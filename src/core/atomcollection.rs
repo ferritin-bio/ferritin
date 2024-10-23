@@ -531,6 +531,8 @@ pub enum BondOrder {
 
 #[cfg(test)]
 mod tests {
+    use itertools::Itertools;
+
     use crate::core::atomcollection::AtomCollection;
 
     #[test]
@@ -555,7 +557,25 @@ mod tests {
         let ac = AtomCollection::from(&pdb_data);
         assert_eq!(ac.coords.len(), 1413);
         assert_eq!(ac.bonds, None);
-        // assert_eq!(ac.bonds.unwrap().len(), 1537); // 1537 bonds
+
+        // 338 Residues
+        let res_ids: Vec<i32> = ac.res_ids.into_iter().unique().collect();
+        let res_max = res_ids.iter().max().unwrap();
+        assert_eq!(res_max, &338);
+
+        // Check resnames
+        let res_names: Vec<String> = ac.res_names.into_iter().unique().sorted().collect();
+        assert_eq!(
+            res_names,
+            [
+                "ALA", "ARG", "ASN", "ASP", "GLN", "GLU", "GLY", "HEM", "HIS", "HOH", "ILE", "LEU",
+                "LYS", "MET", "NBN", "PHE", "PRO", "SER", "SO4", "THR", "TRP", "TYR", "VAL"
+            ]
+        );
+
+        // Take a peek at the unique elements
+        let elements: Vec<String> = ac.elements.into_iter().unique().sorted().collect();
+        assert_eq!(elements, ["C", "FE", "N", "O", "S"]);
     }
 
     // #[test]
