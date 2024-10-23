@@ -175,11 +175,11 @@ mod tests {
     fn test_PSE_from() {
         use pseutils::PSEData;
         let psedata = PSEData::load("tests/data/example.pse").expect("local pse path");
-        assert!(psedata.version == 3000000);
-        let names = psedata.get_session_names();
-        assert_eq!(names.len(), 2);
+
+        // check Atom Collection Numbers
         let ac = AtomCollection::from(&psedata);
         assert_eq!(ac.size, 1519);
         assert_eq!(ac.coords.len(), 1519);
+        assert_eq!(ac.bonds.unwrap().len(), 1537); // 1537 bonds
     }
 }
