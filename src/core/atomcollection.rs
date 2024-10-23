@@ -1,3 +1,4 @@
+use super::constants::default_distance_range;
 use pseutils::PSEData;
 
 pub struct AtomCollection {
@@ -7,12 +8,83 @@ pub struct AtomCollection {
     chains: Vec<String>,
     bonds: Option<Vec<Bond>>,
     // atom_type: Vec<String>,
-    //
     // // ... other fixed fields
     // dynamic_fields: HashMap<String, Vec<Box<dyn Any>>>,
 }
 
 impl AtomCollection {
+    pub fn connect_via_residue_names(&self) -> Vec<Bond> {
+        // connect_via_residue_names(atoms, atom_mask=None, inter_residue=True)
+
+        //    Create a :class:`BondList` for a given atom array (stack), based on
+        //    the deposited bonds for each residue in the RCSB ``components.cif``
+        //    dataset.
+
+        //    Bonds between two adjacent residues are created for the atoms
+        //    expected to connect these residues, i.e. ``'C'`` and ``'N'`` for
+        //    peptides and ``"O3'"`` and ``'P'`` for nucleotides.
+
+        //    Parameters
+        //    ----------
+        //    atoms : AtomArray, shape=(n,) or AtomArrayStack, shape=(m,n)
+        //        The structure to create the :class:`BondList` for.
+        //    inter_residue : bool, optional
+        //        If true, connections between consecutive amino acids and
+        //        nucleotides are also added.
+        //    custom_bond_dict : dict (str -> dict ((str, str) -> int)), optional
+        //        A dictionary of dictionaries:
+        //        The outer dictionary maps residue names to inner dictionaries.
+        //        The inner dictionary maps tuples of two atom names to their
+        //        respective :class:`BondType` (represented as integer).
+        //        If given, these bonds are used instead of the bonds read from
+        //        ``components.cif``.
+        unimplemented!()
+    }
+
+    pub fn connect_via_distance(&self) -> Vec<Bond> {
+        // connect_via_distances(atoms, distance_range=None, atom_mask=None,
+        //                           inter_residue=True, default_bond_type=BondType.ANY,
+        //                           periodic=False)
+
+        //     Create a :class:`BondList` for a given atom array, based on
+        //     pairwise atom distances.
+
+        //     A :attr:`BondType.ANY`, bond is created for two atoms within the
+        //     same residue, if the distance between them is within the expected
+        //     bond distance range.
+        //     Bonds between two adjacent residues are created for the atoms
+        //     expected to connect these residues, i.e. ``'C'`` and ``'N'`` for
+        //     peptides and ``"O3'"`` and ``'P'`` for nucleotides.
+
+        //     Parameters
+        //     ----------
+        //     atoms : AtomArray
+        //         The structure to create the :class:`BondList` for.
+        //     distance_range : dict of tuple(str, str) -> tuple(float, float), optional
+        //         Custom minimum and maximum bond distances.
+        //         The dictionary keys are tuples of chemical elements representing
+        //         the atoms to be potentially bonded.
+        //         The order of elements within each tuple does not matter.
+        //         The dictionary values are the minimum and maximum bond distance,
+        //         respectively, for the given combination of elements.
+        //         This parameter updates the default dictionary.
+        //         Hence, the default bond distances for missing element pairs are
+        //         still taken from the default dictionary.
+        //         The default bond distances are taken from :footcite:`Allen1987`.
+        //     inter_residue : bool, optional
+        //         If true, connections between consecutive amino acids and
+        //         nucleotides are also added.
+        //     default_bond_type : BondType or int, optional
+        //         By default, all created bonds have :attr:`BondType.ANY`.
+        //         An alternative :class:`BondType` can be given in this parameter.
+        //     periodic : bool, optional
+        //         If set to true, bonds can also be detected in periodic
+        //         boundary conditions.
+        //         The `box` attribute of `atoms` is required in this case.
+
+        unimplemented!()
+    }
+
     // ... existing methods ...
 
     // // Get unique chains
@@ -120,6 +192,7 @@ impl From<&PSEData> for AtomCollection {
     }
 }
 
+/// Bond
 pub struct Bond {
     atom1: i32,
     atom2: i32,
