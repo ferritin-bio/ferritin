@@ -2,6 +2,7 @@ use super::constants::default_distance_range;
 use itertools::izip;
 use itertools::Itertools;
 use pseutils::PSEData;
+use std::collections::HashMap;
 
 pub struct AtomCollection {
     size: usize,
@@ -92,12 +93,51 @@ impl AtomCollection {
         //        respective :class:`BondType` (represented as integer).
         //        If given, these bonds are used instead of the bonds read from
         //        ``components.cif``.
+        // let residue_starts = self.get_residue_starts();
+        // let mut bonds = Vec::new();
+
+        // // Iterate through residues
+        // for res_i in 0..residue_starts.len() - 1 {
+        //     let curr_start_i = residue_starts[res_i] as usize;
+        //     let next_start_i = residue_starts[res_i + 1] as usize;
+
+        //     // Get bond dictionary for this residue
+        //     let bond_dict_for_res = self.bonds_in_residue(&self.res_names[curr_start_i]);
+
+        //     // Iterate through bonds in this residue
+        //     for ((atom_name1, atom_name2), bond_type) in bond_dict_for_res {
+        //         let atom_indices1: Vec<usize> = (curr_start_i..next_start_i)
+        //             .filter(|&i| self.atom_names[i] == atom_name1)
+        //             .collect();
+        //         let atom_indices2: Vec<usize> = (curr_start_i..next_start_i)
+        //             .filter(|&i| self.atom_names[i] == atom_name2)
+        //             .collect();
+
+        //         // Create all possible bond combinations
+        //         for &i in &atom_indices1 {
+        //             for &j in &atom_indices2 {
+        //                 bonds.push(Bond {
+        //                     atom1: i as i32,
+        //                     atom2: j as i32,
+        //                     order: bond_type,
+        //                 });
+        //             }
+        //         }
+        //     }
+        // }
+
+        // // if inter_residue {
+        // //     let inter_bonds = self.connect_inter_residue(&residue_starts);
+        // //     bonds.extend(inter_bonds);
+        // // }
+
+        // bonds
         unimplemented!()
     }
 
     /// A new residue starts, either when the chain ID, residue ID,
     /// insertion code or residue name changes from one to the next atom.
-    pub fn get_residue_starts(&self) -> Vec<i64> {
+    fn get_residue_starts(&self) -> Vec<i64> {
         let mut starts = vec![0];
 
         starts.extend(
