@@ -1,6 +1,7 @@
 use super::constants::default_distance_range;
 use itertools::izip;
 use itertools::Itertools;
+use pdbtbx::PDB;
 use pseutils::PSEData;
 use std::collections::HashMap;
 
@@ -313,6 +314,14 @@ impl From<&PSEData> for AtomCollection {
     }
 }
 
+impl From<&PDB> for AtomCollection {
+    fn from(pdb_data: &PDB) -> Self {
+        // let ac = AtomCollection {};
+        // ac
+
+        unimplemented!()
+    }
+}
 /// Bond
 pub struct Bond {
     atom1: i32,
@@ -375,5 +384,17 @@ mod tests {
         assert_eq!(ac.size, 1519);
         assert_eq!(ac.coords.len(), 1519);
         assert_eq!(ac.bonds.unwrap().len(), 1537); // 1537 bonds
+    }
+
+    #[test]
+    fn test_PDB_from() {
+        use pdbtbx::PDB;
+        let (pdb, _errors) = pdbtbx::open("tests/data/101M.cif").unwrap();
+        assert_eq!(pdb.atom_count(), 1413);
+
+        // // check Atom Collection Numbers
+        // let ac = AtomCollection::from(&psedata);
+        // assert_eq!(ac.coords.len(), 1519);
+        // assert_eq!(ac.bonds.unwrap().len(), 1537); // 1537 bonds
     }
 }
