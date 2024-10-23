@@ -1,4 +1,6 @@
 use super::constants::default_distance_range;
+use itertools::izip;
+use itertools::Itertools;
 use pseutils::PSEData;
 
 pub struct AtomCollection {
@@ -93,47 +95,28 @@ impl AtomCollection {
         unimplemented!()
     }
 
-    pub fn get_residue_starts(&self) {
-        // """
-        //    Get indices for an atom array, each indicating the beginning of
-        //    a residue.
+    /// A new residue starts, either when the chain ID, residue ID,
+    /// insertion code or residue name changes from one to the next atom.
+    pub fn get_residue_starts(&self) -> Vec<i64> {
+        let mut starts = vec![0];
 
-        //    A new residue starts, either when the chain ID, residue ID,
-        //    insertion code or residue name changes from one to the next atom.
-
-        //    Parameters
-        //    ----------
-        //    array : AtomArray or AtomArrayStack
-        //        The atom array (stack) to get the residue starts from.
-        //    add_exclusive_stop : bool, optional
-        //        If true, the exclusive stop of the input atom array, i.e.
-        //        ``array.array_length()``, is added to the returned array of
-        //        start indices as last element.
-
-        //    Returns
-        //    -------
-        //    starts : ndarray, dtype=int
-        //        The start indices of residues in `array`.
-
-        //    Notes
-        //    -----
-        //    This method is internally used by all other residue-related
-        //    functions.
-
-        //    Examples
-        //    --------
-
-        //    >>> print(get_residue_starts(atom_array))
-        //    [  0  16  35  56  75  92 116 135 157 169 176 183 197 208 219 226 250 264
-        //     278 292]
-        //    >>> print(get_residue_starts(atom_array, add_exclusive_stop=True))
-        //    [  0  16  35  56  75  92 116 135 157 169 176 183 197 208 219 226 250 264
-        //     278 292 304]
-        //    """
-
-        // A new residue starts, either when the chain ID, residue ID,
-        // insertion code or residue name changes from one to the next atom.
+        starts.extend(
+            izip!(&self.res_ids, &self.res_names, &self.chain_ids)
+                .tuple_windows()
+                .enumerate()
+                .filter_map(
+                    |(i, ((res_id1, name1, chain1), (res_id2, name2, chain2)))| {
+                        if res_id1 != res_id2 || name1 != name2 || chain1 != chain2 {
+                            Some((i + 1) as i64)
+                        } else {
+                            None
+                        }
+                    },
+                ),
+        );
+        starts
     }
+
     pub fn connect_via_distance(&self) -> Vec<Bond> {
         // connect_via_distances(atoms, distance_range=None, atom_mask=None,
         //                           inter_residue=True, default_bond_type=BondType.ANY,
