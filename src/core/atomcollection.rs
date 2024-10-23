@@ -17,7 +17,6 @@ pub struct AtomCollection {
     // atom_type: Vec<String>,
     // // ... other fixed fields
     // dynamic_fields: HashMap<String, Vec<Box<dyn Any>>>,
-    //
     // //         self.add_annotation("chain_id", dtype="U4")
     // self.add_annotation("res_id", dtype=int)
     // self.add_annotation("ins_code", dtype="U1")  <- what is this?
@@ -69,72 +68,73 @@ impl AtomCollection {
         // return np.sqrt(vector_dot(diff, diff))
     }
 
-    pub fn connect_via_residue_names(&self) -> Vec<Bond> {
-        // connect_via_residue_names(atoms, atom_mask=None, inter_residue=True)
+    // pub fn connect_via_residue_names(&self) -> Vec<Bond> {
+    //     // connect_via_residue_names(atoms, atom_mask=None, inter_residue=True)
 
-        //    Create a :class:`BondList` for a given atom array (stack), based on
-        //    the deposited bonds for each residue in the RCSB ``components.cif``
-        //    dataset.
+    //     //    Create a :class:`BondList` for a given atom array (stack), based on
+    //     //    the deposited bonds for each residue in the RCSB ``components.cif``
+    //     //    dataset.
 
-        //    Bonds between two adjacent residues are created for the atoms
-        //    expected to connect these residues, i.e. ``'C'`` and ``'N'`` for
-        //    peptides and ``"O3'"`` and ``'P'`` for nucleotides.
+    //     //    Bonds between two adjacent residues are created for the atoms
+    //     //    expected to connect these residues, i.e. ``'C'`` and ``'N'`` for
+    //     //    peptides and ``"O3'"`` and ``'P'`` for nucleotides.
 
-        //    Parameters
-        //    ----------
-        //    atoms : AtomArray, shape=(n,) or AtomArrayStack, shape=(m,n)
-        //        The structure to create the :class:`BondList` for.
-        //    inter_residue : bool, optional
-        //        If true, connections between consecutive amino acids and
-        //        nucleotides are also added.
-        //    custom_bond_dict : dict (str -> dict ((str, str) -> int)), optional
-        //        A dictionary of dictionaries:
-        //        The outer dictionary maps residue names to inner dictionaries.
-        //        The inner dictionary maps tuples of two atom names to their
-        //        respective :class:`BondType` (represented as integer).
-        //        If given, these bonds are used instead of the bonds read from
-        //        ``components.cif``.
-        // let residue_starts = self.get_residue_starts();
-        // let mut bonds = Vec::new();
+    //     //    Parameters
+    //     //    ----------
+    //     //    atoms : AtomArray, shape=(n,) or AtomArrayStack, shape=(m,n)
+    //     //        The structure to create the :class:`BondList` for.
+    //     //    inter_residue : bool, optional
+    //     //        If true, connections between consecutive amino acids and
+    //     //        nucleotides are also added.
+    //     //    custom_bond_dict : dict (str -> dict ((str, str) -> int)), optional
+    //     //        A dictionary of dictionaries:
+    //     //        The outer dictionary maps residue names to inner dictionaries.
+    //     //        The inner dictionary maps tuples of two atom names to their
+    //     //        respective :class:`BondType` (represented as integer).
+    //     //        If given, these bonds are used instead of the bonds read from
+    //     //        ``components.cif``.
+    //     let residue_starts = self.get_residue_starts();
 
-        // // Iterate through residues
-        // for res_i in 0..residue_starts.len() - 1 {
-        //     let curr_start_i = residue_starts[res_i] as usize;
-        //     let next_start_i = residue_starts[res_i + 1] as usize;
+    //     let mut bonds = Vec::new();
 
-        //     // Get bond dictionary for this residue
-        //     let bond_dict_for_res = self.bonds_in_residue(&self.res_names[curr_start_i]);
+    //     // Iterate through residues
+    //     for res_i in 0..residue_starts.len() - 1 {
+    //         let curr_start_i = residue_starts[res_i] as usize;
+    //         let next_start_i = residue_starts[res_i + 1] as usize;
 
-        //     // Iterate through bonds in this residue
-        //     for ((atom_name1, atom_name2), bond_type) in bond_dict_for_res {
-        //         let atom_indices1: Vec<usize> = (curr_start_i..next_start_i)
-        //             .filter(|&i| self.atom_names[i] == atom_name1)
-        //             .collect();
-        //         let atom_indices2: Vec<usize> = (curr_start_i..next_start_i)
-        //             .filter(|&i| self.atom_names[i] == atom_name2)
-        //             .collect();
+    //         // Get bond dictionary for this residue
+    //         let bond_dict_for_res = self.bonds_in_residue(&self.res_names[curr_start_i]);
 
-        //         // Create all possible bond combinations
-        //         for &i in &atom_indices1 {
-        //             for &j in &atom_indices2 {
-        //                 bonds.push(Bond {
-        //                     atom1: i as i32,
-        //                     atom2: j as i32,
-        //                     order: bond_type,
-        //                 });
-        //             }
-        //         }
-        //     }
-        // }
+    //         // Iterate through bonds in this residue
+    //         for ((atom_name1, atom_name2), bond_type) in bond_dict_for_res {
+    //             let atom_indices1: Vec<usize> = (curr_start_i..next_start_i)
+    //                 .filter(|&i| self.atom_names[i] == atom_name1)
+    //                 .collect();
+    //             let atom_indices2: Vec<usize> = (curr_start_i..next_start_i)
+    //                 .filter(|&i| self.atom_names[i] == atom_name2)
+    //                 .collect();
 
-        // // if inter_residue {
-        // //     let inter_bonds = self.connect_inter_residue(&residue_starts);
-        // //     bonds.extend(inter_bonds);
-        // // }
+    //             // Create all possible bond combinations
+    //             for &i in &atom_indices1 {
+    //                 for &j in &atom_indices2 {
+    //                     bonds.push(Bond {
+    //                         atom1: i as i32,
+    //                         atom2: j as i32,
+    //                         order: bond_type,
+    //                     });
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        // bonds
-        unimplemented!()
-    }
+    //     // if inter_residue {
+    //     //     let inter_bonds = self.connect_inter_residue(&residue_starts);
+    //     //     bonds.extend(inter_bonds);
+    //     // }
+
+    //     bonds
+    //     // unimplemented!()
+    // }
 
     /// A new residue starts, either when the chain ID, residue ID,
     /// insertion code or residue name changes from one to the next atom.
@@ -428,6 +428,9 @@ impl From<&PSEData> for AtomCollection {
 // }
 
 impl From<&PDB> for AtomCollection {
+    // the PDB API requires us to iterate:
+    // PDB --> Chain --> Residue --> Atom if we want data from all.
+    // Here we collect all the data in one go and return an AtomCollection
     fn from(pdb_data: &PDB) -> Self {
         let (coords, is_hetero, atom_names, res_ids, res_names, elements, chain_ids): (
             Vec<[f32; 3]>,
@@ -477,6 +480,7 @@ impl From<&PDB> for AtomCollection {
 }
 
 /// Bond
+#[derive(Debug, PartialEq)]
 pub struct Bond {
     atom1: i32,
     atom2: i32,
@@ -488,6 +492,7 @@ pub struct Bond {
 }
 
 #[repr(u8)]
+#[derive(Debug, PartialEq)]
 /// BondOrder:
 /// https://www.biotite-python.org/latest/apidoc/biotite.structure.BondType.html#biotite.structure.BondType
 /// see also: http://cdk.github.io/cdk/latest/docs/api/org/openscience/cdk/Bond.html
@@ -543,12 +548,25 @@ mod tests {
     #[test]
     fn test_PDB_from() {
         use pdbtbx::PDB;
-        let (pdb, _errors) = pdbtbx::open("tests/data/101M.cif").unwrap();
-        assert_eq!(pdb.atom_count(), 1413);
+        let (pdb_data, _errors) = pdbtbx::open("tests/data/101M.cif").unwrap();
+        assert_eq!(pdb_data.atom_count(), 1413);
 
         // // check Atom Collection Numbers
-        // let ac = AtomCollection::from(&psedata);
-        // assert_eq!(ac.coords.len(), 1519);
+        let ac = AtomCollection::from(&pdb_data);
+        assert_eq!(ac.coords.len(), 1413);
+        assert_eq!(ac.bonds, None);
         // assert_eq!(ac.bonds.unwrap().len(), 1537); // 1537 bonds
     }
+
+    // #[test]
+    // fn test_addbonds() {
+    //     use pdbtbx::PDB;
+    //     let (pdb, _errors) = pdbtbx::open("tests/data/101M.cif").unwrap();
+    //     assert_eq!(pdb.atom_count(), 1413);
+
+    //     // // check Atom Collection Numbers
+    //     // let ac = AtomCollection::from(&psedata);
+    //     // assert_eq!(ac.coords.len(), 1519);
+    //     // assert_eq!(ac.bonds.unwrap().len(), 1537); // 1537 bonds
+    // }
 }
