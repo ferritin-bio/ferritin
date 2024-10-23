@@ -4,15 +4,67 @@ use pseutils::PSEData;
 pub struct AtomCollection {
     size: usize,
     coords: Vec<[f32; 3]>,
-    resvs: Vec<i32>,
-    chains: Vec<String>,
+    res_ids: Vec<i32>,
+    res_names: Vec<String>,
+    is_hetero: Vec<bool>,
+    elements: Vec<String>,
+    chain_ids: Vec<String>,
     bonds: Option<Vec<Bond>>,
     // atom_type: Vec<String>,
     // // ... other fixed fields
     // dynamic_fields: HashMap<String, Vec<Box<dyn Any>>>,
+    //
+    // //         self.add_annotation("chain_id", dtype="U4")
+    // self.add_annotation("res_id", dtype=int)
+    // self.add_annotation("ins_code", dtype="U1")  <- what is this?
+    // self.add_annotation("res_name", dtype="U5")
+    // self.add_annotation("hetero", dtype=bool)
+    // self.add_annotation("atom_name", dtype="U6")
+    // self.add_annotation("element", dtype="U2")
 }
 
 impl AtomCollection {
+    pub fn calculate_displacement(&self) {
+        // Measure the displacement vector, i.e. the vector difference, from
+        // one array of atom coordinates to another array of coordinates.
+        unimplemented!()
+    }
+
+    pub fn calculate_distance(&self, atoms: AtomCollection) {
+        // def distance(atoms1, atoms2, box=None):
+        // """
+        // Measure the euclidian distance between atoms.
+
+        // Parameters
+        // ----------
+        // atoms1, atoms2 : ndarray or Atom or AtomArray or AtomArrayStack
+        //     The atoms to measure the distances between.
+        //     The dimensions may vary.
+        //     Alternatively an ndarray containing the coordinates can be
+        //     provided.
+        //     Usual *NumPy* broadcasting rules apply.
+        // box : ndarray, shape=(3,3) or shape=(m,3,3), optional
+        //     If this parameter is set, periodic boundary conditions are
+        //     taken into account (minimum-image convention), based on
+        //     the box vectors given with this parameter.
+        //     The shape *(m,3,3)* is only allowed, when the input coordinates
+        //     comprise multiple models.
+
+        // Returns
+        // -------
+        // dist : float or ndarray
+        //     The atom distances.
+        //     The shape is equal to the shape of the input `atoms` with the
+        //     highest dimensionality minus the last axis.
+
+        // See also
+        // --------
+        // index_distance
+        // """
+        // diff = displacement(atoms1, atoms2, box)
+        // return np.sqrt(vector_dot(diff, diff))
+    }
+
     pub fn connect_via_residue_names(&self) -> Vec<Bond> {
         // connect_via_residue_names(atoms, atom_mask=None, inter_residue=True)
 
@@ -41,6 +93,47 @@ impl AtomCollection {
         unimplemented!()
     }
 
+    pub fn get_residue_starts(&self) {
+        // """
+        //    Get indices for an atom array, each indicating the beginning of
+        //    a residue.
+
+        //    A new residue starts, either when the chain ID, residue ID,
+        //    insertion code or residue name changes from one to the next atom.
+
+        //    Parameters
+        //    ----------
+        //    array : AtomArray or AtomArrayStack
+        //        The atom array (stack) to get the residue starts from.
+        //    add_exclusive_stop : bool, optional
+        //        If true, the exclusive stop of the input atom array, i.e.
+        //        ``array.array_length()``, is added to the returned array of
+        //        start indices as last element.
+
+        //    Returns
+        //    -------
+        //    starts : ndarray, dtype=int
+        //        The start indices of residues in `array`.
+
+        //    Notes
+        //    -----
+        //    This method is internally used by all other residue-related
+        //    functions.
+
+        //    Examples
+        //    --------
+
+        //    >>> print(get_residue_starts(atom_array))
+        //    [  0  16  35  56  75  92 116 135 157 169 176 183 197 208 219 226 250 264
+        //     278 292]
+        //    >>> print(get_residue_starts(atom_array, add_exclusive_stop=True))
+        //    [  0  16  35  56  75  92 116 135 157 169 176 183 197 208 219 226 250 264
+        //     278 292 304]
+        //    """
+
+        // A new residue starts, either when the chain ID, residue ID,
+        // insertion code or residue name changes from one to the next atom.
+    }
     pub fn connect_via_distance(&self) -> Vec<Bond> {
         // connect_via_distances(atoms, distance_range=None, atom_mask=None,
         //                           inter_residue=True, default_bond_type=BondType.ANY,
@@ -177,15 +270,20 @@ impl From<&PSEData> for AtomCollection {
             .collect();
 
         // specific fields
-        let resns: Vec<String> = atoms.iter().map(|a| a.resn.to_string()).collect();
-        let resvs: Vec<i32> = atoms.iter().map(|a| a.resv).collect();
-        let chains: Vec<String> = atoms.iter().map(|a| a.chain.to_string()).collect();
+        let res_names: Vec<String> = atoms.iter().map(|a| a.resn.to_string()).collect();
+        let res_ids: Vec<i32> = atoms.iter().map(|a| a.resv).collect();
+        let chain_ids: Vec<String> = atoms.iter().map(|a| a.chain.to_string()).collect();
+        let is_hetero: Vec<bool> = atoms.iter().map(|a| a.is_hetatm).collect();
+        let elements: Vec<String> = atoms.iter().map(|a| a.elem.to_string()).collect();
 
         let ac = AtomCollection {
             size: atoms.len(),
             coords,
-            resvs,
-            chains,
+            res_names,
+            res_ids,
+            chain_ids,
+            is_hetero,
+            elements,
             bonds: Some(bonds),
         };
         ac
