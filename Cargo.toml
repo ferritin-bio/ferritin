@@ -1,0 +1,7 @@
+[package]
+name = "ferritin"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pseutils = { git = "https://github.com/zachcp/pseutils" }
