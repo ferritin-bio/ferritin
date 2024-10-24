@@ -1,8 +1,8 @@
-use super::constants::{default_distance_range, get_bonds_canonical20};
+use super::constants::get_bonds_canonical20;
+use ferritin_pymol::PSEData;
 use itertools::izip;
 use itertools::Itertools;
 use pdbtbx::PDB;
-use pseutils::PSEData;
 use std::collections::HashMap;
 
 pub struct AtomCollection {
@@ -395,7 +395,7 @@ mod tests {
     use itertools::Itertools;
 
     #[test]
-    fn test_PSE_from() {
+    fn test_pse_from() {
         use pseutils::PSEData;
         let psedata = PSEData::load("tests/data/example.pse").expect("local pse path");
 
@@ -407,7 +407,7 @@ mod tests {
     }
 
     #[test]
-    fn test_PDB_from() {
+    fn test_pdb_from() {
         use pdbtbx::PDB;
         let (pdb_data, _errors) = pdbtbx::open("tests/data/101M.cif").unwrap();
         assert_eq!(pdb_data.atom_count(), 1413);
