@@ -1,4 +1,4 @@
-use super::constants::default_distance_range;
+use super::constants::{default_distance_range, get_bonds_canonical20};
 use itertools::izip;
 use itertools::Itertools;
 use pdbtbx::PDB;
@@ -129,10 +129,10 @@ impl AtomCollection {
         //     }
         // }
 
-        // // if inter_residue {
-        // //     let inter_bonds = self.connect_inter_residue(&residue_starts);
-        // //     bonds.extend(inter_bonds);
-        // // }
+        // if inter_residue {
+        //     let inter_bonds = self.connect_inter_residue(&residue_starts);
+        //     bonds.extend(inter_bonds);
+        // }
 
         // bonds
         unimplemented!()

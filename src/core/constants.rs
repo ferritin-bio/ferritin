@@ -1,3 +1,7 @@
+use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
 #[rustfmt::skip]
 pub fn default_distance_range(a: &str, b: &str) -> (f32, f32) {
     match (a, b) {
@@ -48,4 +52,143 @@ pub fn default_distance_range(a: &str, b: &str) -> (f32, f32) {
         ("SI", "SE") => (2.359 - 2.0*0.012,  2.359 + 2.0*0.012),
         _ => panic!("Unknown atom pair: {} and {}", a, b),
     }
+}
+
+type BondInfo = (String, String, i32);
+
+#[rustfmt::skip]
+lazy_static! {
+    static ref AA_BONDS: HashMap<&'static str, Vec<(&'static str, &'static str, i32)>> = {
+        let mut m = HashMap::new();
+        m.insert("ALA", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","HB1",1), ("CB","HB2",1), ("CB","HB3",1), ("CA","N",1), ("H","N",1),
+            ("H2","N",1), ("HXT","OXT",1)
+        ]);
+        m.insert("ARG", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CD","HD2",1), ("CD","HD3",1),
+            ("CD","NE",1), ("CD","CG",1), ("CG","HG2",1), ("CG","HG3",1), ("CZ","NH1",1),
+            ("CZ","NH2",2), ("CA","N",1), ("H","N",1), ("H2","N",1), ("CZ","NE",1),
+            ("HE","NE",1), ("HH11","NH1",1), ("HH12","NH1",1), ("HH21","NH2",1),
+            ("HH22","NH2",1), ("HXT","OXT",1)
+        ]);
+        m.insert("ASN", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CG","ND2",1), ("CG","OD1",2),
+            ("CA","N",1), ("H","N",1), ("H2","N",1), ("HD21","ND2",1), ("HD22","ND2",1),
+            ("HXT","OXT",1)
+        ]);
+        m.insert("ASP", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CG","OD1",2), ("CG","OD2",1),
+            ("CA","N",1), ("H","N",1), ("H2","N",1), ("HD2","OD2",1), ("HXT","OXT",1)
+        ]);
+        m.insert("CYS", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","HB2",1), ("CB","HB3",1), ("CB","SG",1), ("CA","N",1), ("H","N",1),
+            ("H2","N",1), ("HXT","OXT",1), ("HG","SG",1)
+        ]);
+        m.insert("GLN", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CD","NE2",1), ("CD","OE1",2),
+            ("CD","CG",1), ("CG","HG2",1), ("CG","HG3",1), ("CA","N",1), ("H","N",1),
+            ("H2","N",1), ("HE21","NE2",1), ("HE22","NE2",1), ("HXT","OXT",1)
+        ]);
+        m.insert("GLU", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CD","OE1",2), ("CD","OE2",1),
+            ("CD","CG",1), ("CG","HG2",1), ("CG","HG3",1), ("CA","N",1), ("H","N",1),
+            ("H2","N",1), ("HE2","OE2",1), ("HXT","OXT",1)
+        ]);
+        m.insert("GLY", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","HA2",1), ("CA","HA3",1),
+            ("CA","N",1), ("H","N",1), ("H2","N",1), ("HXT","OXT",1)
+        ]);
+        m.insert("HIS", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CD2","HD2",1), ("CD2","NE2",5),
+            ("CE1","HE1",1), ("CE1","NE2",5), ("CD2","CG",6), ("CG","ND1",5), ("CA","N",1),
+            ("H","N",1), ("H2","N",1), ("CE1","ND1",6), ("HD1","ND1",1), ("HE2","NE2",1),
+            ("HXT","OXT",1)
+        ]);
+        m.insert("ILE", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG1",1), ("CB","CG2",1), ("CB","HB",1), ("CD1","HD11",1), ("CD1","HD12",1),
+            ("CD1","HD13",1), ("CD1","CG1",1), ("CG1","HG12",1), ("CG1","HG13",1),
+            ("CG2","HG21",1), ("CG2","HG22",1), ("CG2","HG23",1), ("CA","N",1), ("H","N",1),
+            ("H2","N",1), ("HXT","OXT",1)
+        ]);
+        m.insert("LEU", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CD1","HD11",1), ("CD1","HD12",1),
+            ("CD1","HD13",1), ("CD2","HD21",1), ("CD2","HD22",1), ("CD2","HD23",1),
+            ("CD1","CG",1), ("CD2","CG",1), ("CG","HG",1), ("CA","N",1), ("H","N",1),
+            ("H2","N",1), ("HXT","OXT",1)
+        ]);
+        m.insert("LYS", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CD","CE",1), ("CD","HD2",1),
+            ("CD","HD3",1), ("CE","HE2",1), ("CE","HE3",1), ("CE","NZ",1), ("CD","CG",1),
+            ("CG","HG2",1), ("CG","HG3",1), ("CA","N",1), ("H","N",1), ("H2","N",1),
+            ("HZ1","NZ",1), ("HZ2","NZ",1), ("HZ3","NZ",1), ("HXT","OXT",1)
+        ]);
+        m.insert("MET", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CE","HE1",1), ("CE","HE2",1),
+            ("CE","HE3",1), ("CG","HG2",1), ("CG","HG3",1), ("CG","SD",1), ("CA","N",1),
+            ("H","N",1), ("H2","N",1), ("HXT","OXT",1), ("CE","SD",1)
+        ]);
+        m.insert("PHE", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CD1","CE1",5), ("CD1","HD1",1),
+            ("CD2","CE2",6), ("CD2","HD2",1), ("CE1","CZ",6), ("CE1","HE1",1), ("CE2","CZ",5),
+            ("CE2","HE2",1), ("CD1","CG",6), ("CD2","CG",5), ("CZ","HZ",1), ("CA","N",1),
+            ("H","N",1), ("H2","N",1), ("HXT","OXT",1)
+        ]);
+        m.insert("PRO", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CD","HD2",1), ("CD","HD3",1),
+            ("CD","CG",1), ("CG","HG2",1), ("CG","HG3",1), ("CA","N",1), ("CD","N",1),
+            ("H","N",1), ("HXT","OXT",1)
+        ]);
+        m.insert("SER", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","HB2",1), ("CB","HB3",1), ("CB","OG",1), ("CA","N",1), ("H","N",1),
+            ("H2","N",1), ("HG","OG",1), ("HXT","OXT",1)
+        ]);
+        m.insert("THR", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG2",1), ("CB","HB",1), ("CB","OG1",1), ("CG2","HG21",1), ("CG2","HG22",1),
+            ("CG2","HG23",1), ("CA","N",1), ("H","N",1), ("H2","N",1), ("HG1","OG1",1),
+            ("HXT","OXT",1)
+        ]);
+        m.insert("TRP", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CD1","HD1",1), ("CD1","NE1",5),
+            ("CD2","CE2",6), ("CD2","CE3",5), ("CE2","CZ2",5), ("CE3","CZ3",6), ("CE3","HE3",1),
+            ("CD1","CG",6), ("CD2","CG",5), ("CH2","HH2",1), ("CH2","CZ2",6), ("CZ2","HZ2",1),
+            ("CH2","CZ3",5), ("CZ3","HZ3",1), ("CA","N",1), ("H","N",1), ("H2","N",1),
+            ("CE2","NE1",5), ("HE1","NE1",1), ("HXT","OXT",1)
+        ]);
+        m.insert("TYR", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG",1), ("CB","HB2",1), ("CB","HB3",1), ("CD1","CE1",5), ("CD1","HD1",1),
+            ("CD2","CE2",6), ("CD2","HD2",1), ("CE1","CZ",6), ("CE1","HE1",1), ("CE2","CZ",5),
+            ("CE2","HE2",1), ("CD1","CG",6), ("CD2","CG",5), ("CZ","OH",1), ("CA","N",1),
+            ("H","N",1), ("H2","N",1), ("HH","OH",1), ("HXT","OXT",1)
+        ]);
+        m.insert("VAL", vec![
+            ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
+            ("CB","CG1",1), ("CB","CG2",1), ("CB","HB",1), ("CG1","HG11",1), ("CG1","HG12",1),
+            ("CG1","HG13",1), ("CG2","HG21",1), ("CG2","HG22",1), ("CG2","HG23",1),
+            ("CA","N",1), ("H","N",1), ("H2","N",1), ("HXT","OXT",1)
+        ]);
+        m
+    };
+}
+
+pub fn get_bonds_canonical20(
+) -> &'static HashMap<&'static str, Vec<(&'static str, &'static str, i32)>> {
+    &AA_BONDS
 }
