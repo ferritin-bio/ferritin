@@ -8,6 +8,6 @@ description.workspace = true
 
 [dependencies]
 ferritin-core = { path = "../ferritin-core" }
-bevy = { workspace = true }
-bon = { workspace = true }
-glam = { workspace = true }
+bevy = "0.14.2"                               # Specific to bevy crate
+bon = "2.3.0"                                 # Specific to bevy crate
+glam = "0.29.0"                               # Specific to bevy crate

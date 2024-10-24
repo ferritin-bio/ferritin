@@ -8,11 +8,11 @@ description.workspace = true
 
 [dependencies]
 ferritin-core = { path = "../ferritin-core" }
-clap = { workspace = true }
-serde-pickle = { workspace = true }
+clap = { version = "4.5.20", features = ["derive"] }
+serde-pickle = "1.1"
+chrono = "0.4.38"
+validator = { version = "0.18", features = ["derive"] }
 serde_bytes = { workspace = true }
-chrono = { workspace = true }
-validator = { workspace = true }
 urlencoding = { workspace = true }
 serde_repr = { workspace = true }
 once_cell = { workspace = true }
