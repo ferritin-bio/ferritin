@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <style>
+            .buttons {
+                position: absolute;
+                top: 2vh;
+                right: 1vh;
+            }
+            .filelabel {
+                display: inline-block;
+                background: -webkit-linear-gradient(top, #f9f9f9, #e3e3e3);
+                border: 1px solid #999;
+                border-radius: 3px;
+                padding: 5px 8px;
+                outline: none;
+                text-shadow: 1px 1px #fff;
+                font-weight: 700;
+                font-size: 10pt;
+            }
+            .filelabel:hover {
+                border-color: black;
+            }
+            .filelabel:active {
+                background: -webkit-linear-gradient(top, #e3e3e3, #f9f9f9);
+            }
+            .fileb {
+                display: none;
+            }
+            .fileData {
+                display: none;
+            }
+        </style>
+    </head>
+    <body style="margin: 0vh; height: 100vh">
+        <canvas id="bevy"></canvas>
+        <input type="file" id="fileInput" accept=".pdb,.cif" />
+
+        <script type="module">
+            import init, { GameApp } from "./out/simpleweb.js";
+            async function run() {
+                await init({});
+                const game = new GameApp();
+
+                function gameLoop() {
+                    game.run();
+                    requestAnimationFrame(gameLoop);
+                }
+                gameLoop();
+
+                document
+                    .getElementById("fileInput")
+                    .addEventListener("change", (event) => {
+                        const file = event.target.files[0];
+                        if (file) {
+                            // Pass the file name to Rust
+                            game.pick_file(file.name);
+                            console.log(file);
+                        }
+                    });
+            }
+            run();
+        </script>
+    </body>
+</html>
+
+<!-- <!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Bevy WebAssembly Test</title>
+    </head>
+    <body>
+        <input type="file" id="pdbInput" accept=".pdb,.cif" />
+        <canvas id="bevy-canvas"></canvas>
+
+        <script type="module">
+            import init, { run, upload_protein_file } from "./out/simpleweb.js";
+            async function start() {
+                await init();
+                run();
+            }
+
+            function handleFileUpload(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    console.log("File selected:", file.name);
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        const contents = new Uint8Array(e.target.result);
+                        console.log("File read, uploading to Rust...");
+                        upload_protein_file(contents);
+                        console.log("Upload complete");
+                    };
+                    reader.readAsArrayBuffer(file);
+                }
+            }
+
+            start();
+
+            document
+                .getElementById("pdbInput")
+                .addEventListener("change", handleFileUpload);
+        </script>
+    </body>
+</html> -->

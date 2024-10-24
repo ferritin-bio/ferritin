@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>MolStar Viewer</title>
+        <link rel="stylesheet" type="text/css" href="molstar.css" />
+        <script src="molstar.js"></script>
+    </head>
+    <body>
+        <div id="viewer" style="width: 50%; height: 500px"></div>
+        <script>
+            molstar.Viewer.create("viewer", {
+                layoutIsExpanded: false,
+                layoutShowControls: false,
+                layoutShowRemoteState: false,
+                layoutShowSequence: false,
+                layoutShowLog: false,
+                layoutShowLeftPanel: true,
+            }).then(function (viewer) {
+                viewer.loadMvsFromUrl("./state.mvsj", "mvsj"); // <---- Action is here
+            });
+        </script>
+    </body>
+</html>

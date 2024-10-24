@@ -1,1 +1,7 @@
 /target
+*/target
+.idea
+.DS_Store
+
+
+ferritin-bevy/wasm-examples/

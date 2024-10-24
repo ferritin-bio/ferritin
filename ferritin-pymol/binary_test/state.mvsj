@@ -1,0 +1,112 @@
+{
+  "root": {
+    "kind": "root",
+    "children": [
+      {
+        "kind": "camera",
+        "params": {
+          "target": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "position": [
+            0.0,
+            0.0,
+            -121.31033325195312
+          ]
+        }
+      },
+      {
+        "kind": "download",
+        "params": {
+          "url": "pdb/1pdb.pdb"
+        },
+        "children": [
+          {
+            "kind": "parse",
+            "params": {
+              "format": "pdb"
+            },
+            "children": [
+              {
+                "kind": "structure",
+                "params": {
+                  "type": "model"
+                },
+                "children": [
+                  {
+                    "kind": "component",
+                    "params": {
+                      "selector": "all"
+                    },
+                    "children": [
+                      {
+                        "kind": "representation",
+                        "params": {
+                          "type": "cartoon"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "component",
+                    "params": {
+                      "selector": [
+                        {
+                          "atom_index": 899
+                        },
+                        {
+                          "atom_index": 900
+                        },
+                        {
+                          "atom_index": 901
+                        },
+                        {
+                          "atom_index": 902
+                        },
+                        {
+                          "atom_index": 903
+                        },
+                        {
+                          "atom_index": 904
+                        },
+                        {
+                          "atom_index": 905
+                        },
+                        {
+                          "atom_index": 906
+                        }
+                      ]
+                    },
+                    "children": [
+                      {
+                        "kind": "representation",
+                        "params": {
+                          "type": "ball_and_stick"
+                        },
+                        "children": [
+                          {
+                            "kind": "color",
+                            "params": {
+                              "selector": "all",
+                              "color": "magenta"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "metadata": {
+    "version": "1",
+    "timestamp": "2024-07-20T14:20:07.628711+00:00"
+  }
+}

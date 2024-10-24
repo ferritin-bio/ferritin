@@ -1,0 +1,19 @@
+[package]
+name = "ferritin-pymol"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description.workspace = true
+
+[dependencies]
+ferritin-core = { path = "../ferritin-core" }
+clap = { version = "4.5.20", features = ["derive"] }
+serde-pickle = "1.1"
+chrono = "0.4.38"
+validator = { version = "0.18", features = ["derive"] }
+serde_bytes = { workspace = true }
+urlencoding = { workspace = true }
+serde_repr = { workspace = true }
+once_cell = { workspace = true }
+bitflags = { workspace = true }

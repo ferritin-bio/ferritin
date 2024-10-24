@@ -1,0 +1,13 @@
+[package]
+name = "ferritin-bevy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description.workspace = true
+
+[dependencies]
+ferritin-core = { path = "../ferritin-core" }
+bevy = "0.14.2"                               # Specific to bevy crate
+bon = "2.3.0"                                 # Specific to bevy crate
+glam = "0.29.0"                               # Specific to bevy crate
