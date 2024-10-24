@@ -352,7 +352,7 @@ impl From<&PDB> for AtomCollection {
             is_hetero,
             elements,
             chain_ids,
-            atom_names: atom_names,
+            atom_names,
             bonds: None,
         }
     }

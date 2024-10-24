@@ -108,7 +108,6 @@ impl Structure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pdbtbx::StrictnessLevel;
     #[test]
     fn test_pdb_to_mesh() {
         let (pdb, _errors) = pdbtbx::open("examples/1fap.cif").unwrap();
