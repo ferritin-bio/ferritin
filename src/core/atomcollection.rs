@@ -1,4 +1,4 @@
-use super::constants::default_distance_range;
+use super::constants::{default_distance_range, get_bonds_canonical20};
 use itertools::izip;
 use itertools::Itertools;
 use pdbtbx::PDB;
@@ -12,6 +12,7 @@ pub struct AtomCollection {
     res_names: Vec<String>,
     is_hetero: Vec<bool>,
     elements: Vec<String>,
+    atom_names: Vec<String>,
     chain_ids: Vec<String>,
     bonds: Option<Vec<Bond>>,
     // atom_type: Vec<String>,
@@ -68,73 +69,49 @@ impl AtomCollection {
         // return np.sqrt(vector_dot(diff, diff))
     }
 
-    // pub fn connect_via_residue_names(&self) -> Vec<Bond> {
-    //     // connect_via_residue_names(atoms, atom_mask=None, inter_residue=True)
+    pub fn connect_via_residue_names(&self) -> Vec<Bond> {
+        let aa_bond_info = get_bonds_canonical20();
+        let residue_starts = self.get_residue_starts();
 
-    //     //    Create a :class:`BondList` for a given atom array (stack), based on
-    //     //    the deposited bonds for each residue in the RCSB ``components.cif``
-    //     //    dataset.
+        // Iterate through residues
+        let mut bonds = Vec::new();
+        for res_i in 0..residue_starts.len() - 1 {
+            let curr_start_i = residue_starts[res_i] as usize;
+            let next_start_i = residue_starts[res_i + 1] as usize;
+            if let Some(bond_dict_for_res) =
+                aa_bond_info.get(&self.res_names[curr_start_i].as_str())
+            {
+                // Iterate through bonds in this residue
+                for &(atom_name1, atom_name2, bond_type) in bond_dict_for_res {
+                    let atom_indices1: Vec<usize> = (curr_start_i..next_start_i)
+                        .filter(|&i| self.atom_names[i] == atom_name1)
+                        .collect();
+                    let atom_indices2: Vec<usize> = (curr_start_i..next_start_i)
+                        .filter(|&i| self.atom_names[i] == atom_name2)
+                        .collect();
 
-    //     //    Bonds between two adjacent residues are created for the atoms
-    //     //    expected to connect these residues, i.e. ``'C'`` and ``'N'`` for
-    //     //    peptides and ``"O3'"`` and ``'P'`` for nucleotides.
+                    // Create all possible bond combinations
+                    for &i in &atom_indices1 {
+                        for &j in &atom_indices2 {
+                            bonds.push(Bond {
+                                atom1: i as i32,
+                                atom2: j as i32,
+                                order: match_bond(bond_type),
+                            });
+                        }
+                    }
+                }
+            }
+        }
 
-    //     //    Parameters
-    //     //    ----------
-    //     //    atoms : AtomArray, shape=(n,) or AtomArrayStack, shape=(m,n)
-    //     //        The structure to create the :class:`BondList` for.
-    //     //    inter_residue : bool, optional
-    //     //        If true, connections between consecutive amino acids and
-    //     //        nucleotides are also added.
-    //     //    custom_bond_dict : dict (str -> dict ((str, str) -> int)), optional
-    //     //        A dictionary of dictionaries:
-    //     //        The outer dictionary maps residue names to inner dictionaries.
-    //     //        The inner dictionary maps tuples of two atom names to their
-    //     //        respective :class:`BondType` (represented as integer).
-    //     //        If given, these bonds are used instead of the bonds read from
-    //     //        ``components.cif``.
-    //     let residue_starts = self.get_residue_starts();
+        // if inter_residue {
+        //     let inter_bonds = self.connect_inter_residue(&residue_starts);
+        //     bonds.extend(inter_bonds);
+        // }
 
-    //     let mut bonds = Vec::new();
-
-    //     // Iterate through residues
-    //     for res_i in 0..residue_starts.len() - 1 {
-    //         let curr_start_i = residue_starts[res_i] as usize;
-    //         let next_start_i = residue_starts[res_i + 1] as usize;
-
-    //         // Get bond dictionary for this residue
-    //         let bond_dict_for_res = self.bonds_in_residue(&self.res_names[curr_start_i]);
-
-    //         // Iterate through bonds in this residue
-    //         for ((atom_name1, atom_name2), bond_type) in bond_dict_for_res {
-    //             let atom_indices1: Vec<usize> = (curr_start_i..next_start_i)
-    //                 .filter(|&i| self.atom_names[i] == atom_name1)
-    //                 .collect();
-    //             let atom_indices2: Vec<usize> = (curr_start_i..next_start_i)
-    //                 .filter(|&i| self.atom_names[i] == atom_name2)
-    //                 .collect();
-
-    //             // Create all possible bond combinations
-    //             for &i in &atom_indices1 {
-    //                 for &j in &atom_indices2 {
-    //                     bonds.push(Bond {
-    //                         atom1: i as i32,
-    //                         atom2: j as i32,
-    //                         order: bond_type,
-    //                     });
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     // if inter_residue {
-    //     //     let inter_bonds = self.connect_inter_residue(&residue_starts);
-    //     //     bonds.extend(inter_bonds);
-    //     // }
-
-    //     bonds
-    //     // unimplemented!()
-    // }
+        bonds
+        // unimplemented!()
+    }
 
     /// A new residue starts, either when the chain ID, residue ID,
     /// insertion code or residue name changes from one to the next atom.
@@ -203,12 +180,10 @@ impl AtomCollection {
     }
 
     // ... existing methods ...
-
     // // Get unique chains
     // pub fn unique_chains(&self) -> HashSet<&String> {
     //     self.chain.iter().collect()
     // }
-
     // // Filter by chain and atom type
     // pub fn filter_by_chain_and_type<'a>(
     //     &'a self,
@@ -221,7 +196,6 @@ impl AtomCollection {
     //         .filter(move |(i, &ref c)| c == chain && self.atom_type[*i] == atom_type)
     //         .map(|(i, _)| i)
     // }
-
     // // Get atom indices for a specific chain
     // pub fn get_chain_indices<'a>(&'a self, chain: &str) -> impl Iterator<Item = usize> + 'a {
     //     self.chain
@@ -253,6 +227,20 @@ impl AtomCollection {
     // }
 }
 
+fn match_bond(bond_int: i32) -> BondOrder {
+    match bond_int {
+        0 => BondOrder::Unset,
+        1 => BondOrder::Single,
+        2 => BondOrder::Double,
+        3 => BondOrder::Triple,
+        4 => BondOrder::Quadruple,
+        _ => {
+            println!("Bond Order not found: {}", bond_int);
+            panic!()
+        }
+    }
+}
+
 impl From<&PSEData> for AtomCollection {
     fn from(pse_data: &PSEData) -> Self {
         let mols = pse_data.get_molecule_data();
@@ -279,28 +267,33 @@ impl From<&PSEData> for AtomCollection {
             .map(|b| Bond {
                 atom1: b.index_1,
                 atom2: b.index_2,
-                order: match b.order {
-                    0 => BondOrder::Unset,
-                    1 => BondOrder::Single,
-                    2 => BondOrder::Double,
-                    3 => BondOrder::Triple,
-                    4 => BondOrder::Quadruple,
-                    _ => {
-                        println!("Bond Order not found: {:?}", b.order);
-                        panic!()
-                    }
-                },
+                order: match_bond(b.order),
             })
             .collect();
 
-        // specific fields
-        let res_names: Vec<String> = atoms.iter().map(|a| a.resn.to_string()).collect();
-        let res_ids: Vec<i32> = atoms.iter().map(|a| a.resv).collect();
-        let chain_ids: Vec<String> = atoms.iter().map(|a| a.chain.to_string()).collect();
-        let is_hetero: Vec<bool> = atoms.iter().map(|a| a.is_hetatm).collect();
-        let elements: Vec<String> = atoms.iter().map(|a| a.elem.to_string()).collect();
+        // pull out specific fields
+        let (res_names, res_ids, chain_ids, is_hetero, elements, atom_names): (
+            Vec<String>,
+            Vec<i32>,
+            Vec<String>,
+            Vec<bool>,
+            Vec<String>,
+            Vec<String>,
+        ) = atoms
+            .iter()
+            .map(|a| {
+                (
+                    a.resn.to_string(),
+                    a.resv,
+                    a.chain.to_string(),
+                    a.is_hetatm,
+                    a.elem.to_string(),
+                    a.name.to_string(),
+                )
+            })
+            .multiunzip();
 
-        let ac = AtomCollection {
+        AtomCollection {
             size: atoms.len(),
             coords,
             res_names,
@@ -308,124 +301,11 @@ impl From<&PSEData> for AtomCollection {
             chain_ids,
             is_hetero,
             elements,
+            atom_names,
             bonds: Some(bonds),
-        };
-        ac
+        }
     }
 }
-
-// impl From<&PDB> for AtomCollection {
-//     fn from(pdb_data: &PDB) -> Self {
-//         // let ac = AtomCollection {};
-//         // ac
-
-//         // unimplemented!()
-
-//         // let is_hetero = pdb_data.atoms.iter().map(|a| a.hetero()).collect();
-//         // let coords = pdb_data.atoms.iter().map(|a| a.pos()).collect();
-//         // let atom_name = pdb_data.atoms.iter().map(|a| a.name()).collect();
-
-//         // AtomCollection {
-//         //     size: pdb_data.atom_count(),
-//         //     coords,
-//         //     // res_ids: (),
-//         //     // res_names: (),
-//         //     is_hetero,
-//         //     // elements: (),
-//         //     // chain_ids: (),
-//         //     bonds: None,
-//         // }
-//         let (coords, is_hetero, atom_names, res_ids, res_names, elements, chain_ids): (
-//             Vec<[f32; 3]>,
-//             Vec<bool>,
-//             Vec<String>,
-//             Vec<i32>,
-//             Vec<String>,
-//             Vec<String>,
-//             Vec<String>,
-//         ) = pdb_data
-//             .chains()
-//             .flat_map(|chain| {
-//                 let chain_id = chain.id().to_string();
-//                 chain.residues().flat_map(move |residue| {
-//                     let (res_number, _insertion_code) = residue.id();
-//                     let res_id = res_number as i32; //
-//                     let res_name = residue.name().unwrap_or_default().to_string();
-//                     residue.atoms().map(move |atom| {
-//                         (
-//                             atom.pos(),
-//                             atom.hetero(),
-//                             atom.name().to_string(),
-//                             res_id,
-//                             res_name.clone(),
-//                             atom.element()?.symbol().to_string(),
-//                             chain_id.clone(),
-//                         )
-//                     })
-//                 })
-//             })
-//             .unzip();
-
-//         AtomCollection {
-//             size: pdb_data.atom_count(),
-//             coords,
-//             res_ids,
-//             res_names,
-//             is_hetero,
-//             elements,
-//             chain_ids,
-//             atom_names,
-//             bonds: None,
-//         }
-//     }
-// }
-
-// impl From<&PDB> for AtomCollection {
-//     fn from(pdb_data: &PDB) -> Self {
-//         let (coords, is_hetero, atom_names, res_ids, res_names, elements, chain_ids): (
-//             Vec<[f32; 3]>,
-//             Vec<bool>,
-//             Vec<String>,
-//             Vec<i32>,
-//             Vec<String>,
-//             Vec<String>,
-//             Vec<String>,
-//         ) = pdb_data
-//             .chains()
-//             .flat_map(|chain| {
-//                 let chain_id = chain.id().to_string();
-//                 chain.residues().flat_map(move |residue| {
-//                     let (res_number, _insertion_code) = residue.id();
-//                     let res_id = res_number as i32; // Convert isize to i32
-//                     let res_name = residue.name().unwrap_or_default().to_string();
-//                     residue.atoms().filter_map(move |atom| {
-//                         Some((
-//                             atom.pos(),
-//                             atom.hetero(),
-//                             atom.name().to_string(),
-//                             res_id,
-//                             res_name.clone(),
-//                             atom.element()?.symbol().to_string(),
-//                             chain_id.clone(),
-//                         ))
-//                     })
-//                 })
-//             })
-//             .unzip();
-
-//         AtomCollection {
-//             size: coords.len(),
-//             coords,
-//             res_ids,
-//             res_names,
-//             is_hetero,
-//             elements,
-//             chain_ids,
-//             atom_names,
-//             bonds: None,
-//         }
-//     }
-// }
 
 impl From<&PDB> for AtomCollection {
     // the PDB API requires us to iterate:
@@ -473,7 +353,7 @@ impl From<&PDB> for AtomCollection {
             is_hetero,
             elements,
             chain_ids,
-            // atom_names,
+            atom_names: atom_names,
             bonds: None,
         }
     }
@@ -509,31 +389,10 @@ pub enum BondOrder {
     Quadruple,
 }
 
-// // A view struct to represent a subset of atoms
-// pub struct AtomView<'a> {
-//     collection: &'a AtomCollection,
-//     indices: Vec<usize>,
-// }
-
-// impl<'a> AtomView<'a> {
-//     pub fn len(&self) -> usize {
-//         self.indices.len()
-//     }
-
-//     pub fn get_coord(&self, index: usize) -> Option<&[f32; 3]> {
-//         self.indices
-//             .get(index)
-//             .and_then(|&i| self.collection.coord.get(i))
-//     }
-
-//     // ... other methods to access fields for the viewed atoms
-// }
-
 #[cfg(test)]
 mod tests {
-    use itertools::Itertools;
-
     use crate::core::atomcollection::AtomCollection;
+    use itertools::Itertools;
 
     #[test]
     fn test_PSE_from() {
@@ -553,7 +412,7 @@ mod tests {
         let (pdb_data, _errors) = pdbtbx::open("tests/data/101M.cif").unwrap();
         assert_eq!(pdb_data.atom_count(), 1413);
 
-        // // check Atom Collection Numbers
+        // check Atom Collection Numbers
         let ac = AtomCollection::from(&pdb_data);
         assert_eq!(ac.coords.len(), 1413);
         assert_eq!(ac.bonds, None);
@@ -578,15 +437,15 @@ mod tests {
         assert_eq!(elements, ["C", "FE", "N", "O", "S"]);
     }
 
-    // #[test]
-    // fn test_addbonds() {
-    //     use pdbtbx::PDB;
-    //     let (pdb, _errors) = pdbtbx::open("tests/data/101M.cif").unwrap();
-    //     assert_eq!(pdb.atom_count(), 1413);
+    #[test]
+    fn test_addbonds() {
+        use pdbtbx::PDB;
+        let (pdb, _errors) = pdbtbx::open("tests/data/101M.cif").unwrap();
+        assert_eq!(pdb.atom_count(), 1413);
 
-    //     // // check Atom Collection Numbers
-    //     // let ac = AtomCollection::from(&psedata);
-    //     // assert_eq!(ac.coords.len(), 1519);
-    //     // assert_eq!(ac.bonds.unwrap().len(), 1537); // 1537 bonds
-    // }
+        // // check Atom Collection Numbers
+        // let ac = AtomCollection::from(&psedata);
+        // assert_eq!(ac.coords.len(), 1519);
+        // assert_eq!(ac.bonds.unwrap().len(), 1537); // 1537 bonds
+    }
 }
