@@ -1,5 +1,5 @@
 [workspace]
-members = ["ferritin-core", "ferritin-pymol", "ferretin-bevy"]
+members = ["ferritin-core", "ferritin-pymol", "ferritin-bevy"]
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }

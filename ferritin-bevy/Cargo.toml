@@ -1,10 +1,10 @@
 [package]
-name = "ferretin-bevy"
+name = "ferritin-bevy"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ferritin-core = { path = "../ferritin-core" }
 bevy = "0.14.2"
-pdbtbx = "0.11.0"
 bon = "2.3.0"
 glam = "0.29.0"

@@ -1,0 +1,386 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "MolViewSpec Node Schema OpenAPI",
+    "version": "0.1"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "State": {
+        "title": "State",
+        "type": "object",
+        "properties": {
+          "root": {
+            "title": "Root",
+            "description": "Root of the node tree.",
+            "allOf": [
+              {
+                "$ref": "#/definitions/Node"
+              }
+            ]
+          },
+          "metadata": {
+            "title": "Metadata",
+            "description": "Associated metadata.",
+            "allOf": [
+              {
+                "$ref": "#/definitions/Metadata"
+              }
+            ]
+          }
+        },
+        "required": ["root", "metadata"],
+        "definitions": {}
+      },
+      "StructureParams": {
+        "title": "StructureParams",
+        "type": "object",
+        "properties": {
+          "type": {
+            "title": "Type",
+            "enum": ["model", "assembly", "symmetry", "symmetry_mates"],
+            "type": "string"
+          },
+          "assembly_id": {
+            "title": "Assembly Id",
+            "description": "Use the name to specify which assembly to load",
+            "type": "string"
+          },
+          "assembly_index": {
+            "title": "Assembly Index",
+            "description": "0-based assembly index, use this to load the 1st assembly",
+            "type": "integer"
+          },
+          "model_index": {
+            "title": "Model Index",
+            "description": "0-based model index in case multiple NMR frames are present",
+            "type": "integer"
+          },
+          "block_index": {
+            "title": "Block Index",
+            "description": "0-based block index in case multiple mmCIF or SDF data blocks are present",
+            "type": "integer"
+          },
+          "block_header": {
+            "title": "Block Header",
+            "description": "Reference a specific mmCIF or SDF data block by its block header",
+            "type": "string"
+          },
+          "radius": {
+            "title": "Radius",
+            "description": "Radius around model coordinates when loading symmetry mates",
+            "type": "number"
+          },
+          "ijk_min": {
+            "title": "Ijk Min",
+            "description": "Bottom-left Miller indices",
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "ijk_max": {
+            "title": "Ijk Max",
+            "description": "Top-right Miller indices",
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          }
+        },
+        "required": ["type"]
+      },
+      "TooltipFromSourceParams": {
+        "title": "TooltipFromSourceParams",
+        "type": "object",
+        "properties": {
+          "category_name": {
+            "title": "Category Name",
+            "type": "string"
+          },
+          "field_name": {
+            "title": "Field Name",
+            "description": "Name of the column in CIF that contains the desired value (color/label/tooltip/component...); the default value is 'color'/'label'/'tooltip'/'component' depending on the node kind",
+            "type": "string"
+          },
+          "block_header": {
+            "title": "Block Header",
+            "type": "string"
+          },
+          "block_index": {
+            "title": "Block Index",
+            "type": "integer"
+          },
+          "schema": {
+            "title": "Schema",
+            "enum": [
+              "whole_structure",
+              "entity",
+              "chain",
+              "auth_chain",
+              "residue",
+              "auth_residue",
+              "residue_range",
+              "auth_residue_range",
+              "atom",
+              "auth_atom",
+              "all_atomic"
+            ],
+            "type": "string"
+          }
+        },
+        "required": ["category_name", "schema"]
+      },
+      "TooltipFromUriParams": {
+        "title": "TooltipFromUriParams",
+        "type": "object",
+        "properties": {
+          "uri": {
+            "title": "Uri",
+            "type": "string"
+          },
+          "format": {
+            "title": "Format",
+            "enum": ["cif", "bcif", "json"],
+            "type": "string"
+          },
+          "category_name": {
+            "title": "Category Name",
+            "description": "Only applies when format is 'cif' or 'bcif'",
+            "type": "string"
+          },
+          "field_name": {
+            "title": "Field Name",
+            "description": "Name of the column in CIF or field name (key) in JSON that contains the desired value (color/label/tooltip/component...); the default value is 'color'/'label'/'tooltip'/'component' depending on the node kind",
+            "type": "string"
+          },
+          "block_header": {
+            "title": "Block Header",
+            "description": "Only applies when format is 'cif' or 'bcif'",
+            "type": "string"
+          },
+          "block_index": {
+            "title": "Block Index",
+            "description": "Only applies when format is 'cif' or 'bcif'",
+            "type": "integer"
+          },
+          "schema": {
+            "title": "Schema",
+            "enum": [
+              "whole_structure",
+              "entity",
+              "chain",
+              "auth_chain",
+              "residue",
+              "auth_residue",
+              "residue_range",
+              "auth_residue_range",
+              "atom",
+              "auth_atom",
+              "all_atomic"
+            ],
+            "type": "string"
+          }
+        },
+        "required": ["uri", "format", "schema"]
+      },
+      "TooltipInlineParams": {
+        "title": "TooltipInlineParams",
+        "type": "object",
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": ["text"]
+      },
+      "TransformParams": {
+        "title": "TransformParams",
+        "type": "object",
+        "properties": {
+          "rotation": {
+            "title": "Rotation",
+            "description": "In a column major (j * 3 + i indexing) format, this is equivalent to Fortran-order in numpy, to be multiplied from the left",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "translation": {
+            "title": "Translation",
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        }
+      },
+      "Component": {
+        "title": "Component",
+        "type": "object",
+        "properties": {}
+      },
+      "Download": {
+        "title": "Download",
+        "type": "object",
+        "properties": {}
+      },
+      "GenericVisuals": {
+        "title": "GenericVisuals",
+        "type": "object",
+        "properties": {}
+      },
+      "Parse": {
+        "title": "Parse",
+        "type": "object",
+        "properties": {}
+      },
+      "Representation": {
+        "title": "Representation",
+        "type": "object",
+        "properties": {}
+      },
+      "Root": {
+        "title": "Root",
+        "type": "object",
+        "properties": {}
+      },
+      "Structure": {
+        "title": "Structure",
+        "type": "object",
+        "properties": {}
+      },
+      "_Base": {
+        "title": "_Base",
+        "type": "object",
+        "properties": {}
+      },
+      "_DataFromSourceParams": {
+        "title": "_DataFromSourceParams",
+        "type": "object",
+        "properties": {
+          "category_name": {
+            "title": "Category Name",
+            "type": "string"
+          },
+          "field_name": {
+            "title": "Field Name",
+            "description": "Name of the column in CIF that contains the desired value (color/label/tooltip/component...); the default value is 'color'/'label'/'tooltip'/'component' depending on the node kind",
+            "type": "string"
+          },
+          "block_header": {
+            "title": "Block Header",
+            "type": "string"
+          },
+          "block_index": {
+            "title": "Block Index",
+            "type": "integer"
+          },
+          "schema": {
+            "title": "Schema",
+            "enum": [
+              "whole_structure",
+              "entity",
+              "chain",
+              "auth_chain",
+              "residue",
+              "auth_residue",
+              "residue_range",
+              "auth_residue_range",
+              "atom",
+              "auth_atom",
+              "all_atomic"
+            ],
+            "type": "string"
+          }
+        },
+        "required": ["category_name", "schema"]
+      },
+      "_DataFromUriParams": {
+        "title": "_DataFromUriParams",
+        "type": "object",
+        "properties": {
+          "uri": {
+            "title": "Uri",
+            "type": "string"
+          },
+          "format": {
+            "title": "Format",
+            "enum": ["cif", "bcif", "json"],
+            "type": "string"
+          },
+          "category_name": {
+            "title": "Category Name",
+            "description": "Only applies when format is 'cif' or 'bcif'",
+            "type": "string"
+          },
+          "field_name": {
+            "title": "Field Name",
+            "description": "Name of the column in CIF or field name (key) in JSON that contains the desired value (color/label/tooltip/component...); the default value is 'color'/'label'/'tooltip'/'component' depending on the node kind",
+            "type": "string"
+          },
+          "block_header": {
+            "title": "Block Header",
+            "description": "Only applies when format is 'cif' or 'bcif'",
+            "type": "string"
+          },
+          "block_index": {
+            "title": "Block Index",
+            "description": "Only applies when format is 'cif' or 'bcif'",
+            "type": "integer"
+          },
+          "schema": {
+            "title": "Schema",
+            "enum": [
+              "whole_structure",
+              "entity",
+              "chain",
+              "auth_chain",
+              "residue",
+              "auth_residue",
+              "residue_range",
+              "auth_residue_range",
+              "atom",
+              "auth_atom",
+              "all_atomic"
+            ],
+            "type": "string"
+          }
+        },
+        "required": ["uri", "format", "schema"]
+      }
+    }
+  }
+}
