@@ -13,6 +13,7 @@ use crate::pymolparsing::parsing::{
 };
 use pdbtbx::PDB;
 use serde::{Deserialize, Serialize};
+use serde_bytes;
 use serde_pickle::de::{from_reader, DeOptions};
 use std::collections::HashMap;
 use std::fs;
