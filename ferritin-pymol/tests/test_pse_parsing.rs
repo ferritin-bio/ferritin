@@ -1,8 +1,8 @@
+use ferritin_pymol::pymolparsing::colors::Color;
+use ferritin_pymol::pymolparsing::parsing::{CoordSet, CustomValue, SettingsEnum};
+use ferritin_pymol::pymolparsing::representation::RepBitmask;
+use ferritin_pymol::PSEData;
 use itertools::assert_equal;
-use pseutils::pymolparsing::colors::Color;
-use pseutils::pymolparsing::parsing::{CoordSet, CustomValue, SettingsEnum};
-use pseutils::pymolparsing::representation::RepBitmask;
-use pseutils::PSEData;
 const TEST_OUTPUT_DIR: &str = "./test_temporary";
 
 #[test]
