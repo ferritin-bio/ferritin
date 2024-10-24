@@ -419,7 +419,7 @@ mod tests {
         let file_path = PathBuf::from(manifest_dir)
             .join("tests")
             .join("data")
-            .join("101M.cif");
+            .join("101m.cif");
 
         let (pdb_data, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         assert_eq!(pdb_data.atom_count(), 1413);
@@ -455,7 +455,7 @@ mod tests {
         let file_path = PathBuf::from(manifest_dir)
             .join("tests")
             .join("data")
-            .join("101M.cif");
+            .join("101m.cif");
 
         let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         assert_eq!(pdb.atom_count(), 1413);
