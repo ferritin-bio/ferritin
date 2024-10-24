@@ -7,9 +7,12 @@ license.workspace = true
 description.workspace = true
 
 [dependencies]
+ferritin-pymol = { path = "../ferritin-pymol" }
 urlencoding.workspace = true
 serde_repr.workspace = true
 once_cell.workspace = true
 bitflags.workspace = true
 serde = { workspace = true }
 thiserror = { workspace = true }
+pdbtbx.workspace = true
+itertools = "0.13.0"
