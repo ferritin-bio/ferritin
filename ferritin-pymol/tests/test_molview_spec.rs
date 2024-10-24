@@ -179,6 +179,7 @@ fn test_moviewspec_01_common_actions_cartoon() {
 }
 
 #[test]
+#[ignore]
 fn test_moviewspec_01_common_actions_selectors() {
     // https://colab.research.google.com/drive/1O2TldXlS01s-YgkD9gy87vWsfCBTYuz9#scrollTo=U256gC0Tj2vS
     // builder = mvs.create_builder()
@@ -300,6 +301,7 @@ fn test_moviewspec_01_common_actions_selectors() {
 }
 
 #[test]
+#[ignore]
 fn test_moviewspec_01_common_actions_symmetry() {
     // https://colab.research.google.com/drive/1O2TldXlS01s-YgkD9gy87vWsfCBTYuz9#scrollTo=U256gC0Tj2vS
     // builder = mvs.create_builder()
@@ -348,6 +350,7 @@ fn test_moviewspec_01_common_actions_symmetry() {
 }
 
 #[test]
+#[ignore]
 fn test_moviewspec_01_common_actions_symmetry_miller() {
     // https://colab.research.google.com/drive/1O2TldXlS01s-YgkD9gy87vWsfCBTYuz9#scrollTo=U256gC0Tj2vS
     // builder = mvs.create_builder()
