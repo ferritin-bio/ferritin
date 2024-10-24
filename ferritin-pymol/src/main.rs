@@ -1,5 +1,5 @@
 use clap::Parser;
-use pseutils::pymolparsing::psedata::PSEData;
+use ferritin_pymol::pymolparsing::psedata::PSEData;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]

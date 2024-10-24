@@ -15,4 +15,5 @@ bitflags.workspace = true
 serde = { workspace = true }
 thiserror = { workspace = true }
 pdbtbx.workspace = true
-itertools = "0.13.0"
+itertools.workspace = true
+lazy_static = "1.5.0"

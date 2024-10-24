@@ -6,7 +6,7 @@
 //! # Examples
 //!
 //! ```
-//! use pseutils::pymolparsing::colors::COLOR_SET;
+//! use ferritin_pymol::pymolparsing::colors::COLOR_SET;
 //!
 //! // white is the first color
 //! // pymol uses indexes which is why this is stored as a vector.

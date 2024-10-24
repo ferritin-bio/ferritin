@@ -3,7 +3,6 @@ use ferritin_pymol::PSEData;
 use itertools::izip;
 use itertools::Itertools;
 use pdbtbx::PDB;
-use std::collections::HashMap;
 
 pub struct AtomCollection {
     size: usize,
@@ -246,11 +245,11 @@ impl From<&PSEData> for AtomCollection {
         let mols = pse_data.get_molecule_data();
 
         // Pymol: most of the descriptive data is there
-        let atoms: Vec<&pseutils::pymolparsing::parsing::AtomInfo> =
+        let atoms: Vec<&ferritin_pymol::pymolparsing::parsing::AtomInfo> =
             mols.iter().flat_map(|mol| mol.atom.iter()).collect();
 
         // Pymol: coord sets are maintained seperately.
-        let coord_sets: Vec<&pseutils::pymolparsing::parsing::CoordSet> =
+        let coord_sets: Vec<&ferritin_pymol::pymolparsing::parsing::CoordSet> =
             mols.iter().flat_map(|mol| mol.coord_set.iter()).collect();
 
         let coords: Vec<[f32; 3]> = coord_sets
@@ -259,7 +258,7 @@ impl From<&PSEData> for AtomCollection {
             .collect();
 
         // Pymol: most of the descriptive data is there
-        let pymol_bonds: Vec<&pseutils::pymolparsing::parsing::Bond> =
+        let pymol_bonds: Vec<&ferritin_pymol::pymolparsing::parsing::Bond> =
             mols.iter().flat_map(|mol| mol.bond.iter()).collect();
 
         let bonds = pymol_bonds
