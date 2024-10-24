@@ -1,0 +1,10 @@
+[package]
+name = "ferretin-bevy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "0.14.2"
+pdbtbx = "0.11.0"
+bon = "2.3.0"
+glam = "0.29.0"
