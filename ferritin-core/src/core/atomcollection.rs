@@ -391,10 +391,10 @@ pub enum BondOrder {
 #[cfg(test)]
 mod tests {
     use crate::core::atomcollection::AtomCollection;
-    use itertools::Itertools;
-    use std::path::PathBuf;
     use ferritin_pymol::PSEData;
+    use itertools::Itertools;
     use pdbtbx;
+    use std::path::PathBuf;
 
     #[test]
     fn test_pse_from() {
@@ -419,8 +419,7 @@ mod tests {
         let file_path = PathBuf::from(manifest_dir)
             .join("tests")
             .join("data")
-            .join("101M.cif")
-            ;
+            .join("101M.cif");
 
         let (pdb_data, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         assert_eq!(pdb_data.atom_count(), 1413);
@@ -456,8 +455,7 @@ mod tests {
         let file_path = PathBuf::from(manifest_dir)
             .join("tests")
             .join("data")
-            .join("101M.cif")
-            ;
+            .join("101M.cif");
 
         let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         assert_eq!(pdb.atom_count(), 1413);
