@@ -24,3 +24,8 @@ clean:
     cargo clean --doc
     rm -rf docs/doc/
     rm -rf docs/examples/example
+
+
+# cargo install cargo-edit
+upgrade:
+    cargo upgrade --all
