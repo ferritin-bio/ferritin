@@ -3,7 +3,7 @@
 //! Over time this would be a good candidate for factoring out
 use super::{ColorScheme, RenderOptions, Structure};
 use bevy::prelude::*;
-use pdbtbx::StrictnessLevel;
+// use pdbtbx::StrictnessLevel;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -75,7 +75,7 @@ fn load_initial_proteins(
 
         if let Ok((pdb, _errors)) = pdbtbx::open(
             file_path.to_str().unwrap_or_default(),
-            StrictnessLevel::Medium,
+            // StrictnessLevel::Medium,
         ) {
             let structure = Structure::builder()
                 .pdb(pdb)

@@ -11,7 +11,7 @@
 //! # Examples
 //!
 //! ```
-//! use pseutils::pymolparsing::representation::RepBitmask;
+//! use ferritin_pymol::pymolparsing::representation::RepBitmask;
 //!
 //! let mut reps = RepBitmask::new();
 //! reps.insert(RepBitmask::CYL | RepBitmask::SPHERE);

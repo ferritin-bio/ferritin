@@ -74,7 +74,7 @@ fn test_pdb_00() {
     println!("{:?}", view);
 
     // Check symmetry code
-    let (unit, sym) = mols[0].get_unit_cell_symmetry();
+    let (_unit, _sym) = mols[0].get_unit_cell_symmetry();
 
     // Check the pymol object fields
     let pyobj = &mols[0].object;

@@ -392,11 +392,19 @@ pub enum BondOrder {
 mod tests {
     use crate::core::atomcollection::AtomCollection;
     use itertools::Itertools;
+    use std::path::PathBuf;
+    use ferritin_pymol::PSEData;
+    use pdbtbx;
 
     #[test]
     fn test_pse_from() {
-        use pseutils::PSEData;
-        let psedata = PSEData::load("tests/data/example.pse").expect("local pse path");
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let file_path = PathBuf::from(manifest_dir)
+            .join("tests")
+            .join("data")
+            .join("example.pse");
+
+        let psedata = PSEData::load(file_path.to_str().unwrap()).expect("local pse path");
 
         // check Atom Collection Numbers
         let ac = AtomCollection::from(&psedata);
@@ -407,8 +415,14 @@ mod tests {
 
     #[test]
     fn test_pdb_from() {
-        use pdbtbx::PDB;
-        let (pdb_data, _errors) = pdbtbx::open("tests/data/101M.cif").unwrap();
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let file_path = PathBuf::from(manifest_dir)
+            .join("tests")
+            .join("data")
+            .join("101M.cif")
+            ;
+
+        let (pdb_data, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         assert_eq!(pdb_data.atom_count(), 1413);
 
         // check Atom Collection Numbers
@@ -438,8 +452,14 @@ mod tests {
 
     #[test]
     fn test_addbonds() {
-        use pdbtbx::PDB;
-        let (pdb, _errors) = pdbtbx::open("tests/data/101M.cif").unwrap();
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let file_path = PathBuf::from(manifest_dir)
+            .join("tests")
+            .join("data")
+            .join("101M.cif")
+            ;
+
+        let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         assert_eq!(pdb.atom_count(), 1413);
 
         // // check Atom Collection Numbers
