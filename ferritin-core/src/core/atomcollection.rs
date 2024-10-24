@@ -1,9 +1,8 @@
-use super::constants::{default_distance_range, get_bonds_canonical20};
+use super::constants::get_bonds_canonical20;
+use ferritin_pymol::PSEData;
 use itertools::izip;
 use itertools::Itertools;
 use pdbtbx::PDB;
-use pseutils::PSEData;
-use std::collections::HashMap;
 
 pub struct AtomCollection {
     size: usize,
@@ -246,11 +245,11 @@ impl From<&PSEData> for AtomCollection {
         let mols = pse_data.get_molecule_data();
 
         // Pymol: most of the descriptive data is there
-        let atoms: Vec<&pseutils::pymolparsing::parsing::AtomInfo> =
+        let atoms: Vec<&ferritin_pymol::pymolparsing::parsing::AtomInfo> =
             mols.iter().flat_map(|mol| mol.atom.iter()).collect();
 
         // Pymol: coord sets are maintained seperately.
-        let coord_sets: Vec<&pseutils::pymolparsing::parsing::CoordSet> =
+        let coord_sets: Vec<&ferritin_pymol::pymolparsing::parsing::CoordSet> =
             mols.iter().flat_map(|mol| mol.coord_set.iter()).collect();
 
         let coords: Vec<[f32; 3]> = coord_sets
@@ -259,7 +258,7 @@ impl From<&PSEData> for AtomCollection {
             .collect();
 
         // Pymol: most of the descriptive data is there
-        let pymol_bonds: Vec<&pseutils::pymolparsing::parsing::Bond> =
+        let pymol_bonds: Vec<&ferritin_pymol::pymolparsing::parsing::Bond> =
             mols.iter().flat_map(|mol| mol.bond.iter()).collect();
 
         let bonds = pymol_bonds
@@ -353,7 +352,7 @@ impl From<&PDB> for AtomCollection {
             is_hetero,
             elements,
             chain_ids,
-            atom_names: atom_names,
+            atom_names,
             bonds: None,
         }
     }
@@ -392,12 +391,20 @@ pub enum BondOrder {
 #[cfg(test)]
 mod tests {
     use crate::core::atomcollection::AtomCollection;
+    use ferritin_pymol::PSEData;
     use itertools::Itertools;
+    use pdbtbx;
+    use std::path::PathBuf;
 
     #[test]
-    fn test_PSE_from() {
-        use pseutils::PSEData;
-        let psedata = PSEData::load("tests/data/example.pse").expect("local pse path");
+    fn test_pse_from() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let file_path = PathBuf::from(manifest_dir)
+            .join("tests")
+            .join("data")
+            .join("example.pse");
+
+        let psedata = PSEData::load(file_path.to_str().unwrap()).expect("local pse path");
 
         // check Atom Collection Numbers
         let ac = AtomCollection::from(&psedata);
@@ -407,9 +414,14 @@ mod tests {
     }
 
     #[test]
-    fn test_PDB_from() {
-        use pdbtbx::PDB;
-        let (pdb_data, _errors) = pdbtbx::open("tests/data/101M.cif").unwrap();
+    fn test_pdb_from() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let file_path = PathBuf::from(manifest_dir)
+            .join("tests")
+            .join("data")
+            .join("101m.cif");
+
+        let (pdb_data, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         assert_eq!(pdb_data.atom_count(), 1413);
 
         // check Atom Collection Numbers
@@ -439,8 +451,13 @@ mod tests {
 
     #[test]
     fn test_addbonds() {
-        use pdbtbx::PDB;
-        let (pdb, _errors) = pdbtbx::open("tests/data/101M.cif").unwrap();
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let file_path = PathBuf::from(manifest_dir)
+            .join("tests")
+            .join("data")
+            .join("101m.cif");
+
+        let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         assert_eq!(pdb.atom_count(), 1413);
 
         // // check Atom Collection Numbers

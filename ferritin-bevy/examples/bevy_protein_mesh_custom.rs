@@ -1,6 +1,6 @@
 //!  Example allowing custom colors and rendering options
 use bevy::prelude::*;
-use protein_renderer::{ColorScheme, RenderOptions, StructurePlugin, StructureSettings};
+use ferritin_bevy::{ColorScheme, RenderOptions, StructurePlugin, StructureSettings};
 
 fn main() {
     let chalky = StandardMaterial {

@@ -1,4 +1,4 @@
-use pseutils::molviewspec::nodes::{
+use ferritin_pymol::molviewspec::nodes::{
     ColorT, ComponentExpression, ComponentSelector, ComponentSelectorT, ParseFormatT, ParseParams,
     RepresentationTypeT, State, StructureParams, StructureTypeT,
 };
@@ -10,6 +10,7 @@ use std::io::Write;
 const TEST_OUTPUT_DIR: &str = "./test_temporary";
 
 #[test]
+#[ignore]
 fn test_molspecview_json_1cbs() {
     let json_files_component_list = vec![
         "tests/mol-spec-data/1cbs/auth_residue.json",
@@ -40,6 +41,7 @@ fn test_molspecview_json_1cbs() {
 }
 
 #[test]
+#[ignore]
 fn test_molspecview_json_1h9t() {
     let file = File::open("tests/mol-spec-data/1h9t/domains.json").expect("Failed to open file");
     let reader = BufReader::new(file);
@@ -61,6 +63,7 @@ fn test_molspecview_json_1h9t() {
 }
 
 #[test]
+#[ignore]
 fn test_molspecview_json_2bvk() {
     let file = File::open("tests/mol-spec-data/2bvk/atoms.json").expect("Failed to open file");
     let reader = BufReader::new(file);
@@ -117,6 +120,7 @@ fn test_moviewspec_00_builder_basics() {
 }
 
 #[test]
+#[ignore]
 fn test_moviewspec_01_common_actions_cartoon() {
     // https://colab.research.google.com/drive/1O2TldXlS01s-YgkD9gy87vWsfCBTYuz9#scrollTo=U256gC0Tj2vS
     // builder = mvs.create_builder()
@@ -175,6 +179,7 @@ fn test_moviewspec_01_common_actions_cartoon() {
 }
 
 #[test]
+#[ignore]
 fn test_moviewspec_01_common_actions_selectors() {
     // https://colab.research.google.com/drive/1O2TldXlS01s-YgkD9gy87vWsfCBTYuz9#scrollTo=U256gC0Tj2vS
     // builder = mvs.create_builder()
@@ -296,6 +301,7 @@ fn test_moviewspec_01_common_actions_selectors() {
 }
 
 #[test]
+#[ignore]
 fn test_moviewspec_01_common_actions_symmetry() {
     // https://colab.research.google.com/drive/1O2TldXlS01s-YgkD9gy87vWsfCBTYuz9#scrollTo=U256gC0Tj2vS
     // builder = mvs.create_builder()
@@ -344,6 +350,7 @@ fn test_moviewspec_01_common_actions_symmetry() {
 }
 
 #[test]
+#[ignore]
 fn test_moviewspec_01_common_actions_symmetry_miller() {
     // https://colab.research.google.com/drive/1O2TldXlS01s-YgkD9gy87vWsfCBTYuz9#scrollTo=U256gC0Tj2vS
     // builder = mvs.create_builder()

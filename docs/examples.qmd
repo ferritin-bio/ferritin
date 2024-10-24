@@ -1,0 +1,29 @@
+---
+title: "Examples"
+format:
+  html:
+    page-layout: full
+---
+
+PSE utils: Conversion of python session files to Molviewspec.
+
+
+## Example PSE
+
+This is a simple example PSE that has a protein object and a selection object. The pymol `PSE` is on the left and the resulting molviewspec is on the right.
+
+```sh
+pseutils --psefile docs/examples/example.pse --outputdir docs/examples/example
+```
+
+:::: {.columns .column-page}
+
+::: {.column width="40%"}
+![](./examples/images/example_pse.png)
+:::
+
+::: {.column width="60%"}
+{{< mol-json ./examples/example/state.mvsj >}}
+:::
+
+::::

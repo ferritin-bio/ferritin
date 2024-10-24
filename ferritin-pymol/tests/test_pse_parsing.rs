@@ -1,8 +1,8 @@
+use ferritin_pymol::pymolparsing::colors::Color;
+use ferritin_pymol::pymolparsing::parsing::{CoordSet, CustomValue, SettingsEnum};
+use ferritin_pymol::pymolparsing::representation::RepBitmask;
+use ferritin_pymol::PSEData;
 use itertools::assert_equal;
-use pseutils::pymolparsing::colors::Color;
-use pseutils::pymolparsing::parsing::{CoordSet, CustomValue, SettingsEnum};
-use pseutils::pymolparsing::representation::RepBitmask;
-use pseutils::PSEData;
 const TEST_OUTPUT_DIR: &str = "./test_temporary";
 
 #[test]
@@ -68,13 +68,13 @@ fn test_pdb_00() {
     // MASTER      365    0    0    5   18    0    0    6 1519    1    0   15
     // MASTER    0    0    0    0    0    0    0    6    1519 1    0    0
 
-    let chain = mols[0].create_chain(chains[0].clone());
+    let _chain = mols[0].create_chain(chains[0].clone());
 
     let view = &psedata.view;
     println!("{:?}", view);
 
     // Check symmetry code
-    let (unit, sym) = mols[0].get_unit_cell_symmetry();
+    let (_unit, _sym) = mols[0].get_unit_cell_symmetry();
 
     // Check the pymol object fields
     let pyobj = &mols[0].object;

@@ -1,0 +1,27 @@
+project:
+  type: website
+  resources:
+    - "examples/**"
+    - "doc/**"
+
+website:
+  title: "ferritin"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - href: examples.qmd
+        text: Examples
+      - text: Ferritin-RustDoc
+        href: doc/ferritin_core/index.html
+
+    right:
+      - icon: github
+        href: https://github.com/zachcp/ferritin
+        aria-label: GitHub
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true

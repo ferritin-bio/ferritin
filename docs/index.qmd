@@ -1,0 +1,60 @@
+---
+title: "pseutils"
+---
+
+
+
+:::: {.columns}
+
+::: {.column width="20%"}
+![](pseutils.png)
+:::
+
+::: {.column width="75%" style="padding-left: 20px;"}
+## PSEutils
+
+Conversion of python session files to Molviewspec.
+:::
+
+::::
+
+
+
+## Convert PSE
+
+
+
+```sh
+
+# build the binary and test
+cargo build --release
+./target/release/pseutils  --psefile tests/data/example.pse --outputdir binary_test
+
+# outputs a complete directory
+> tree binary_test
+binary_test
+├── index.html
+├── molstar.css
+├── molstar.js
+├── pdb
+│   └── 1pdb.pdb
+├── pdb_contents.txt
+└── state.mvsj
+
+```
+
+
+## Docs and Links
+
+PSEUtils:
+
+- High Level [Rust Docs](./doc/pseutils)
+- PSE [Rust Parser](./doc/pseutils/pymolparsing/psedata/index.html)
+- MVSJ [Nodes](./doc/pseutils/molviewspec/nodes/index.html)
+
+Related:
+
+- [Pymol-Open-source](https://github.com/schrodinger/pymol-open-source)
+- [mol-view-spec](https://molstar.org/mol-view-spec/)
+- [molstar](https://molstar.org)
+- [molstar-quarto](https://github.com/jmbuhr/quarto-molstar). Used to embed the MVSJ widgets in the page.

@@ -108,10 +108,9 @@ impl Structure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pdbtbx::StrictnessLevel;
     #[test]
     fn test_pdb_to_mesh() {
-        let (pdb, _errors) = pdbtbx::open("examples/1fap.cif", StrictnessLevel::Medium).unwrap();
+        let (pdb, _errors) = pdbtbx::open("examples/1fap.cif").unwrap();
         let structure = Structure::builder().pdb(pdb).build();
         assert_eq!(structure.pdb.atom_count(), 2154);
         let mesh = structure.to_mesh();
