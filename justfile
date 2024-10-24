@@ -6,7 +6,7 @@ build:
 # convert all PSEs to msvj folders
 convert: build
     for file in docs/examples/*.pse; do \
-        ./target/debug/pseutils --psefile "$file" --outputdir "${file%.*}"; \
+        ./target/debug/ferritin-pymol --psefile "$file" --outputdir "${file%.*}"; \
     done
 
 
