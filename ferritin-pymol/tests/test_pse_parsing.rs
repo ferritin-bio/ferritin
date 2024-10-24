@@ -68,7 +68,7 @@ fn test_pdb_00() {
     // MASTER      365    0    0    5   18    0    0    6 1519    1    0   15
     // MASTER    0    0    0    0    0    0    0    6    1519 1    0    0
 
-    let chain = mols[0].create_chain(chains[0].clone());
+    let _chain = mols[0].create_chain(chains[0].clone());
 
     let view = &psedata.view;
     println!("{:?}", view);
