@@ -4,6 +4,7 @@
 use super::{ColorScheme, RenderOptions, Structure};
 use bevy::prelude::*;
 // use pdbtbx::StrictnessLevel;
+use ferritin_core::AtomCollection;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -78,7 +79,7 @@ fn load_initial_proteins(
             // StrictnessLevel::Medium,
         ) {
             let structure = Structure::builder()
-                .pdb(pdb)
+                .pdb(AtomCollection::from(&pdb))
                 .rendertype(settings.render_type.clone())
                 .color_scheme(settings.color_scheme.clone())
                 .material(settings.material.clone())

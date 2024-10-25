@@ -9,6 +9,7 @@ description.workspace = true
 [dependencies]
 serde.workspace = true
 ferritin-core = { path = "../ferritin-core" }
+itertools.workspace = true
 pdbtbx.workspace = true
 bevy = "0.14.2"                               # Specific to bevy crate
 bon = "2.3.0"                                 # Specific to bevy crate

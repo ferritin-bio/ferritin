@@ -12,7 +12,8 @@ use bevy::prelude::{
     StandardMaterial, Vec3,
 };
 use bon::Builder;
-use pdbtbx::PDB;
+use ferritin_core::AtomCollection;
+use pdbtbx::Element;
 
 /// Enum representing various rendering options.
 ///
@@ -31,7 +32,7 @@ pub enum RenderOptions {
 /// Define Everything Needed to render
 #[derive(Builder, Component)]
 pub struct Structure {
-    pdb: PDB,
+    pdb: AtomCollection,
     #[builder(default = RenderOptions::Solid)]
     rendertype: RenderOptions,
     #[builder(default = ColorScheme::Solid(Color::WHITE))]
@@ -74,29 +75,57 @@ impl Structure {
         todo!()
     }
     /// Internal fn for rendering spheres.
+    // fn render_spheres(&self) -> Mesh {
+    //     let mut meshes = Vec::new();
+    //     // atoms: radius
+
+    //     for atom in self.pdb.atoms() {
+    //         let (x, y, z) = atom.pos();
+    //         let center = Vec3::new(x as f32, y as f32, z as f32);
+    //         let radius = atom
+    //             .element()
+    //             .expect("Atom Element not Defined")
+    //             .atomic_radius()
+    //             .van_der_waals
+    //             .expect("Van der waals not defined") as f32;
+    //         let color = self.color_scheme.get_color(atom).to_srgba();
+    //         let mut sphere_mesh = Sphere::new(radius).mesh().build();
+    //         let vertex_count = sphere_mesh.count_vertices();
+    //         let color_array = vec![color.to_vec4(); vertex_count];
+    //         sphere_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color_array);
+    //         sphere_mesh = sphere_mesh.translated_by(center);
+    //         sphere_mesh.compute_smooth_normals();
+    //         meshes.push(sphere_mesh);
+    //     }
+    //     // combine all the meshes together
+    //     meshes
+    //         .into_iter()
+    //         .reduce(|mut acc, mesh| {
+    //             acc.merge(&mesh);
+    //             acc
+    //         })
+    //         .unwrap()
+    // }
+
     fn render_spheres(&self) -> Mesh {
-        let mut meshes = Vec::new();
-        for atom in self.pdb.atoms() {
-            let (x, y, z) = atom.pos();
-            let center = Vec3::new(x as f32, y as f32, z as f32);
-            let radius = atom
-                .element()
-                .expect("Atom Element not Defined")
-                .atomic_radius()
-                .van_der_waals
-                .expect("Van der waals not defined") as f32;
-            let color = self.color_scheme.get_color(atom).to_srgba();
-            let mut sphere_mesh = Sphere::new(radius).mesh().build();
-            let vertex_count = sphere_mesh.count_vertices();
-            let color_array = vec![color.to_vec4(); vertex_count];
-            sphere_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color_array);
-            sphere_mesh = sphere_mesh.translated_by(center);
-            sphere_mesh.compute_smooth_normals();
-            meshes.push(sphere_mesh);
-        }
-        // combine all the meshes together
-        meshes
-            .into_iter()
+        self.pdb
+            .iter_coords_and_elements()
+            .map(|(coord, element_str)| {
+                let center = Vec3::new(coord[0], coord[1], coord[2]);
+                let element = Element::from_symbol(element_str).expect("Element not recognized");
+                let radius = element
+                    .atomic_radius()
+                    .van_der_waals
+                    .expect("Van der waals not defined") as f32;
+                // let color = self.color_scheme.get_color(element_str).to_srgba();
+                let mut sphere_mesh = Sphere::new(radius).mesh().build();
+                let vertex_count = sphere_mesh.count_vertices();
+                // let color_array = vec![color.to_vec4(); vertex_count];
+                // sphere_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color_array);
+                sphere_mesh = sphere_mesh.translated_by(center);
+                sphere_mesh.compute_smooth_normals();
+                sphere_mesh
+            })
             .reduce(|mut acc, mesh| {
                 acc.merge(&mesh);
                 acc

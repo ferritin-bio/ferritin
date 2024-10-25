@@ -27,6 +27,12 @@ pub struct AtomCollection {
 }
 
 impl AtomCollection {
+    pub fn size(&self) -> usize {
+        self.size
+    }
+    pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &String)> {
+        izip!(&self.coords, &self.elements)
+    }
     pub fn calculate_displacement(&self) {
         // Measure the displacement vector, i.e. the vector difference, from
         // one array of atom coordinates to another array of coordinates.
