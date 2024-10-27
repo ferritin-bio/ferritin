@@ -1,6 +1,5 @@
+# Ferritin
 
+Protein utilities for Rust
 
-```sh
-
-cargo run --example ccd
-```
+![](ferritin.png)

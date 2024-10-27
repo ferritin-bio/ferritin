@@ -1,5 +1,5 @@
 ---
-title: "pseutils"
+title: "ferritin"
 ---
 
 
@@ -7,54 +7,29 @@ title: "pseutils"
 :::: {.columns}
 
 ::: {.column width="20%"}
-![](pseutils.png)
+![](ferritin.png)
 :::
 
 ::: {.column width="75%" style="padding-left: 20px;"}
-## PSEutils
+## Ferritin
 
-Conversion of python session files to Molviewspec.
+Protein utilities for Rust
 :::
 
 ::::
 
 
 
-## Convert PSE
+## Crates
 
+### Ferritin-Core
 
+Data structures and algorithims to work with proteins. [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_core/). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-core).
 
-```sh
+### Ferritin-Bevy
 
-# build the binary and test
-cargo build --release
-./target/release/pseutils  --psefile tests/data/example.pse --outputdir binary_test
+Visualization of proteins using the Bevy animation engine. [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_bevy/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-bevy).
 
-# outputs a complete directory
-> tree binary_test
-binary_test
-├── index.html
-├── molstar.css
-├── molstar.js
-├── pdb
-│   └── 1pdb.pdb
-├── pdb_contents.txt
-└── state.mvsj
+### Ferritin-Pymol
 
-```
-
-
-## Docs and Links
-
-PSEUtils:
-
-- High Level [Rust Docs](./doc/pseutils)
-- PSE [Rust Parser](./doc/pseutils/pymolparsing/psedata/index.html)
-- MVSJ [Nodes](./doc/pseutils/molviewspec/nodes/index.html)
-
-Related:
-
-- [Pymol-Open-source](https://github.com/schrodinger/pymol-open-source)
-- [mol-view-spec](https://molstar.org/mol-view-spec/)
-- [molstar](https://molstar.org)
-- [molstar-quarto](https://github.com/jmbuhr/quarto-molstar). Used to embed the MVSJ widgets in the page.
+Native Rust access to pymol `pse` binary files.  [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_pymol/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-pymol).
