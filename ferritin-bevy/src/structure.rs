@@ -7,6 +7,7 @@
 // use bevy::prelude::*;
 use super::ColorScheme;
 use bevy::asset::Assets;
+use bevy::math::Vec4;
 use bevy::prelude::{
     default, Color, ColorToComponents, Component, Mesh, MeshBuilder, Meshable, PbrBundle, Sphere,
     StandardMaterial, Vec3,
@@ -117,11 +118,15 @@ impl Structure {
                     .atomic_radius()
                     .van_der_waals
                     .expect("Van der waals not defined") as f32;
-                // let color = self.color_scheme.get_color(element_str).to_srgba();
+
                 let mut sphere_mesh = Sphere::new(radius).mesh().build();
                 let vertex_count = sphere_mesh.count_vertices();
-                // let color_array = vec![color.to_vec4(); vertex_count];
-                // sphere_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color_array);
+                let color = Color::srgb(0.3, 0.5, 0.8).to_srgba();
+
+                // let color_array: Vec<Vec4> = vec![color.into(); vertex_count];
+                let color_array =
+                    vec![Vec4::new(color.red, color.green, color.blue, color.alpha); vertex_count];
+                sphere_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color_array);
                 sphere_mesh = sphere_mesh.translated_by(center);
                 sphere_mesh.compute_smooth_normals();
                 sphere_mesh
