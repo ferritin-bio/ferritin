@@ -4,7 +4,8 @@
 ## Examples
 
 ```sh
-cargo run --example bevy_protein_mesh_custom
+cargo run --example basic_spheres
+cargo run --example basic_ballandstick
 ```
 
 ![](docs/images/protein_01.png)

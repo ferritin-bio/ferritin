@@ -27,6 +27,18 @@ pub struct AtomCollection {
 }
 
 impl AtomCollection {
+    pub fn size(&self) -> usize {
+        self.size
+    }
+    pub fn bonds(&self) -> Option<&Vec<Bond>> {
+        self.bonds.as_ref()
+    }
+    pub fn coords(&self) -> &Vec<[f32; 3]> {
+        self.coords.as_ref()
+    }
+    pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &String)> {
+        izip!(&self.coords, &self.elements)
+    }
     pub fn calculate_displacement(&self) {
         // Measure the displacement vector, i.e. the vector difference, from
         // one array of atom coordinates to another array of coordinates.
@@ -368,6 +380,12 @@ pub struct Bond {
     // stereo
     // unique_id
     // has_setting
+}
+
+impl Bond {
+    pub fn get_atom_indices(&self) -> (i32, i32) {
+        (self.atom1, self.atom2)
+    }
 }
 
 #[repr(u8)]
