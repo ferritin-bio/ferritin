@@ -1,2 +1,2 @@
 mod core;
-pub use core::AtomCollection;
+pub use core::{AtomCollection, Bond};
