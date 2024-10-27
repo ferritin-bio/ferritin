@@ -2,6 +2,7 @@
 //!
 //! This module defines the color mapping used for rendering.
 use bevy::prelude::Color;
+use pdbtbx::Element;
 
 /// Represents different color schemes for rendering atoms.
 #[derive(Clone)]
@@ -25,16 +26,16 @@ pub enum ColorScheme {
 // ColorScheme::ByResidueType(func) => func(residue),
 // ColorScheme::Custom(func) => func(atom, residue, chain),
 impl ColorScheme {
-    pub fn get_color(&self, atom: &str) -> Color {
+    pub fn get_color(&self, atom: &Element) -> Color {
         match &self {
             ColorScheme::Solid(color) => *color,
             ColorScheme::ByAtomType => {
                 match atom {
-                    "C" => Color::srgb(0.5, 0.5, 0.5), // Carbon: Gray
-                    "N" => Color::srgb(0.0, 0.0, 1.0), // Nitrogen: Blue
-                    "O" => Color::srgb(1.0, 0.0, 0.0), // Oxygen: Red
-                    "S" => Color::srgb(1.0, 1.0, 0.0), // Sulfur: Yellow
-                    _ => Color::srgb(1.0, 1.0, 1.0),   // Other: White
+                    Element::C => Color::srgb(0.5, 0.5, 0.5), // Carbon: Gray
+                    Element::N => Color::srgb(0.0, 0.0, 1.0), // Nitrogen: Blue
+                    Element::O => Color::srgb(1.0, 0.0, 0.0), // Oxygen: Red
+                    Element::S => Color::srgb(1.0, 1.0, 0.0), // Sulfur: Yellow
+                    _ => Color::srgb(1.0, 1.0, 1.0),          // Other: White
                 }
             }
         }
@@ -47,9 +48,21 @@ mod tests {
     #[test]
     fn test_get_color() {
         let by_atom_scheme = ColorScheme::ByAtomType;
-        assert_eq!(by_atom_scheme.get_color("C"), Color::srgb(0.5, 0.5, 0.5));
-        assert_eq!(by_atom_scheme.get_color("N"), Color::srgb(0.0, 0.0, 1.0));
-        assert_eq!(by_atom_scheme.get_color("O"), Color::srgb(1.0, 0.0, 0.0));
-        assert_eq!(by_atom_scheme.get_color("S"), Color::srgb(1.0, 1.0, 0.0));
+        assert_eq!(
+            by_atom_scheme.get_color(&Element::C),
+            Color::srgb(0.5, 0.5, 0.5)
+        );
+        assert_eq!(
+            by_atom_scheme.get_color(&Element::N),
+            Color::srgb(0.0, 0.0, 1.0)
+        );
+        assert_eq!(
+            by_atom_scheme.get_color(&Element::O),
+            Color::srgb(1.0, 0.0, 0.0)
+        );
+        assert_eq!(
+            by_atom_scheme.get_color(&Element::S),
+            Color::srgb(1.0, 1.0, 0.0)
+        );
     }
 }

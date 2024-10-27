@@ -49,7 +49,7 @@ use crate::molviewspec::nodes::{ComponentExpression, ComponentSelector};
 use crate::pymolparsing::colors::{Color, COLOR_SET};
 use crate::pymolparsing::representation::RepBitmask;
 use itertools::Itertools;
-use pdbtbx::{self, Residue, PDB};
+use pdbtbx::{self, Element, Residue, PDB};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_pickle::{from_value, Value};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -84,7 +84,7 @@ pub struct AtomInfo {
     /// Atom name
     pub name: String,
     /// Element symbol
-    pub elem: String,
+    pub elem: Element,
     /// Text type
     pub text_type: String,
     /// Label text
@@ -200,16 +200,16 @@ impl AtomInfo {
     pub fn to_pdbtbx_atom(&self) -> pdbtbx::Atom {
         let formal_charge = self.formal_charge as isize;
         let atom = pdbtbx::Atom::new(
-            self.is_hetatm, // hetero
-            0,              // serial_number
-            &self.name,     // atom_name
-            0.0,            // x Todo
-            0.0,            // y Todo
-            0.0,            // z Todo
-            0.0,            // occupancy? Todo
-            self.b,         // b-factor
-            &self.elem,     // element
-            formal_charge,  // charge: todo: is this the right charge?
+            self.is_hetatm,     // hetero
+            0,                  // serial_number
+            &self.name,         // atom_name
+            0.0,                // x Todo
+            0.0,                // y Todo
+            0.0,                // z Todo
+            0.0,                // occupancy? Todo
+            self.b,             // b-factor
+            self.elem.symbol(), // element
+            formal_charge,      // charge: todo: is this the right charge?
         );
         atom.unwrap()
     }
@@ -419,16 +419,16 @@ impl PyObjectMolecule {
         let serial_number = atom_info.id as usize;
 
         let atom = pdbtbx::Atom::new(
-            atom_info.is_hetatm,    // hetero
-            serial_number,          // serial_number: Note: I am not sure this is correct just yet.
-            atom_info.name.clone(), // atom_name
-            x_coord.into(),         // x
-            y_coord.into(),         // y
-            z_coord.into(),         // z
-            0.0,                    // occupancy? Todo
-            atom_info.b,            // b-factor
-            atom_info.elem.clone(), // element
-            formal_charge,          // charge: todo: is this the right charge?
+            atom_info.is_hetatm,     // hetero
+            serial_number,           // serial_number: Note: I am not sure this is correct just yet.
+            atom_info.name.clone(),  // atom_name
+            x_coord.into(),          // x
+            y_coord.into(),          // y
+            z_coord.into(),          // z
+            0.0,                     // occupancy? Todo
+            atom_info.b,             // b-factor
+            atom_info.elem.symbol(), // element
+            formal_charge,           // charge: todo: is this the right charge?
         );
         atom.unwrap()
     }

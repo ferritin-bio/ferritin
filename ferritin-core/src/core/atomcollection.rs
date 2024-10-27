@@ -2,7 +2,7 @@ use super::constants::get_bonds_canonical20;
 use ferritin_pymol::PSEData;
 use itertools::izip;
 use itertools::Itertools;
-use pdbtbx::PDB;
+use pdbtbx::{Element, PDB};
 
 pub struct AtomCollection {
     size: usize,
@@ -10,7 +10,7 @@ pub struct AtomCollection {
     res_ids: Vec<i32>,
     res_names: Vec<String>,
     is_hetero: Vec<bool>,
-    elements: Vec<String>,
+    elements: Vec<Element>,
     atom_names: Vec<String>,
     chain_ids: Vec<String>,
     bonds: Option<Vec<Bond>>,
@@ -36,7 +36,7 @@ impl AtomCollection {
     pub fn coords(&self) -> &Vec<[f32; 3]> {
         self.coords.as_ref()
     }
-    pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &String)> {
+    pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
         izip!(&self.coords, &self.elements)
     }
     pub fn calculate_displacement(&self) {
@@ -78,6 +78,7 @@ impl AtomCollection {
         // """
         // diff = displacement(atoms1, atoms2, box)
         // return np.sqrt(vector_dot(diff, diff))
+        unimplemented!()
     }
 
     pub fn connect_via_residue_names(&mut self) {
@@ -287,7 +288,7 @@ impl From<&PSEData> for AtomCollection {
             Vec<i32>,
             Vec<String>,
             Vec<bool>,
-            Vec<String>,
+            Vec<Element>,
             Vec<String>,
         ) = atoms
             .iter()
@@ -297,7 +298,7 @@ impl From<&PSEData> for AtomCollection {
                     a.resv,
                     a.chain.to_string(),
                     a.is_hetatm,
-                    a.elem.to_string(),
+                    a.elem,
                     a.name.to_string(),
                 )
             })
@@ -328,7 +329,7 @@ impl From<&PDB> for AtomCollection {
             Vec<String>,
             Vec<i32>,
             Vec<String>,
-            Vec<String>,
+            Vec<Element>,
             Vec<String>,
         ) = izip!(pdb_data.chains().flat_map(|chain| {
             let chain_id = chain.id().to_string();
@@ -346,7 +347,7 @@ impl From<&PDB> for AtomCollection {
                             atom.name().to_string(),
                             res_id,
                             res_name.clone(),
-                            element.symbol().to_string(),
+                            element,
                             chain_id.clone(),
                         )
                     })
@@ -414,8 +415,8 @@ mod tests {
     use crate::core::atomcollection::AtomCollection;
     use ferritin_pymol::PSEData;
     use itertools::Itertools;
-    use pdbtbx;
-    use std::path::PathBuf;
+    use pdbtbx::{self, Element};
+    use std::{f32::consts::E, path::PathBuf};
 
     #[test]
     fn test_pse_from() {
@@ -466,8 +467,12 @@ mod tests {
         );
 
         // Take a peek at the unique elements
-        let elements: Vec<String> = ac.elements.into_iter().unique().sorted().collect();
-        assert_eq!(elements, ["C", "FE", "N", "O", "S"]);
+        let elements: Vec<Element> = ac.elements.into_iter().unique().sorted().collect();
+        // assert_eq!(elements, ["C", "FE", "N", "O", "S"]);
+        assert_eq!(
+            elements,
+            [Element::C, Element::N, Element::O, Element::S, Element::Fe,]
+        );
     }
 
     #[test]

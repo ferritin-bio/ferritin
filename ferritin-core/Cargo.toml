@@ -8,9 +8,6 @@ description.workspace = true
 
 [dependencies]
 ferritin-pymol = { path = "../ferritin-pymol" }
-once_cell.workspace = true
-bitflags.workspace = true
-serde = { workspace = true }
 pdbtbx.workspace = true
 itertools.workspace = true
 lazy_static = "1.5.0"

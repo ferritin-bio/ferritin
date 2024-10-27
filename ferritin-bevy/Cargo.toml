@@ -9,7 +9,5 @@ description.workspace = true
 [dependencies]
 bevy = "0.14"
 bon = "2.3.0"
-serde.workspace = true
 ferritin-core = { path = "../ferritin-core" }
-itertools.workspace = true
 pdbtbx.workspace = true

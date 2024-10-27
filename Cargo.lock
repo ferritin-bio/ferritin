@@ -791,7 +791,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5421792749dda753ab3718e77d27bfce38443daf1850b836b97530b6245a4581"
 dependencies = [
  "bevy_reflect",
- "glam 0.27.0",
+ "glam",
  "rand",
  "serde",
  "smallvec",
@@ -804,7 +804,7 @@ version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66cf695a264b043f2c4edb92dd5c742e6892180d2b30dac870012d153f8557ea"
 dependencies = [
- "glam 0.27.0",
+ "glam",
 ]
 
 [[package]]
@@ -851,7 +851,7 @@ dependencies = [
  "bevy_utils",
  "downcast-rs",
  "erased-serde",
- "glam 0.27.0",
+ "glam",
  "petgraph",
  "serde",
  "smallvec",
@@ -1807,7 +1807,7 @@ checksum = "5a9299a95fa5671ddf29ecc22b00e121843a65cb9ff24911e394b4ae556baf36"
 dependencies = [
  "const_panic",
  "encase_derive",
- "glam 0.27.0",
+ "glam",
  "thiserror",
 ]
 
@@ -1915,22 +1915,17 @@ dependencies = [
  "bevy",
  "bon",
  "ferritin-core",
- "glam 0.29.0",
  "pdbtbx",
- "serde",
 ]
 
 [[package]]
 name = "ferritin-core"
 version = "0.1.0"
 dependencies = [
- "bitflags 2.6.0",
  "ferritin-pymol",
  "itertools",
  "lazy_static",
- "once_cell",
  "pdbtbx",
- "serde",
 ]
 
 [[package]]
@@ -2119,12 +2114,6 @@ dependencies = [
  "rand",
  "serde",
 ]
-
-[[package]]
-name = "glam"
-version = "0.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28091a37a5d09b555cb6628fd954da299b536433834f5b8e59eba78e0cbbf8a"
 
 [[package]]
 name = "glob"
@@ -2338,7 +2327,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edd6b038160f086b0a7496edae34169ae22f328793cbe2b627a5a3d8373748ec"
 dependencies = [
  "constgebra",
- "glam 0.27.0",
+ "glam",
 ]
 
 [[package]]

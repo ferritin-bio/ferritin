@@ -3,7 +3,6 @@
 //! Over time this would be a good candidate for factoring out
 use super::{ColorScheme, RenderOptions, Structure};
 use bevy::prelude::*;
-// use pdbtbx::StrictnessLevel;
 use ferritin_core::AtomCollection;
 use std::path::Path;
 use std::path::PathBuf;
