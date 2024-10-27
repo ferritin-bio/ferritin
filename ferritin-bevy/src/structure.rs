@@ -1,6 +1,6 @@
-//! Renderable
+//! Structure.
 //!
-//! Trait and Implementations for Generating Representations.
+//! Struct for rendering with Bevy
 //!
 //!
 
@@ -13,7 +13,7 @@ use bevy::prelude::{
     StandardMaterial, Transform, Vec3,
 };
 use bon::Builder;
-use ferritin_core::{AtomCollection, Bond};
+use ferritin_core::AtomCollection;
 use pdbtbx::Element;
 
 /// Enum representing various rendering options.
