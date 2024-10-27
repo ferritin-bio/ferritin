@@ -1,4 +1,4 @@
 mod atomcollection;
 mod constants;
 
-pub use atomcollection::AtomCollection;
+pub use atomcollection::{AtomCollection, Bond};
