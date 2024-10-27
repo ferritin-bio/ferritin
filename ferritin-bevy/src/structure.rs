@@ -9,8 +9,8 @@ use super::ColorScheme;
 use bevy::asset::Assets;
 use bevy::math::Vec4;
 use bevy::prelude::{
-    default, Color, ColorToComponents, Component, Mesh, MeshBuilder, Meshable, PbrBundle, Sphere,
-    StandardMaterial, Vec3,
+    default, Color, Component, Mesh, MeshBuilder, Meshable, PbrBundle, Sphere, StandardMaterial,
+    Vec3,
 };
 use bon::Builder;
 use ferritin_core::AtomCollection;
@@ -112,8 +112,8 @@ mod tests {
     #[test]
     fn test_pdb_to_mesh() {
         let (pdb, _errors) = pdbtbx::open("examples/1fap.cif").unwrap();
-        let structure = Structure::builder().pdb(pdb).build();
-        assert_eq!(structure.pdb.atom_count(), 2154);
+        let structure = Structure::builder().pdb(AtomCollection::from(&pdb)).build();
+        assert_eq!(structure.pdb.size(), 2154);
         let mesh = structure.to_mesh();
         assert_eq!(mesh.count_vertices(), 779748);
     }

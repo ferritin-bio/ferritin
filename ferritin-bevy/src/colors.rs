@@ -7,7 +7,7 @@ use pdbtbx::Atom;
 /// Represents different color schemes for rendering atoms.
 #[derive(Clone)]
 pub enum ColorScheme {
-    /// A solid, sinel color for all atoms.
+    /// A solid, single color for all atoms.
     Solid(Color),
     /// Colors atoms based on their element type.
     ByAtomType,
@@ -26,11 +26,11 @@ pub enum ColorScheme {
 // ColorScheme::ByResidueType(func) => func(residue),
 // ColorScheme::Custom(func) => func(atom, residue, chain),
 impl ColorScheme {
-    pub fn get_color(&self, atom: &Atom) -> Color {
+    pub fn get_color(&self, atom: &str) -> Color {
         match &self {
             ColorScheme::Solid(color) => *color,
             ColorScheme::ByAtomType => {
-                match atom.element().expect("expect atom").symbol() {
+                match atom {
                     "C" => Color::srgb(0.5, 0.5, 0.5), // Carbon: Gray
                     "N" => Color::srgb(0.0, 0.0, 1.0), // Nitrogen: Blue
                     "O" => Color::srgb(1.0, 0.0, 0.0), // Oxygen: Red
@@ -45,38 +45,12 @@ impl ColorScheme {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pdbtbx::Atom;
-
     #[test]
     fn test_get_color() {
         let by_atom_scheme = ColorScheme::ByAtomType;
-        let create_atom =
-            |element: &str| Atom::new(true, 1, "", 0.0, 0.0, 0.0, 0.0, 0.0, element, 1).unwrap();
-        let carbon_atom = create_atom("C");
-        let nitrogen_atom = create_atom("N");
-        let oxygen_atom = create_atom("O");
-        let sulfur_atom = create_atom("S");
-        // let other_atom = create_atom("X");
-        // Test ByAtomType color scheme
-        assert_eq!(
-            by_atom_scheme.get_color(&carbon_atom),
-            Color::srgb(0.5, 0.5, 0.5)
-        );
-        assert_eq!(
-            by_atom_scheme.get_color(&nitrogen_atom),
-            Color::srgb(0.0, 0.0, 1.0)
-        );
-        assert_eq!(
-            by_atom_scheme.get_color(&oxygen_atom),
-            Color::srgb(1.0, 0.0, 0.0)
-        );
-        assert_eq!(
-            by_atom_scheme.get_color(&sulfur_atom),
-            Color::srgb(1.0, 1.0, 0.0)
-        );
-        // assert_eq!(
-        //     by_atom_scheme.get_color(&other_atom),
-        //     Color::srgb(1.0, 1.0, 1.0)
-        // );
+        assert_eq!(by_atom_scheme.get_color("C"), Color::srgb(0.5, 0.5, 0.5));
+        assert_eq!(by_atom_scheme.get_color("N"), Color::srgb(0.0, 0.0, 1.0));
+        assert_eq!(by_atom_scheme.get_color("O"), Color::srgb(1.0, 0.0, 0.0));
+        assert_eq!(by_atom_scheme.get_color("S"), Color::srgb(1.0, 1.0, 0.0));
     }
 }
