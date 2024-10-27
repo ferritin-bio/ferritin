@@ -80,7 +80,12 @@ impl AtomCollection {
         // return np.sqrt(vector_dot(diff, diff))
     }
 
-    pub fn connect_via_residue_names(&self) -> Vec<Bond> {
+    pub fn connect_via_residue_names(&mut self) {
+        if self.bonds.is_some() {
+            println!("Bonds already in place. Not overwriting.");
+            return;
+        }
+
         let aa_bond_info = get_bonds_canonical20();
         let residue_starts = self.get_residue_starts();
 
@@ -114,14 +119,8 @@ impl AtomCollection {
                 }
             }
         }
-
-        // if inter_residue {
-        //     let inter_bonds = self.connect_inter_residue(&residue_starts);
-        //     bonds.extend(inter_bonds);
-        // }
-
-        bonds
-        // unimplemented!()
+        // Update self.bonds
+        self.bonds = Some(bonds);
     }
 
     /// A new residue starts, either when the chain ID, residue ID,
@@ -244,7 +243,7 @@ fn match_bond(bond_int: i32) -> BondOrder {
         1 => BondOrder::Single,
         2 => BondOrder::Double,
         3 => BondOrder::Triple,
-        4 => BondOrder::Quadruple,
+        4 | 5 | 6 => BondOrder::Quadruple,
         _ => {
             println!("Bond Order not found: {}", bond_int);
             panic!()
@@ -337,7 +336,7 @@ impl From<&PDB> for AtomCollection {
                 let (res_number, _insertion_code) = residue.id();
                 let res_id = res_number as i32;
                 let res_name = residue.name().unwrap_or_default().to_string();
-                let chain_id = chain_id.clone(); // Clone here to avoid moving
+                let chain_id = chain_id.clone();
                 residue.atoms().filter_map(move |atom| {
                     atom.element().map(|element| {
                         let (x, y, z) = atom.pos();
@@ -356,7 +355,7 @@ impl From<&PDB> for AtomCollection {
         }))
         .multiunzip();
 
-        AtomCollection {
+        let mut ac = AtomCollection {
             size: coords.len(),
             coords,
             res_ids,
@@ -366,7 +365,11 @@ impl From<&PDB> for AtomCollection {
             chain_ids,
             atom_names,
             bonds: None,
-        }
+        };
+
+        // adds bonds
+        ac.connect_via_residue_names();
+        ac
     }
 }
 
