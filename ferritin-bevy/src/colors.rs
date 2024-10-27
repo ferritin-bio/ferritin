@@ -2,7 +2,6 @@
 //!
 //! This module defines the color mapping used for rendering.
 use bevy::prelude::Color;
-use pdbtbx::Atom;
 
 /// Represents different color schemes for rendering atoms.
 #[derive(Clone)]

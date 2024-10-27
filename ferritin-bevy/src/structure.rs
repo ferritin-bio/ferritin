@@ -73,6 +73,9 @@ impl Structure {
         todo!()
     }
     fn render_ballandstick(&self) -> Mesh {
+        // create ball meshes
+        // create stick meshes form cylinder
+        // aggregate the meshes
         todo!()
     }
     /// Internal fn for rendering spheres.
@@ -86,10 +89,8 @@ impl Structure {
                     .atomic_radius()
                     .van_der_waals
                     .expect("Van der waals not defined") as f32;
-
                 let mut sphere_mesh = Sphere::new(radius).mesh().build();
                 let vertex_count = sphere_mesh.count_vertices();
-
                 let color = self.color_scheme.get_color(element_str).to_srgba();
                 let color_array =
                     vec![Vec4::new(color.red, color.green, color.blue, color.alpha); vertex_count];
