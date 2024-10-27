@@ -448,7 +448,7 @@ mod tests {
         // check Atom Collection Numbers
         let ac = AtomCollection::from(&pdb_data);
         assert_eq!(ac.coords.len(), 1413);
-        assert_eq!(ac.bonds, None);
+        assert_eq!(ac.bonds().unwrap().len(), 1095);
 
         // 338 Residues
         let res_ids: Vec<i32> = ac.res_ids.into_iter().unique().collect();
