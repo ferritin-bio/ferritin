@@ -1,4 +1,6 @@
+.
 /.quarto/
 _site/
 doc/
 examples/
+src/

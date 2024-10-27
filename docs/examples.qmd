@@ -5,15 +5,15 @@ format:
     page-layout: full
 ---
 
-PSE utils: Conversion of python session files to Molviewspec.
+# ferritin-pymol
 
 
-## Example PSE
+## PSE -> MSVJ Conversion
 
-This is a simple example PSE that has a protein object and a selection object. The pymol `PSE` is on the left and the resulting molviewspec is on the right.
+Conversion of python session files to Molviewspec. This is a simple example PSE that has a protein object and a selection object. The pymol `PSE` is on the left and the resulting molviewspec is on the right.
 
 ```sh
-pseutils --psefile docs/examples/example.pse --outputdir docs/examples/example
+ferritin-pymol --psefile docs/examples/example.pse --outputdir docs/examples/example
 ```
 
 :::: {.columns .column-page}
@@ -27,3 +27,32 @@ pseutils --psefile docs/examples/example.pse --outputdir docs/examples/example
 :::
 
 ::::
+
+
+### Complete Outputs
+
+```sh
+# build the binary and test
+cargo build --release
+./target/release/ferritin-pymol  --psefile tests/data/example.pse --outputdir binary_test
+
+# outputs a complete directory
+> tree binary_test
+binary_test
+├── index.html
+├── molstar.css
+├── molstar.js
+├── pdb
+│   └── 1pdb.pdb
+├── pdb_contents.txt
+└── state.mvsj
+
+```
+
+
+## Links
+
+- [Pymol-Open-source](https://github.com/schrodinger/pymol-open-source)
+- [mol-view-spec](https://molstar.org/mol-view-spec/)
+- [molstar](https://molstar.org)
+- [molstar-quarto](https://github.com/jmbuhr/quarto-molstar). Used to embed the MVSJ widgets in the page.
