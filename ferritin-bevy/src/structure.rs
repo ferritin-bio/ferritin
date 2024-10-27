@@ -4,7 +4,6 @@
 //!
 //!
 
-// use bevy::prelude::*;
 use super::ColorScheme;
 use bevy::asset::Assets;
 use bevy::math::Vec4;
@@ -14,7 +13,6 @@ use bevy::prelude::{
 };
 use bon::Builder;
 use ferritin_core::AtomCollection;
-use pdbtbx::Element;
 
 /// Enum representing various rendering options.
 ///
