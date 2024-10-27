@@ -147,16 +147,15 @@ impl Structure {
     fn render_spheres(&self) -> Mesh {
         self.pdb
             .iter_coords_and_elements()
-            .map(|(coord, element_str)| {
+            .map(|(coord, element)| {
                 let center = Vec3::new(coord[0], coord[1], coord[2]);
-                let element = Element::from_symbol(element_str).expect("Element not recognized");
                 let radius = element
                     .atomic_radius()
                     .van_der_waals
                     .expect("Van der waals not defined") as f32;
                 let mut sphere_mesh = Sphere::new(radius).mesh().build();
                 let vertex_count = sphere_mesh.count_vertices();
-                let color = self.color_scheme.get_color(element_str).to_srgba();
+                let color = self.color_scheme.get_color(element).to_srgba();
                 let color_array =
                     vec![Vec4::new(color.red, color.green, color.blue, color.alpha); vertex_count];
                 sphere_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color_array);

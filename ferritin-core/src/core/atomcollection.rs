@@ -471,7 +471,7 @@ mod tests {
         // assert_eq!(elements, ["C", "FE", "N", "O", "S"]);
         assert_eq!(
             elements,
-            [Element::C, Element::Fe, Element::N, Element::O, Element::S]
+            [Element::C, Element::N, Element::O, Element::S, Element::Fe,]
         );
     }
 
