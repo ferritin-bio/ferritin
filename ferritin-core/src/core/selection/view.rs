@@ -4,22 +4,21 @@ use pdbtbx::Element;
 
 pub struct AtomView<'a> {
     collection: &'a AtomCollection,
-    selection: Selection,
+    selection: &'a Selection,
 }
 
 impl<'a> AtomView<'a> {
-    pub(crate) fn new(collection: &'a AtomCollection, selection: Selection) -> Self {
-        Self {
+    pub(crate) fn new(collection: &'a AtomCollection, selection: &'b Selection) -> Self {
+        AtomView {
             collection,
             selection,
         }
     }
-
     pub fn coords(&self) -> Vec<[f32; 3]> {
         self.selection
             .indices
             .iter()
-            .map(|&i| self.collection.coords()[i])
+            .map(|&i| self.collection.coords[i])
             .collect()
     }
 
@@ -27,12 +26,12 @@ impl<'a> AtomView<'a> {
         self.selection.indices.len()
     }
 }
-
 pub struct AtomRef<'a> {
     pub coords: &'a [f32; 3],
     pub res_id: &'a i32,
     pub res_name: &'a String,
     pub element: &'a Element,
+    // ... other fields
 }
 
 pub struct AtomIterator<'a> {
@@ -64,10 +63,10 @@ impl<'a> Iterator for AtomIterator<'a> {
         self.current += 1;
 
         Some(AtomRef {
-            coords: &self.view.collection.coords()[idx],
-            res_id: &self.view.collection.resids()[idx],
-            res_name: &self.view.collection.resnames()[idx],
-            element: &self.view.collection.elements()[idx],
+            coords: &self.view.collection.coords[idx],
+            res_id: &self.view.collection.res_ids[idx],
+            res_name: &self.view.collection.res_names[idx],
+            element: &self.view.collection.elements[idx],
         })
     }
 }

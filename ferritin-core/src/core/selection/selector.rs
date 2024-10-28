@@ -8,7 +8,7 @@ pub struct AtomSelector<'a> {
     current_selection: Selection,
 }
 
-impl<'a> AtomSelector<'a> {
+impl<'b,'a> AtomSelector<'a> {
     pub(crate) fn new(collection: &'a AtomCollection) -> Self {
         Self {
             collection,
@@ -74,7 +74,7 @@ impl<'a> AtomSelector<'a> {
         self
     }
 
-    pub fn collect(self) -> AtomView<'a> {
-        AtomView::new(self.collection, self.current_selection)
+    pub fn collect<'b>(self) -> AtomView<'a, 'b> {
+        AtomView::new(self.collection, &self.current_selection)
     }
 }
