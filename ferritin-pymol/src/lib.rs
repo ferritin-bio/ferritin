@@ -23,7 +23,6 @@
 //! - `molviewspec`: Handles molecular viewing specifications
 //! - `pymolparsing`: Core parsing functionality for PSE files
 //!
-pub mod molviewspec;
 pub mod pymolparsing;
 
 pub use self::pymolparsing::parsing::PyObjectMolecule;

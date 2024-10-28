@@ -45,9 +45,9 @@
 //! if (!m_tmpids[m_iter.getAtm()]) {
 //! m_id = m_retain_ids ? m_iter.getAtomInfo()->id : (m_id + 1);
 //!  m_tmpids[m_iter.getAtm()] = m_id;
-use crate::molviewspec::nodes::{ComponentExpression, ComponentSelector};
 use crate::pymolparsing::colors::{Color, COLOR_SET};
 use crate::pymolparsing::representation::RepBitmask;
+use ferritin_molviewspec::molviewspec::nodes::{ComponentExpression, ComponentSelector};
 use itertools::Itertools;
 use pdbtbx::{self, Element, Residue, PDB};
 use serde::{Deserialize, Deserializer, Serialize};

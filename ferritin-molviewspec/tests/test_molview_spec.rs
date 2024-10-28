@@ -1,4 +1,4 @@
-use ferritin_pymol::molviewspec::nodes::{
+use ferritin_molviewspec::molviewspec::nodes::{
     ColorT, ComponentExpression, ComponentSelector, ComponentSelectorT, ParseFormatT, ParseParams,
     RepresentationTypeT, State, StructureParams, StructureTypeT,
 };

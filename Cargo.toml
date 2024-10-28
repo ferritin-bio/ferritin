@@ -1,5 +1,10 @@
 [workspace]
-members = ["ferritin-core", "ferritin-pymol", "ferritin-bevy"]
+members = [
+    "ferritin-core",
+    "ferritin-pymol",
+    "ferritin-bevy",
+    "ferritin-molviewspec",
+]
 resolver = "2"
 
 

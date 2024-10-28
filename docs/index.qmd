@@ -33,3 +33,7 @@ Visualization of proteins using the Bevy animation engine. [rust-docs](https://z
 ### Ferritin-Pymol
 
 Native Rust access to pymol `pse` binary files.  [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_pymol/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-pymol).
+
+### Ferritin-MolViewSpec
+
+Utilities for consuming and creating [molviewspec files](https://molstar.org/mol-view-spec/).  [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_molviewspec/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-molviewspec).

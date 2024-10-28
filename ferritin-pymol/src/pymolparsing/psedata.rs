@@ -6,11 +6,11 @@
 //! other PSE data types which include the folloing:
 //!
 
-use crate::molviewspec::nodes::{self as mvsnodes, ColorNamesT, State};
 use crate::pymolparsing::parsing::{
     PyObjectMolecule, PymolSessionObjectData, SceneView, SessionName, SessionSelectorList,
     Settings, SettingsEnum,
 };
+use ferritin_molviewspec::molviewspec::nodes::{self as mvsnodes, ColorNamesT, State};
 use pdbtbx::PDB;
 use serde::{Deserialize, Serialize};
 use serde_bytes;
