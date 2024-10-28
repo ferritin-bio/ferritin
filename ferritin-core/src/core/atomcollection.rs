@@ -52,24 +52,6 @@ impl AtomCollection {
     pub fn select(&self) -> AtomSelector {
         AtomSelector::new(self)
     }
-    pub fn size(&self) -> usize {
-        self.size
-    }
-    pub fn bonds(&self) -> Option<&Vec<Bond>> {
-        self.bonds.as_ref()
-    }
-    pub fn coords(&self) -> &Vec<[f32; 3]> {
-        self.coords.as_ref()
-    }
-    pub fn elements(&self) -> &Vec<pdbtbx::Element> {
-        self.elements.as_ref()
-    }
-    pub fn resnames(&self) -> &Vec<String> {
-        self.res_names.as_ref()
-    }
-    pub fn resids(&self) -> &Vec<i32> {
-        self.res_ids.as_ref()
-    }
     pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
         izip!(&self.coords, &self.elements)
     }
@@ -78,7 +60,6 @@ impl AtomCollection {
         // one array of atom coordinates to another array of coordinates.
         unimplemented!()
     }
-
     pub fn calculate_distance(&self, _atoms: AtomCollection) {
         // def distance(atoms1, atoms2, box=None):
         // """
@@ -114,7 +95,6 @@ impl AtomCollection {
         // return np.sqrt(vector_dot(diff, diff))
         unimplemented!()
     }
-
     pub fn connect_via_residue_names(&mut self) {
         if self.bonds.is_some() {
             println!("Bonds already in place. Not overwriting.");
@@ -162,29 +142,6 @@ impl AtomCollection {
         println!("Updating bonds....");
         self.bonds = Some(bonds);
     }
-
-    /// A new residue starts, either when the chain ID, residue ID,
-    /// insertion code or residue name changes from one to the next atom.
-    fn get_residue_starts(&self) -> Vec<i64> {
-        let mut starts = vec![0];
-
-        starts.extend(
-            izip!(&self.res_ids, &self.res_names, &self.chain_ids)
-                .tuple_windows()
-                .enumerate()
-                .filter_map(
-                    |(i, ((res_id1, name1, chain1), (res_id2, name2, chain2)))| {
-                        if res_id1 != res_id2 || name1 != name2 || chain1 != chain2 {
-                            Some((i + 1) as i64)
-                        } else {
-                            None
-                        }
-                    },
-                ),
-        );
-        starts
-    }
-
     pub fn connect_via_distance(&self) -> Vec<Bond> {
         // connect_via_distances(atoms, distance_range=None, atom_mask=None,
         //                           inter_residue=True, default_bond_type=BondType.ANY,
@@ -228,7 +185,24 @@ impl AtomCollection {
 
         unimplemented!()
     }
-
+    pub fn get_size(&self) -> usize {
+        self.size
+    }
+    pub fn get_bonds(&self) -> Option<&Vec<Bond>> {
+        self.bonds.as_ref()
+    }
+    pub fn get_coords(&self) -> &Vec<[f32; 3]> {
+        self.coords.as_ref()
+    }
+    pub fn get_elements(&self) -> &Vec<pdbtbx::Element> {
+        self.elements.as_ref()
+    }
+    pub fn get_resnames(&self) -> &Vec<String> {
+        self.res_names.as_ref()
+    }
+    pub fn get_resids(&self) -> &Vec<i32> {
+        self.res_ids.as_ref()
+    }
     pub fn select_by_chain(&self, chain_id: &str) -> Selection {
         let indices: Vec<usize> = self
             .chain_ids
@@ -251,9 +225,6 @@ impl AtomCollection {
         Selection::new(indices)
     }
 
-    pub fn view(&self, selection: Selection) -> AtomView {
-        AtomView::new(self, selection)
-    }
     pub fn get_coord(&self, idx: usize) -> &[f32; 3] {
         &self.coords[idx]
     }
@@ -268,6 +239,30 @@ impl AtomCollection {
 
     pub fn get_element(&self, idx: usize) -> &Element {
         &self.elements[idx]
+    }
+    pub fn view(&self, selection: Selection) -> AtomView {
+        AtomView::new(self, selection)
+    }
+    /// A new residue starts, either when the chain ID, residue ID,
+    /// insertion code or residue name changes from one to the next atom.
+    fn get_residue_starts(&self) -> Vec<i64> {
+        let mut starts = vec![0];
+
+        starts.extend(
+            izip!(&self.res_ids, &self.res_names, &self.chain_ids)
+                .tuple_windows()
+                .enumerate()
+                .filter_map(
+                    |(i, ((res_id1, name1, chain1), (res_id2, name2, chain2)))| {
+                        if res_id1 != res_id2 || name1 != name2 || chain1 != chain2 {
+                            Some((i + 1) as i64)
+                        } else {
+                            None
+                        }
+                    },
+                ),
+        );
+        starts
     }
 }
 
@@ -350,7 +345,7 @@ mod tests {
         let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         assert_eq!(pdb.atom_count(), 1413);
         let ac = AtomCollection::from(&pdb);
-        assert_eq!(ac.size(), 1413);
+        assert_eq!(ac.get_size(), 1413);
     }
 
     #[test]
@@ -358,7 +353,7 @@ mod tests {
         let file_path = get_file();
         let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         let ac = AtomCollection::from(&pdb);
-        assert_eq!(ac.size(), 1413);
+        assert_eq!(ac.get_size(), 1413);
 
         let selected_atoms = ac
             .select()

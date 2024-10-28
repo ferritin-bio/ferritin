@@ -108,7 +108,7 @@ impl LMPNNFeatures for AtomCollection {
     // }
 
     fn featurize(&self) -> LigandMPNNDataDict {
-        let atoms = &self.coords();
+        let atoms = &self.get_coords();
 
         //    atoms = atoms.select("occupancy > 0")?;
 

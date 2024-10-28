@@ -84,8 +84,8 @@ mod tests {
 
         // check Atom Collection Numbers
         let ac = AtomCollection::from(&psedata);
-        assert_eq!(ac.size(), 1519);
-        assert_eq!(ac.coords().len(), 1519);
-        assert_eq!(ac.bonds().unwrap().len(), 1537); // 1537 bonds
+        assert_eq!(ac.get_size(), 1519);
+        assert_eq!(ac.get_coords().len(), 1519);
+        assert_eq!(ac.get_bonds().unwrap().len(), 1537); // 1537 bonds
     }
 }

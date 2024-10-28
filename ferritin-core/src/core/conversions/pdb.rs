@@ -79,17 +79,17 @@ mod tests {
 
         // check Atom Collection Numbers
         let ac = AtomCollection::from(&pdb_data);
-        assert_eq!(ac.coords().len(), 1413);
-        assert_eq!(ac.bonds().unwrap().len(), 1095);
+        assert_eq!(ac.get_coords().len(), 1413);
+        assert_eq!(ac.get_bonds().unwrap().len(), 1095);
 
         // 338 Residues
-        let res_ids: Vec<i32> = ac.resids().into_iter().cloned().unique().collect();
+        let res_ids: Vec<i32> = ac.get_resids().into_iter().cloned().unique().collect();
         let res_max = res_ids.iter().max().unwrap();
         assert_eq!(res_max, &338);
 
         // Check resnames
         let res_names: Vec<String> = ac
-            .resnames()
+            .get_resnames()
             .into_iter()
             .cloned()
             .unique()
@@ -105,7 +105,7 @@ mod tests {
 
         // Take a peek at the unique elements
         let elements: Vec<Element> = ac
-            .elements()
+            .get_elements()
             .into_iter()
             .cloned()
             .unique()

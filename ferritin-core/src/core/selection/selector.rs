@@ -10,7 +10,7 @@ pub struct AtomSelector<'a> {
 
 impl<'a> AtomSelector<'a> {
     pub(crate) fn new(collection: &AtomCollection) -> AtomSelector<'_> {
-        let size = collection.size() as usize;
+        let size = collection.get_size() as usize;
         AtomSelector {
             collection,
             current_selection: Selection::new((0..size).collect()),
@@ -32,7 +32,7 @@ impl<'a> AtomSelector<'a> {
     pub fn element(mut self, element: Element) -> Self {
         let element_selection = self
             .collection
-            .elements()
+            .get_elements()
             .iter()
             .enumerate()
             .filter(|(_, &e)| e == element)
@@ -45,7 +45,7 @@ impl<'a> AtomSelector<'a> {
     pub fn sphere(mut self, center: [f32; 3], radius: f32) -> Self {
         let sphere_selection = self
             .collection
-            .coords()
+            .get_coords()
             .iter()
             .enumerate()
             .filter(|(_, &pos)| {
