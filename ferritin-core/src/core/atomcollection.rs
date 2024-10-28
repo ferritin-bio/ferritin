@@ -26,35 +26,6 @@ pub struct AtomCollection {
 }
 
 impl AtomCollection {
-    pub fn new(
-        size: usize,
-        coords: Vec<[f32; 3]>,
-        res_ids: Vec<i32>,
-        res_names: Vec<String>,
-        is_hetero: Vec<bool>,
-        elements: Vec<Element>,
-        atom_names: Vec<String>,
-        chain_ids: Vec<String>,
-        bonds: Option<Vec<Bond>>,
-    ) -> Self {
-        AtomCollection {
-            size,
-            coords,
-            res_ids,
-            res_names,
-            is_hetero,
-            elements,
-            atom_names,
-            chain_ids,
-            bonds,
-        }
-    }
-    pub fn select(&self) -> AtomSelector {
-        AtomSelector::new(self)
-    }
-    pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
-        izip!(&self.coords, &self.elements)
-    }
     pub fn calculate_displacement(&self) {
         // Measure the displacement vector, i.e. the vector difference, from
         // one array of atom coordinates to another array of coordinates.
@@ -203,6 +174,47 @@ impl AtomCollection {
     pub fn get_resids(&self) -> &Vec<i32> {
         self.res_ids.as_ref()
     }
+    pub fn get_coord(&self, idx: usize) -> &[f32; 3] {
+        &self.coords[idx]
+    }
+    pub fn get_res_id(&self, idx: usize) -> &i32 {
+        &self.res_ids[idx]
+    }
+    pub fn get_res_name(&self, idx: usize) -> &String {
+        &self.res_names[idx]
+    }
+    pub fn get_element(&self, idx: usize) -> &Element {
+        &self.elements[idx]
+    }
+    pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
+        izip!(&self.coords, &self.elements)
+    }
+    pub fn select(&self) -> AtomSelector {
+        AtomSelector::new(self)
+    }
+    pub fn new(
+        size: usize,
+        coords: Vec<[f32; 3]>,
+        res_ids: Vec<i32>,
+        res_names: Vec<String>,
+        is_hetero: Vec<bool>,
+        elements: Vec<Element>,
+        atom_names: Vec<String>,
+        chain_ids: Vec<String>,
+        bonds: Option<Vec<Bond>>,
+    ) -> Self {
+        AtomCollection {
+            size,
+            coords,
+            res_ids,
+            res_names,
+            is_hetero,
+            elements,
+            atom_names,
+            chain_ids,
+            bonds,
+        }
+    }
     pub fn select_by_chain(&self, chain_id: &str) -> Selection {
         let indices: Vec<usize> = self
             .chain_ids
@@ -213,7 +225,6 @@ impl AtomCollection {
             .collect();
         Selection::new(indices)
     }
-
     pub fn select_by_residue(&self, res_name: &str) -> Selection {
         let indices: Vec<usize> = self
             .res_names
@@ -223,22 +234,6 @@ impl AtomCollection {
             .map(|(i, _)| i)
             .collect();
         Selection::new(indices)
-    }
-
-    pub fn get_coord(&self, idx: usize) -> &[f32; 3] {
-        &self.coords[idx]
-    }
-
-    pub fn get_res_id(&self, idx: usize) -> &i32 {
-        &self.res_ids[idx]
-    }
-
-    pub fn get_res_name(&self, idx: usize) -> &String {
-        &self.res_names[idx]
-    }
-
-    pub fn get_element(&self, idx: usize) -> &Element {
-        &self.elements[idx]
     }
     pub fn view(&self, selection: Selection) -> AtomView {
         AtomView::new(self, selection)
