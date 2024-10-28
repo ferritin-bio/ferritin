@@ -7,6 +7,7 @@ project:
 website:
   title: "ferritin"
   navbar:
+    logo: ferritin.png
     left:
       - href: index.qmd
         text: Home
