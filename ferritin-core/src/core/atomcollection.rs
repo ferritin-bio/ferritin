@@ -50,7 +50,7 @@ impl AtomCollection {
         }
     }
     pub fn select(&self) -> AtomSelector {
-        AtomSelector::new(&self)
+        AtomSelector::new(self)
     }
     pub fn size(&self) -> usize {
         self.size
@@ -79,7 +79,7 @@ impl AtomCollection {
         unimplemented!()
     }
 
-    pub fn calculate_distance(&self, atoms: AtomCollection) {
+    pub fn calculate_distance(&self, _atoms: AtomCollection) {
         // def distance(atoms1, atoms2, box=None):
         // """
         // Measure the euclidian distance between atoms.
@@ -251,8 +251,23 @@ impl AtomCollection {
         Selection::new(indices)
     }
 
-    pub fn view<'a, 'b>(&'a self, selection: &'b Selection) -> AtomView<'a, 'b> {
+    pub fn view<'a>(&'a self, selection: &'a Selection) -> AtomView<'a> {
         AtomView::new(self, selection)
+    }
+    pub fn get_coord(&self, idx: usize) -> &[f32; 3] {
+        &self.coords[idx]
+    }
+
+    pub fn get_res_id(&self, idx: usize) -> &i32 {
+        &self.res_ids[idx]
+    }
+
+    pub fn get_res_name(&self, idx: usize) -> &String {
+        &self.res_names[idx]
+    }
+
+    pub fn get_element(&self, idx: usize) -> &Element {
+        &self.elements[idx]
     }
 }
 

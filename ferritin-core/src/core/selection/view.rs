@@ -8,7 +8,7 @@ pub struct AtomView<'a> {
 }
 
 impl<'a> AtomView<'a> {
-    pub(crate) fn new(collection: &'a AtomCollection, selection: &'b Selection) -> Self {
+    pub(crate) fn new(collection: &'a AtomCollection, selection: &'a Selection) -> Self {
         AtomView {
             collection,
             selection,
@@ -18,7 +18,7 @@ impl<'a> AtomView<'a> {
         self.selection
             .indices
             .iter()
-            .map(|&i| self.collection.coords[i])
+            .map(|&i| *self.collection.get_coord(i))
             .collect()
     }
 
@@ -63,10 +63,10 @@ impl<'a> Iterator for AtomIterator<'a> {
         self.current += 1;
 
         Some(AtomRef {
-            coords: &self.view.collection.coords[idx],
-            res_id: &self.view.collection.res_ids[idx],
-            res_name: &self.view.collection.res_names[idx],
-            element: &self.view.collection.elements[idx],
+            coords: &self.view.collection.get_coord(idx),
+            res_id: &self.view.collection.get_res_id(idx),
+            res_name: &self.view.collection.get_res_name(idx),
+            element: &self.view.collection.get_element(idx),
         })
     }
 }
