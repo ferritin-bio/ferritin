@@ -82,12 +82,18 @@ mod tests {
         assert_eq!(ac.bonds().unwrap().len(), 1095);
 
         // 338 Residues
-        let res_ids: Vec<i32> = ac.res_ids.into_iter().unique().collect();
+        let res_ids: Vec<i32> = ac.resids().into_iter().cloned().unique().collect();
         let res_max = res_ids.iter().max().unwrap();
         assert_eq!(res_max, &338);
 
         // Check resnames
-        let res_names: Vec<String> = ac.res_names.into_iter().unique().sorted().collect();
+        let res_names: Vec<String> = ac
+            .resnames()
+            .into_iter()
+            .cloned()
+            .unique()
+            .sorted()
+            .collect();
         assert_eq!(
             res_names,
             [
@@ -97,7 +103,13 @@ mod tests {
         );
 
         // Take a peek at the unique elements
-        let elements: Vec<Element> = ac.elements.into_iter().unique().sorted().collect();
+        let elements: Vec<Element> = ac
+            .elements()
+            .into_iter()
+            .cloned()
+            .unique()
+            .sorted()
+            .collect();
         assert_eq!(
             elements,
             [Element::C, Element::N, Element::O, Element::S, Element::Fe,]

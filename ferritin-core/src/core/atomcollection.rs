@@ -172,6 +172,15 @@ impl AtomCollection {
     pub fn coords(&self) -> &Vec<[f32; 3]> {
         self.coords.as_ref()
     }
+    pub fn elements(&self) -> &Vec<pdbtbx::Element> {
+        self.elements.as_ref()
+    }
+    pub fn resnames(&self) -> &Vec<String> {
+        self.res_names.as_ref()
+    }
+    pub fn resids(&self) -> &Vec<i32> {
+        self.res_ids.as_ref()
+    }
     pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
         izip!(&self.coords, &self.elements)
     }

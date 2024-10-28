@@ -54,11 +54,11 @@ impl From<&PSEData> for AtomCollection {
         AtomCollection::new(
             atoms.len() as usize, // size
             coords,
-            res_names,
             res_ids,
-            chain_ids,
+            res_names,
             is_hetero,
             elements,
+            chain_ids,
             atom_names,
             Some(bonds), //bonds
         )
