@@ -1,5 +1,5 @@
-use crate::core::AtomCollection;
-use itertools::Itertools;
+use crate::core::{AtomCollection, Bond, BondOrder};
+use itertools::{izip, Itertools};
 use pdbtbx::{Element, PDB};
 
 impl From<&PDB> for AtomCollection {
@@ -78,7 +78,7 @@ mod tests {
 
         // check Atom Collection Numbers
         let ac = AtomCollection::from(&pdb_data);
-        assert_eq!(ac.coords.len(), 1413);
+        assert_eq!(ac.coords().len(), 1413);
         assert_eq!(ac.bonds().unwrap().len(), 1095);
 
         // 338 Residues

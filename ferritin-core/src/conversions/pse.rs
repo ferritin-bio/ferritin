@@ -1,4 +1,4 @@
-use crate::core::{AtomCollection, Bond};
+use crate::core::{AtomCollection, Bond, BondOrder};
 use ferritin_pymol::PSEData;
 use itertools::Itertools;
 use pdbtbx::Element;
@@ -26,7 +26,7 @@ impl From<&PSEData> for AtomCollection {
 
         let bonds = pymol_bonds
             .iter()
-            .map(|b| Bond::new(b.index_1, b.index_2, match_bond(b.order)))
+            .map(|b| Bond::new(b.index_1, b.index_2, BondOrder::match_bond(b.order)))
             .collect();
 
         // pull out specific fields
@@ -51,8 +51,8 @@ impl From<&PSEData> for AtomCollection {
             })
             .multiunzip();
 
-        AtomCollection {
-            size: atoms.len(),
+        AtomCollection::new(
+            atoms.len() as usize, // size
             coords,
             res_names,
             res_ids,
@@ -60,14 +60,14 @@ impl From<&PSEData> for AtomCollection {
             is_hetero,
             elements,
             atom_names,
-            bonds: Some(bonds),
-        }
+            Some(bonds), //bonds
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::core::atomcollection::AtomCollection;
+    use crate::core::AtomCollection;
     use ferritin_pymol::PSEData;
     use itertools::Itertools;
     use pdbtbx::{self, Element};
@@ -85,8 +85,8 @@ mod tests {
 
         // check Atom Collection Numbers
         let ac = AtomCollection::from(&psedata);
-        assert_eq!(ac.size, 1519);
-        assert_eq!(ac.coords.len(), 1519);
-        assert_eq!(ac.bonds.unwrap().len(), 1537); // 1537 bonds
+        assert_eq!(ac.size(), 1519);
+        assert_eq!(ac.coords().len(), 1519);
+        assert_eq!(ac.bonds().unwrap().len(), 1537); // 1537 bonds
     }
 }

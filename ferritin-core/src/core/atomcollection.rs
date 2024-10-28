@@ -249,7 +249,7 @@ impl AtomCollection {
                             bonds.push(Bond {
                                 atom1: i as i32,
                                 atom2: j as i32,
-                                order: match_bond(bond_type),
+                                order: BondOrder::match_bond(bond_type),
                             });
                         }
                     }
