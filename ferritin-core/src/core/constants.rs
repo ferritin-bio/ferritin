@@ -187,6 +187,11 @@ lazy_static! {
     };
 }
 
+/// get_bonds_canonical20
+///
+/// This is the bond information for the 10 canonical
+/// AAs.  Data were obtained from the [CCD](https://www.wwpdb.org/data/ccd).
+///
 pub fn get_bonds_canonical20(
 ) -> &'static HashMap<&'static str, Vec<(&'static str, &'static str, i32)>> {
     &AA_BONDS

@@ -1,9 +1,9 @@
 use super::constants::get_bonds_canonical20;
-use ferritin_pymol::PSEData;
+use crate::conversions;
 use itertools::izip;
 use itertools::Itertools;
-use pdbtbx::{Element, PDB};
-use std::ops::BitAnd;
+use pdbtbx::Element;
+use std::ops::BitAnd; // import
 
 pub struct AtomSelector<'a> {
     collection: &'a AtomCollection,
@@ -133,6 +133,29 @@ pub struct AtomCollection {
 }
 
 impl AtomCollection {
+    pub fn new(
+        size: usize,
+        coords: Vec<[f32; 3]>,
+        res_ids: Vec<i32>,
+        res_names: Vec<String>,
+        is_hetero: Vec<bool>,
+        elements: Vec<Element>,
+        atom_names: Vec<String>,
+        chain_ids: Vec<String>,
+        bonds: Option<Vec<Bond>>,
+    ) -> Self {
+        AtomCollection {
+            size,
+            coords,
+            res_ids,
+            res_names,
+            is_hetero,
+            elements,
+            atom_names,
+            chain_ids,
+            bonds,
+        }
+    }
     pub fn select(&self) -> AtomSelector {
         AtomSelector {
             collection: self,
@@ -397,20 +420,6 @@ impl<'a, 'b> AtomView<'a, 'b> {
     }
 }
 
-fn match_bond(bond_int: i32) -> BondOrder {
-    match bond_int {
-        0 => BondOrder::Unset,
-        1 => BondOrder::Single,
-        2 => BondOrder::Double,
-        3 => BondOrder::Triple,
-        4 | 5 | 6 => BondOrder::Quadruple,
-        _ => {
-            println!("Bond Order not found: {}", bond_int);
-            panic!()
-        }
-    }
-}
-
 /// Bond
 #[derive(Debug, PartialEq)]
 pub struct Bond {
@@ -424,6 +433,13 @@ pub struct Bond {
 }
 
 impl Bond {
+    pub fn new(atom1: i32, atom2: i32, order: BondOrder) -> Self {
+        Bond {
+            atom1,
+            atom2,
+            order,
+        }
+    }
     pub fn get_atom_indices(&self) -> (i32, i32) {
         (self.atom1, self.atom2)
     }
@@ -447,6 +463,22 @@ pub enum BondOrder {
     Quadruple,
 }
 
+impl BondOrder {
+    pub fn match_bond(bond_int: i32) -> BondOrder {
+        match bond_int {
+            0 => BondOrder::Unset,
+            1 => BondOrder::Single,
+            2 => BondOrder::Double,
+            3 => BondOrder::Triple,
+            4 | 5 | 6 => BondOrder::Quadruple,
+            _ => {
+                println!("Bond Order not found: {}", bond_int);
+                panic!()
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::core::atomcollection::AtomCollection;
@@ -454,23 +486,6 @@ mod tests {
     use itertools::Itertools;
     use pdbtbx::{self, Element};
     use std::path::PathBuf;
-
-    #[test]
-    fn test_pse_from() {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let file_path = PathBuf::from(manifest_dir)
-            .join("tests")
-            .join("data")
-            .join("example.pse");
-
-        let psedata = PSEData::load(file_path.to_str().unwrap()).expect("local pse path");
-
-        // check Atom Collection Numbers
-        let ac = AtomCollection::from(&psedata);
-        assert_eq!(ac.size, 1519);
-        assert_eq!(ac.coords.len(), 1519);
-        assert_eq!(ac.bonds.unwrap().len(), 1537); // 1537 bonds
-    }
 
     #[test]
     fn test_pdb_from() {

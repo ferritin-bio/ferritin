@@ -1,5 +1,6 @@
 use crate::core::AtomCollection;
-use pdbtbx::PDB;
+use itertools::Itertools;
+use pdbtbx::{Element, PDB};
 
 impl From<&PDB> for AtomCollection {
     // the PDB API requires us to iterate:
@@ -39,8 +40,8 @@ impl From<&PDB> for AtomCollection {
         }))
         .multiunzip();
 
-        let mut ac = AtomCollection {
-            size: coords.len(),
+        let mut ac = AtomCollection::new(
+            coords.len(),
             coords,
             res_ids,
             res_names,
@@ -48,8 +49,8 @@ impl From<&PDB> for AtomCollection {
             elements,
             chain_ids,
             atom_names,
-            bonds: None,
-        };
+            None,
+        );
 
         // adds bonds
         ac.connect_via_residue_names();
@@ -59,8 +60,7 @@ impl From<&PDB> for AtomCollection {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::atomcollection::AtomCollection;
-    use ferritin_pymol::PSEData;
+    use crate::core::AtomCollection;
     use itertools::Itertools;
     use pdbtbx::{self, Element};
     use std::path::PathBuf;
