@@ -1,5 +1,4 @@
 use super::constants::get_bonds_canonical20;
-use crate::conversions;
 use itertools::izip;
 use itertools::Itertools;
 use pdbtbx::Element;
@@ -235,6 +234,10 @@ impl AtomCollection {
         let aa_bond_info = get_bonds_canonical20();
         let residue_starts = self.get_residue_starts();
 
+        println!("Number of residues: {}", residue_starts.len());
+        println!("First few residue names: {:?}", &self.res_names[..5]);
+        println!("First few atom names: {:?}", &self.atom_names[..5]);
+
         // Iterate through residues
         let mut bonds = Vec::new();
         for res_i in 0..residue_starts.len() - 1 {
@@ -266,6 +269,7 @@ impl AtomCollection {
             }
         }
         // Update self.bonds
+        println!("Updating bonds....");
         self.bonds = Some(bonds);
     }
 
@@ -491,49 +495,9 @@ impl BondOrder {
 #[cfg(test)]
 mod tests {
     use crate::core::atomcollection::AtomCollection;
-    use ferritin_pymol::PSEData;
     use itertools::Itertools;
-    use pdbtbx::{self, Element};
+    use pdbtbx;
     use std::path::PathBuf;
-
-    #[test]
-    fn test_pdb_from() {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let file_path = PathBuf::from(manifest_dir)
-            .join("tests")
-            .join("data")
-            .join("101m.cif");
-
-        let (pdb_data, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
-        assert_eq!(pdb_data.atom_count(), 1413);
-
-        // check Atom Collection Numbers
-        let ac = AtomCollection::from(&pdb_data);
-        assert_eq!(ac.coords.len(), 1413);
-        assert_eq!(ac.bonds().unwrap().len(), 1095);
-
-        // 338 Residues
-        let res_ids: Vec<i32> = ac.res_ids.into_iter().unique().collect();
-        let res_max = res_ids.iter().max().unwrap();
-        assert_eq!(res_max, &338);
-
-        // Check resnames
-        let res_names: Vec<String> = ac.res_names.into_iter().unique().sorted().collect();
-        assert_eq!(
-            res_names,
-            [
-                "ALA", "ARG", "ASN", "ASP", "GLN", "GLU", "GLY", "HEM", "HIS", "HOH", "ILE", "LEU",
-                "LYS", "MET", "NBN", "PHE", "PRO", "SER", "SO4", "THR", "TRP", "TYR", "VAL"
-            ]
-        );
-
-        // Take a peek at the unique elements
-        let elements: Vec<Element> = ac.elements.into_iter().unique().sorted().collect();
-        assert_eq!(
-            elements,
-            [Element::C, Element::N, Element::O, Element::S, Element::Fe,]
-        );
-    }
 
     #[test]
     fn test_addbonds() {

@@ -69,8 +69,7 @@ impl From<&PSEData> for AtomCollection {
 mod tests {
     use crate::core::AtomCollection;
     use ferritin_pymol::PSEData;
-    use itertools::Itertools;
-    use pdbtbx::{self, Element};
+    use pdbtbx;
     use std::path::PathBuf;
 
     #[test]
