@@ -14,8 +14,69 @@
 ///
 struct LigandMPNNFeatures {}
 
+// macro_rules! define_residues {
+//     ($
+//         ($name:ident: $code3:expr, $code1:expr, $idx:expr, $features:expr, $atoms14:expr,),* $(,)?) => {
+//         #[derive(Debug, Copy, Clone)]
+//         pub enum Residue {
+//             $($name),*
+//         }
+
+//         impl Residue {
+//             pub const fn code3(&self) -> &'static str {
+//                 match self {
+//                     $(Self::$name => $code3),*
+//                 }
+//             }
+
+//             pub const fn code1(&self) -> &'static str {
+//                 match self {
+//                     $(Self::$name => $code1),*
+//                 }
+//             }
+
+//             pub const fn atoms14(&self) -> &'static str {
+//                 match self {
+//                     $(Self::$name => $code1),*
+//                 }
+//             }
+
+//             pub fn from_int(value: i32) -> Self {
+//                 match value {
+//                     $($idx => Self::$name,)*
+//                     _ => Self::UNK,
+//                 }
+//             }
+
+//             // Optionally add to_int function for completeness
+//             pub fn to_int(&self) -> i32 {
+//                 match self {
+//                     $(Self::$name => $idx,)*
+//                     _ => -1
+//                 }
+//             }
+//         }
+//     }
+// }
+
+#[rustfmt::skip]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AAAtom {
+    N = 0,    CA = 1,   C = 2,    CB = 3,   O = 4,
+    CG = 5,   CG1 = 6,  CG2 = 7,  OG = 8,   OG1 = 9,
+    SG = 10,  CD = 11,  CD1 = 12, CD2 = 13, ND1 = 14,
+    ND2 = 15, OD1 = 16, OD2 = 17, SD = 18,  CE = 19,
+    CE1 = 20, CE2 = 21, CE3 = 22, NE = 23,  NE1 = 24,
+    NE2 = 25, OE1 = 26, OE2 = 27, CH2 = 28, NH1 = 29,
+    NH2 = 30, OH = 31,  CZ = 32,  CZ2 = 33, CZ3 = 34,
+    NZ = 35,  OXT = 36,
+    Unknown = -1,
+}
+
 macro_rules! define_residues {
-    ($($name:ident: $code3:expr, $code1:expr, $idx:expr, $features:expr),* $(,)?) => {
+    ($(
+        $name:ident: $code3:expr, $code1:expr, $idx:expr, $features:expr, $atoms14:expr
+    ),* $(,)?) => {
         #[derive(Debug, Copy, Clone)]
         pub enum Residue {
             $($name),*
@@ -27,49 +88,29 @@ macro_rules! define_residues {
                     $(Self::$name => $code3),*
                 }
             }
+            pub const fn code1(&self) -> char {
+                match self {
+                    $(Self::$name => $code1),*
+                }
+            }
+            pub const fn atoms14(&self) -> [AAAtom; 14] {
+                match self {
+                    $(Self::$name => $atoms14),*
+                }
+            }
+            pub fn from_int(value: i32) -> Self {
+                match value {
+                    $($idx => Self::$name,)*
+                    _ => Self::UNK
+                }
+            }
+            pub fn to_int(&self) -> i32 {
+                match self {
+                    $(Self::$name => $idx),*
+                }
+            }
         }
     }
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AAAtom {
-    N = 0,
-    CA = 1,
-    C = 2,
-    CB = 3,
-    O = 4,
-    CG = 5,
-    CG1 = 6,
-    CG2 = 7,
-    OG = 8,
-    OG1 = 9,
-    SG = 10,
-    CD = 11,
-    CD1 = 12,
-    CD2 = 13,
-    ND1 = 14,
-    ND2 = 15,
-    OD1 = 16,
-    OD2 = 17,
-    SD = 18,
-    CE = 19,
-    CE1 = 20,
-    CE2 = 21,
-    CE3 = 22,
-    NE = 23,
-    NE1 = 24,
-    NE2 = 25,
-    OE1 = 26,
-    OE2 = 27,
-    CH2 = 28,
-    NH1 = 29,
-    NH2 = 30,
-    OH = 31,
-    CZ = 32,
-    CZ2 = 33,
-    CZ3 = 34,
-    NZ = 35,
-    OXT = 36,
-    Unknown = -1,
 }
 
 define_residues! {
@@ -95,6 +136,7 @@ define_residues! {
     TYR: "TYR", 'Y', 19, [0.0, 0.0], [AAAtom::N, AAAtom::CA, AAAtom::C, AAAtom::O, AAAtom::CB, AAAtom::CG, AAAtom::CD1, AAAtom::CD2, AAAtom::CE1, AAAtom::CE2, AAAtom::CZ, AAAtom::OH, AAAtom::Unknown, AAAtom::Unknown],
     UNK: "UNK", 'X', 20, [0.0, 0.0], [AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown],
 }
+
 // // todo: finish this port
 // pub fn parse_pdb(
 //     input_path: &str,
@@ -258,3 +300,35 @@ define_residues! {
 
 //     Ok((output_dict, backbone, other_atoms, ca_icodes, water_atoms))
 // }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_residue_codes() {
+        let ala = Residue::ALA;
+        assert_eq!(ala.code3(), "ALA");
+        assert_eq!(ala.code1(), 'A');
+        assert_eq!(ala.to_int(), 0);
+    }
+
+    #[test]
+    fn test_residue_from_int() {
+        assert!(matches!(Residue::from_int(0), Residue::ALA));
+        assert!(matches!(Residue::from_int(1), Residue::CYS));
+        assert!(matches!(Residue::from_int(999), Residue::UNK));
+    }
+
+    #[test]
+    fn test_residue_atoms() {
+        let trp = Residue::TRP;
+        let atoms = trp.atoms14();
+        assert_eq!(atoms[0], AAAtom::N);
+        assert_eq!(atoms[13], AAAtom::CH2);
+
+        let gly = Residue::GLY;
+        let atoms = gly.atoms14();
+        assert_eq!(atoms[4], AAAtom::Unknown);
+    }
+}
