@@ -1,113 +1,7 @@
 use super::constants::get_bonds_canonical20;
-use itertools::izip;
-use itertools::Itertools;
+use crate::core::selection::{AtomSelector, AtomView, Selection};
+use itertools::{izip, Itertools};
 use pdbtbx::Element;
-use std::ops::BitAnd; // import
-
-pub struct AtomSelector<'a> {
-    collection: &'a AtomCollection,
-    current_selection: Selection,
-}
-
-impl<'a> AtomSelector<'a> {
-    // Chainable methods
-    pub fn chain(mut self, chain_id: &str) -> Self {
-        let chain_selection = self.collection.select_by_chain(chain_id);
-        self.current_selection = &self.current_selection & &chain_selection;
-        self
-    }
-
-    pub fn residue(mut self, res_name: &str) -> Self {
-        let res_selection = self.collection.select_by_residue(res_name);
-        self.current_selection = &self.current_selection & &res_selection;
-        self
-    }
-
-    pub fn element(mut self, element: Element) -> Self {
-        let element_selection = self
-            .collection
-            .elements
-            .iter()
-            .enumerate()
-            .filter(|(_, &e)| e == element)
-            .map(|(i, _)| i)
-            .collect();
-        self.current_selection = &self.current_selection & &Selection::new(element_selection);
-        self
-    }
-
-    pub fn sphere(mut self, center: [f32; 3], radius: f32) -> Self {
-        let sphere_selection = self
-            .collection
-            .coords
-            .iter()
-            .enumerate()
-            .filter(|(_, &pos)| {
-                let dx = pos[0] - center[0];
-                let dy = pos[1] - center[1];
-                let dz = pos[2] - center[2];
-                (dx * dx + dy * dy + dz * dz).sqrt() <= radius
-            })
-            .map(|(i, _)| i)
-            .collect();
-        self.current_selection = &self.current_selection & &Selection::new(sphere_selection);
-        self
-    }
-
-    // Custom predicate selection
-    pub fn filter<F>(mut self, predicate: F) -> Self
-    where
-        F: Fn(usize) -> bool,
-    {
-        let filtered = self
-            .current_selection
-            .indices
-            .iter()
-            .filter(|&&idx| predicate(idx))
-            .copied()
-            .collect();
-        self.current_selection = Selection::new(filtered);
-        self
-    }
-
-    // Finalize the selection and create a view
-    pub fn collect(&self) -> AtomView {
-        AtomView {
-            collection: self.collection,
-            selection: &self.current_selection,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Selection {
-    indices: Vec<usize>,
-}
-
-impl Selection {
-    fn new(indices: Vec<usize>) -> Self {
-        Selection { indices }
-    }
-
-    // Combine selections using & operator
-    fn and(&self, other: &Selection) -> Selection {
-        let indices: Vec<usize> = self
-            .indices
-            .iter()
-            .filter(|&&idx| other.indices.contains(&idx))
-            .cloned()
-            .collect();
-        Selection::new(indices)
-    }
-}
-
-impl BitAnd for &Selection {
-    type Output = Selection;
-
-    fn bitand(self, other: Self) -> Selection {
-        self.and(other)
-    }
-}
 
 pub struct AtomCollection {
     size: usize,
@@ -156,12 +50,8 @@ impl AtomCollection {
         }
     }
     pub fn select(&self) -> AtomSelector {
-        AtomSelector {
-            collection: self,
-            current_selection: Selection::new((0..self.size).collect()),
-        }
+        AtomSelector::new(self)
     }
-
     pub fn size(&self) -> usize {
         self.size
     }
@@ -189,7 +79,7 @@ impl AtomCollection {
         unimplemented!()
     }
 
-    pub fn calculate_distance(&self, atoms: AtomCollection) {
+    pub fn calculate_distance(&self, _atoms: AtomCollection) {
         // def distance(atoms1, atoms2, box=None):
         // """
         // Measure the euclidian distance between atoms.
@@ -361,75 +251,23 @@ impl AtomCollection {
         Selection::new(indices)
     }
 
-    pub fn view<'a, 'b>(&'a self, selection: &'b Selection) -> AtomView<'a, 'b> {
-        AtomView {
-            collection: self,
-            selection,
-        }
+    pub fn view(&self, selection: Selection) -> AtomView {
+        AtomView::new(self, selection)
     }
-}
-
-pub struct AtomView<'a, 'b> {
-    collection: &'a AtomCollection,
-    selection: &'b Selection,
-}
-
-impl<'a, 'b> IntoIterator for &'a AtomView<'a, 'b> {
-    type Item = AtomRef<'a>;
-    type IntoIter = AtomIterator<'a, 'b>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        AtomIterator {
-            view: self,
-            current: 0,
-        }
-    }
-}
-
-pub struct AtomRef<'a> {
-    pub coords: &'a [f32; 3],
-    pub res_id: &'a i32,
-    pub res_name: &'a String,
-    pub element: &'a Element,
-    // ... other fields
-}
-
-pub struct AtomIterator<'a, 'b> {
-    view: &'a AtomView<'a, 'b>,
-    current: usize,
-}
-
-impl<'a, 'b> Iterator for AtomIterator<'a, 'b> {
-    type Item = AtomRef<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current >= self.view.selection.indices.len() {
-            return None;
-        }
-
-        let idx = self.view.selection.indices[self.current];
-        self.current += 1;
-
-        Some(AtomRef {
-            coords: &self.view.collection.coords[idx],
-            res_id: &self.view.collection.res_ids[idx],
-            res_name: &self.view.collection.res_names[idx],
-            element: &self.view.collection.elements[idx],
-        })
-    }
-}
-
-impl<'a, 'b> AtomView<'a, 'b> {
-    pub fn coords(&self) -> Vec<[f32; 3]> {
-        self.selection
-            .indices
-            .iter()
-            .map(|&i| self.collection.coords[i])
-            .collect()
+    pub fn get_coord(&self, idx: usize) -> &[f32; 3] {
+        &self.coords[idx]
     }
 
-    pub fn size(&self) -> usize {
-        self.selection.indices.len()
+    pub fn get_res_id(&self, idx: usize) -> &i32 {
+        &self.res_ids[idx]
+    }
+
+    pub fn get_res_name(&self, idx: usize) -> &String {
+        &self.res_names[idx]
+    }
+
+    pub fn get_element(&self, idx: usize) -> &Element {
+        &self.elements[idx]
     }
 }
 
@@ -494,20 +332,47 @@ impl BondOrder {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::atomcollection::AtomCollection;
-    use itertools::Itertools;
-    use pdbtbx;
+    use crate::AtomCollection;
+    use pdbtbx::{self, Element};
     use std::path::PathBuf;
 
-    #[test]
-    fn test_addbonds() {
+    fn get_file() -> PathBuf {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let file_path = PathBuf::from(manifest_dir)
+        PathBuf::from(manifest_dir)
             .join("tests")
             .join("data")
-            .join("101m.cif");
+            .join("101m.cif")
+    }
 
+    #[test]
+    fn test_simple_conversion() {
+        let file_path = get_file();
         let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         assert_eq!(pdb.atom_count(), 1413);
+        let ac = AtomCollection::from(&pdb);
+        assert_eq!(ac.size(), 1413);
+    }
+
+    #[test]
+    fn test_selection_api() {
+        let file_path = get_file();
+        let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
+        let ac = AtomCollection::from(&pdb);
+        assert_eq!(ac.size(), 1413);
+
+        let selected_atoms = ac
+            .select()
+            .chain("A")
+            .residue("GLY")
+            .element(Element::C)
+            .collect();
+
+        assert_eq!(selected_atoms.size(), 22);
+
+        // let carbon_coords: Vec<[f32; 3]> = selected_atoms
+        //     .into_iter()
+        //     .filter(|atom| *atom.element == Element::C)
+        //     .map(|atom| *atom.coords)
+        //     .collect();
     }
 }
