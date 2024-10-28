@@ -189,53 +189,6 @@ impl AtomCollection {
 
         unimplemented!()
     }
-
-    // ... existing methods ...
-    // // Get unique chains
-    // pub fn unique_chains(&self) -> HashSet<&String> {
-    //     self.chain.iter().collect()
-    // }
-    // // Filter by chain and atom type
-    // pub fn filter_by_chain_and_type<'a>(
-    //     &'a self,
-    //     chain: &str,
-    //     atom_type: &str,
-    // ) -> impl Iterator<Item = usize> + 'a {
-    //     self.chain
-    //         .iter()
-    //         .enumerate()
-    //         .filter(move |(i, &ref c)| c == chain && self.atom_type[*i] == atom_type)
-    //         .map(|(i, _)| i)
-    // }
-    // // Get atom indices for a specific chain
-    // pub fn get_chain_indices<'a>(&'a self, chain: &str) -> impl Iterator<Item = usize> + 'a {
-    //     self.chain
-    //         .iter()
-    //         .enumerate()
-    //         .filter(move |(_, c)| *c == chain)
-    //         .map(|(i, _)| i)
-    // }
-
-    // // Get atom indices for a specific atom type
-    // pub fn get_atom_type_indices<'a>(
-    //     &'a self,
-    //     atom_type: &str,
-    // ) -> impl Iterator<Item = usize> + 'a {
-    //     self.atom_type
-    //         .iter()
-    //         .enumerate()
-    //         .filter(move |(_, t)| *t == atom_type)
-    //         .map(|(i, _)| i)
-    // }
-
-    // // Get a view of the atom collection filtered by chain
-    // pub fn view_by_chain<'a>(&'a self, chain: &str) -> AtomView<'a> {
-    //     let indices: Vec<usize> = self.get_chain_indices(chain).collect();
-    //     AtomView {
-    //         collection: self,
-    //         indices,
-    //     }
-    // }
 }
 
 fn match_bond(bond_int: i32) -> BondOrder {
