@@ -80,7 +80,7 @@ impl<'a> AtomSelector<'a> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Selection {
     indices: Vec<usize>,
 }
@@ -319,13 +319,13 @@ impl AtomCollection {
             .res_names
             .iter()
             .enumerate()
-            .filter(|(_, name)| name == res_name)
+            .filter(|(_, name)| name.as_str() == res_name)
             .map(|(i, _)| i)
             .collect();
         Selection::new(indices)
     }
 
-    pub fn view(&self, selection: &Selection) -> AtomView {
+    pub fn view<'a, 'b>(&'a self, selection: &'b Selection) -> AtomView<'a, 'b> {
         AtomView {
             collection: self,
             selection,
@@ -333,14 +333,14 @@ impl AtomCollection {
     }
 }
 
-pub struct AtomView<'a> {
+pub struct AtomView<'a, 'b> {
     collection: &'a AtomCollection,
-    selection: &'a Selection,
+    selection: &'b Selection,
 }
 
-impl<'a> IntoIterator for &'a AtomView<'a> {
+impl<'a, 'b> IntoIterator for &'a AtomView<'a, 'b> {
     type Item = AtomRef<'a>;
-    type IntoIter = AtomIterator<'a>;
+    type IntoIter = AtomIterator<'a, 'b>;
 
     fn into_iter(self) -> Self::IntoIter {
         AtomIterator {
@@ -358,12 +358,12 @@ pub struct AtomRef<'a> {
     // ... other fields
 }
 
-pub struct AtomIterator<'a> {
-    view: &'a AtomView<'a>,
+pub struct AtomIterator<'a, 'b> {
+    view: &'a AtomView<'a, 'b>,
     current: usize,
 }
 
-impl<'a> Iterator for AtomIterator<'a> {
+impl<'a, 'b> Iterator for AtomIterator<'a, 'b> {
     type Item = AtomRef<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -379,13 +379,11 @@ impl<'a> Iterator for AtomIterator<'a> {
             res_id: &self.view.collection.res_ids[idx],
             res_name: &self.view.collection.res_names[idx],
             element: &self.view.collection.elements[idx],
-            // ... other fields
         })
     }
 }
 
-// Implement methods to access data through the view
-impl<'a> AtomView<'a> {
+impl<'a, 'b> AtomView<'a, 'b> {
     pub fn coords(&self) -> Vec<[f32; 3]> {
         self.selection
             .indices
