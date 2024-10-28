@@ -8,7 +8,7 @@ pub struct AtomSelector<'a> {
     current_selection: Selection,
 }
 
-impl AtomSelector<'_> {
+impl<'a> AtomSelector<'a> {
     pub(crate) fn new(collection: &AtomCollection) -> AtomSelector<'_> {
         let size = collection.size() as usize;
         AtomSelector {
@@ -75,7 +75,7 @@ impl AtomSelector<'_> {
         self
     }
 
-    pub fn collect(&self) -> AtomView<'_> {
-        AtomView::new(&self.collection, &self.current_selection)
+    pub fn collect(self) -> AtomView<'a> {
+        AtomView::new(self.collection, self.current_selection)
     }
 }

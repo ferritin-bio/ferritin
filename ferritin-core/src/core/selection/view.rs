@@ -4,11 +4,11 @@ use pdbtbx::Element;
 
 pub struct AtomView<'a> {
     collection: &'a AtomCollection,
-    selection: &'a Selection,
+    selection: Selection,
 }
 
 impl<'a> AtomView<'a> {
-    pub(crate) fn new(collection: &'a AtomCollection, selection: &'a Selection) -> Self {
+    pub(crate) fn new(collection: &'a AtomCollection, selection: Selection) -> Self {
         AtomView {
             collection,
             selection,

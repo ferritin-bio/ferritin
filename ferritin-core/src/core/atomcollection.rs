@@ -251,7 +251,7 @@ impl AtomCollection {
         Selection::new(indices)
     }
 
-    pub fn view<'a>(&'a self, selection: &'a Selection) -> AtomView<'a> {
+    pub fn view(&self, selection: Selection) -> AtomView {
         AtomView::new(self, selection)
     }
     pub fn get_coord(&self, idx: usize) -> &[f32; 3] {
@@ -332,18 +332,47 @@ impl BondOrder {
 
 #[cfg(test)]
 mod tests {
-    use pdbtbx;
+    use crate::AtomCollection;
+    use pdbtbx::{self, Element};
     use std::path::PathBuf;
 
-    #[test]
-    fn test_addbonds() {
+    fn get_file() -> PathBuf {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let file_path = PathBuf::from(manifest_dir)
+        PathBuf::from(manifest_dir)
             .join("tests")
             .join("data")
-            .join("101m.cif");
+            .join("101m.cif")
+    }
 
+    #[test]
+    fn test_simple_conversion() {
+        let file_path = get_file();
         let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         assert_eq!(pdb.atom_count(), 1413);
+        let ac = AtomCollection::from(&pdb);
+        assert_eq!(ac.size(), 1413);
+    }
+
+    #[test]
+    fn test_selection_api() {
+        let file_path = get_file();
+        let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
+        let ac = AtomCollection::from(&pdb);
+        assert_eq!(ac.size(), 1413);
+
+        let selected_atoms = ac
+            .select()
+            .chain("A")
+            .residue("GLY")
+            .element(Element::C)
+            .collect();
+
+        assert_eq!(selected_atoms.size(), 22);
+
+        // let carbon_coords: Vec<[f32; 3]> = selected_atoms
+        //     .into_iter()
+        //     .filter(|atom| *atom.element == Element::C)
+        //     .map(|atom| *atom.coords)
+        //     .collect();
     }
 }
