@@ -7,19 +7,11 @@ license.workspace = true
 description.workspace = true
 
 [dependencies]
-clap = { version = "4.5.20", features = ["derive"] }
-serde-pickle = "1.1"
 chrono = "0.4.38"
 validator = { version = "0.18", features = ["derive"] }
-serde_bytes = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
-serde_repr = { workspace = true }
-once_cell = { workspace = true }
-bitflags = { workspace = true }
-pdbtbx.workspace = true
-itertools.workspace = true
 
 [dev.dependencies]
 ferritin-pymol = { path = "../ferritin-pymol" }
