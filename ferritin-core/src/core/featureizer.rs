@@ -130,6 +130,7 @@ impl LMPNNFeatures for AtomCollection {
 
         let mut xyz_37 = Array3::<f32>::zeros((atoms.len(), 37, 3));
         let mut xyz_37_m = Array2::<i32>::zeros((atoms.len(), 37));
+
         //     for atom_name in &atom_types {
         //         let (xyz, xyz_m) = get_aligned_coordinates(&protein_atoms, &ca_dict, atom_name)?;
         //         xyz_37
