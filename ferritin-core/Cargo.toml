@@ -11,3 +11,4 @@ ferritin-pymol = { path = "../ferritin-pymol" }
 pdbtbx.workspace = true
 itertools.workspace = true
 lazy_static = "1.5.0"
+ndarray = "0.16.1"
