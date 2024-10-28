@@ -1,0 +1,91 @@
+use crate::core::{AtomCollection, Bond, BondOrder};
+use ferritin_pymol::PSEData;
+use itertools::Itertools;
+use pdbtbx::Element;
+
+impl From<&PSEData> for AtomCollection {
+    fn from(pse_data: &PSEData) -> Self {
+        let mols = pse_data.get_molecule_data();
+
+        // Pymol: most of the descriptive data is there
+        let atoms: Vec<&ferritin_pymol::pymolparsing::parsing::AtomInfo> =
+            mols.iter().flat_map(|mol| mol.atom.iter()).collect();
+
+        // Pymol: coord sets are maintained seperately.
+        let coord_sets: Vec<&ferritin_pymol::pymolparsing::parsing::CoordSet> =
+            mols.iter().flat_map(|mol| mol.coord_set.iter()).collect();
+
+        let coords: Vec<[f32; 3]> = coord_sets
+            .iter()
+            .flat_map(|c| c.get_coords_as_vec())
+            .collect();
+
+        // Pymol: most of the descriptive data is there
+        let pymol_bonds: Vec<&ferritin_pymol::pymolparsing::parsing::Bond> =
+            mols.iter().flat_map(|mol| mol.bond.iter()).collect();
+
+        let bonds = pymol_bonds
+            .iter()
+            .map(|b| Bond::new(b.index_1, b.index_2, BondOrder::match_bond(b.order)))
+            .collect();
+
+        // pull out specific fields
+        let (res_names, res_ids, chain_ids, is_hetero, elements, atom_names): (
+            Vec<String>,
+            Vec<i32>,
+            Vec<String>,
+            Vec<bool>,
+            Vec<Element>,
+            Vec<String>,
+        ) = atoms
+            .iter()
+            .map(|a| {
+                (
+                    a.resn.to_string(),
+                    a.resv,
+                    a.chain.to_string(),
+                    a.is_hetatm,
+                    a.elem,
+                    a.name.to_string(),
+                )
+            })
+            .multiunzip();
+
+        AtomCollection::new(
+            atoms.len() as usize, // size
+            coords,
+            res_ids,
+            res_names,
+            is_hetero,
+            elements,
+            chain_ids,
+            atom_names,
+            Some(bonds), //bonds
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::core::AtomCollection;
+    use ferritin_pymol::PSEData;
+    use pdbtbx;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_pse_from() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let file_path = PathBuf::from(manifest_dir)
+            .join("tests")
+            .join("data")
+            .join("example.pse");
+
+        let psedata = PSEData::load(file_path.to_str().unwrap()).expect("local pse path");
+
+        // check Atom Collection Numbers
+        let ac = AtomCollection::from(&psedata);
+        assert_eq!(ac.size(), 1519);
+        assert_eq!(ac.coords().len(), 1519);
+        assert_eq!(ac.bonds().unwrap().len(), 1537); // 1537 bonds
+    }
+}
