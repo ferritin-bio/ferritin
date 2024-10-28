@@ -3,6 +3,112 @@ use ferritin_pymol::PSEData;
 use itertools::izip;
 use itertools::Itertools;
 use pdbtbx::{Element, PDB};
+use std::ops::BitAnd;
+
+pub struct AtomSelector<'a> {
+    collection: &'a AtomCollection,
+    current_selection: Selection,
+}
+
+impl<'a> AtomSelector<'a> {
+    // Chainable methods
+    pub fn chain(mut self, chain_id: &str) -> Self {
+        let chain_selection = self.collection.select_by_chain(chain_id);
+        self.current_selection = &self.current_selection & &chain_selection;
+        self
+    }
+
+    pub fn residue(mut self, res_name: &str) -> Self {
+        let res_selection = self.collection.select_by_residue(res_name);
+        self.current_selection = &self.current_selection & &res_selection;
+        self
+    }
+
+    pub fn element(mut self, element: Element) -> Self {
+        let element_selection = self
+            .collection
+            .elements
+            .iter()
+            .enumerate()
+            .filter(|(_, &e)| e == element)
+            .map(|(i, _)| i)
+            .collect();
+        self.current_selection = &self.current_selection & &Selection::new(element_selection);
+        self
+    }
+
+    pub fn sphere(mut self, center: [f32; 3], radius: f32) -> Self {
+        let sphere_selection = self
+            .collection
+            .coords
+            .iter()
+            .enumerate()
+            .filter(|(_, &pos)| {
+                let dx = pos[0] - center[0];
+                let dy = pos[1] - center[1];
+                let dz = pos[2] - center[2];
+                (dx * dx + dy * dy + dz * dz).sqrt() <= radius
+            })
+            .map(|(i, _)| i)
+            .collect();
+        self.current_selection = &self.current_selection & &Selection::new(sphere_selection);
+        self
+    }
+
+    // Custom predicate selection
+    pub fn filter<F>(mut self, predicate: F) -> Self
+    where
+        F: Fn(usize) -> bool,
+    {
+        let filtered = self
+            .current_selection
+            .indices
+            .iter()
+            .filter(|&&idx| predicate(idx))
+            .copied()
+            .collect();
+        self.current_selection = Selection::new(filtered);
+        self
+    }
+
+    // Finalize the selection and create a view
+    pub fn collect(&self) -> AtomView {
+        AtomView {
+            collection: self.collection,
+            selection: &self.current_selection,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Selection {
+    indices: Vec<usize>,
+}
+
+impl Selection {
+    fn new(indices: Vec<usize>) -> Self {
+        Selection { indices }
+    }
+
+    // Combine selections using & operator
+    fn and(&self, other: &Selection) -> Selection {
+        let indices: Vec<usize> = self
+            .indices
+            .iter()
+            .filter(|&&idx| other.indices.contains(&idx))
+            .cloned()
+            .collect();
+        Selection::new(indices)
+    }
+}
+
+impl BitAnd for &Selection {
+    type Output = Selection;
+
+    fn bitand(self, other: Self) -> Selection {
+        self.and(other)
+    }
+}
 
 pub struct AtomCollection {
     size: usize,
@@ -27,6 +133,13 @@ pub struct AtomCollection {
 }
 
 impl AtomCollection {
+    pub fn select(&self) -> AtomSelector {
+        AtomSelector {
+            collection: self,
+            current_selection: Selection::new((0..self.size).collect()),
+        }
+    }
+
     pub fn size(&self) -> usize {
         self.size
     }
@@ -188,6 +301,101 @@ impl AtomCollection {
         //         The `box` attribute of `atoms` is required in this case.
 
         unimplemented!()
+    }
+
+    pub fn select_by_chain(&self, chain_id: &str) -> Selection {
+        let indices: Vec<usize> = self
+            .chain_ids
+            .iter()
+            .enumerate()
+            .filter(|(_, &ref chain)| chain == chain_id)
+            .map(|(i, _)| i)
+            .collect();
+        Selection::new(indices)
+    }
+
+    pub fn select_by_residue(&self, res_name: &str) -> Selection {
+        let indices: Vec<usize> = self
+            .res_names
+            .iter()
+            .enumerate()
+            .filter(|(_, name)| name == res_name)
+            .map(|(i, _)| i)
+            .collect();
+        Selection::new(indices)
+    }
+
+    pub fn view(&self, selection: &Selection) -> AtomView {
+        AtomView {
+            collection: self,
+            selection,
+        }
+    }
+}
+
+pub struct AtomView<'a> {
+    collection: &'a AtomCollection,
+    selection: &'a Selection,
+}
+
+impl<'a> IntoIterator for &'a AtomView<'a> {
+    type Item = AtomRef<'a>;
+    type IntoIter = AtomIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        AtomIterator {
+            view: self,
+            current: 0,
+        }
+    }
+}
+
+pub struct AtomRef<'a> {
+    pub coords: &'a [f32; 3],
+    pub res_id: &'a i32,
+    pub res_name: &'a String,
+    pub element: &'a Element,
+    // ... other fields
+}
+
+pub struct AtomIterator<'a> {
+    view: &'a AtomView<'a>,
+    current: usize,
+}
+
+impl<'a> Iterator for AtomIterator<'a> {
+    type Item = AtomRef<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current >= self.view.selection.indices.len() {
+            return None;
+        }
+
+        let idx = self.view.selection.indices[self.current];
+        self.current += 1;
+
+        Some(AtomRef {
+            coords: &self.view.collection.coords[idx],
+            res_id: &self.view.collection.res_ids[idx],
+            res_name: &self.view.collection.res_names[idx],
+            element: &self.view.collection.elements[idx],
+            // ... other fields
+        })
+    }
+}
+
+// Implement methods to access data through the view
+impl<'a> AtomView<'a> {
+    pub fn coords(&self) -> Vec<[f32; 3]> {
+        self.selection
+            .indices
+            .iter()
+            .map(|&i| self.collection.coords[i])
+            .collect()
+    }
+
+    pub fn size(&self) -> usize {
+        self.selection.indices.len()
     }
 }
 
@@ -369,7 +577,7 @@ mod tests {
     use ferritin_pymol::PSEData;
     use itertools::Itertools;
     use pdbtbx::{self, Element};
-    use std::{f32::consts::E, path::PathBuf};
+    use std::path::PathBuf;
 
     #[test]
     fn test_pse_from() {
@@ -421,7 +629,6 @@ mod tests {
 
         // Take a peek at the unique elements
         let elements: Vec<Element> = ac.elements.into_iter().unique().sorted().collect();
-        // assert_eq!(elements, ["C", "FE", "N", "O", "S"]);
         assert_eq!(
             elements,
             [Element::C, Element::N, Element::O, Element::S, Element::Fe,]
@@ -438,10 +645,5 @@ mod tests {
 
         let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
         assert_eq!(pdb.atom_count(), 1413);
-
-        // // check Atom Collection Numbers
-        // let ac = AtomCollection::from(&psedata);
-        // assert_eq!(ac.coords.len(), 1519);
-        // assert_eq!(ac.bonds.unwrap().len(), 1537); // 1537 bonds
     }
 }
