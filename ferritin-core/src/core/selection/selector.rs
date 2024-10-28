@@ -16,17 +16,13 @@ impl<'a> AtomSelector<'a> {
             current_selection: Selection::new((0..size).collect()),
         }
     }
-
     pub fn chain(mut self, chain_id: &str) -> Self {
         let chain_selection = self.collection.select_by_chain(chain_id);
         self.current_selection = &self.current_selection & &chain_selection;
         self
     }
-
-    pub fn residue(mut self, res_name: &str) -> Self {
-        let res_selection = self.collection.select_by_residue(res_name);
-        self.current_selection = &self.current_selection & &res_selection;
-        self
+    pub fn collect(self) -> AtomView<'a> {
+        AtomView::new(self.collection, self.current_selection)
     }
 
     pub fn element(mut self, element: Element) -> Self {
@@ -39,6 +35,25 @@ impl<'a> AtomSelector<'a> {
             .map(|(i, _)| i)
             .collect();
         self.current_selection = &self.current_selection & &Selection::new(element_selection);
+        self
+    }
+    pub fn filter<F>(mut self, predicate: F) -> Self
+    where
+        F: Fn(usize) -> bool,
+    {
+        let filtered = self
+            .current_selection
+            .indices
+            .iter()
+            .filter(|&&idx| predicate(idx))
+            .copied()
+            .collect();
+        self.current_selection = Selection::new(filtered);
+        self
+    }
+    pub fn residue(mut self, res_name: &str) -> Self {
+        let res_selection = self.collection.select_by_residue(res_name);
+        self.current_selection = &self.current_selection & &res_selection;
         self
     }
 
@@ -58,24 +73,5 @@ impl<'a> AtomSelector<'a> {
             .collect();
         self.current_selection = &self.current_selection & &Selection::new(sphere_selection);
         self
-    }
-
-    pub fn filter<F>(mut self, predicate: F) -> Self
-    where
-        F: Fn(usize) -> bool,
-    {
-        let filtered = self
-            .current_selection
-            .indices
-            .iter()
-            .filter(|&&idx| predicate(idx))
-            .copied()
-            .collect();
-        self.current_selection = Selection::new(filtered);
-        self
-    }
-
-    pub fn collect(self) -> AtomView<'a> {
-        AtomView::new(self.collection, self.current_selection)
     }
 }
