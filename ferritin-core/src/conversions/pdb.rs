@@ -1,64 +1,11 @@
 use crate::core::AtomCollection;
-use itertools::{izip, Itertools};
+use itertools::Itertools;
 use pdbtbx::{Element, PDB};
 
-// impl From<&PDB> for AtomCollection {
-//     // the PDB API requires us to iterate:
-//     // PDB --> Chain --> Residue --> Atom if we want data from all.
-//     // Here we collect all the data in one go and return an AtomCollection
-//     fn from(pdb_data: &PDB) -> Self {
-//         let (coords, is_hetero, atom_names, res_ids, res_names, elements, chain_ids): (
-//             Vec<[f32; 3]>,
-//             Vec<bool>,
-//             Vec<String>,
-//             Vec<i32>,
-//             Vec<String>,
-//             Vec<Element>,
-//             Vec<String>,
-//         ) = izip!(pdb_data.chains().flat_map(|chain| {
-//             let chain_id = chain.id().to_string();
-//             chain.residues().flat_map(move |residue| {
-//                 let (res_number, _insertion_code) = residue.id();
-//                 let res_id = res_number as i32;
-//                 let res_name = residue.name().unwrap_or_default().to_string();
-//                 let chain_id = chain_id.clone();
-//                 residue.atoms().filter_map(move |atom| {
-//                     atom.element().map(|element| {
-//                         let (x, y, z) = atom.pos();
-//                         (
-//                             [x as f32, y as f32, z as f32],
-//                             atom.hetero(),
-//                             atom.name().unwrap_or("".to_string(),
-//                             res_id,
-//                             res_name.clone(),
-//                             element,
-//                             chain_id.clone(),
-//                         )
-//                     })
-//                 })
-//             })
-//         }))
-//         .multiunzip();
-
-//         let mut ac = AtomCollection::new(
-//             coords.len(),
-//             coords,
-//             res_ids,
-//             res_names,
-//             is_hetero,
-//             elements,
-//             chain_ids,
-//             atom_names,
-//             None,
-//         );
-
-//         // adds bonds
-//         ac.connect_via_residue_names();
-//         ac
-//     }
-// }
-
 impl From<&PDB> for AtomCollection {
+    // the PDB API requires us to iterate:
+    // PDB --> Chain --> Residue --> Atom if we want data from all.
+    // Here we collect all the data in one go and return an AtomCollection
     fn from(pdb_data: &PDB) -> Self {
         let (coords, is_hetero, atom_names, res_ids, res_names, elements, chain_ids): (
             Vec<[f32; 3]>,
