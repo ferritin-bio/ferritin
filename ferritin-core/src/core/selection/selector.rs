@@ -21,6 +21,9 @@ impl<'a> AtomSelector<'a> {
         self.current_selection = &self.current_selection & &chain_selection;
         self
     }
+    pub fn backbone(mut self) -> Self {
+        unimplemented!()
+    }
     pub fn collect(self) -> AtomView<'a> {
         AtomView::new(self.collection, self.current_selection)
     }
@@ -50,6 +53,9 @@ impl<'a> AtomSelector<'a> {
             .collect();
         self.current_selection = Selection::new(filtered);
         self
+    }
+    pub fn protein(mut self) -> Self {
+        unimplemented!()
     }
     pub fn residue(mut self, res_name: &str) -> Self {
         let res_selection = self.collection.select_by_residue(res_name);
