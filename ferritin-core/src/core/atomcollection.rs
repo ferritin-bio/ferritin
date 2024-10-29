@@ -1,5 +1,6 @@
 use super::bonds::{Bond, BondOrder};
 use super::constants::get_bonds_canonical20;
+use crate::core::residue::ResidueIter;
 use crate::core::selection::{AtomSelector, AtomView, Selection};
 use itertools::{izip, Itertools};
 use pdbtbx::Element;
@@ -123,11 +124,11 @@ impl AtomCollection {
                     // Create all possible bond combinations
                     for &i in &atom_indices1 {
                         for &j in &atom_indices2 {
-                            bonds.push(Bond {
-                                atom1: i as i32,
-                                atom2: j as i32,
-                                order: BondOrder::match_bond(bond_type),
-                            });
+                            bonds.push(Bond::new(
+                                i as i32,
+                                j as i32,
+                                BondOrder::match_bond(bond_type),
+                            ));
                         }
                     }
                 }
@@ -233,6 +234,15 @@ impl AtomCollection {
     }
     pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
         izip!(&self.coords, &self.elements)
+    }
+    // Method to create the iterator
+    pub fn iter_residues(&self) -> ResidueIter {
+        let residue_starts = self.get_residue_starts();
+        ResidueIter {
+            atom_collection: self,
+            residue_starts,
+            current_idx: 0,
+        }
     }
     pub fn select(&self) -> AtomSelector {
         AtomSelector::new(self)

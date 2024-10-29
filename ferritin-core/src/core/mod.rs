@@ -3,7 +3,8 @@ mod bonds;
 mod constants;
 mod conversions;
 mod featureizer;
-mod selection;
+pub mod residue;
+pub mod selection;
 
 pub use atomcollection::AtomCollection;
 pub use bonds::{Bond, BondOrder};

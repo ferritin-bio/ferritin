@@ -1,0 +1,11 @@
+use pdbtbx::Element;
+
+// Struct to hold atom information
+#[derive(Debug)]
+pub struct AtomInfo<'a> {
+    pub index: usize,
+    pub coords: &'a [f32; 3],
+    pub element: &'a Element,
+    pub atom_name: &'a String,
+    pub is_hetero: bool,
+}
