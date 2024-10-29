@@ -9,4 +9,4 @@ categories: [news, code, analysis]
 ## Post
 
 ![](images/ballandstick.png)
-![](images/sphere.png)
+![](images/spheres.png)
