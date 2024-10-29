@@ -13,7 +13,7 @@ convert: build
 docs: convert
     # generate and copy rust docs
     cargo doc --workspace --no-deps
-    cp -r target/doc/  docs/
+    cp -r target/doc/  docs/doc
     # quarto
     quarto render docs
 
