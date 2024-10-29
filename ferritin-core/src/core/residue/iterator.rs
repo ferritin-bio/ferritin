@@ -1,6 +1,7 @@
 use super::atoms::ResidueAtoms;
 use crate::core::AtomCollection;
 use crate::core::Selection;
+use std::iter::FromIterator;
 
 // Rest of the iterator implementation remains the same
 pub struct ResidueIter<'a> {
@@ -42,5 +43,55 @@ impl<'a> Iterator for ResidueIter<'a> {
 
         self.current_idx += 1;
         Some(residue)
+    }
+}
+
+impl<'a> FromIterator<ResidueAtoms<'a>> for AtomCollection {
+    fn from_iter<T: IntoIterator<Item = ResidueAtoms<'a>>>(iter: T) -> Self {
+        let mut coords = Vec::new();
+        let mut res_ids = Vec::new();
+        let mut res_names = Vec::new();
+        let mut is_hetero = Vec::new();
+        let mut elements = Vec::new();
+        let mut atom_names = Vec::new();
+        let mut chain_ids = Vec::new();
+        let mut size = 0;
+
+        // Collect all atoms from the residues
+        for residue in iter {
+            for i in residue.start_idx..residue.end_idx {
+                coords.push(*residue.parent.get_coord(i));
+                res_ids.push(*residue.parent.get_res_id(i));
+                res_names.push(residue.parent.get_res_name(i).clone());
+                is_hetero.push(residue.parent.get_is_hetero(i));
+                elements.push(residue.parent.get_element(i).clone());
+                atom_names.push(residue.parent.get_atom_name(i).clone());
+                chain_ids.push(residue.parent.get_chain_id(i).clone());
+                size += 1;
+            }
+        }
+
+        AtomCollection::new(
+            size, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None,
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::info::constants::is_amino_acid;
+    use crate::core::test_utilities::get_atom_container;
+
+    #[test]
+    fn test_collect_amino_acids() {
+        // the collect creates a new AC. Improtant if we want to make new copies.
+        let ac: AtomCollection = get_atom_container();
+        let amino_acids: AtomCollection = ac.iter_residues_aminoacid().collect();
+        assert!(amino_acids.get_size() < ac.get_size());
+
+        for residue in amino_acids.iter_residues_all() {
+            assert!(is_amino_acid(&residue.res_name));
+        }
     }
 }

@@ -77,8 +77,16 @@ fn load_initial_proteins(
             file_path.to_str().unwrap_or_default(),
             // StrictnessLevel::Medium,
         ) {
+            // by default lets only keep the amino acids.
+            let mut ac: AtomCollection = AtomCollection::from(&pdb)
+                .iter_residues_aminoacid()
+                .collect();
+
+            // add the bonds back in as they are removed during the collection process above.
+            ac.connect_via_residue_names();
+
             let structure = Structure::builder()
-                .pdb(AtomCollection::from(&pdb))
+                .pdb(ac)
                 .rendertype(settings.render_type.clone())
                 .color_scheme(settings.color_scheme.clone())
                 .material(settings.material.clone())
