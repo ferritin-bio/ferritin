@@ -1,5 +1,26 @@
+//! # Constants
+//!
+//! This module contains core data structures and functions for analyzing molecular structures.
+//!
+//! ## Residue Types
+//! The module provides functions to check residue types:
+//!
+//! - `is_amino_acid()` - Check if a residue is an amino acid
+//! - `is_carbohydrate()` - Check if a residue is a carbohydrate
+//! - `is_nucleotide()` - Check if a residue is a nucleotide
+//!
+//! ## Bond Information
+//! Bond data from CCD includes:
+//!
+//! - Bond lengths with standard deviations
+//! - Canonical amino acid connectivity
+//! - Bond order information
+//!
+
 use lazy_static::lazy_static;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fs::read_to_string;
+use std::path::PathBuf;
 
 #[rustfmt::skip]
 pub fn default_distance_range(a: &str, b: &str) -> (f32, f32) {
@@ -57,6 +78,7 @@ type BondInfo = (String, String, i32);
 
 #[rustfmt::skip]
 lazy_static! {
+    // amino acids from ccd
     static ref AA_BONDS: HashMap<&'static str, Vec<(&'static str, &'static str, i32)>> = {
         let mut m = HashMap::new();
         m.insert("ALA", vec![
@@ -195,4 +217,45 @@ lazy_static! {
 pub fn get_bonds_canonical20(
 ) -> &'static HashMap<&'static str, Vec<(&'static str, &'static str, i32)>> {
     &AA_BONDS
+}
+
+lazy_static! {
+    static ref AMINO_ACIDS: HashSet<&'static str> =
+        include_str!("ccddata/amino_acids.txt").lines().collect();
+    static ref CARBOHYDRATES: HashSet<&'static str> =
+        include_str!("ccddata/carbohydrates.txt").lines().collect();
+    static ref NUCLEOTIDES: HashSet<&'static str> =
+        include_str!("ccddata/nucleotides.txt").lines().collect();
+}
+
+pub fn is_amino_acid(symbol: &str) -> bool {
+    AMINO_ACIDS.contains(symbol)
+}
+
+pub fn is_carbohydrate(symbol: &str) -> bool {
+    CARBOHYDRATES.contains(symbol)
+}
+
+pub fn is_nucleotide(symbol: &str) -> bool {
+    NUCLEOTIDES.contains(symbol)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_residue_checking() {
+        assert!(is_amino_acid("ALA"));
+        assert!(is_amino_acid("ARG"));
+        assert!(!is_amino_acid("ZZZ"));
+
+        assert!(is_carbohydrate("045"));
+        assert!(is_carbohydrate("05L"));
+        assert!(!is_carbohydrate("ZZZ"));
+
+        assert!(is_nucleotide("02I"));
+        assert!(is_nucleotide("05A"));
+        assert!(!is_nucleotide("ZZZ"));
+    }
 }

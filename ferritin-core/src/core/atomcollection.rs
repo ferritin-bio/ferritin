@@ -1,4 +1,8 @@
-use super::constants::get_bonds_canonical20;
+use super::bonds::{Bond, BondOrder};
+use super::info::constants::{
+    get_bonds_canonical20, is_amino_acid, is_carbohydrate, is_nucleotide,
+};
+use crate::core::residue::{ResidueAtoms, ResidueIter};
 use crate::core::selection::{AtomSelector, AtomView, Selection};
 use itertools::{izip, Itertools};
 use pdbtbx::Element;
@@ -49,36 +53,11 @@ impl AtomCollection {
             bonds,
         }
     }
-    pub fn select(&self) -> AtomSelector {
-        AtomSelector::new(self)
-    }
-    pub fn size(&self) -> usize {
-        self.size
-    }
-    pub fn bonds(&self) -> Option<&Vec<Bond>> {
-        self.bonds.as_ref()
-    }
-    pub fn coords(&self) -> &Vec<[f32; 3]> {
-        self.coords.as_ref()
-    }
-    pub fn elements(&self) -> &Vec<pdbtbx::Element> {
-        self.elements.as_ref()
-    }
-    pub fn resnames(&self) -> &Vec<String> {
-        self.res_names.as_ref()
-    }
-    pub fn resids(&self) -> &Vec<i32> {
-        self.res_ids.as_ref()
-    }
-    pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
-        izip!(&self.coords, &self.elements)
-    }
     pub fn calculate_displacement(&self) {
         // Measure the displacement vector, i.e. the vector difference, from
         // one array of atom coordinates to another array of coordinates.
         unimplemented!()
     }
-
     pub fn calculate_distance(&self, _atoms: AtomCollection) {
         // def distance(atoms1, atoms2, box=None):
         // """
@@ -114,7 +93,6 @@ impl AtomCollection {
         // return np.sqrt(vector_dot(diff, diff))
         unimplemented!()
     }
-
     pub fn connect_via_residue_names(&mut self) {
         if self.bonds.is_some() {
             println!("Bonds already in place. Not overwriting.");
@@ -148,11 +126,11 @@ impl AtomCollection {
                     // Create all possible bond combinations
                     for &i in &atom_indices1 {
                         for &j in &atom_indices2 {
-                            bonds.push(Bond {
-                                atom1: i as i32,
-                                atom2: j as i32,
-                                order: BondOrder::match_bond(bond_type),
-                            });
+                            bonds.push(Bond::new(
+                                i as i32,
+                                j as i32,
+                                BondOrder::match_bond(bond_type),
+                            ));
                         }
                     }
                 }
@@ -162,29 +140,6 @@ impl AtomCollection {
         println!("Updating bonds....");
         self.bonds = Some(bonds);
     }
-
-    /// A new residue starts, either when the chain ID, residue ID,
-    /// insertion code or residue name changes from one to the next atom.
-    fn get_residue_starts(&self) -> Vec<i64> {
-        let mut starts = vec![0];
-
-        starts.extend(
-            izip!(&self.res_ids, &self.res_names, &self.chain_ids)
-                .tuple_windows()
-                .enumerate()
-                .filter_map(
-                    |(i, ((res_id1, name1, chain1), (res_id2, name2, chain2)))| {
-                        if res_id1 != res_id2 || name1 != name2 || chain1 != chain2 {
-                            Some((i + 1) as i64)
-                        } else {
-                            None
-                        }
-                    },
-                ),
-        );
-        starts
-    }
-
     pub fn connect_via_distance(&self) -> Vec<Bond> {
         // connect_via_distances(atoms, distance_range=None, atom_mask=None,
         //                           inter_residue=True, default_bond_type=BondType.ANY,
@@ -228,7 +183,82 @@ impl AtomCollection {
 
         unimplemented!()
     }
+    pub fn get_size(&self) -> usize {
+        self.size
+    }
+    pub fn get_atom_name(&self, idx: usize) -> &String {
+        &self.atom_names[idx]
+    }
+    pub fn get_bonds(&self) -> Option<&Vec<Bond>> {
+        self.bonds.as_ref()
+    }
+    pub fn get_chain_id(&self, idx: usize) -> &String {
+        &self.chain_ids[idx]
+    }
+    pub fn get_coord(&self, idx: usize) -> &[f32; 3] {
+        &self.coords[idx]
+    }
+    pub fn get_coords(&self) -> &Vec<[f32; 3]> {
+        self.coords.as_ref()
+    }
+    pub fn get_element(&self, idx: usize) -> &Element {
+        &self.elements[idx]
+    }
+    pub fn get_elements(&self) -> &Vec<pdbtbx::Element> {
+        self.elements.as_ref()
+    }
+    pub fn get_is_hetero(&self, idx: usize) -> bool {
+        self.is_hetero[idx]
+    }
+    pub fn get_resnames(&self) -> &Vec<String> {
+        self.res_names.as_ref()
+    }
+    pub fn get_res_id(&self, idx: usize) -> &i32 {
+        &self.res_ids[idx]
+    }
+    pub fn get_resids(&self) -> &Vec<i32> {
+        self.res_ids.as_ref()
+    }
+    pub fn get_res_name(&self, idx: usize) -> &String {
+        &self.res_names[idx]
+    }
+    /// A new residue starts, either when the chain ID, residue ID,
+    /// insertion code or residue name changes from one to the next atom.
+    pub(crate) fn get_residue_starts(&self) -> Vec<i64> {
+        let mut starts = vec![0];
 
+        starts.extend(
+            izip!(&self.res_ids, &self.res_names, &self.chain_ids)
+                .tuple_windows()
+                .enumerate()
+                .filter_map(
+                    |(i, ((res_id1, name1, chain1), (res_id2, name2, chain2)))| {
+                        if res_id1 != res_id2 || name1 != name2 || chain1 != chain2 {
+                            Some((i + 1) as i64)
+                        } else {
+                            None
+                        }
+                    },
+                ),
+        );
+        starts
+    }
+    pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
+        izip!(&self.coords, &self.elements)
+    }
+    /// IterResiudees Will Iterate Through the AtomCollection one Residue at a time.
+    ///
+    /// This is the base for any onther residue filtration code.
+    pub fn iter_residues_all(&self) -> ResidueIter {
+        ResidueIter::new(self, self.get_residue_starts())
+    }
+    pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueAtoms> {
+        self.iter_residues_all()
+            .filter(|residue| is_amino_acid(&residue.res_name))
+    }
+    pub fn select(&self) -> AtomSelector {
+        AtomSelector::new(self)
+    }
     pub fn select_by_chain(&self, chain_id: &str) -> Selection {
         let indices: Vec<usize> = self
             .chain_ids
@@ -239,7 +269,6 @@ impl AtomCollection {
             .collect();
         Selection::new(indices)
     }
-
     pub fn select_by_residue(&self, res_name: &str) -> Selection {
         let indices: Vec<usize> = self
             .res_names
@@ -250,123 +279,26 @@ impl AtomCollection {
             .collect();
         Selection::new(indices)
     }
-
     pub fn view(&self, selection: Selection) -> AtomView {
         AtomView::new(self, selection)
-    }
-    pub fn get_coord(&self, idx: usize) -> &[f32; 3] {
-        &self.coords[idx]
-    }
-
-    pub fn get_res_id(&self, idx: usize) -> &i32 {
-        &self.res_ids[idx]
-    }
-
-    pub fn get_res_name(&self, idx: usize) -> &String {
-        &self.res_names[idx]
-    }
-
-    pub fn get_element(&self, idx: usize) -> &Element {
-        &self.elements[idx]
-    }
-}
-
-/// Bond
-#[derive(Debug, PartialEq)]
-pub struct Bond {
-    atom1: i32,
-    atom2: i32,
-    order: BondOrder,
-    // id
-    // stereo
-    // unique_id
-    // has_setting
-}
-
-impl Bond {
-    pub fn new(atom1: i32, atom2: i32, order: BondOrder) -> Self {
-        Bond {
-            atom1,
-            atom2,
-            order,
-        }
-    }
-    pub fn get_atom_indices(&self) -> (i32, i32) {
-        (self.atom1, self.atom2)
-    }
-}
-
-#[repr(u8)]
-#[derive(Debug, PartialEq)]
-/// BondOrder:
-/// https://www.biotite-python.org/latest/apidoc/biotite.structure.BondType.html#biotite.structure.BondType
-/// see also: http://cdk.github.io/cdk/latest/docs/api/org/openscience/cdk/Bond.html
-pub enum BondOrder {
-    /// Used if the actual type is unknown
-    Unset,
-    /// Single bond
-    Single,
-    /// Double bond
-    Double,
-    /// Triple bond
-    Triple,
-    /// A quadruple bond
-    Quadruple,
-}
-
-impl BondOrder {
-    pub fn match_bond(bond_int: i32) -> BondOrder {
-        match bond_int {
-            0 => BondOrder::Unset,
-            1 => BondOrder::Single,
-            2 => BondOrder::Double,
-            3 => BondOrder::Triple,
-            4 | 5 | 6 => BondOrder::Quadruple,
-            _ => {
-                println!("Bond Order not found: {}", bond_int);
-                panic!()
-            }
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::core::test_utilities::get_atom_container;
     use crate::AtomCollection;
-    use pdbtbx::{self, Element};
-    use std::path::PathBuf;
-
-    fn get_file() -> PathBuf {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        PathBuf::from(manifest_dir)
-            .join("tests")
-            .join("data")
-            .join("101m.cif")
-    }
-
-    #[test]
-    fn test_simple_conversion() {
-        let file_path = get_file();
-        let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
-        assert_eq!(pdb.atom_count(), 1413);
-        let ac = AtomCollection::from(&pdb);
-        assert_eq!(ac.size(), 1413);
-    }
+    use pdbtbx::Element;
 
     #[test]
     fn test_selection_api() {
-        let file_path = get_file();
-        let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
-        let ac = AtomCollection::from(&pdb);
-        assert_eq!(ac.size(), 1413);
-
+        let ac: AtomCollection = get_atom_container();
         let selected_atoms = ac
             .select()
             .chain("A")
             .residue("GLY")
             .element(Element::C)
             .collect();
-
         assert_eq!(selected_atoms.size(), 22);
 
         // let carbon_coords: Vec<[f32; 3]> = selected_atoms
@@ -374,5 +306,31 @@ mod tests {
         //     .filter(|atom| *atom.element == Element::C)
         //     .map(|atom| *atom.coords)
         //     .collect();
+    }
+
+    #[test]
+    fn test_residue_iterator() {
+        let ac: AtomCollection = get_atom_container();
+        assert_eq!(ac.get_size(), 1413);
+
+        // This includes Water Molecules
+        let max_resid = ac.get_resids().iter().max().unwrap_or(&0);
+        assert_eq!(*max_resid, 338);
+
+        // this fn is only available in-crate
+        // let residue_breaks = ac.get_residue_starts();
+        // assert_eq!(residue_breaks, vec![1, 2, 3]);
+
+        // This is counting 294 - I expect
+        // let residue_count = ac.iter_residues().count();
+        // assert_eq!(residue_count, 154);
+        //
+
+        // Water count -> 139
+        //
+
+        for res in ac.iter_residues_all() {
+            println!("{:?}", res.res_name)
+        }
     }
 }

@@ -95,8 +95,8 @@ impl Structure {
             .unwrap();
 
         // Add bond cylinders using iterators
-        if let Some(bonds) = self.pdb.bonds() {
-            let coords = self.pdb.coords();
+        if let Some(bonds) = self.pdb.get_bonds() {
+            let coords = self.pdb.get_coords();
             bonds
                 .iter()
                 .filter_map(|bond| {
@@ -176,7 +176,7 @@ mod tests {
     fn test_pdb_to_mesh() {
         let (pdb, _errors) = pdbtbx::open("examples/1fap.cif").unwrap();
         let structure = Structure::builder().pdb(AtomCollection::from(&pdb)).build();
-        assert_eq!(structure.pdb.size(), 2154);
+        assert_eq!(structure.pdb.get_size(), 2154);
         let mesh = structure.to_mesh();
         assert_eq!(mesh.count_vertices(), 779748);
     }

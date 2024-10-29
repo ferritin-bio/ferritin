@@ -1,7 +1,12 @@
 mod atomcollection;
-mod constants;
+mod bonds;
 mod conversions;
 mod featureizer;
+mod info;
+mod residue;
 mod selection;
+mod test_utilities;
 
-pub use atomcollection::{AtomCollection, Bond, BondOrder};
+pub use atomcollection::AtomCollection;
+pub use bonds::{Bond, BondOrder};
+pub use selection::Selection;

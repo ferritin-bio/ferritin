@@ -62,11 +62,17 @@ impl<'a> Iterator for AtomIterator<'a> {
         let idx = self.view.selection.indices[self.current];
         self.current += 1;
 
+        // Get the actual values first
+        let coords = self.view.collection.get_coord(idx);
+        let res_id = self.view.collection.get_res_id(idx);
+        let res_name = self.view.collection.get_res_name(idx);
+        let element = self.view.collection.get_element(idx);
+
         Some(AtomRef {
-            coords: &self.view.collection.get_coord(idx),
-            res_id: &self.view.collection.get_res_id(idx),
-            res_name: &self.view.collection.get_res_name(idx),
-            element: &self.view.collection.get_element(idx),
+            coords, // Pass the references directly
+            res_id,
+            res_name,
+            element,
         })
     }
 }
