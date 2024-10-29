@@ -94,59 +94,21 @@ mod tests {
 
     #[test]
     fn test_iteration() {
-        // This is counting 294 - I expect 154.
-        //  This is including waters. Need to get the filtering going....
         let ac: AtomCollection = get_atom_container();
-        assert_eq!(ac.iter_residues_aminoacid().count(), 154)
+        assert_eq!(ac.iter_residues_aminoacid().count(), 154);
+
+        let first_residue: ResidueAtoms = ac
+            .iter_residues_aminoacid()
+            .take(1)
+            .next()
+            .expect("Should have at least one amino acid residue");
+
+        assert_eq!(first_residue.start_idx, 0);
+        assert_eq!(first_residue.end_idx, 8); // Met has 9 Atoms
+        assert_eq!(first_residue.res_id, 0);
+        assert_eq!(first_residue.res_name, "MET");
+        assert_eq!(first_residue.chain_id, "A");
+        // assert_eq!(first_residue.atoms, "A"); // <- should test Selection
+        assert_eq!(first_residue.parent.get_size(), 1413);
     }
-
-    // #[test]
-    // fn test_coords() {
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_atom_names() {
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_elements() {
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_view() {
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_atom_count() {
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_iter_atoms() {
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_get_atom() {
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_find_atom_by_name() {
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_get_atom_out_of_bounds() {
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_find_atom_by_name_not_found() {
-    //     unimplemented!()
-    // }
 }
