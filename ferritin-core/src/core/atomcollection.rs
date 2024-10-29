@@ -27,6 +27,29 @@ pub struct AtomCollection {
 }
 
 impl AtomCollection {
+    pub fn new(
+        size: usize,
+        coords: Vec<[f32; 3]>,
+        res_ids: Vec<i32>,
+        res_names: Vec<String>,
+        is_hetero: Vec<bool>,
+        elements: Vec<Element>,
+        atom_names: Vec<String>,
+        chain_ids: Vec<String>,
+        bonds: Option<Vec<Bond>>,
+    ) -> Self {
+        AtomCollection {
+            size,
+            coords,
+            res_ids,
+            res_names,
+            is_hetero,
+            elements,
+            atom_names,
+            chain_ids,
+            bonds,
+        }
+    }
     pub fn calculate_displacement(&self) {
         // Measure the displacement vector, i.e. the vector difference, from
         // one array of atom coordinates to another array of coordinates.
@@ -184,6 +207,27 @@ impl AtomCollection {
     pub fn get_res_name(&self, idx: usize) -> &String {
         &self.res_names[idx]
     }
+    /// A new residue starts, either when the chain ID, residue ID,
+    /// insertion code or residue name changes from one to the next atom.
+    fn get_residue_starts(&self) -> Vec<i64> {
+        let mut starts = vec![0];
+
+        starts.extend(
+            izip!(&self.res_ids, &self.res_names, &self.chain_ids)
+                .tuple_windows()
+                .enumerate()
+                .filter_map(
+                    |(i, ((res_id1, name1, chain1), (res_id2, name2, chain2)))| {
+                        if res_id1 != res_id2 || name1 != name2 || chain1 != chain2 {
+                            Some((i + 1) as i64)
+                        } else {
+                            None
+                        }
+                    },
+                ),
+        );
+        starts
+    }
     pub fn get_element(&self, idx: usize) -> &Element {
         &self.elements[idx]
     }
@@ -192,29 +236,6 @@ impl AtomCollection {
     }
     pub fn select(&self) -> AtomSelector {
         AtomSelector::new(self)
-    }
-    pub fn new(
-        size: usize,
-        coords: Vec<[f32; 3]>,
-        res_ids: Vec<i32>,
-        res_names: Vec<String>,
-        is_hetero: Vec<bool>,
-        elements: Vec<Element>,
-        atom_names: Vec<String>,
-        chain_ids: Vec<String>,
-        bonds: Option<Vec<Bond>>,
-    ) -> Self {
-        AtomCollection {
-            size,
-            coords,
-            res_ids,
-            res_names,
-            is_hetero,
-            elements,
-            atom_names,
-            chain_ids,
-            bonds,
-        }
     }
     pub fn select_by_chain(&self, chain_id: &str) -> Selection {
         let indices: Vec<usize> = self
@@ -238,27 +259,6 @@ impl AtomCollection {
     }
     pub fn view(&self, selection: Selection) -> AtomView {
         AtomView::new(self, selection)
-    }
-    /// A new residue starts, either when the chain ID, residue ID,
-    /// insertion code or residue name changes from one to the next atom.
-    fn get_residue_starts(&self) -> Vec<i64> {
-        let mut starts = vec![0];
-
-        starts.extend(
-            izip!(&self.res_ids, &self.res_names, &self.chain_ids)
-                .tuple_windows()
-                .enumerate()
-                .filter_map(
-                    |(i, ((res_id1, name1, chain1), (res_id2, name2, chain2)))| {
-                        if res_id1 != res_id2 || name1 != name2 || chain1 != chain2 {
-                            Some((i + 1) as i64)
-                        } else {
-                            None
-                        }
-                    },
-                ),
-        );
-        starts
     }
 }
 
