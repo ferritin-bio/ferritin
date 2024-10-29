@@ -203,7 +203,7 @@ impl AtomCollection {
         self.elements.as_ref()
     }
     pub fn get_is_hetero(&self, idx: usize) -> &bool {
-        self.elements[i]
+        self.elements[idx]
     }
     pub fn get_resnames(&self) -> &Vec<String> {
         self.res_names.as_ref()
