@@ -6,6 +6,7 @@ use crate::core::residue::{ResidueAtoms, ResidueIter};
 use crate::core::selection::{AtomSelector, AtomView, Selection};
 use itertools::{izip, Itertools};
 use pdbtbx::Element;
+use std::iter::FromIterator;
 
 pub struct AtomCollection {
     size: usize,

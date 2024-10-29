@@ -73,18 +73,25 @@ fn load_initial_proteins(
             continue;
         }
 
-        if let Ok((pdb, _errors)) = pdbtbx::open(
-            file_path.to_str().unwrap_or_default(),
-            // StrictnessLevel::Medium,
-        ) {
+        if let Ok((pdb, _errors)) = pdbtbx::open(file_path.to_str().unwrap_or_default()) {
+            // Todo: revist this portion about the right default visuals later on
+            // by default lets only keep the amino acids.
+            let mut ac: AtomCollection = AtomCollection::from(&pdb)
+                .iter_residues_aminoacid()
+                .collect();
+
+            // add the bonds back in as they are removed during the collection process above.
+            ac.connect_via_residue_names();
+
             let structure = Structure::builder()
-                .pdb(AtomCollection::from(&pdb))
+                .pdb(ac)
                 .rendertype(settings.render_type.clone())
                 .color_scheme(settings.color_scheme.clone())
                 .material(settings.material.clone())
                 .build();
-            // bundle the mesh and the material together.
+
             let pbr = structure.to_pbr(&mut meshes, &mut materials);
+
             commands.spawn((structure, pbr));
         }
     }

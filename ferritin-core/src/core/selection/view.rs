@@ -1,9 +1,26 @@
+//! A crate for viewing and manipulating atomic coordinates and properties.
+//!
+//! This crate provides functionality for working with collections of atoms, including:
+//!
+//! - View-based access to atomic coordinates and properties
+//! - Iteration over selected atoms
+//! - Access to atomic properties like coordinates, residue IDs, residue names, and elements
+//!
+//! The main types are:
+//!
+//! - [`AtomView`] - A view into a subset of atoms in a collection
+//! - [`AtomRef`] - A reference to atomic properties
+//! - [`AtomIterator`] - An iterator over atoms in a view
+//!
+
 use super::selection::Selection;
 use crate::core::AtomCollection;
 use pdbtbx::Element;
 
 pub struct AtomView<'a> {
+    /// Reference to the underlying atom collection
     collection: &'a AtomCollection,
+    /// The selected subset of atoms in the collection
     selection: Selection,
 }
 
@@ -26,16 +43,25 @@ impl<'a> AtomView<'a> {
         self.selection.indices.len()
     }
 }
+
+/// A reference to an atom's properties including coordinates, residue info, and element
 pub struct AtomRef<'a> {
+    /// 3D coordinates of the atom [x, y, z]
     pub coords: &'a [f32; 3],
+    /// Residue identifier number
     pub res_id: &'a i32,
+    /// Residue name (e.g. ALA, GLY, etc)
     pub res_name: &'a String,
+    /// Chemical element of the atom
     pub element: &'a Element,
     // ... other fields
 }
 
+/// An iterator over atoms in an [`AtomView`], yielding [`AtomRef`]s
 pub struct AtomIterator<'a> {
+    /// Reference to the atom view being iterated over
     view: &'a AtomView<'a>,
+    /// Current index into the selection indices
     current: usize,
 }
 
@@ -69,7 +95,7 @@ impl<'a> Iterator for AtomIterator<'a> {
         let element = self.view.collection.get_element(idx);
 
         Some(AtomRef {
-            coords, // Pass the references directly
+            coords,
             res_id,
             res_name,
             element,
