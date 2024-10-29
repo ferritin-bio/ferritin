@@ -1,3 +1,10 @@
+//! Core module for iterating over residues in a molecular structure
+//!
+//! This module provides functionality to iterate over residues in an [AtomCollection],
+//! including utilities to extract and collect residues into new collections.
+//!
+//! ```
+
 use super::atoms::ResidueAtoms;
 use crate::core::AtomCollection;
 use crate::core::Selection;

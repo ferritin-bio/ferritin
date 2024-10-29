@@ -1,3 +1,9 @@
+//! Provides functionality for working with residue atoms in molecular structures.
+//!
+//! This module contains the `ResidueAtoms` struct and its implementation, which provides methods for
+//! accessing and manipulating atoms within a single residue of a molecular structure. A residue is
+//! a structural unit in a protein or other macromolecule consisting of multiple atoms.
+//!
 use super::info::AtomInfo;
 use crate::core::selection::AtomView;
 use crate::core::{AtomCollection, Selection};

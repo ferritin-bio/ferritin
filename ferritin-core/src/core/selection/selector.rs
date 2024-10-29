@@ -1,10 +1,34 @@
+//! Provides the `AtomSelector` type for making atom selections from a protein structure.
+//!
+//! This module implements a builder pattern for filtering and selecting atoms based on
+//! various criteria like chain ID, residue name, element type, spatial location, etc.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use ferritin_core::AtomCollection;
+//! # fn example(atoms: &AtomCollection) {
+//! let selection = atoms.select()
+//!     .chain("A")                // Select chain A
+//!     .residue("ALA")           // Filter to alanine residues
+//!     .sphere([0.0, 0.0, 0.0], 10.0)  // Within 10Å of origin
+//!     .collect();               // Get the selected atoms
+//! # }
+//! ```
 use super::selection::Selection;
 use super::view::AtomView;
 use crate::core::AtomCollection;
 use pdbtbx::Element;
 
+/// A structure for selecting atoms from an `AtomCollection` using various filtering criteria.
+///
+/// The `AtomSelector` provides a builder-style interface for creating atom selections through
+/// methods like `chain()`, `element()`, `residue()`, etc. Each method returns `Self` for
+/// method chaining.
 pub struct AtomSelector<'a> {
+    /// Reference to the underlying atom collection being selected from
     collection: &'a AtomCollection,
+    /// The current selection state tracking which atoms are selected
     current_selection: Selection,
 }
 
