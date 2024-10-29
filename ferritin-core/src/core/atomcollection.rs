@@ -222,7 +222,7 @@ impl AtomCollection {
     }
     /// A new residue starts, either when the chain ID, residue ID,
     /// insertion code or residue name changes from one to the next atom.
-    fn get_residue_starts(&self) -> Vec<i64> {
+    pub(crate) fn get_residue_starts(&self) -> Vec<i64> {
         let mut starts = vec![0];
 
         starts.extend(
@@ -278,41 +278,19 @@ impl AtomCollection {
 
 #[cfg(test)]
 mod tests {
+    use crate::core::test_utilities::get_atom_container;
     use crate::AtomCollection;
-    use pdbtbx::{self, Element};
-    use std::path::PathBuf;
-
-    fn get_file() -> PathBuf {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        PathBuf::from(manifest_dir)
-            .join("tests")
-            .join("data")
-            .join("101m.cif")
-    }
-
-    #[test]
-    fn test_simple_conversion() {
-        let file_path = get_file();
-        let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
-        assert_eq!(pdb.atom_count(), 1413);
-        let ac = AtomCollection::from(&pdb);
-        assert_eq!(ac.get_size(), 1413);
-    }
+    use pdbtbx::Element;
 
     #[test]
     fn test_selection_api() {
-        let file_path = get_file();
-        let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
-        let ac = AtomCollection::from(&pdb);
-        assert_eq!(ac.get_size(), 1413);
-
+        let ac: AtomCollection = get_atom_container();
         let selected_atoms = ac
             .select()
             .chain("A")
             .residue("GLY")
             .element(Element::C)
             .collect();
-
         assert_eq!(selected_atoms.size(), 22);
 
         // let carbon_coords: Vec<[f32; 3]> = selected_atoms
@@ -324,17 +302,27 @@ mod tests {
 
     #[test]
     fn test_residue_iterator() {
-        let file_path = get_file();
-        let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
-        let ac = AtomCollection::from(&pdb);
+        let ac: AtomCollection = get_atom_container();
         assert_eq!(ac.get_size(), 1413);
 
         // This includes Water Molecules
         let max_resid = ac.get_resids().iter().max().unwrap_or(&0);
         assert_eq!(*max_resid, 338);
 
-        // This is counting 294
+        // this fn is only available in-crate
+        // let residue_breaks = ac.get_residue_starts();
+        // assert_eq!(residue_breaks, vec![1, 2, 3]);
+
+        // This is counting 294 - I expect
         // let residue_count = ac.iter_residues().count();
-        // assert_eq!(residue_count, 93);
+        // assert_eq!(residue_count, 154);
+        //
+
+        // Water count -> 139
+        //
+
+        for res in ac.iter_residues() {
+            println!("{:?}", res.res_name)
+        }
     }
 }
