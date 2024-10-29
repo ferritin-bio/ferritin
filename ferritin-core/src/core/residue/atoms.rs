@@ -1,6 +1,7 @@
 use super::info::AtomInfo;
 use crate::core::selection::AtomView;
 use crate::core::{AtomCollection, Selection};
+use pdbtbx::Element;
 
 pub struct ResidueAtoms<'a> {
     pub start_idx: usize,
@@ -16,21 +17,21 @@ impl<'a> ResidueAtoms<'a> {
     // Get all atom coordinates for this residue
     pub fn coords(&self) -> Vec<&[f32; 3]> {
         (self.start_idx..self.end_idx)
-            .map(|i| &self.parent.coords[i])
+            .map(|i| self.parent.get_coord(i))
             .collect()
     }
 
     // Get all atom names for this residue
     pub fn atom_names(&self) -> Vec<&String> {
         (self.start_idx..self.end_idx)
-            .map(|i| &self.parent.atom_names[i])
+            .map(|i| self.parent.get_atom_name(i))
             .collect()
     }
 
     // Get all elements for this residue
     pub fn elements(&self) -> Vec<&Element> {
         (self.start_idx..self.end_idx)
-            .map(|i| &self.parent.elements[i])
+            .map(|i| self.parent.get_element(i))
             .collect()
     }
 
@@ -48,10 +49,10 @@ impl<'a> ResidueAtoms<'a> {
     pub fn iter_atoms(&self) -> impl Iterator<Item = AtomInfo> + '_ {
         (self.start_idx..self.end_idx).map(|i| AtomInfo {
             index: i,
-            coords: &self.parent.coords[i],
-            element: &self.parent.elements[i],
-            atom_name: &self.parent.atom_names[i],
-            is_hetero: self.parent.is_hetero[i],
+            coords: self.parent.get_coord(i),
+            element: self.parent.get_element(i),
+            atom_name: self.parent.get_atom_name(i),
+            is_hetero: self.parent.is_hetero(i),
         })
     }
 

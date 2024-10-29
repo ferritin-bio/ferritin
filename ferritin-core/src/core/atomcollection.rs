@@ -184,26 +184,35 @@ impl AtomCollection {
     pub fn get_size(&self) -> usize {
         self.size
     }
+    pub fn get_atom_name(&self, idx: usize) -> &String {
+        &self.atom_names[idx]
+    }
     pub fn get_bonds(&self) -> Option<&Vec<Bond>> {
         self.bonds.as_ref()
-    }
-    pub fn get_coords(&self) -> &Vec<[f32; 3]> {
-        self.coords.as_ref()
-    }
-    pub fn get_elements(&self) -> &Vec<pdbtbx::Element> {
-        self.elements.as_ref()
-    }
-    pub fn get_resnames(&self) -> &Vec<String> {
-        self.res_names.as_ref()
-    }
-    pub fn get_resids(&self) -> &Vec<i32> {
-        self.res_ids.as_ref()
     }
     pub fn get_coord(&self, idx: usize) -> &[f32; 3] {
         &self.coords[idx]
     }
+    pub fn get_coords(&self) -> &Vec<[f32; 3]> {
+        self.coords.as_ref()
+    }
+    pub fn get_element(&self, idx: usize) -> &Element {
+        &self.elements[idx]
+    }
+    pub fn get_elements(&self) -> &Vec<pdbtbx::Element> {
+        self.elements.as_ref()
+    }
+    pub fn get_is_hetero(&self, idx: usize) -> &bool {
+        self.elements[i]
+    }
+    pub fn get_resnames(&self) -> &Vec<String> {
+        self.res_names.as_ref()
+    }
     pub fn get_res_id(&self, idx: usize) -> &i32 {
         &self.res_ids[idx]
+    }
+    pub fn get_resids(&self) -> &Vec<i32> {
+        self.res_ids.as_ref()
     }
     pub fn get_res_name(&self, idx: usize) -> &String {
         &self.res_names[idx]
@@ -228,9 +237,6 @@ impl AtomCollection {
                 ),
         );
         starts
-    }
-    pub fn get_element(&self, idx: usize) -> &Element {
-        &self.elements[idx]
     }
     pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
         izip!(&self.coords, &self.elements)
