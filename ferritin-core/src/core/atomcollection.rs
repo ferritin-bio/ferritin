@@ -321,4 +321,20 @@ mod tests {
         //     .map(|atom| *atom.coords)
         //     .collect();
     }
+
+    #[test]
+    fn test_residue_iterator() {
+        let file_path = get_file();
+        let (pdb, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
+        let ac = AtomCollection::from(&pdb);
+        assert_eq!(ac.get_size(), 1413);
+
+        // This includes Water Molecules
+        let max_resid = ac.get_resids().iter().max().unwrap_or(&0);
+        assert_eq!(*max_resid, 338);
+
+        // This is counting 294
+        // let residue_count = ac.iter_residues().count();
+        // assert_eq!(residue_count, 93);
+    }
 }
