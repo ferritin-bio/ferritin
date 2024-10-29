@@ -96,8 +96,8 @@ mod tests {
     fn test_iteration() {
         // This is counting 294 - I expect 154.
         //  This is including waters. Need to get the filtering going....
-        // let ac: AtomCollection = get_atom_container();
-        // assert_eq!(ac.iter_residues().count(), 154)
+        let ac: AtomCollection = get_atom_container();
+        assert_eq!(ac.iter_residues_aminoacid().count(), 154)
     }
 
     // #[test]

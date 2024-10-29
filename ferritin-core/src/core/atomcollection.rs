@@ -1,6 +1,8 @@
 use super::bonds::{Bond, BondOrder};
-use super::info::constants::get_bonds_canonical20;
-use crate::core::residue::ResidueIter;
+use super::info::constants::{
+    get_bonds_canonical20, is_amino_acid, is_carbohydrate, is_nucleotide,
+};
+use crate::core::residue::{ResidueAtoms, ResidueIter};
 use crate::core::selection::{AtomSelector, AtomView, Selection};
 use itertools::{izip, Itertools};
 use pdbtbx::Element;
@@ -244,9 +246,15 @@ impl AtomCollection {
     pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
         izip!(&self.coords, &self.elements)
     }
-    /// Iter Resiudees Will Iterate Through the AtomCollection one Residue at a time
-    pub fn iter_residues(&self) -> ResidueIter {
+    /// IterResiudees Will Iterate Through the AtomCollection one Residue at a time.
+    ///
+    /// This is the base for any onther residue filtration code.
+    pub fn iter_residues_all(&self) -> ResidueIter {
         ResidueIter::new(self, self.get_residue_starts())
+    }
+    pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueAtoms> {
+        self.iter_residues_all()
+            .filter(|residue| is_amino_acid(&residue.res_name))
     }
     pub fn select(&self) -> AtomSelector {
         AtomSelector::new(self)
@@ -321,7 +329,7 @@ mod tests {
         // Water count -> 139
         //
 
-        for res in ac.iter_residues() {
+        for res in ac.iter_residues_all() {
             println!("{:?}", res.res_name)
         }
     }
