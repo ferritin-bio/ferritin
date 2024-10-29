@@ -1,3 +1,22 @@
+//! # Constants
+//!
+//! This module contains core data structures and functions for analyzing molecular structures.
+//!
+//! ## Residue Types
+//! The module provides functions to check residue types:
+//!
+//! - `is_amino_acid()` - Check if a residue is an amino acid
+//! - `is_carbohydrate()` - Check if a residue is a carbohydrate
+//! - `is_nucleotide()` - Check if a residue is a nucleotide
+//!
+//! ## Bond Information
+//! Bond data from CCD includes:
+//!
+//! - Bond lengths with standard deviations
+//! - Canonical amino acid connectivity
+//! - Bond order information
+//!
+
 use lazy_static::lazy_static;
 use std::collections::{HashMap, HashSet};
 use std::fs::read_to_string;
@@ -227,8 +246,8 @@ mod tests {
 
     #[test]
     fn test_residue_checking() {
-        assert!(is_amino_acid("00B"));
-        assert!(is_amino_acid("00C"));
+        assert!(is_amino_acid("ALA"));
+        assert!(is_amino_acid("ARG"));
         assert!(!is_amino_acid("ZZZ"));
 
         assert!(is_carbohydrate("045"));
