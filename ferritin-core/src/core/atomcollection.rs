@@ -1,4 +1,5 @@
 use super::constants::get_bonds_canonical20;
+use super::{Bond, BondOrder};
 use crate::core::selection::{AtomSelector, AtomView, Selection};
 use itertools::{izip, Itertools};
 use pdbtbx::Element;
@@ -258,31 +259,6 @@ impl AtomCollection {
                 ),
         );
         starts
-    }
-}
-
-/// Bond
-#[derive(Debug, PartialEq)]
-pub struct Bond {
-    atom1: i32,
-    atom2: i32,
-    order: BondOrder,
-    // id
-    // stereo
-    // unique_id
-    // has_setting
-}
-
-impl Bond {
-    pub fn new(atom1: i32, atom2: i32, order: BondOrder) -> Self {
-        Bond {
-            atom1,
-            atom2,
-            order,
-        }
-    }
-    pub fn get_atom_indices(&self) -> (i32, i32) {
-        (self.atom1, self.atom2)
     }
 }
 
