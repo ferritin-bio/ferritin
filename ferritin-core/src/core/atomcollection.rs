@@ -202,8 +202,8 @@ impl AtomCollection {
     pub fn get_elements(&self) -> &Vec<pdbtbx::Element> {
         self.elements.as_ref()
     }
-    pub fn get_is_hetero(&self, idx: usize) -> &bool {
-        self.elements[idx]
+    pub fn get_is_hetero(&self, idx: usize) -> bool {
+        self.is_hetero[idx]
     }
     pub fn get_resnames(&self) -> &Vec<String> {
         self.res_names.as_ref()
