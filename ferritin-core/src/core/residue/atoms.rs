@@ -52,7 +52,7 @@ impl<'a> ResidueAtoms<'a> {
             coords: self.parent.get_coord(i),
             element: self.parent.get_element(i),
             atom_name: self.parent.get_atom_name(i),
-            is_hetero: self.parent.is_hetero(i),
+            is_hetero: self.parent.get_is_hetero(i),
         })
     }
 
@@ -62,10 +62,10 @@ impl<'a> ResidueAtoms<'a> {
         if abs_idx < self.end_idx {
             Some(AtomInfo {
                 index: abs_idx,
-                coords: &self.parent.coords[abs_idx],
-                element: &self.parent.elements[abs_idx],
-                atom_name: &self.parent.atom_names[abs_idx],
-                is_hetero: self.parent.is_hetero[abs_idx],
+                coords: &self.parent.get_coord(abs_idx),
+                element: &self.parent.get_element(abs_idx),
+                atom_name: &self.parent.get_atom_name(abs_idx),
+                is_hetero: self.parent.get_is_hetero(abs_idx),
             })
         } else {
             None
@@ -75,13 +75,13 @@ impl<'a> ResidueAtoms<'a> {
     // Find atom by name within this residue
     pub fn find_atom_by_name(&self, name: &str) -> Option<AtomInfo> {
         (self.start_idx..self.end_idx)
-            .find(|&i| self.parent.atom_names[i] == name)
+            .find(|&i| self.parent.get_atom_name(i) == name)
             .map(|i| AtomInfo {
                 index: i,
-                coords: &self.parent.coords[i],
-                element: &self.parent.elements[i],
-                atom_name: &self.parent.atom_names[i],
-                is_hetero: self.parent.is_hetero[i],
+                coords: &self.parent.get_coord(i),
+                element: &self.parent.get_element(i),
+                atom_name: &self.parent.get_atom_name(i),
+                is_hetero: self.parent.get_is_hetero(i),
             })
     }
 }

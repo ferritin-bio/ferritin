@@ -190,6 +190,9 @@ impl AtomCollection {
     pub fn get_bonds(&self) -> Option<&Vec<Bond>> {
         self.bonds.as_ref()
     }
+    pub fn get_chain_id(&self, idx: usize) -> &String {
+        &self.chain_ids[idx]
+    }
     pub fn get_coord(&self, idx: usize) -> &[f32; 3] {
         &self.coords[idx]
     }
@@ -241,14 +244,9 @@ impl AtomCollection {
     pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
         izip!(&self.coords, &self.elements)
     }
-    // Method to create the iterator
+    /// Iter Resiudees Will Iterate Through the AtomCollection one Residue at a time
     pub fn iter_residues(&self) -> ResidueIter {
-        let residue_starts = self.get_residue_starts();
-        ResidueIter {
-            atom_collection: self,
-            residue_starts,
-            current_idx: 0,
-        }
+        ResidueIter::new(self, self.get_residue_starts())
     }
     pub fn select(&self) -> AtomSelector {
         AtomSelector::new(self)
