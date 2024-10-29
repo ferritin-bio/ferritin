@@ -1,3 +1,7 @@
+//! Module for handling atomic information in chemical/molecular structures.
+//!
+//! This module provides data structures and functionality for working with atomic data
+//! including coordinates, element types, and atom metadata.
 use pdbtbx::Element;
 
 // Struct to hold atom information

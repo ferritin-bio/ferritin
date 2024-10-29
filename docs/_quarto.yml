@@ -11,8 +11,8 @@ website:
     left:
       - href: index.qmd
         text: home
-      - href: examples.qmd
-        text: examples
+      # - href: examples.qmd
+      #   text: examples
       - text: ferritin-rustdoc
         href: doc/ferritin_core/index.html
       - text: blog

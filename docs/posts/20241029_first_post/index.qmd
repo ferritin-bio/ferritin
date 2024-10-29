@@ -1,12 +1,245 @@
 ---
-title: "My First Post"
-description: "Post description here"
-author: "Your Name"
-date: "2024-01-01"
-categories: [news, code, analysis]
+title: "Ferritin Init"
+description: "Intro to the Ferritin Project"
+author: "Zachary Charlop-Powers"
+date: "2024-10-29"
+categories: [rust, ai, proteins]
 ---
 
-## Post
+# Intro to Ferritin
 
+This is an introduction to Ferritin, a set of crates for working with proteins.
+
+
+
+## Visualization
+
+
+```sh
+cd ferritin-bevy
+cargo run --example basic_spheres
+cargo run --example basic_ballandstick
+```
+
+:::: {.columns}
+
+::: {.column width="50%"}
 ![](images/ballandstick.png)
+:::
+
+::: {.column width="50%"}
 ![](images/spheres.png)
+:::
+
+::::
+
+
+## Pymol PSE Loading
+
+
+
+```rust
+// the PSEData struct is the entrypoint to Pymol's binary `pse` formay
+use ferritin_pymol::PSEData;
+
+// this struct has access to everything a loadable pymol session does.
+// the initial impetus of this crate was to be able to load/work in
+// pymol and then export the results to the web via molview spec json.
+//
+// However, recreating high level state is not so simple...
+let deserialized: PSEData = PSEData::load("tests/data/example.pse").unwrap();
+
+
+```
+
+## Serialize to MolviewSpec
+
+I've recreated the MolViewSpec heirarchy in rust. We should then be able to translate our structure,
+selection/component, and representation data from any source and export it as MSVJ. As I was initially
+interested in creating a pymol converter I did make a utility in that would generate a
+self-contianed HTML page with accompanying [MVSJ](https://molstar.org/viewer-docs/extensions/mvs/) json
+file.
+
+
+```sh
+// cli to convert pse.
+ferritin-pymol
+  --psefile docs/examples/example.pse \
+  --outputdir docs/examples/example
+```
+
+
+
+```rust
+// Example builder code to generate molviewspec json
+
+// Components are selections...
+let component = ComponentSelector::default();
+
+// Representations need a type. I implemented only one or two
+let cartoon_type = RepresentationTypeT::Cartoon;
+
+
+let mut state = State::new();
+state
+    .download("https://files.wwpdb.org/download/1cbs.cif")
+    .expect("Create a Downlaod node with a URL")
+    .parse(structfile)
+    .expect("Parseable option")
+    .assembly_structure(structparams)
+    .expect("a set of Structure options")
+    .component(component)
+    .expect("defined a valid component")
+    .representation(cartoon_type);
+```
+
+
+## Create Ferritin-Core
+
+The three crates above were originally two standalone projects: [pseutils](https://github.com/zachcp/pseutils),
+and [protein-render](https://github.com/zachcp/protein-renderer); there are not archived. I had also been playing around with
+[vizualization in Blender](http://zachcp.org/blog/molecular_nodes/). All together I realized I was fighting or working around
+different APIs to do what I needed. And so I decided - why not try writting the API that I wanted. Okay so what do I want?
+
+### Simple data structure
+
+I wanted a simple data structure that is maximally flexible and that I can work off of. One interesting thing poking around the pymol internals
+is that the underlying binary representation of things is computer optimized using a [Struct-of-Array](https://en.wikipedia.org/wiki/AoS_and_SoA)
+style that keeps the coordinates tightly packed in memory. Below is some code from the `ferritin-core` crate that points this out.
+
+```rust
+// the binary layout of pymol's PSE files
+// uses a Stuct-of-Arrays approach to memory layout
+
+
+pub struct PyObjectMolecule {
+    pub object: PyObject,
+    pub n_cset: i32,
+    pub n_bond: i32,
+    pub n_atom: i32,
+    pub coord_set: Vec<CoordSet>,  <--- Coordinates
+    pub bond: Vec<Bond>,
+    pub atom: Vec<AtomInfo>,       <--- AtomInfo
+    ....
+}
+
+// note heterogenous data espeially Strings
+pub struct AtomInfo {
+    pub resv: i32,
+    pub chain: String,
+    pub alt: String,
+    pub resi: String,
+    pub segi: String,
+    ...
+}
+
+// all numeric. some indexing and then the entire coordinate set
+pub struct CoordSet {
+    pub n_index: i32,         // 1519
+    n_at_index: i32,          // 1519
+    pub coord: Vec<f32>,      // len -== 4556 ( 1519 *3 )  <-------- coordinates are a single vector of [x,y,z,x,y,z....]
+    pub idx_to_atm: Vec<i32>, // 1 - 1518
+}
+```
+
+It was interesting to me that a recent and growing python package, [biotite][biotite], has a similar organization style in its use of `AtomArrays`
+to store atom info in Numpy Arrays.  I'd also watched Andrew Kelly's talk on [data oriented design][andrew-dod] which is a strong pitch for
+making software fast by paying attention to it's memory layout. Sounds good. After googling around a bit I saw a few Struct-of-Array libraries but it seems
+that most people just kind of roll their own - e.g. use vectors of homogenous data in their struct types and handle the index themself. Thats what
+`AtomCollection` ended up being.
+
+
+### Thats Fast ... and also ergonomic.
+
+I think this library should be relatively quick if I end up using packed data, use iteration, and avoid copying.
+At least thats what the Rust world seems to indicate. We'll see.  One other thing I wanted is something simple
+and ergonomic.  If you read the code in [biotite][biotite] one can't help but be impressed at how well organized,
+coheive and simple the code is.  I contrast this with the pymol code which has acquired multiple decades of indirections
+and lots and lots of indirections. So the plan is to try to keep the high level API smooth and nice and hide away any complexity whiel
+keeping the speed up. I think its possible and if so, it might turn out be be widely useful.
+
+At the moment I have basic IO via the excellent [pdbtbx][pdbtbx] crate; selections and filtering of residues; iteration through residues
+using an indexing mechanism based on iterators; and a set of tests indicating initial good behavior. Theres lots of work to do but I think
+the core `AtomCollection` can now be reasonably extended via new traits/methods fairly easily.
+
+```rust
+// the one ring
+use ferritin-core::AtomCollection;
+
+// utiltity to load a stet file
+let ac: AtomCollection = get_atom_container();
+
+// iter_residues_aminoacid over residues using indexing/slicing
+// `collect` invokes a copy
+//
+// this look very pythonic to me but should run at C speeds
+let amino_acids = ac.iter_residues_aminoacid().collect();
+```
+
+
+# Experience Report
+
+## Rust
+
+Its been a bit of learning curve but I'm glad to be working in Rust. Coming from
+a dynamic background (R/Python mostly) and static language can be tricky and Rust epsceially so.
+But with help from Claude+ZED, I was able to get over the learning curve and now feel like I've got
+some momentum.
+
+Some tough bits:
+
+- Lifetimes are still far from intuitive but I didn't come across them for awhile. And when I did
+hit them my LLM friends were there to help.
+- Code organization. All languages have their quirks about the best way to organize your files/functions/strucuts. Rust is no different. I did downoad RustRover at some point when I wanted to move some files around and make sure all the references are preserves. Would love to see that end up in Zed at some point.
+
+Some Wonderful Bits:
+
+- iterators and clojures are really great.
+- when I am working within the iterated methods I feel really good and I feel that the language is working for me.
+- Structs/Methods. As in the code organization, knowing when/how to give something its own identity didn't come natural. I started programming in functions but ende dup really likeing assocaiting methods with fewer structs as a way to minimize overhead.
+- Traits. I found these a bit awkward to think about/use. When do I write them? when do I need them? I came to apprecaite them at two occasions. At one point I needed to refactor some IO code and the trait boundary was the perfect way to define the bit of code to move. Similarly as my core Stuct accumulates methods, I will want to think about grouping these funtions into traits and using thes traits to define new extension behavior.
+- Private by default. It can be frustrating but... it pays off. I had just been teaching myself a python library where there is a large data structure which gets heavily mutated and its hard to keep track o whats happening. If your fields are private by default it limits how the mutations happen but this mutability gives you a lot more confidence when looking at a small piece of the code that you are understanding all of the relevant bits. So not ergonomic but big-picture healthy.
+
+
+
+## Claude & Zed
+
+Both amazing and helpful tools. [Zed](https://zed.dev) is fast and I've been using it since it was released.
+The incorporation of LLM APIs has been superb. I use the chat window for exploring approaches or solving problems and I use the
+inline box for small fixes, alphabetixing methods, inline tweaks, and other small, local tasks. Combined they definitely keep you in flow.
+
+
+# Next Steps
+
+Lots to do. But what I would like is:
+
+1. a decent interactive viewer in Bevy with common visualization (ribbon, cartoon etc).
+2. a wasm build of the above.
+3. some common protein utilities (e.g. rmsd)
+4. ML tokenizer crate. E.g. for use in DL models via [candle][candle]
+
+
+If any of this interests you - reach out!
+
+
+[transformersjs]:https://huggingface.co/blog/transformersjs-v3
+[ollama]: https://ollama.com
+[llamafile]:https://github.com/Mozilla-Ocho/llamafile
+[Kevin Lynagh]:https://kevinlynagh.com
+[Bioinformatics Toolkit]:https://github.com/zachcp/bioinformaticstoolkit
+[candle]: https://github.com/huggingface/candle
+[pixi]: https://prefix.dev
+[uv]: https://docs.astral.sh/uv/
+[ruff]: https://docs.astral.sh/ruff/
+[MolecularNodes]: https://github.com/BradyAJohnston/MolecularNodes
+[molviewspec]: https://molstar.org/mol-view-spec-docs/
+[pseutils]: https://github.com/zachcp/pseutils
+[pdbtbx]: https://github.com/douweschulte/pdbtbx
+[biotite]: https://www.biotite-python.org/latest/
+[shu]: https://github.com/biosustain/shu
+[andrew-dod]: https://www.youtube.com/watch?v=IroPQ150F6c
+
+[basilisp]: https://github.com/basilisp-lang/basilisp
+[basilisp-blender]: https://github.com/ikappaki/basilisp-blender
+[blender]: https://www.blender.org/
+[blendersynth]: https://github.com/OllieBoyne/BlenderSynth
