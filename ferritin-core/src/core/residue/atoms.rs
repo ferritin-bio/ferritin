@@ -85,3 +85,68 @@ impl<'a> ResidueAtoms<'a> {
             })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::test_utilities::get_atom_container;
+    use crate::core::AtomCollection;
+
+    #[test]
+    fn test_iteration() {
+        // This is counting 294 - I expect 154.
+        //  This is including waters
+        let ac: AtomCollection = get_atom_container();
+        assert_eq!(ac.iter_residues().count(), 154)
+    }
+
+    // #[test]
+    // fn test_coords() {
+    //     unimplemented!()
+    // }
+
+    // #[test]
+    // fn test_atom_names() {
+    //     unimplemented!()
+    // }
+
+    // #[test]
+    // fn test_elements() {
+    //     unimplemented!()
+    // }
+
+    // #[test]
+    // fn test_view() {
+    //     unimplemented!()
+    // }
+
+    // #[test]
+    // fn test_atom_count() {
+    //     unimplemented!()
+    // }
+
+    // #[test]
+    // fn test_iter_atoms() {
+    //     unimplemented!()
+    // }
+
+    // #[test]
+    // fn test_get_atom() {
+    //     unimplemented!()
+    // }
+
+    // #[test]
+    // fn test_find_atom_by_name() {
+    //     unimplemented!()
+    // }
+
+    // #[test]
+    // fn test_get_atom_out_of_bounds() {
+    //     unimplemented!()
+    // }
+
+    // #[test]
+    // fn test_find_atom_by_name_not_found() {
+    //     unimplemented!()
+    // }
+}
