@@ -1,8 +1,8 @@
 mod atomcollection;
 mod bonds;
-mod constants;
 mod conversions;
 mod featureizer;
+mod info;
 mod residue;
 mod selection;
 mod test_utilities;

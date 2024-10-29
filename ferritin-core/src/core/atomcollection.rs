@@ -1,5 +1,5 @@
 use super::bonds::{Bond, BondOrder};
-use super::constants::get_bonds_canonical20;
+use super::info::constants::get_bonds_canonical20;
 use crate::core::residue::ResidueIter;
 use crate::core::selection::{AtomSelector, AtomView, Selection};
 use itertools::{izip, Itertools};
