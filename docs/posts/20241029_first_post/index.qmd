@@ -8,7 +8,16 @@ categories: [rust, ai, proteins]
 
 # Intro to Ferritin
 
-This is an introduction to Ferritin, a set of crates for working with proteins.
+This is an introduction to Ferritin, a set of Rust crates for working with proteins. At the moment
+ferritin is very much in alpha stage but I am pleased with the current progress and wanted to give
+a high level overview of the project as it currently stands.
+
+At the moment I have in place what I think to be a reasonably well architected core data structures
+for handling atoms as well as a set of related crates for 1) handling inputs from pymol (via the PSE binary file), 2)
+creating molviewspec json and self-contained HTML and 3) an early set of visualizations built on top of [Bevy](https://bevyengine.org).
+
+In this post I will give a high level intro to the crates in this repo as well as a brief experience report
+of using Rust, and glimpse of the next steps.
 
 
 
@@ -39,12 +48,12 @@ cargo run --example basic_ballandstick
 
 
 ```rust
-// the PSEData struct is the entrypoint to Pymol's binary `pse` formay
+// the PSEData struct is the entrypoint to Pymol's binary `pse` format
 use ferritin_pymol::PSEData;
 
 // this struct has access to everything a loadable pymol session does.
 // the initial impetus of this crate was to be able to load/work in
-// pymol and then export the results to the web via molview spec json.
+// pymol and then export the results to the web via molviewspec json.
 //
 // However, recreating high level state is not so simple...
 let deserialized: PSEData = PSEData::load("tests/data/example.pse").unwrap();
@@ -54,10 +63,9 @@ let deserialized: PSEData = PSEData::load("tests/data/example.pse").unwrap();
 
 ## Serialize to MolviewSpec
 
-I've recreated the MolViewSpec heirarchy in rust. We should then be able to translate our structure,
-selection/component, and representation data from any source and export it as MSVJ. As I was initially
-interested in creating a pymol converter I did make a utility in that would generate a
-self-contianed HTML page with accompanying [MVSJ](https://molstar.org/viewer-docs/extensions/mvs/) json
+I've recreated the MolViewSpec hierarchy in rust. We should then be able to translate our structure,
+selection/component, and representation data from any source and export it as molviewspec-json (MVSJ). As I was initially interested in creating a pymol converter I did make a utility in that would generate a
+self-contained HTML page with accompanying [MVSJ](https://molstar.org/viewer-docs/extensions/mvs/) json
 file.
 
 
@@ -83,7 +91,7 @@ let cartoon_type = RepresentationTypeT::Cartoon;
 let mut state = State::new();
 state
     .download("https://files.wwpdb.org/download/1cbs.cif")
-    .expect("Create a Downlaod node with a URL")
+    .expect("Create a Download node with a URL")
     .parse(structfile)
     .expect("Parseable option")
     .assembly_structure(structparams)
@@ -93,13 +101,12 @@ state
     .representation(cartoon_type);
 ```
 
-
-## Create Ferritin-Core
+## Ferritin-Core
 
 The three crates above were originally two standalone projects: [pseutils](https://github.com/zachcp/pseutils),
 and [protein-render](https://github.com/zachcp/protein-renderer); there are not archived. I had also been playing around with
-[vizualization in Blender](http://zachcp.org/blog/molecular_nodes/). All together I realized I was fighting or working around
-different APIs to do what I needed. And so I decided - why not try writting the API that I wanted. Okay so what do I want?
+[visualization in Blender](http://zachcp.org/blog/molecular_nodes/). All together I realized I was fighting or working around
+different APIs to do what I needed. And so I decided - why not try writing the API that I wanted. Okay so what do I want?
 
 ### Simple data structure
 
@@ -123,7 +130,7 @@ pub struct PyObjectMolecule {
     ....
 }
 
-// note heterogenous data espeially Strings
+// note heterogenous data especially Strings
 pub struct AtomInfo {
     pub resv: i32,
     pub chain: String,
@@ -145,7 +152,7 @@ pub struct CoordSet {
 It was interesting to me that a recent and growing python package, [biotite][biotite], has a similar organization style in its use of `AtomArrays`
 to store atom info in Numpy Arrays.  I'd also watched Andrew Kelly's talk on [data oriented design][andrew-dod] which is a strong pitch for
 making software fast by paying attention to it's memory layout. Sounds good. After googling around a bit I saw a few Struct-of-Array libraries but it seems
-that most people just kind of roll their own - e.g. use vectors of homogenous data in their struct types and handle the index themself. Thats what
+that most people just kind of roll their own - e.g. use vectors of homogenous data in their struct types and handle the index themselves. Thats what
 `AtomCollection` ended up being.
 
 
@@ -154,8 +161,8 @@ that most people just kind of roll their own - e.g. use vectors of homogenous da
 I think this library should be relatively quick if I end up using packed data, use iteration, and avoid copying.
 At least thats what the Rust world seems to indicate. We'll see.  One other thing I wanted is something simple
 and ergonomic.  If you read the code in [biotite][biotite] one can't help but be impressed at how well organized,
-coheive and simple the code is.  I contrast this with the pymol code which has acquired multiple decades of indirections
-and lots and lots of indirections. So the plan is to try to keep the high level API smooth and nice and hide away any complexity whiel
+cohesive and simple the code is.  I contrast this with the pymol code which has acquired multiple decades of indirections
+and lots and lots of indirections. So the plan is to try to keep the high level API smooth and nice and hide away any complexity while
 keeping the speed up. I think its possible and if so, it might turn out be be widely useful.
 
 At the moment I have basic IO via the excellent [pdbtbx][pdbtbx] crate; selections and filtering of residues; iteration through residues
@@ -166,7 +173,7 @@ the core `AtomCollection` can now be reasonably extended via new traits/methods 
 // the one ring
 use ferritin-core::AtomCollection;
 
-// utiltity to load a stet file
+// utility to load a stet file
 let ac: AtomCollection = get_atom_container();
 
 // iter_residues_aminoacid over residues using indexing/slicing
@@ -177,12 +184,14 @@ let amino_acids = ac.iter_residues_aminoacid().collect();
 ```
 
 
+
+
 # Experience Report
 
 ## Rust
 
 Its been a bit of learning curve but I'm glad to be working in Rust. Coming from
-a dynamic background (R/Python mostly) and static language can be tricky and Rust epsceially so.
+a dynamic background (R/Python mostly) and static language can be tricky and Rust especially so.
 But with help from Claude+ZED, I was able to get over the learning curve and now feel like I've got
 some momentum.
 
@@ -190,14 +199,14 @@ Some tough bits:
 
 - Lifetimes are still far from intuitive but I didn't come across them for awhile. And when I did
 hit them my LLM friends were there to help.
-- Code organization. All languages have their quirks about the best way to organize your files/functions/strucuts. Rust is no different. I did downoad RustRover at some point when I wanted to move some files around and make sure all the references are preserves. Would love to see that end up in Zed at some point.
+- Code organization. All languages have their quirks about the best way to organize your files/functions/structs. Rust is no different. I did download RustRover at some point when I wanted to move some files around and make sure all the references are preserves. Would love to see that end up in Zed at some point.
 
 Some Wonderful Bits:
 
 - iterators and clojures are really great.
 - when I am working within the iterated methods I feel really good and I feel that the language is working for me.
-- Structs/Methods. As in the code organization, knowing when/how to give something its own identity didn't come natural. I started programming in functions but ende dup really likeing assocaiting methods with fewer structs as a way to minimize overhead.
-- Traits. I found these a bit awkward to think about/use. When do I write them? when do I need them? I came to apprecaite them at two occasions. At one point I needed to refactor some IO code and the trait boundary was the perfect way to define the bit of code to move. Similarly as my core Stuct accumulates methods, I will want to think about grouping these funtions into traits and using thes traits to define new extension behavior.
+- Structs/Methods. As in the code organization, knowing when/how to give something its own identity didn't come natural. I started programming in functions but ended up really liking associating methods with fewer structs as a way to minimize overhead.
+- Traits. I found these a bit awkward to think about/use. When do I write them? when do I need them? I came to appreciate them at two occasions. At one point I needed to refactor some IO code and the trait boundary was the perfect way to define the bit of code to move. Similarly as my core Stuct accumulates methods, I will want to think about grouping these functions into traits and using these traits to define new extension behavior.
 - Private by default. It can be frustrating but... it pays off. I had just been teaching myself a python library where there is a large data structure which gets heavily mutated and its hard to keep track o whats happening. If your fields are private by default it limits how the mutations happen but this mutability gives you a lot more confidence when looking at a small piece of the code that you are understanding all of the relevant bits. So not ergonomic but big-picture healthy.
 
 
@@ -206,7 +215,7 @@ Some Wonderful Bits:
 
 Both amazing and helpful tools. [Zed](https://zed.dev) is fast and I've been using it since it was released.
 The incorporation of LLM APIs has been superb. I use the chat window for exploring approaches or solving problems and I use the
-inline box for small fixes, alphabetixing methods, inline tweaks, and other small, local tasks. Combined they definitely keep you in flow.
+inline box for small fixes, alphabetizing methods, inline tweaks, and other small, local tasks. Combined they definitely keep you in flow.
 
 
 # Next Steps
