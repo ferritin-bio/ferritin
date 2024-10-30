@@ -10,11 +10,13 @@ website:
     logo: ferritin.png
     left:
       - href: index.qmd
-        text: Home
-      - href: examples.qmd
-        text: Examples
-      - text: Ferritin-RustDoc
+        text: home
+      # - href: examples.qmd
+      #   text: examples
+      - text: ferritin-rustdoc
         href: doc/ferritin_core/index.html
+      - text: blog
+        href: posts/
 
     right:
       - icon: github

@@ -1,0 +1,7 @@
+---
+title: "Blog Posts"
+listing:
+  contents: "."
+  sort: "date desc"
+  type: default
+---
