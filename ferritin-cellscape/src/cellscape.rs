@@ -2,8 +2,9 @@ use anyhow::{Context, Result};
 use geo::buffer::Buffer;
 use geo::simplify::Simplify;
 use geo::{LineString, MultiPolygon, Polygon};
-use nalgebra::{Matrix2, Point2, Vector2};
-use nalgebra::{Matrix3, Vector3};
+use nalgebra::{
+    Array1, Array2, Axis, DMatrix, Matrix2, Matrix3, Matrix4, Point2, Vector2, Vector3,
+};
 use plotters::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -581,4 +582,327 @@ impl ColorScheme {
     fn from(colors: Vec<String>) -> Self {
         ColorScheme::Multiple(colors)
     }
+}
+
+pub fn matrix_from_nglview(m: &[f64]) -> (Matrix3<f64>, Vector3<f64>) {
+    let camera_matrix = Matrix4::from_iterator(m.iter().cloned());
+    let rotation = camera_matrix.fixed_slice::<3, 3>(0, 0);
+    let translation = Vector3::new(
+        camera_matrix[(3, 0)],
+        camera_matrix[(3, 1)],
+        camera_matrix[(3, 2)],
+    );
+
+    // Normalize rotation matrix
+    let norms: Vec<f64> = (0..3).map(|i| rotation.row(i).norm()).collect();
+
+    let normalized_rotation = Matrix3::from_fn(|i, j| rotation[(i, j)] / norms[i]);
+
+    (normalized_rotation, translation)
+}
+
+pub fn matrix_to_nglview(m: &Matrix3<f64>) -> Vec<f64> {
+    let mut nglv_matrix = Matrix4::identity();
+    let transform = Matrix3::new(-1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0);
+
+    let rotated = m * transform;
+    nglv_matrix
+        .fixed_slice_mut::<3, 3>(0, 0)
+        .copy_from(&rotated);
+
+    nglv_matrix.as_slice().to_vec()
+}
+
+#[derive(Debug, Clone)]
+pub struct TopologyEntry {
+    pub description: String,
+    pub start: usize,
+    pub end: usize,
+}
+
+pub fn orientation_from_topology(topologies: &[TopologyEntry]) -> bool {
+    let mut first_ex = None;
+    let mut first_cy = None;
+    let mut first_he = None;
+
+    for entry in topologies {
+        match entry.description.as_str() {
+            "Extracellular" if first_ex.is_none() => {
+                first_ex = Some((entry.start, entry.end));
+            }
+            "Helical" if first_he.is_none() => {
+                first_he = Some((entry.start, entry.end));
+            }
+            "Cytoplasmic" if first_cy.is_none() => {
+                first_cy = Some((entry.start, entry.end));
+            }
+            _ => {}
+        }
+    }
+
+    // Default to true (N->C orientation)
+    match (first_ex, first_cy) {
+        (Some((ex_start, _)), Some((cy_start, _))) => ex_start < cy_start,
+        _ => true,
+    }
+}
+
+pub fn orientation_from_ptm(ptm: &HashMap<String, (usize, usize)>) -> bool {
+    match (ptm.get("chain"), ptm.get("signal peptide")) {
+        (Some(&(chain_start, _)), Some(&(signal_start, _))) => signal_start < chain_start,
+        _ => true,
+    }
+}
+
+pub fn depth_slices_from_coord(xyz: &Array2<f64>, width: f64) -> Vec<Array2<f64>> {
+    let z_coords = xyz.slice(s![.., 2]);
+    let binned: Array1<i32> = (&z_coords / width).mapv(|x| x.floor() as i32);
+    let min_bin = binned.fold(i32::MAX, |a, &b| a.min(b));
+    let binned_shifted = &binned - min_bin;
+    let num_bins = binned_shifted.fold(0, |a, &b| a.max(b)) + 1;
+
+    let mut slice_coords = Vec::with_capacity(num_bins as usize);
+    let mut total_coords = 0;
+
+    for i in 0..num_bins {
+        let mask = binned_shifted.mapv(|x| x == i);
+        let bin_coords = xyz.slice(s![mask, ..]).to_owned();
+        total_coords += bin_coords.nrows();
+        slice_coords.push(bin_coords);
+    }
+
+    assert_eq!(xyz.nrows(), total_coords);
+    slice_coords
+}
+
+/// Take an Nx3 coordinate matrix and return Z bin labels
+pub fn get_z_slice_labels(xyz: &Array2<f64>, width: f64) -> Array1<i32> {
+    let z_coords = xyz.slice(s![.., 2]);
+    let binned: Array1<i32> = (&z_coords / width).mapv(|x| x.floor() as i32);
+    let min_bin = binned.fold(i32::MAX, |a, &b| a.min(b));
+    &binned - min_bin
+}
+
+/// Split matrix based on labels
+pub fn split_on_labels(m: &Array2<f64>, labels: &Array1<i32>) -> Vec<Array2<f64>> {
+    let num_bins = labels.fold(0, |a, &b| a.max(b)) + 1;
+    let mut coords = Vec::with_capacity(num_bins as usize);
+    let mut total_coords = 0;
+
+    for i in 0..num_bins {
+        let mask = labels.mapv(|x| x == i);
+        let group_coords = m.slice(s![mask, ..]).to_owned();
+        total_coords += group_coords.nrows();
+        coords.push(group_coords);
+    }
+
+    assert_eq!(m.nrows(), total_coords);
+    coords
+}
+
+/// Get dimensions from xy coordinates
+pub fn get_dimensions(xy: &Array2<f64>, end_window: usize) -> HashMap<String, Value> {
+    let mut dimensions = HashMap::new();
+
+    // Width and height
+    let x_coords = xy.column(0);
+    let y_coords = xy.column(1);
+
+    dimensions.insert(
+        "width".to_string(),
+        Value::Float(x_coords.max() - x_coords.min()),
+    );
+    dimensions.insert(
+        "height".to_string(),
+        Value::Float(y_coords.max() - y_coords.min()),
+    );
+
+    // Start and end means
+    let start_mean = xy.slice(s![..end_window, ..]).mean();
+    let end_mean = xy.slice(s![-end_window.., ..]).mean();
+    dimensions.insert("start".to_string(), Value::Float(start_mean));
+    dimensions.insert("end".to_string(), Value::Float(end_mean));
+
+    // Bottom and top points
+    let bottom_idx = y_coords
+        .iter()
+        .enumerate()
+        .min_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+        .map(|(idx, _)| idx)
+        .unwrap();
+    let top_idx = y_coords
+        .iter()
+        .enumerate()
+        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+        .map(|(idx, _)| idx)
+        .unwrap();
+
+    dimensions.insert(
+        "bottom".to_string(),
+        Value::Point(Point2::new(xy[[bottom_idx, 0]], xy[[bottom_idx, 1]])),
+    );
+    dimensions.insert(
+        "top".to_string(),
+        Value::Point(Point2::new(xy[[top_idx, 0]], xy[[top_idx, 1]])),
+    );
+
+    dimensions
+}
+
+/// Structure class for loading coordinates and generating cartoons
+pub struct Structure {
+    name: String,
+    structure: bio::structure::Structure,
+    chains: Vec<String>,
+    is_opm: bool,
+    use_nglview: bool,
+    view_matrix: Option<Matrix3<f64>>,
+    residues: HashMap<String, HashMap<i32, ResidueInfo>>,
+    sequence: HashMap<String, String>,
+    coord: Array2<f64>,
+    ca_atoms: Vec<usize>,
+    backbone_atoms: Vec<usize>,
+    uniprot: Option<UniProtRecord>,
+    uniprot_xml: Option<String>,
+    uniprot_overlap: Option<Array1<i32>>,
+    uniprot_offset: Option<i32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResidueInfo {
+    chain: String,
+    id: i32,
+    amino_acid: String,
+    coord: (usize, usize),
+    coord_ca: (usize, usize),
+    coord_backbone: Vec<usize>,
+    atoms: Vec<String>,
+}
+
+impl Structure {
+    pub fn new(
+        file: &str,
+        name: Option<&str>,
+        model: usize,
+        chain: &str,
+        uniprot: Option<&str>,
+        view: bool,
+        is_opm: bool,
+        res_start: Option<i32>,
+        res_end: Option<i32>,
+    ) -> Result<Self> {
+        // Mock implementation
+        Ok(Structure {
+            name: name.unwrap_or(file).to_string(),
+            structure: BioStructure::default(),
+            chains: vec![],
+            is_opm,
+            use_nglview: view,
+            view_matrix: None,
+            residues: HashMap::new(),
+            residues_flat: vec![],
+            sequence: HashMap::new(),
+            coord: Array2::zeros((0, 3)),
+            rotated_coord: None,
+            ca_atoms: vec![],
+            backbone_atoms: vec![],
+            uniprot: None,
+            uniprot_xml: None,
+            uniprot_overlap: None,
+            uniprot_offset: None,
+        })
+    }
+
+    pub fn load_pymol_view(&mut self, file: &str) -> Result<()> {
+        // Mock implementation
+        self.view_matrix = Some(Matrix3::identity());
+        Ok(())
+    }
+
+    pub fn load_chimera_view(&mut self, file: &str) -> Result<()> {
+        // Mock implementation
+        self.view_matrix = Some(Matrix3::identity());
+        Ok(())
+    }
+
+    pub fn save_view_matrix(&self, path: &str) -> Result<()> {
+        // Mock implementation
+        Ok(())
+    }
+
+    pub fn load_view_matrix(&mut self, path: &str) -> Result<()> {
+        // Mock implementation
+        self.view_matrix = Some(Matrix3::identity());
+        Ok(())
+    }
+
+    pub fn set_view_matrix(&mut self, matrix: Matrix3<f64>) -> Result<()> {
+        // Mock implementation
+        self.view_matrix = Some(matrix);
+        Ok(())
+    }
+
+    pub fn align_view(&mut self, v1: Vector3<f64>, v2: Vector3<f64>) -> Result<()> {
+        // Mock implementation
+        self.view_matrix = Some(Matrix3::identity());
+        Ok(())
+    }
+
+    pub fn align_view_nc(&mut self, n_atoms: usize, c_atoms: usize, flip: bool) -> Result<()> {
+        // Mock implementation
+        self.view_matrix = Some(Matrix3::identity());
+        Ok(())
+    }
+
+    pub fn auto_view(&mut self, n_atoms: usize, c_atoms: usize, flip: Option<bool>) -> Result<()> {
+        // Mock implementation
+        self.view_matrix = Some(Matrix3::identity());
+        Ok(())
+    }
+
+    pub fn outline(&mut self, options: OutlineOptions) -> Result<Cartoon> {
+        // Mock implementation
+        Ok(Cartoon::default())
+    }
+
+    // Private helper methods
+    fn process_structure(&mut self, res_start: Option<i32>, res_end: Option<i32>) -> Result<()> {
+        // Mock implementation
+        Ok(())
+    }
+
+    fn process_uniprot(&mut self, uniprot_id: &str) -> Result<()> {
+        // Mock implementation
+        Ok(())
+    }
+
+    fn update_view_matrix(&mut self) -> Result<()> {
+        // Mock implementation
+        self.view_matrix = Some(Matrix3::identity());
+        Ok(())
+    }
+
+    fn apply_view_matrix(&mut self) -> Result<()> {
+        // Mock implementation
+        self.rotated_coord = Some(self.coord.clone());
+        Ok(())
+    }
+
+    fn set_nglview_orientation(&mut self, matrix: Matrix3<f64>) -> Result<()> {
+        // Mock implementation
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Cartoon {
+    name: String,
+    polygons: Vec<(HashMap<String, String>, Polygon)>,
+    residues: Vec<ResidueInfo>,
+    outline_by: String,
+    back_outline: Option<Polygon>,
+    group_outlines: Vec<Polygon>,
+    num_groups: usize,
+    dimensions: HashMap<String, f64>,
+    groups: Vec<String>,
 }
