@@ -1,7 +1,6 @@
 mod atomcollection;
 mod bonds;
 mod conversions;
-mod featureizer;
 mod info;
 mod residue;
 mod selection;
