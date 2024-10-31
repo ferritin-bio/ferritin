@@ -14,6 +14,153 @@ use std::path::Path;
 // Helper Fns  ---------------------------------------------
 //
 
+pub fn orientation_from_topology(topologies: &[TopologyEntry]) -> bool {
+    let mut first_ex = None;
+    let mut first_cy = None;
+    let mut first_he = None;
+
+    for entry in topologies {
+        match entry.description.as_str() {
+            "Extracellular" if first_ex.is_none() => {
+                first_ex = Some((entry.start, entry.end));
+            }
+            "Helical" if first_he.is_none() => {
+                first_he = Some((entry.start, entry.end));
+            }
+            "Cytoplasmic" if first_cy.is_none() => {
+                first_cy = Some((entry.start, entry.end));
+            }
+            _ => {}
+        }
+    }
+
+    // Default to true (N->C orientation)
+    match (first_ex, first_cy) {
+        (Some((ex_start, _)), Some((cy_start, _))) => ex_start < cy_start,
+        _ => true,
+    }
+}
+
+pub fn orientation_from_ptm(ptm: &HashMap<String, (usize, usize)>) -> bool {
+    match (ptm.get("chain"), ptm.get("signal peptide")) {
+        (Some(&(chain_start, _)), Some(&(signal_start, _))) => signal_start < chain_start,
+        _ => true,
+    }
+}
+
+pub fn depth_slices_from_coord(xyz: &Array2<f64>, width: f64) -> Vec<Array2<f64>> {
+    let z_coords = xyz.slice(s![.., 2]);
+    let binned: Array1<i32> = (&z_coords / width).mapv(|x| x.floor() as i32);
+    let min_bin = binned.fold(i32::MAX, |a, &b| a.min(b));
+    let binned_shifted = &binned - min_bin;
+    let num_bins = binned_shifted.fold(0, |a, &b| a.max(b)) + 1;
+
+    let mut slice_coords = Vec::with_capacity(num_bins as usize);
+    let mut total_coords = 0;
+
+    for i in 0..num_bins {
+        let mask = binned_shifted.mapv(|x| x == i);
+        let bin_coords = xyz.slice(s![mask, ..]).to_owned();
+        total_coords += bin_coords.nrows();
+        slice_coords.push(bin_coords);
+    }
+
+    assert_eq!(xyz.nrows(), total_coords);
+    slice_coords
+}
+
+/// Take an Nx3 coordinate matrix and return Z bin labels
+pub fn get_z_slice_labels(xyz: &Array2<f64>, width: f64) -> Array1<i32> {
+    let z_coords = xyz.slice(s![.., 2]);
+    let binned: Array1<i32> = (&z_coords / width).mapv(|x| x.floor() as i32);
+    let min_bin = binned.fold(i32::MAX, |a, &b| a.min(b));
+    &binned - min_bin
+}
+
+/// Split matrix based on labels
+pub fn split_on_labels(m: &Array2<f64>, labels: &Array1<i32>) -> Vec<Array2<f64>> {
+    let num_bins = labels.fold(0, |a, &b| a.max(b)) + 1;
+    let mut coords = Vec::with_capacity(num_bins as usize);
+    let mut total_coords = 0;
+
+    for i in 0..num_bins {
+        let mask = labels.mapv(|x| x == i);
+        let group_coords = m.slice(s![mask, ..]).to_owned();
+        total_coords += group_coords.nrows();
+        coords.push(group_coords);
+    }
+
+    assert_eq!(m.nrows(), total_coords);
+    coords
+}
+
+/// Get dimensions from xy coordinates
+pub fn get_dimensions(xy: &Array2<f64>, end_window: usize) -> HashMap<String, Value> {
+    let mut dimensions = HashMap::new();
+
+    // Width and height
+    let x_coords = xy.column(0);
+    let y_coords = xy.column(1);
+
+    dimensions.insert(
+        "width".to_string(),
+        Value::Float(x_coords.max() - x_coords.min()),
+    );
+    dimensions.insert(
+        "height".to_string(),
+        Value::Float(y_coords.max() - y_coords.min()),
+    );
+
+    // Start and end means
+    let start_mean = xy.slice(s![..end_window, ..]).mean();
+    let end_mean = xy.slice(s![-end_window.., ..]).mean();
+    dimensions.insert("start".to_string(), Value::Float(start_mean));
+    dimensions.insert("end".to_string(), Value::Float(end_mean));
+
+    // Bottom and top points
+    let bottom_idx = y_coords
+        .iter()
+        .enumerate()
+        .min_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+        .map(|(idx, _)| idx)
+        .unwrap();
+    let top_idx = y_coords
+        .iter()
+        .enumerate()
+        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+        .map(|(idx, _)| idx)
+        .unwrap();
+
+    dimensions.insert(
+        "bottom".to_string(),
+        Value::Point(Point2::new(xy[[bottom_idx, 0]], xy[[bottom_idx, 1]])),
+    );
+    dimensions.insert(
+        "top".to_string(),
+        Value::Point(Point2::new(xy[[top_idx, 0]], xy[[top_idx, 1]])),
+    );
+
+    dimensions
+}
+
+fn create_union_outline(coords: &Array2<f64>, radius: f64) -> Result<Polygon> {
+    let points: Vec<_> = coords
+        .rows()
+        .into_iter()
+        .map(|row| Point::new(row[0], row[1]))
+        .collect();
+
+    let buffers: Vec<_> = points.iter().map(|p| p.buffer(radius)).collect();
+
+    Ok(union_polygons(&buffers)?)
+}
+
+fn create_back_outline(polygons: &[(HashMap<String, String>, Polygon)]) -> Result<Polygon> {
+    let polys: Vec<_> = polygons.iter().map(|(_, p)| p.buffer(0.01)).collect();
+
+    Ok(union_polygons(&polys)?)
+}
+
 fn composite_polygon(
     cartoon: &mut Cartoon,
     height_before: f64,
@@ -623,135 +770,6 @@ pub struct TopologyEntry {
     pub end: usize,
 }
 
-pub fn orientation_from_topology(topologies: &[TopologyEntry]) -> bool {
-    let mut first_ex = None;
-    let mut first_cy = None;
-    let mut first_he = None;
-
-    for entry in topologies {
-        match entry.description.as_str() {
-            "Extracellular" if first_ex.is_none() => {
-                first_ex = Some((entry.start, entry.end));
-            }
-            "Helical" if first_he.is_none() => {
-                first_he = Some((entry.start, entry.end));
-            }
-            "Cytoplasmic" if first_cy.is_none() => {
-                first_cy = Some((entry.start, entry.end));
-            }
-            _ => {}
-        }
-    }
-
-    // Default to true (N->C orientation)
-    match (first_ex, first_cy) {
-        (Some((ex_start, _)), Some((cy_start, _))) => ex_start < cy_start,
-        _ => true,
-    }
-}
-
-pub fn orientation_from_ptm(ptm: &HashMap<String, (usize, usize)>) -> bool {
-    match (ptm.get("chain"), ptm.get("signal peptide")) {
-        (Some(&(chain_start, _)), Some(&(signal_start, _))) => signal_start < chain_start,
-        _ => true,
-    }
-}
-
-pub fn depth_slices_from_coord(xyz: &Array2<f64>, width: f64) -> Vec<Array2<f64>> {
-    let z_coords = xyz.slice(s![.., 2]);
-    let binned: Array1<i32> = (&z_coords / width).mapv(|x| x.floor() as i32);
-    let min_bin = binned.fold(i32::MAX, |a, &b| a.min(b));
-    let binned_shifted = &binned - min_bin;
-    let num_bins = binned_shifted.fold(0, |a, &b| a.max(b)) + 1;
-
-    let mut slice_coords = Vec::with_capacity(num_bins as usize);
-    let mut total_coords = 0;
-
-    for i in 0..num_bins {
-        let mask = binned_shifted.mapv(|x| x == i);
-        let bin_coords = xyz.slice(s![mask, ..]).to_owned();
-        total_coords += bin_coords.nrows();
-        slice_coords.push(bin_coords);
-    }
-
-    assert_eq!(xyz.nrows(), total_coords);
-    slice_coords
-}
-
-/// Take an Nx3 coordinate matrix and return Z bin labels
-pub fn get_z_slice_labels(xyz: &Array2<f64>, width: f64) -> Array1<i32> {
-    let z_coords = xyz.slice(s![.., 2]);
-    let binned: Array1<i32> = (&z_coords / width).mapv(|x| x.floor() as i32);
-    let min_bin = binned.fold(i32::MAX, |a, &b| a.min(b));
-    &binned - min_bin
-}
-
-/// Split matrix based on labels
-pub fn split_on_labels(m: &Array2<f64>, labels: &Array1<i32>) -> Vec<Array2<f64>> {
-    let num_bins = labels.fold(0, |a, &b| a.max(b)) + 1;
-    let mut coords = Vec::with_capacity(num_bins as usize);
-    let mut total_coords = 0;
-
-    for i in 0..num_bins {
-        let mask = labels.mapv(|x| x == i);
-        let group_coords = m.slice(s![mask, ..]).to_owned();
-        total_coords += group_coords.nrows();
-        coords.push(group_coords);
-    }
-
-    assert_eq!(m.nrows(), total_coords);
-    coords
-}
-
-/// Get dimensions from xy coordinates
-pub fn get_dimensions(xy: &Array2<f64>, end_window: usize) -> HashMap<String, Value> {
-    let mut dimensions = HashMap::new();
-
-    // Width and height
-    let x_coords = xy.column(0);
-    let y_coords = xy.column(1);
-
-    dimensions.insert(
-        "width".to_string(),
-        Value::Float(x_coords.max() - x_coords.min()),
-    );
-    dimensions.insert(
-        "height".to_string(),
-        Value::Float(y_coords.max() - y_coords.min()),
-    );
-
-    // Start and end means
-    let start_mean = xy.slice(s![..end_window, ..]).mean();
-    let end_mean = xy.slice(s![-end_window.., ..]).mean();
-    dimensions.insert("start".to_string(), Value::Float(start_mean));
-    dimensions.insert("end".to_string(), Value::Float(end_mean));
-
-    // Bottom and top points
-    let bottom_idx = y_coords
-        .iter()
-        .enumerate()
-        .min_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-        .map(|(idx, _)| idx)
-        .unwrap();
-    let top_idx = y_coords
-        .iter()
-        .enumerate()
-        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-        .map(|(idx, _)| idx)
-        .unwrap();
-
-    dimensions.insert(
-        "bottom".to_string(),
-        Value::Point(Point2::new(xy[[bottom_idx, 0]], xy[[bottom_idx, 1]])),
-    );
-    dimensions.insert(
-        "top".to_string(),
-        Value::Point(Point2::new(xy[[top_idx, 0]], xy[[top_idx, 1]])),
-    );
-
-    dimensions
-}
-
 #[derive(Debug, Clone)]
 pub struct ResidueInfo {
     chain: String,
@@ -767,6 +785,31 @@ pub struct ResidueInfo {
     xyz: Option<Array2<f64>>,
     polygon: Option<Polygon>,
     depth: Option<f64>,
+}
+impl ResidueInfo {
+    fn to_metadata(&self) -> HashMap<String, String> {
+        let mut metadata = HashMap::new();
+        if let Some(depth) = self.depth {
+            metadata.insert("depth".to_string(), depth.to_string());
+        }
+        if let Some(domain) = &self.domain {
+            metadata.insert("domain".to_string(), domain.clone());
+        }
+        if let Some(topology) = &self.topology {
+            metadata.insert("topology".to_string(), topology.clone());
+        }
+        metadata.insert("chain".to_string(), self.chain.clone());
+        metadata
+    }
+
+    fn get_group_key(&self, by: &str) -> Result<String> {
+        match by {
+            "chain" => Ok(self.chain.clone()),
+            "domain" => Ok(self.domain.clone().unwrap_or_else(|| "None".to_string())),
+            "topology" => Ok(self.topology.clone().unwrap_or_else(|| "None".to_string())),
+            _ => Err(anyhow::anyhow!("Invalid grouping key")),
+        }
+    }
 }
 
 /// Structure class for loading coordinates and generating cartoons
