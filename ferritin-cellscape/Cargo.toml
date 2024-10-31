@@ -7,8 +7,7 @@ license.workspace = true
 description.workspace = true
 
 [dependencies]
-chrono = "0.4.38"
-validator = { version = "0.18", features = ["derive"] }
+ferritin-core = { path = "../ferritin-core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
@@ -16,6 +15,5 @@ geo = "0.29.0"
 nalgebra = "0.33.2"
 ndarray = "0.16.1"
 plotters = "0.3.7"
-
-[dev.dependencies]
-ferritin-pymol = { path = "../ferritin-pymol" }
+svg = "0.18.0"
+rand = "0.8.5"
