@@ -973,54 +973,6 @@ impl Structure {
 
         Ok(structure)
     }
-
-    // pub fn load_pymol_view(&mut self, file: &str) -> Result<()> {
-    //     // Mock implementation
-    //     self.view_matrix = Some(Matrix3::identity());
-    //     Ok(())
-    // }
-
-    // pub fn load_chimera_view(&mut self, file: &str) -> Result<()> {
-    //     // Mock implementation
-    //     self.view_matrix = Some(Matrix3::identity());
-    //     Ok(())
-    // }
-
-    // pub fn save_view_matrix(&self, path: &str) -> Result<()> {
-    //     // Mock implementation
-    //     Ok(())
-    // }
-
-    // pub fn load_view_matrix(&mut self, path: &str) -> Result<()> {
-    //     // Mock implementation
-    //     self.view_matrix = Some(Matrix3::identity());
-    //     Ok(())
-    // }
-
-    // pub fn set_view_matrix(&mut self, matrix: Matrix3<f64>) -> Result<()> {
-    //     // Mock implementation
-    //     self.view_matrix = Some(matrix);
-    //     Ok(())
-    // }
-
-    // pub fn align_view(&mut self, v1: Vector3<f64>, v2: Vector3<f64>) -> Result<()> {
-    //     // Mock implementation
-    //     self.view_matrix = Some(Matrix3::identity());
-    //     Ok(())
-    // }
-
-    // pub fn align_view_nc(&mut self, n_atoms: usize, c_atoms: usize, flip: bool) -> Result<()> {
-    //     // Mock implementation
-    //     self.view_matrix = Some(Matrix3::identity());
-    //     Ok(())
-    // }
-
-    // pub fn auto_view(&mut self, n_atoms: usize, c_atoms: usize, flip: Option<bool>) -> Result<()> {
-    //     // Mock implementation
-    //     self.view_matrix = Some(Matrix3::identity());
-    //     Ok(())
-    // }
-
     pub fn outline(&mut self, options: OutlineOptions) -> Result<Cartoon> {
         // Validate options
         if !["all", "residue", "chain", "domain", "topology"].contains(&options.by.as_str()) {
@@ -1205,31 +1157,14 @@ impl Structure {
         Ok(())
     }
 
-    // Private helper methods
-    fn process_structure(&mut self, res_start: Option<i32>, res_end: Option<i32>) -> Result<()> {
-        // Mock implementation
-        Ok(())
+    // // Private helper methods
+    // fn process_structure(&mut self, res_start: Option<i32>, res_end: Option<i32>) -> Result<()> {
+    //     // Mock implementation
+    //     Ok(())
+    // }
+
+    // fn process_uniprot(&mut self, uniprot_id: &str) -> Result<()> {
+    //     // Mock implementation
+    //     Ok(())
     }
-
-    fn process_uniprot(&mut self, uniprot_id: &str) -> Result<()> {
-        // Mock implementation
-        Ok(())
-    }
-
-    // fn update_view_matrix(&mut self) -> Result<()> {
-    //     // Mock implementation
-    //     self.view_matrix = Some(Matrix3::identity());
-    //     Ok(())
-    // }
-
-    // fn apply_view_matrix(&mut self) -> Result<()> {
-    //     // Mock implementation
-    //     self.rotated_coord = Some(self.coord.clone());
-    //     Ok(())
-    // }
-
-    // fn set_nglview_orientation(&mut self, matrix: Matrix3<f64>) -> Result<()> {
-    //     // Mock implementation
-    //     Ok(())
-    // }
 }
