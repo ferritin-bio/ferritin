@@ -365,22 +365,32 @@ mod tests {
         // 154 residues; N/CA/C/O; positions
         assert_eq!(ac_backbone_tensor.dims(), &[154, 4, 3]);
 
-        // check residue 1 - methionine
-        //
+        // Check my residue coords in the Tensor
         // ATOM   1    N  N   . MET A 1 1   ? 24.277 8.374   -9.854  1.00 38.41  ? 0   MET A N   1
         // ATOM   2    C  CA  . MET A 1 1   ? 24.404 9.859   -9.939  1.00 37.90  ? 0   MET A CA  1
         // ATOM   3    C  C   . MET A 1 1   ? 25.814 10.249  -10.359 1.00 36.65  ? 0   MET A C   1
         // ATOM   4    O  O   . MET A 1 1   ? 26.748 9.469   -10.197 1.00 37.13  ? 0   MET A O   1
-        // let met_location = ac_backbone_tensor.i((0, 0, ..)).unwrap(;
-        // let values: Vec<f32> = met_location.to_vec1().unwrap();
-        // assert_eq!(values, vec![24.277, 8.374, -9.854]);
-        let met_n_loc: Vec<f32> = ac_backbone_tensor.i((0, 0, ..)).unwrap().to_vec1().unwrap();
-        assert_eq!(met_n_loc, vec![24.277, 8.374, -9.854]);
-        let met_ca_loc: Vec<f32> = ac_backbone_tensor.i((0, 1, ..)).unwrap().to_vec1().unwrap();
-        assert_eq!(met_ca_loc, vec![24.404, 9.859, -9.939]);
-        let met_c_loc: Vec<f32> = ac_backbone_tensor.i((0, 2, ..)).unwrap().to_vec1().unwrap();
-        assert_eq!(met_c_loc, vec![25.814, 10.249, -10.359]);
-        let met_o_loc: Vec<f32> = ac_backbone_tensor.i((0, 3, ..)).unwrap().to_vec1().unwrap();
-        assert_eq!(met_o_loc, vec![26.748, 9.469, -10.197]);
+        let backbone_coords = [
+            // Methionine - AA00
+            ("N", (0, 0, ..), vec![24.277, 8.374, -9.854]),
+            ("CA", (0, 1, ..), vec![24.404, 9.859, -9.939]),
+            ("C", (0, 2, ..), vec![25.814, 10.249, -10.359]),
+            ("O", (0, 3, ..), vec![26.748, 9.469, -10.197]),
+            // Valine - AA01
+            ("N", (1, 0, ..), vec![25.964, 11.453, -10.903]),
+            ("CA", (1, 1, ..), vec![27.263, 11.924, -11.359]),
+            ("C", (1, 2, ..), vec![27.392, 13.428, -11.115]),
+            ("O", (1, 3, ..), vec![26.443, 14.184, -11.327]),
+            // Glycing - AAlast
+            ("N", (153, 0, ..), vec![23.474, -3.227, 5.994]),
+            ("CA", (153, 1, ..), vec![22.818, -2.798, 7.211]),
+            ("C", (153, 2, ..), vec![22.695, -1.282, 7.219]),
+            ("O", (153, 3, ..), vec![21.870, -0.745, 7.992]),
+        ];
+
+        for (atom_name, (i, j, k), expected) in backbone_coords {
+            let actual: Vec<f32> = ac_backbone_tensor.i((i, j, k)).unwrap().to_vec1().unwrap();
+            assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
+        }
     }
 }
