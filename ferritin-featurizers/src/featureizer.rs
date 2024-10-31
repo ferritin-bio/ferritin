@@ -31,7 +31,8 @@ impl LMPNNFeatures for AtomCollection {
         // Create a vec to hold the data
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
 
-        for (res_idx, residue) in self.iter_residues_aminoacid().enumerate() {
+        for residue in self.iter_residues_aminoacid() {
+            let resid = residue.res_id as usize;
             let backbone_atoms = [
                 residue.find_atom_by_name("N"),
                 residue.find_atom_by_name("CA"),
@@ -42,7 +43,7 @@ impl LMPNNFeatures for AtomCollection {
             for (atom_idx, maybe_atom) in backbone_atoms.iter().enumerate() {
                 if let Some(atom) = maybe_atom {
                     let [x, y, z] = atom.coords;
-                    let base_idx = (res_idx * 4 + atom_idx) * 3;
+                    let base_idx = (resid * 4 + atom_idx) * 3;
                     backbone_data[base_idx] = *x;
                     backbone_data[base_idx + 1] = *y;
                     backbone_data[base_idx + 2] = *z;
@@ -326,6 +327,7 @@ define_residues! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use candle_core::IndexOp;
     use pdbtbx;
 
     #[test]
@@ -356,10 +358,29 @@ mod tests {
     }
 
     #[test]
-    fn test_atom37() {
+    fn test_atom_backbone_tensor() {
         let (pdb, _) = pdbtbx::open("data/101m.cif").unwrap();
         let ac = AtomCollection::from(&pdb);
-
         let ac_backbone_tensor: Tensor = ac.to_numeric_backbone_atoms().expect("REASON");
+        // 154 residues; N/CA/C/O; positions
+        assert_eq!(ac_backbone_tensor.dims(), &[154, 4, 3]);
+
+        // check residue 1 - methionine
+        //
+        // ATOM   1    N  N   . MET A 1 1   ? 24.277 8.374   -9.854  1.00 38.41  ? 0   MET A N   1
+        // ATOM   2    C  CA  . MET A 1 1   ? 24.404 9.859   -9.939  1.00 37.90  ? 0   MET A CA  1
+        // ATOM   3    C  C   . MET A 1 1   ? 25.814 10.249  -10.359 1.00 36.65  ? 0   MET A C   1
+        // ATOM   4    O  O   . MET A 1 1   ? 26.748 9.469   -10.197 1.00 37.13  ? 0   MET A O   1
+        // let met_location = ac_backbone_tensor.i((0, 0, ..)).unwrap(;
+        // let values: Vec<f32> = met_location.to_vec1().unwrap();
+        // assert_eq!(values, vec![24.277, 8.374, -9.854]);
+        let met_n_loc: Vec<f32> = ac_backbone_tensor.i((0, 0, ..)).unwrap().to_vec1().unwrap();
+        assert_eq!(met_n_loc, vec![24.277, 8.374, -9.854]);
+        let met_ca_loc: Vec<f32> = ac_backbone_tensor.i((0, 1, ..)).unwrap().to_vec1().unwrap();
+        assert_eq!(met_ca_loc, vec![24.404, 9.859, -9.939]);
+        let met_c_loc: Vec<f32> = ac_backbone_tensor.i((0, 2, ..)).unwrap().to_vec1().unwrap();
+        assert_eq!(met_c_loc, vec![25.814, 10.249, -10.359]);
+        let met_o_loc: Vec<f32> = ac_backbone_tensor.i((0, 3, ..)).unwrap().to_vec1().unwrap();
+        assert_eq!(met_o_loc, vec![26.748, 9.469, -10.197]);
     }
 }
