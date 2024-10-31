@@ -12,6 +12,7 @@
 use super::AtomCollection;
 use ndarray::{Array2, Array3};
 
+/// Convert the AtomCollection into a struct that can be passed to a model.
 trait LMPNNFeatures {
     fn featurize(&self) -> LigandMPNNDataDict;
 }
@@ -155,7 +156,7 @@ impl LMPNNFeatures for AtomCollection {
             chain_list: Vec::new(),
             s: Vec::new(),
             xyz_37: Vec::new(),
-            xyz_37__m: Vec::new(),
+            xyz_37_m: Vec::new(),
             bias_AA: None,
             bias_AA_per_residue: None,
             omit_AA_per_residue_multi: None,
@@ -166,20 +167,44 @@ impl LMPNNFeatures for AtomCollection {
 /// Features of Ligand MPNN
 ///
 ///
+/// output_dict
+/// X :            Tensor dimensions: torch.Size([93, 4, 3])    #[B,L,4,3] - backbone xyz coordinates for N,CA,C,O
+/// mask:          Tensor dimensions: torch.Size([93])          #[B, L]    - mask
+/// Y:             Tensor dimensions: torch.Size([406, 3])      #[B,L,num_context_atoms,3] - for ligandMPNN coords
+/// Y_t:           Tensor dimensions: torch.Size([406])         #[B,L,num_context_atoms] - element type
+/// Y_m:           Tensor dimensions: torch.Size([406])         #[B,L,num_context_atoms] - mask
+/// R_idx:         Tensor dimensions: torch.Size([93])
+/// chain_labels:  Tensor dimensions: torch.Size([93])
+/// chain_letters: NumPy array dimensions: (93,)
+/// mask_c:        Tensor dimensions: torch.Size([93])
+/// S:             Tensor dimensions: torch.Size([93])
+/// xyz_37:        Tensor dimensions: torch.Size([93, 37, 3])   #[B,L,37,3] - xyz coordinates for all atoms if needed
+/// xyz_37_m       Tensor dimensions: torch.Size([93, 37])      #[B,L,37,3] - xyz coordinates for all atoms if needed
+/// CA_icodes:     NumPy array dimensions: (93,)
+///
+/// chain_list
+/// backbone
+/// Selection
+/// other_atoms
+/// Selection
+/// water_atoms
+/// Selection
+///
 pub struct LigandMPNNDataDict {
-    pub x: Vec<f64>,    // Tensor,
-    pub mask: Vec<f64>, // Tensor,
+    //
+    x: Vec<f64>,    // Tensor,
+    mask: Vec<f64>, // Tensor,
     y: Vec<Vec<f64>>,
-    y_t: Vec<f64>,              // Tensor,
-    y_m: Vec<f64>,              // Tensor,
-    pub r_idx: Vec<f64>,        // Tensor,
-    pub chain_labels: Vec<f64>, // Tensor,
-    pub chain_letters: Vec<String>,
-    pub mask_c: Vec<Vec<bool>>,
+    y_t: Vec<f64>,          // Tensor,
+    y_m: Vec<f64>,          // Tensor,
+    r_idx: Vec<f64>,        // Tensor,
+    chain_labels: Vec<f64>, // Tensor,
+    chain_letters: Vec<String>,
+    mask_c: Vec<Vec<bool>>,
     chain_list: Vec<String>,
-    pub s: Vec<f64>,                             // Tensor,
+    s: Vec<f64>,                                 // Tensor,
     xyz_37: Vec<f64>,                            // Tensor,
-    xyz_37__m: Vec<f64>,                         // Tensor,
+    xyz_37_m: Vec<f64>,                          // Tensor,
     bias_AA: Option<Vec<f64>>,                   // Tensor,
     bias_AA_per_residue: Option<Vec<f64>>,       // Tensor,
     omit_AA_per_residue_multi: Option<Vec<f64>>, // Tensor,

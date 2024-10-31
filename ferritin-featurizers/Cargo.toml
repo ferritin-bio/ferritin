@@ -1,0 +1,13 @@
+[package]
+name = "ferritin-featurizers"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description.workspace = true
+
+[dependencies]
+ferritin-core = { path = "../ferritin-core" }
+serde = { workspace = true }
+pdbtbx.workspace = true
+itertools.workspace = true
