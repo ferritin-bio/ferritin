@@ -6,7 +6,7 @@ use svg::node::element::{Circle, Path};
 use svg::Document;
 
 // Traits -------------------------------------------------------------------------------------
-trait StructureFlatten {
+pub trait StructureFlatten {
     fn flatten_structure(&self) -> Document;
 }
 
