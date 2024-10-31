@@ -3,7 +3,7 @@
 use geo::simplify::Simplify;
 use geo::{LineString, Polygon};
 use nalgebra::{Matrix2, Matrix3, Matrix4, Point2, Point3, Vector2, Vector3};
-use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis};
+use ndarray::{s, Array1, Array2};
 use plotters::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -11,19 +11,12 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 
+// Helper Fns  ---------------------------------------------
+//
+
 // Equivalent to scale_line_width
 fn scale_line_width(x: f64, lw_min: f64, lw_max: f64) -> f64 {
     lw_max * (1.0 - x) + lw_min * x
-}
-
-// Equivalent to shade_from_color
-// Note: This requires a color handling library
-#[derive(Debug, Clone, Copy)]
-struct RgbaColor {
-    r: f64,
-    g: f64,
-    b: f64,
-    a: f64,
 }
 
 fn shade_from_color(color: RgbaColor, x: f64, range: f64) -> (f64, f64, f64) {
@@ -82,11 +75,9 @@ fn smooth_polygon(polygon: &Polygon<f64>, level: i32) -> Polygon<f64> {
     }
 }
 
-// Equivalent to ring_coding
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum PathCode {
-    MoveTo,
-    LineTo,
+// Equivalent to scale_line_width
+fn scale_line_width(x: f64, lw_min: f64, lw_max: f64) -> f64 {
+    lw_max * (1.0 - x) + lw_min * x
 }
 
 fn ring_coding(coordinates: &[(f64, f64)]) -> Vec<PathCode> {
@@ -95,23 +86,6 @@ fn ring_coding(coordinates: &[(f64, f64)]) -> Vec<PathCode> {
         codes[0] = PathCode::MoveTo;
     }
     codes
-}
-
-struct Cartoon {
-    bottom_coord: Vector2<f64>,
-    top_coord: Vector2<f64>,
-    image_height: f64,
-    styled_polygons: Vec<StyledPolygon>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct StyledPolygon {
-    polygon: Polygon<f64>,
-    facecolor: String,
-    shade: f64,
-    edgecolor: String,
-    linewidth: f64,
-    zorder: i32,
 }
 
 fn placeholder_polygon(height: f64, buffer_width: f64, origin: Vector2<f64>) -> Polygon<f64> {
@@ -157,18 +131,6 @@ fn composite_polygon(
     cartoon.image_height += buffer_width + height_before + height_after;
     cartoon.bottom_coord -= Vector2::new(0.0, height_before);
     cartoon.top_coord += Vector2::new(0.0, height_after);
-}
-
-#[derive(Serialize, Deserialize)]
-struct PlaceholderData {
-    polygons: Vec<StyledPolygon>,
-    name: String,
-    width: f64,
-    height: f64,
-    start: Vector2<f64>,
-    end: Vector2<f64>,
-    bottom: Vector2<f64>,
-    top: Vector2<f64>,
 }
 
 fn export_placeholder(height: f64, name: &str, fname: &str, buffer_width: f64) {
@@ -302,6 +264,93 @@ fn plot_polygon(
     Ok(())
 }
 
+pub fn matrix_from_nglview(m: &[f64]) -> (Matrix3<f64>, Vector3<f64>) {
+    let camera_matrix = Matrix4::from_iterator(m.iter().cloned());
+    let rotation = camera_matrix.fixed_slice::<3, 3>(0, 0);
+    let translation = Vector3::new(
+        camera_matrix[(3, 0)],
+        camera_matrix[(3, 1)],
+        camera_matrix[(3, 2)],
+    );
+
+    // Normalize rotation matrix
+    let norms: Vec<f64> = (0..3).map(|i| rotation.row(i).norm()).collect();
+
+    let normalized_rotation = Matrix3::from_fn(|i, j| rotation[(i, j)] / norms[i]);
+
+    (normalized_rotation, translation)
+}
+
+pub fn matrix_to_nglview(m: &Matrix3<f64>) -> Vec<f64> {
+    let mut nglv_matrix = Matrix4::identity();
+    let transform = Matrix3::new(-1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0);
+
+    let rotated = m * transform;
+    nglv_matrix
+        .fixed_slice_mut::<3, 3>(0, 0)
+        .copy_from(&rotated);
+
+    nglv_matrix.as_slice().to_vec()
+}
+
+// ENUMS  ---------------------------------------------
+
+// Equivalent to ring_coding
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PathCode {
+    MoveTo,
+    LineTo,
+}
+
+#[derive(Clone)]
+enum ColorScheme {
+    Single(RGBColor),
+    Multiple(Vec<RGBColor>),
+    Named(String),
+    Map(HashMap<String, RGBColor>),
+}
+
+// Structs  ---------------------------------------------
+
+// Equivalent to shade_from_color
+// Note: This requires a color handling library
+#[derive(Debug, Clone, Copy)]
+struct RgbaColor {
+    r: f64,
+    g: f64,
+    b: f64,
+    a: f64,
+}
+
+struct Cartoon {
+    bottom_coord: Vector2<f64>,
+    top_coord: Vector2<f64>,
+    image_height: f64,
+    styled_polygons: Vec<StyledPolygon>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct StyledPolygon {
+    polygon: Polygon<f64>,
+    facecolor: String,
+    shade: f64,
+    edgecolor: String,
+    linewidth: f64,
+    zorder: i32,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PlaceholderData {
+    polygons: Vec<StyledPolygon>,
+    name: String,
+    width: f64,
+    height: f64,
+    start: Vector2<f64>,
+    end: Vector2<f64>,
+    bottom: Vector2<f64>,
+    top: Vector2<f64>,
+}
+
 #[derive(Clone)]
 pub struct Cartoon {
     name: String,
@@ -396,14 +445,6 @@ struct PlotOptions {
     output_path: String,
     dpi: u32,
     placeholder: Option<f64>,
-}
-
-#[derive(Clone)]
-enum ColorScheme {
-    Single(RGBColor),
-    Multiple(Vec<RGBColor>),
-    Named(String),
-    Map(HashMap<String, RGBColor>),
 }
 
 #[derive(Clone)]
@@ -581,35 +622,6 @@ impl ColorScheme {
     fn from(colors: Vec<String>) -> Self {
         ColorScheme::Multiple(colors)
     }
-}
-
-pub fn matrix_from_nglview(m: &[f64]) -> (Matrix3<f64>, Vector3<f64>) {
-    let camera_matrix = Matrix4::from_iterator(m.iter().cloned());
-    let rotation = camera_matrix.fixed_slice::<3, 3>(0, 0);
-    let translation = Vector3::new(
-        camera_matrix[(3, 0)],
-        camera_matrix[(3, 1)],
-        camera_matrix[(3, 2)],
-    );
-
-    // Normalize rotation matrix
-    let norms: Vec<f64> = (0..3).map(|i| rotation.row(i).norm()).collect();
-
-    let normalized_rotation = Matrix3::from_fn(|i, j| rotation[(i, j)] / norms[i]);
-
-    (normalized_rotation, translation)
-}
-
-pub fn matrix_to_nglview(m: &Matrix3<f64>) -> Vec<f64> {
-    let mut nglv_matrix = Matrix4::identity();
-    let transform = Matrix3::new(-1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0);
-
-    let rotated = m * transform;
-    nglv_matrix
-        .fixed_slice_mut::<3, 3>(0, 0)
-        .copy_from(&rotated);
-
-    nglv_matrix.as_slice().to_vec()
 }
 
 #[derive(Debug, Clone)]
