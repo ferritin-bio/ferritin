@@ -1,10 +1,9 @@
-use anyhow::{Context, Result};
-use geo::buffer::Buffer;
+// use anyhow::{Context, Result};
+// use geo::buffer::Buffer;
 use geo::simplify::Simplify;
-use geo::{LineString, MultiPolygon, Polygon};
-use nalgebra::{
-    Array1, Array2, Axis, DMatrix, Matrix2, Matrix3, Matrix4, Point2, Vector2, Vector3,
-};
+use geo::{LineString, Polygon};
+use nalgebra::{Matrix2, Matrix3, Matrix4, Point2, Point3, Vector2, Vector3};
+use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis};
 use plotters::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

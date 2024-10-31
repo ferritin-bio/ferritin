@@ -13,6 +13,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
 geo = "0.29.0"
+nalgebra = "0.33.2"
+ndarray = "0.16.1"
+plotters = "0.3.7"
 
 [dev.dependencies]
 ferritin-pymol = { path = "../ferritin-pymol" }
