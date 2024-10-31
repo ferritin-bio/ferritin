@@ -1,1 +1,1 @@
-mod featurizer.rs
+mod featureizer;

@@ -1,4 +1,4 @@
-//! Protein Featurizer for ProteinMPNN/LigadMPNN
+//! Protein Featurizer for ProteinMPNN/LignadMPNN
 //!
 //! Extract protein features for ligampnn
 //!
@@ -9,15 +9,52 @@
 //! - Chemical features like hydrophobicity, charge
 //! - Evolutionary features from MSA profiles
 
-use super::AtomCollection;
-use ndarray::{Array2, Array3};
+use candle_core::{Device, Result, Shape, Tensor};
+use ferritin_core::AtomCollection;
 
 /// Convert the AtomCollection into a struct that can be passed to a model.
 trait LMPNNFeatures {
-    fn featurize(&self) -> LigandMPNNDataDict;
+    fn featurize(&self) -> Result<LigandMPNNDataDict>;
+    fn to_numeric_backbone_atoms(&self) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
+    fn to_numeric_atom37(&self) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
 }
 
+// Create default
 impl LMPNNFeatures for AtomCollection {
+    fn to_numeric_atom37(&self) -> Result<Tensor> {
+        unimplemented!()
+    }
+    fn to_numeric_backbone_atoms(&self) -> Result<Tensor> {
+        let device = Device::Cpu;
+        let res_count = self.iter_residues_aminoacid().count();
+
+        // Create a vec to hold the data
+        let mut backbone_data = vec![0f32; res_count * 4 * 3];
+
+        for (res_idx, residue) in self.iter_residues_aminoacid().enumerate() {
+            let backbone_atoms = [
+                residue.find_atom_by_name("N"),
+                residue.find_atom_by_name("CA"),
+                residue.find_atom_by_name("C"),
+                residue.find_atom_by_name("O"),
+            ];
+
+            for (atom_idx, maybe_atom) in backbone_atoms.iter().enumerate() {
+                if let Some(atom) = maybe_atom {
+                    let [x, y, z] = atom.coords;
+                    let base_idx = (res_idx * 4 + atom_idx) * 3;
+                    backbone_data[base_idx] = *x;
+                    backbone_data[base_idx + 1] = *y;
+                    backbone_data[base_idx + 2] = *z;
+                }
+            }
+        }
+
+        // Create tensor with shape [residues, 4, 3]
+        Tensor::from_vec(backbone_data, (res_count, 4, 3), &device)
+    }
+
+    //    what are the 37 atoms????
     //
     //     let n = xyz_37.slice(s![.., atom_order("N"), ..]);
     //     let ca = xyz_37.slice(s![.., atom_order("CA"), ..]);
@@ -108,7 +145,7 @@ impl LMPNNFeatures for AtomCollection {
     //     Ok((output_dict, backbone, other_atoms, ca_icodes, water_atoms))
     // }
 
-    fn featurize(&self) -> LigandMPNNDataDict {
+    fn featurize(&self) -> Result<LigandMPNNDataDict> {
         let atoms = &self.get_coords();
 
         //    atoms = atoms.select("occupancy > 0")?;
@@ -129,8 +166,8 @@ impl LMPNNFeatures for AtomCollection {
         //         ca_dict.insert(code, i);
         //     }
 
-        let mut xyz_37 = Array3::<f32>::zeros((atoms.len(), 37, 3));
-        let mut xyz_37_m = Array2::<i32>::zeros((atoms.len(), 37));
+        // let mut xyz_37 = Array3::<f32>::zeros((atoms.len(), 37, 3));
+        // let mut xyz_37_m = Array2::<i32>::zeros((atoms.len(), 37));
 
         //     for atom_name in &atom_types {
         //         let (xyz, xyz_m) = get_aligned_coordinates(&protein_atoms, &ca_dict, atom_name)?;
@@ -143,7 +180,7 @@ impl LMPNNFeatures for AtomCollection {
         //     }
         //
         //
-        LigandMPNNDataDict {
+        Ok(LigandMPNNDataDict {
             x: Vec::new(),
             mask: Vec::new(),
             y: Vec::new(),
@@ -160,7 +197,7 @@ impl LMPNNFeatures for AtomCollection {
             bias_AA: None,
             bias_AA_per_residue: None,
             omit_AA_per_residue_multi: None,
-        }
+        })
     }
 }
 
@@ -173,8 +210,8 @@ impl LMPNNFeatures for AtomCollection {
 /// Y:             Tensor dimensions: torch.Size([406, 3])      #[B,L,num_context_atoms,3] - for ligandMPNN coords
 /// Y_t:           Tensor dimensions: torch.Size([406])         #[B,L,num_context_atoms] - element type
 /// Y_m:           Tensor dimensions: torch.Size([406])         #[B,L,num_context_atoms] - mask
-/// R_idx:         Tensor dimensions: torch.Size([93])
-/// chain_labels:  Tensor dimensions: torch.Size([93])
+/// R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
+/// chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
 /// chain_letters: NumPy array dimensions: (93,)
 /// mask_c:        Tensor dimensions: torch.Size([93])
 /// S:             Tensor dimensions: torch.Size([93])
@@ -289,6 +326,7 @@ define_residues! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pdbtbx;
 
     #[test]
     fn test_residue_codes() {
@@ -315,5 +353,13 @@ mod tests {
         let gly = Residue::GLY;
         let atoms = gly.atoms14();
         assert_eq!(atoms[4], AAAtom::Unknown);
+    }
+
+    #[test]
+    fn test_atom37() {
+        let (pdb, _) = pdbtbx::open("data/101m.cif").unwrap();
+        let ac = AtomCollection::from(&pdb);
+
+        let ac_backbone_tensor: Tensor = ac.to_numeric_backbone_atoms().expect("REASON");
     }
 }
