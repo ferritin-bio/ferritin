@@ -234,255 +234,6 @@ fn polygon_to_path(
     Path::new(transformed_vertices, codes)
 }
 
-fn plot_polygon(
-    poly: &Polygon<f64>,
-    style: PolygonStyle,
-    drawing_area: &DrawingArea<BitMapBackend, Cartesian2d<f64, f64>>,
-    transform_params: TransformParams,
-) -> Result<(), Box<dyn Error>> {
-    match poly {
-        poly if poly.area() > style.min_area => {
-            let path = polygon_to_path(
-                poly,
-                style.min_interior_length,
-                transform_params.translate_pre,
-                transform_params.translate_post,
-                transform_params.scale,
-                transform_params.flip,
-            );
-
-            drawing_area.draw(
-                &path
-                    .styled()
-                    .fill(style.facecolor)
-                    .stroke_width(style.linewidth)
-                    .stroke_color(style.edgecolor),
-            )?;
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-pub fn matrix_from_nglview(m: &[f64]) -> (Matrix3<f64>, Vector3<f64>) {
-    let camera_matrix = Matrix4::from_iterator(m.iter().cloned());
-    let rotation = camera_matrix.fixed_slice::<3, 3>(0, 0);
-    let translation = Vector3::new(
-        camera_matrix[(3, 0)],
-        camera_matrix[(3, 1)],
-        camera_matrix[(3, 2)],
-    );
-
-    // Normalize rotation matrix
-    let norms: Vec<f64> = (0..3).map(|i| rotation.row(i).norm()).collect();
-
-    let normalized_rotation = Matrix3::from_fn(|i, j| rotation[(i, j)] / norms[i]);
-
-    (normalized_rotation, translation)
-}
-
-pub fn matrix_to_nglview(m: &Matrix3<f64>) -> Vec<f64> {
-    let mut nglv_matrix = Matrix4::identity();
-    let transform = Matrix3::new(-1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0);
-
-    let rotated = m * transform;
-    nglv_matrix
-        .fixed_slice_mut::<3, 3>(0, 0)
-        .copy_from(&rotated);
-
-    nglv_matrix.as_slice().to_vec()
-}
-
-// ENUMS  ---------------------------------------------
-
-// Equivalent to ring_coding
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum PathCode {
-    MoveTo,
-    LineTo,
-}
-
-#[derive(Clone)]
-enum ColorScheme {
-    Single(RGBColor),
-    Multiple(Vec<RGBColor>),
-    Named(String),
-    Map(HashMap<String, RGBColor>),
-}
-
-// Structs  ---------------------------------------------
-
-// Equivalent to shade_from_color
-// Note: This requires a color handling library
-#[derive(Debug, Clone, Copy)]
-struct RgbaColor {
-    r: f64,
-    g: f64,
-    b: f64,
-    a: f64,
-}
-
-struct Cartoon {
-    bottom_coord: Vector2<f64>,
-    top_coord: Vector2<f64>,
-    image_height: f64,
-    styled_polygons: Vec<StyledPolygon>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct StyledPolygon {
-    polygon: Polygon<f64>,
-    facecolor: String,
-    shade: f64,
-    edgecolor: String,
-    linewidth: f64,
-    zorder: i32,
-}
-
-#[derive(Serialize, Deserialize)]
-struct PlaceholderData {
-    polygons: Vec<StyledPolygon>,
-    name: String,
-    width: f64,
-    height: f64,
-    start: Vector2<f64>,
-    end: Vector2<f64>,
-    bottom: Vector2<f64>,
-    top: Vector2<f64>,
-}
-
-#[derive(Clone)]
-pub struct Cartoon {
-    name: String,
-    polygons: Vec<(ResidueInfo, Polygon<f64>)>,
-    residues_flat: Vec<ResidueInfo>,
-    outline_by: String,
-    num_groups: usize,
-    groups: Vec<String>,
-    back_outline: Option<Polygon<f64>>,
-    group_outlines: Vec<Polygon<f64>>,
-    dimensions: Vector2<f64>,
-    styled_polygons: Vec<StyledPolygon>,
-    image_width: f64,
-    image_height: f64,
-}
-
-impl Cartoon {
-    pub fn new(
-        name: String,
-        polygons: Vec<(ResidueInfo, Polygon<f64>)>,
-        residues: Vec<ResidueInfo>,
-        outline_by: String,
-        back_outline: Option<Polygon<f64>>,
-        group_outlines: Vec<Polygon<f64>>,
-        num_groups: usize,
-        dimensions: Vector2<f64>,
-        groups: Vec<String>,
-    ) -> Self {
-        Cartoon {
-            name,
-            polygons,
-            residues_flat: residues,
-            outline_by,
-            num_groups,
-            groups,
-            back_outline,
-            group_outlines,
-            dimensions,
-            styled_polygons: Vec::new(),
-            image_width: dimensions.x,
-            image_height: dimensions.y,
-        }
-    }
-
-    pub fn plot(&mut self, plot_options: PlotOptions) -> Result<(), Box<dyn Error>> {
-        // Implementation of plot function
-        // This would be a long implementation similar to the Python version
-        // but using the plotters crate for rendering
-
-        // Create styled polygons list
-        self.styled_polygons = Vec::new();
-
-        // Create drawing area
-        let root = BitMapBackend::new(&plot_options.output_path, (800, 600)).into_drawing_area();
-        root.fill(&WHITE)?;
-
-        // Setup coordinate system
-        let mut chart = ChartBuilder::on(&root)
-            .build_cartesian_2d(0f64..self.dimensions.x, 0f64..self.dimensions.y)?;
-
-        // Plot background outline if exists
-        if let Some(back_outline) = &self.back_outline {
-            // Plot background outline
-        }
-
-        // Plot group outlines
-        for outline in &self.group_outlines {
-            // Plot group outlines
-        }
-
-        // Plot main polygons
-        for (info, polygon) in &self.polygons {
-            // Plot individual polygons with styling
-        }
-
-        Ok(())
-    }
-}
-
-// Supporting structures
-#[derive(Clone)]
-struct PlotOptions {
-    colors: Option<ColorScheme>,
-    axes_labels: bool,
-    color_residues_by: Option<String>,
-    edge_color: RGBColor,
-    line_width: f64,
-    depth_shading: bool,
-    depth_lines: bool,
-    shading_range: f64,
-    smoothing: bool,
-    output_path: String,
-    dpi: u32,
-    placeholder: Option<f64>,
-}
-
-#[derive(Clone)]
-struct StyledPolygon {
-    polygon: Polygon<f64>,
-    facecolor: RGBColor,
-    edgecolor: RGBColor,
-    linewidth: f64,
-    shade: Option<f64>,
-    base_fc: RGBColor,
-}
-
-#[derive(Debug, Clone)]
-pub struct CartoonArgs {
-    pub pdb: String,
-    pub chain: Vec<String>,
-    pub model: usize,
-    pub uniprot: Option<String>,
-    pub view: Option<String>,
-    pub outline_by: String,
-    pub depth: bool,
-    pub radius: f64,
-    pub only_annotated: bool,
-    pub only_ca: bool,
-    pub depth_contour_interval: f64,
-    pub back_outline: bool,
-    pub color_by: String,
-    pub colors: Vec<String>,
-    pub axes: bool,
-    pub dpi: u32,
-    pub save: String,
-    pub depth_shading: bool,
-    pub depth_lines: bool,
-    pub edge_color: String,
-    pub line_width: f64,
-    pub export: bool,
-}
-
 pub fn make_cartoon(args: CartoonArgs) -> Result<()> {
     // Convert chain argument to single string if necessary
     let chain = if args.chain.len() == 1 {
@@ -586,6 +337,267 @@ pub fn make_cartoon(args: CartoonArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn plot_polygon(
+    poly: &Polygon<f64>,
+    style: PolygonStyle,
+    drawing_area: &DrawingArea<BitMapBackend, Cartesian2d<f64, f64>>,
+    transform_params: TransformParams,
+) -> Result<(), Box<dyn Error>> {
+    match poly {
+        poly if poly.area() > style.min_area => {
+            let path = polygon_to_path(
+                poly,
+                style.min_interior_length,
+                transform_params.translate_pre,
+                transform_params.translate_post,
+                transform_params.scale,
+                transform_params.flip,
+            );
+
+            drawing_area.draw(
+                &path
+                    .styled()
+                    .fill(style.facecolor)
+                    .stroke_width(style.linewidth)
+                    .stroke_color(style.edgecolor),
+            )?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+pub fn matrix_from_nglview(m: &[f64]) -> (Matrix3<f64>, Vector3<f64>) {
+    let camera_matrix = Matrix4::from_iterator(m.iter().cloned());
+    let rotation = camera_matrix.fixed_slice::<3, 3>(0, 0);
+    let translation = Vector3::new(
+        camera_matrix[(3, 0)],
+        camera_matrix[(3, 1)],
+        camera_matrix[(3, 2)],
+    );
+
+    // Normalize rotation matrix
+    let norms: Vec<f64> = (0..3).map(|i| rotation.row(i).norm()).collect();
+
+    let normalized_rotation = Matrix3::from_fn(|i, j| rotation[(i, j)] / norms[i]);
+
+    (normalized_rotation, translation)
+}
+
+pub fn matrix_to_nglview(m: &Matrix3<f64>) -> Vec<f64> {
+    let mut nglv_matrix = Matrix4::identity();
+    let transform = Matrix3::new(-1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0);
+
+    let rotated = m * transform;
+    nglv_matrix
+        .fixed_slice_mut::<3, 3>(0, 0)
+        .copy_from(&rotated);
+
+    nglv_matrix.as_slice().to_vec()
+}
+
+// ENUMS  ---------------------------------------------
+
+#[derive(Clone)]
+enum ColorScheme {
+    Single(RGBColor),
+    Multiple(Vec<RGBColor>),
+    Named(String),
+    Map(HashMap<String, RGBColor>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PathCode {
+    MoveTo,
+    LineTo,
+}
+
+// Structs  ---------------------------------------------
+
+struct Cartoon {
+    bottom_coord: Vector2<f64>,
+    top_coord: Vector2<f64>,
+    image_height: f64,
+    styled_polygons: Vec<StyledPolygon>,
+}
+
+#[derive(Debug, Default)]
+pub struct Cartoon {
+    name: String,
+    polygons: Vec<(HashMap<String, String>, Polygon)>,
+    residues: Vec<ResidueInfo>,
+    outline_by: String,
+    back_outline: Option<Polygon>,
+    group_outlines: Vec<Polygon>,
+    num_groups: usize,
+    dimensions: HashMap<String, f64>,
+    groups: Vec<String>,
+}
+
+#[derive(Clone)]
+pub struct Cartoon {
+    name: String,
+    polygons: Vec<(ResidueInfo, Polygon<f64>)>,
+    residues_flat: Vec<ResidueInfo>,
+    outline_by: String,
+    num_groups: usize,
+    groups: Vec<String>,
+    back_outline: Option<Polygon<f64>>,
+    group_outlines: Vec<Polygon<f64>>,
+    dimensions: Vector2<f64>,
+    styled_polygons: Vec<StyledPolygon>,
+    image_width: f64,
+    image_height: f64,
+}
+
+impl Cartoon {
+    pub fn new(
+        name: String,
+        polygons: Vec<(ResidueInfo, Polygon<f64>)>,
+        residues: Vec<ResidueInfo>,
+        outline_by: String,
+        back_outline: Option<Polygon<f64>>,
+        group_outlines: Vec<Polygon<f64>>,
+        num_groups: usize,
+        dimensions: Vector2<f64>,
+        groups: Vec<String>,
+    ) -> Self {
+        Cartoon {
+            name,
+            polygons,
+            residues_flat: residues,
+            outline_by,
+            num_groups,
+            groups,
+            back_outline,
+            group_outlines,
+            dimensions,
+            styled_polygons: Vec::new(),
+            image_width: dimensions.x,
+            image_height: dimensions.y,
+        }
+    }
+
+    pub fn plot(&mut self, plot_options: PlotOptions) -> Result<(), Box<dyn Error>> {
+        // Implementation of plot function
+        // This would be a long implementation similar to the Python version
+        // but using the plotters crate for rendering
+
+        // Create styled polygons list
+        self.styled_polygons = Vec::new();
+
+        // Create drawing area
+        let root = BitMapBackend::new(&plot_options.output_path, (800, 600)).into_drawing_area();
+        root.fill(&WHITE)?;
+
+        // Setup coordinate system
+        let mut chart = ChartBuilder::on(&root)
+            .build_cartesian_2d(0f64..self.dimensions.x, 0f64..self.dimensions.y)?;
+
+        // Plot background outline if exists
+        if let Some(back_outline) = &self.back_outline {
+            // Plot background outline
+        }
+
+        // Plot group outlines
+        for outline in &self.group_outlines {
+            // Plot group outlines
+        }
+
+        // Plot main polygons
+        for (info, polygon) in &self.polygons {
+            // Plot individual polygons with styling
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CartoonArgs {
+    pub pdb: String,
+    pub chain: Vec<String>,
+    pub model: usize,
+    pub uniprot: Option<String>,
+    pub view: Option<String>,
+    pub outline_by: String,
+    pub depth: bool,
+    pub radius: f64,
+    pub only_annotated: bool,
+    pub only_ca: bool,
+    pub depth_contour_interval: f64,
+    pub back_outline: bool,
+    pub color_by: String,
+    pub colors: Vec<String>,
+    pub axes: bool,
+    pub dpi: u32,
+    pub save: String,
+    pub depth_shading: bool,
+    pub depth_lines: bool,
+    pub edge_color: String,
+    pub line_width: f64,
+    pub export: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+struct StyledPolygon {
+    polygon: Polygon<f64>,
+    facecolor: String,
+    shade: f64,
+    edgecolor: String,
+    linewidth: f64,
+    zorder: i32,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PlaceholderData {
+    polygons: Vec<StyledPolygon>,
+    name: String,
+    width: f64,
+    height: f64,
+    start: Vector2<f64>,
+    end: Vector2<f64>,
+    bottom: Vector2<f64>,
+    top: Vector2<f64>,
+}
+
+// Supporting structures
+#[derive(Clone)]
+struct PlotOptions {
+    colors: Option<ColorScheme>,
+    axes_labels: bool,
+    color_residues_by: Option<String>,
+    edge_color: RGBColor,
+    line_width: f64,
+    depth_shading: bool,
+    depth_lines: bool,
+    shading_range: f64,
+    smoothing: bool,
+    output_path: String,
+    dpi: u32,
+    placeholder: Option<f64>,
+}
+
+// Equivalent to shade_from_color
+// Note: This requires a color handling library
+#[derive(Debug, Clone, Copy)]
+struct RgbaColor {
+    r: f64,
+    g: f64,
+    b: f64,
+    a: f64,
+}
+
+#[derive(Clone)]
+struct StyledPolygon {
+    polygon: Polygon<f64>,
+    facecolor: RGBColor,
+    edgecolor: RGBColor,
+    linewidth: f64,
+    shade: Option<f64>,
+    base_fc: RGBColor,
 }
 
 #[derive(Debug)]
@@ -903,17 +915,4 @@ impl Structure {
         // Mock implementation
         Ok(())
     }
-}
-
-#[derive(Debug, Default)]
-pub struct Cartoon {
-    name: String,
-    polygons: Vec<(HashMap<String, String>, Polygon)>,
-    residues: Vec<ResidueInfo>,
-    outline_by: String,
-    back_outline: Option<Polygon>,
-    group_outlines: Vec<Polygon>,
-    num_groups: usize,
-    dimensions: HashMap<String, f64>,
-    groups: Vec<String>,
 }
