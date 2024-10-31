@@ -2,7 +2,7 @@
 // use geo::buffer::Buffer;
 use geo::simplify::Simplify;
 use geo::{LineString, Polygon};
-use nalgebra::{Matrix2, Matrix3, Matrix4, Point2, Point3, Vector2, Vector3};
+use nalgebra::{Matrix2, Matrix3, Matrix4, Point2, Vector2, Vector3};
 use ndarray::{s, Array1, Array2};
 use plotters::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -13,88 +13,6 @@ use std::path::Path;
 
 // Helper Fns  ---------------------------------------------
 //
-
-// Equivalent to scale_line_width
-fn scale_line_width(x: f64, lw_min: f64, lw_max: f64) -> f64 {
-    lw_max * (1.0 - x) + lw_min * x
-}
-
-fn shade_from_color(color: RgbaColor, x: f64, range: f64) -> (f64, f64, f64) {
-    let (h, l, s) = rgb_to_hls(color.r, color.g, color.b);
-    let l_dark = (l - range / 2.0).max(0.0);
-    let l_light = (l + range / 2.0).min(1.0);
-    let l_new = l_dark * (1.0 - x) + l_light * x;
-    hls_to_rgb(h, l_new, s)
-}
-
-// Helper functions for color conversion
-fn rgb_to_hls(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
-    // Implementation needed
-    unimplemented!()
-}
-
-fn hls_to_rgb(h: f64, l: f64, s: f64) -> (f64, f64, f64) {
-    // Implementation needed
-    unimplemented!()
-}
-
-// Equivalent to get_sequential_colors
-fn get_sequential_colors(colormap_name: &str, n: usize) -> Vec<RgbaColor> {
-    // This would need a proper color map implementation
-    // For now, returning a placeholder
-    vec![
-        RgbaColor {
-            r: 0.0,
-            g: 0.0,
-            b: 0.0,
-            a: 1.0
-        };
-        n
-    ]
-}
-
-// Equivalent to smooth_polygon
-fn smooth_polygon(polygon: &Polygon<f64>, level: i32) -> Polygon<f64> {
-    match level {
-        0 => polygon
-            .simplify(&0.3)
-            .buffer(-2.0, 16, 1)
-            .buffer(3.0, 16, 1),
-        1 => polygon
-            .simplify(&1.0)
-            .buffer(3.0, 16, 1)
-            .buffer(-5.0, 16, 1)
-            .buffer(4.0, 16, 1),
-        2 => polygon
-            .simplify(&3.0)
-            .buffer(5.0, 16, 1)
-            .buffer(-9.0, 16, 1)
-            .buffer(5.0, 16, 1),
-        3 => polygon.simplify(&0.1).buffer(2.0, 16, 1),
-        _ => polygon.clone(),
-    }
-}
-
-// Equivalent to scale_line_width
-fn scale_line_width(x: f64, lw_min: f64, lw_max: f64) -> f64 {
-    lw_max * (1.0 - x) + lw_min * x
-}
-
-fn ring_coding(coordinates: &[(f64, f64)]) -> Vec<PathCode> {
-    let mut codes = vec![PathCode::LineTo; coordinates.len()];
-    if !coordinates.is_empty() {
-        codes[0] = PathCode::MoveTo;
-    }
-    codes
-}
-
-fn placeholder_polygon(height: f64, buffer_width: f64, origin: Vector2<f64>) -> Polygon<f64> {
-    let line = LineString::from(vec![
-        (buffer_width + origin.x, origin.y),
-        (buffer_width + origin.x, height + origin.y),
-    ]);
-    line.buffer(buffer_width)
-}
 
 fn composite_polygon(
     cartoon: &mut Cartoon,
@@ -133,6 +51,26 @@ fn composite_polygon(
     cartoon.top_coord += Vector2::new(0.0, height_after);
 }
 
+fn hls_to_rgb(h: f64, l: f64, s: f64) -> (f64, f64, f64) {
+    // Implementation needed
+    unimplemented!()
+}
+
+// Equivalent to get_sequential_colors
+fn get_sequential_colors(colormap_name: &str, n: usize) -> Vec<RgbaColor> {
+    // This would need a proper color map implementation
+    // For now, returning a placeholder
+    vec![
+        RgbaColor {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0
+        };
+        n
+    ]
+}
+
 fn export_placeholder(height: f64, name: &str, fname: &str, buffer_width: f64) {
     let poly = placeholder_polygon(height, buffer_width, Vector2::new(buffer_width, 0.0));
     let styled_polygons = vec![StyledPolygon {
@@ -158,80 +96,6 @@ fn export_placeholder(height: f64, name: &str, fname: &str, buffer_width: f64) {
     let serialized = serde_json::to_string(&data).unwrap();
     let mut file = File::create(format!("{}.json", fname)).unwrap();
     file.write_all(serialized.as_bytes()).unwrap();
-}
-
-fn transform_coord(
-    xy: Vector2<f64>,
-    translate_post: Option<Vector2<f64>>,
-    translate_pre: Option<Vector2<f64>>,
-    scale: f64,
-    flip: bool,
-) -> Vector2<f64> {
-    let mut xy = xy;
-
-    if let Some(pre_trans) = translate_pre {
-        xy += pre_trans;
-    }
-
-    if flip {
-        let flip_matrix = Matrix2::new(-1.0, 0.0, 0.0, -1.0);
-        xy = flip_matrix * xy;
-    }
-
-    if let Some(post_trans) = translate_post {
-        xy += post_trans;
-    }
-
-    xy * scale
-}
-
-fn polygon_to_path(
-    polygon: &Polygon<f64>,
-    min_interior_length: f64,
-    translate_pre: Option<Vector2<f64>>,
-    translate_post: Option<Vector2<f64>>,
-    scale: f64,
-    flip: bool,
-) -> Path {
-    let filtered_interiors: Vec<_> = polygon
-        .interiors()
-        .iter()
-        .filter(|x| x.length() > min_interior_length)
-        .collect();
-
-    // Collect exterior vertices
-    let mut vertices = polygon.exterior().points().collect::<Vec<_>>();
-
-    // Add interior vertices
-    for interior in filtered_interiors.iter() {
-        vertices.extend(interior.points());
-    }
-
-    // Generate codes
-    let mut codes = vec![];
-    codes.extend(ring_coding(
-        &polygon.exterior().points().collect::<Vec<_>>(),
-    ));
-    for interior in filtered_interiors.iter() {
-        codes.extend(ring_coding(&interior.points().collect::<Vec<_>>()));
-    }
-
-    // Transform vertices
-    let transformed_vertices: Vec<Point2<f64>> = vertices
-        .iter()
-        .map(|v| {
-            let transformed = transform_coord(
-                Vector2::new(v.x(), v.y()),
-                translate_post,
-                translate_pre,
-                scale,
-                flip,
-            );
-            Point2::new(transformed.x, transformed.y)
-        })
-        .collect();
-
-    Path::new(transformed_vertices, codes)
 }
 
 pub fn make_cartoon(args: CartoonArgs) -> Result<()> {
@@ -339,6 +203,43 @@ pub fn make_cartoon(args: CartoonArgs) -> Result<()> {
     Ok(())
 }
 
+pub fn matrix_from_nglview(m: &[f64]) -> (Matrix3<f64>, Vector3<f64>) {
+    let camera_matrix = Matrix4::from_iterator(m.iter().cloned());
+    let rotation = camera_matrix.fixed_slice::<3, 3>(0, 0);
+    let translation = Vector3::new(
+        camera_matrix[(3, 0)],
+        camera_matrix[(3, 1)],
+        camera_matrix[(3, 2)],
+    );
+
+    // Normalize rotation matrix
+    let norms: Vec<f64> = (0..3).map(|i| rotation.row(i).norm()).collect();
+
+    let normalized_rotation = Matrix3::from_fn(|i, j| rotation[(i, j)] / norms[i]);
+
+    (normalized_rotation, translation)
+}
+
+pub fn matrix_to_nglview(m: &Matrix3<f64>) -> Vec<f64> {
+    let mut nglv_matrix = Matrix4::identity();
+    let transform = Matrix3::new(-1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0);
+
+    let rotated = m * transform;
+    nglv_matrix
+        .fixed_slice_mut::<3, 3>(0, 0)
+        .copy_from(&rotated);
+
+    nglv_matrix.as_slice().to_vec()
+}
+
+fn placeholder_polygon(height: f64, buffer_width: f64, origin: Vector2<f64>) -> Polygon<f64> {
+    let line = LineString::from(vec![
+        (buffer_width + origin.x, origin.y),
+        (buffer_width + origin.x, height + origin.y),
+    ]);
+    line.buffer(buffer_width)
+}
+
 fn plot_polygon(
     poly: &Polygon<f64>,
     style: PolygonStyle,
@@ -369,33 +270,127 @@ fn plot_polygon(
     Ok(())
 }
 
-pub fn matrix_from_nglview(m: &[f64]) -> (Matrix3<f64>, Vector3<f64>) {
-    let camera_matrix = Matrix4::from_iterator(m.iter().cloned());
-    let rotation = camera_matrix.fixed_slice::<3, 3>(0, 0);
-    let translation = Vector3::new(
-        camera_matrix[(3, 0)],
-        camera_matrix[(3, 1)],
-        camera_matrix[(3, 2)],
-    );
+fn polygon_to_path(
+    polygon: &Polygon<f64>,
+    min_interior_length: f64,
+    translate_pre: Option<Vector2<f64>>,
+    translate_post: Option<Vector2<f64>>,
+    scale: f64,
+    flip: bool,
+) -> Path {
+    let filtered_interiors: Vec<_> = polygon
+        .interiors()
+        .iter()
+        .filter(|x| x.length() > min_interior_length)
+        .collect();
 
-    // Normalize rotation matrix
-    let norms: Vec<f64> = (0..3).map(|i| rotation.row(i).norm()).collect();
+    // Collect exterior vertices
+    let mut vertices = polygon.exterior().points().collect::<Vec<_>>();
 
-    let normalized_rotation = Matrix3::from_fn(|i, j| rotation[(i, j)] / norms[i]);
+    // Add interior vertices
+    for interior in filtered_interiors.iter() {
+        vertices.extend(interior.points());
+    }
 
-    (normalized_rotation, translation)
+    // Generate codes
+    let mut codes = vec![];
+    codes.extend(ring_coding(
+        &polygon.exterior().points().collect::<Vec<_>>(),
+    ));
+    for interior in filtered_interiors.iter() {
+        codes.extend(ring_coding(&interior.points().collect::<Vec<_>>()));
+    }
+
+    // Transform vertices
+    let transformed_vertices: Vec<Point2<f64>> = vertices
+        .iter()
+        .map(|v| {
+            let transformed = transform_coord(
+                Vector2::new(v.x(), v.y()),
+                translate_post,
+                translate_pre,
+                scale,
+                flip,
+            );
+            Point2::new(transformed.x, transformed.y)
+        })
+        .collect();
+
+    Path::new(transformed_vertices, codes)
 }
 
-pub fn matrix_to_nglview(m: &Matrix3<f64>) -> Vec<f64> {
-    let mut nglv_matrix = Matrix4::identity();
-    let transform = Matrix3::new(-1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0);
+// Helper functions for color conversion
+fn rgb_to_hls(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
+    // Implementation needed
+    unimplemented!()
+}
 
-    let rotated = m * transform;
-    nglv_matrix
-        .fixed_slice_mut::<3, 3>(0, 0)
-        .copy_from(&rotated);
+fn ring_coding(coordinates: &[(f64, f64)]) -> Vec<PathCode> {
+    let mut codes = vec![PathCode::LineTo; coordinates.len()];
+    if !coordinates.is_empty() {
+        codes[0] = PathCode::MoveTo;
+    }
+    codes
+}
 
-    nglv_matrix.as_slice().to_vec()
+// Equivalent to scale_line_width
+fn scale_line_width(x: f64, lw_min: f64, lw_max: f64) -> f64 {
+    lw_max * (1.0 - x) + lw_min * x
+}
+
+fn shade_from_color(color: RgbaColor, x: f64, range: f64) -> (f64, f64, f64) {
+    let (h, l, s) = rgb_to_hls(color.r, color.g, color.b);
+    let l_dark = (l - range / 2.0).max(0.0);
+    let l_light = (l + range / 2.0).min(1.0);
+    let l_new = l_dark * (1.0 - x) + l_light * x;
+    hls_to_rgb(h, l_new, s)
+}
+
+// Equivalent to smooth_polygon
+fn smooth_polygon(polygon: &Polygon<f64>, level: i32) -> Polygon<f64> {
+    match level {
+        0 => polygon
+            .simplify(&0.3)
+            .buffer(-2.0, 16, 1)
+            .buffer(3.0, 16, 1),
+        1 => polygon
+            .simplify(&1.0)
+            .buffer(3.0, 16, 1)
+            .buffer(-5.0, 16, 1)
+            .buffer(4.0, 16, 1),
+        2 => polygon
+            .simplify(&3.0)
+            .buffer(5.0, 16, 1)
+            .buffer(-9.0, 16, 1)
+            .buffer(5.0, 16, 1),
+        3 => polygon.simplify(&0.1).buffer(2.0, 16, 1),
+        _ => polygon.clone(),
+    }
+}
+
+fn transform_coord(
+    xy: Vector2<f64>,
+    translate_post: Option<Vector2<f64>>,
+    translate_pre: Option<Vector2<f64>>,
+    scale: f64,
+    flip: bool,
+) -> Vector2<f64> {
+    let mut xy = xy;
+
+    if let Some(pre_trans) = translate_pre {
+        xy += pre_trans;
+    }
+
+    if flip {
+        let flip_matrix = Matrix2::new(-1.0, 0.0, 0.0, -1.0);
+        xy = flip_matrix * xy;
+    }
+
+    if let Some(post_trans) = translate_post {
+        xy += post_trans;
+    }
+
+    xy * scale
 }
 
 // ENUMS  ---------------------------------------------
@@ -416,30 +411,11 @@ enum PathCode {
 
 // Structs  ---------------------------------------------
 
-struct Cartoon {
-    bottom_coord: Vector2<f64>,
-    top_coord: Vector2<f64>,
-    image_height: f64,
-    styled_polygons: Vec<StyledPolygon>,
-}
-
-#[derive(Debug, Default)]
-pub struct Cartoon {
-    name: String,
-    polygons: Vec<(HashMap<String, String>, Polygon)>,
-    residues: Vec<ResidueInfo>,
-    outline_by: String,
-    back_outline: Option<Polygon>,
-    group_outlines: Vec<Polygon>,
-    num_groups: usize,
-    dimensions: HashMap<String, f64>,
-    groups: Vec<String>,
-}
-
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Cartoon {
     name: String,
     polygons: Vec<(ResidueInfo, Polygon<f64>)>,
+    residues: Vec<ResidueInfo>,
     residues_flat: Vec<ResidueInfo>,
     outline_by: String,
     num_groups: usize,
@@ -450,6 +426,8 @@ pub struct Cartoon {
     styled_polygons: Vec<StyledPolygon>,
     image_width: f64,
     image_height: f64,
+    bottom_coord: Vector2<f64>,
+    top_coord: Vector2<f64>,
 }
 
 impl Cartoon {
