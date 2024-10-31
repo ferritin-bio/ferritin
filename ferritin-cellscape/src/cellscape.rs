@@ -579,14 +579,16 @@ struct StyledPolygon {
 }
 
 #[derive(Debug)]
-struct OutlineParams {
-    outline_by: String,
-    depth: bool,
-    radius: f64,
-    only_annotated: bool,
-    only_ca: bool,
-    depth_contour_interval: f64,
-    back_outline: bool,
+pub struct OutlineOptions {
+    pub by: String,
+    pub depth: Option<String>,
+    pub depth_contour_interval: f64,
+    pub only_backbone: bool,
+    pub only_ca: bool,
+    pub only_annotated: bool,
+    pub radius: Option<f64>,
+    pub back_outline: bool,
+    pub align_transmembrane: bool,
 }
 
 impl Default for PlotOptions {
@@ -750,34 +752,42 @@ pub fn get_dimensions(xy: &Array2<f64>, end_window: usize) -> HashMap<String, Va
     dimensions
 }
 
+#[derive(Debug, Clone)]
+pub struct ResidueInfo {
+    chain: String,
+    id: i32,
+    amino_acid: String,
+    object: Residue,
+    coord: (usize, usize),
+    coord_ca: (usize, usize),
+    coord_backbone: Vec<usize>,
+    atoms: Vec<String>,
+    domain: Option<String>,
+    topology: Option<String>,
+    xyz: Option<Array2<f64>>,
+    polygon: Option<Polygon>,
+    depth: Option<f64>,
+}
+
 /// Structure class for loading coordinates and generating cartoons
 pub struct Structure {
     name: String,
-    structure: bio::structure::Structure,
+    structure: BioStructure,
     chains: Vec<String>,
     is_opm: bool,
     use_nglview: bool,
     view_matrix: Option<Matrix3<f64>>,
     residues: HashMap<String, HashMap<i32, ResidueInfo>>,
+    residues_flat: Vec<ResidueInfo>,
     sequence: HashMap<String, String>,
     coord: Array2<f64>,
+    rotated_coord: Option<Array2<f64>>,
     ca_atoms: Vec<usize>,
     backbone_atoms: Vec<usize>,
     uniprot: Option<UniProtRecord>,
     uniprot_xml: Option<String>,
     uniprot_overlap: Option<Array1<i32>>,
     uniprot_offset: Option<i32>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ResidueInfo {
-    chain: String,
-    id: i32,
-    amino_acid: String,
-    coord: (usize, usize),
-    coord_ca: (usize, usize),
-    coord_backbone: Vec<usize>,
-    atoms: Vec<String>,
 }
 
 impl Structure {
@@ -792,78 +802,364 @@ impl Structure {
         res_start: Option<i32>,
         res_end: Option<i32>,
     ) -> Result<Self> {
-        // Mock implementation
-        Ok(Structure {
-            name: name.unwrap_or(file).to_string(),
-            structure: BioStructure::default(),
-            chains: vec![],
+        // Parse file extension and choose appropriate parser
+        let file_path = Path::new(file);
+        let ext = file_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_lowercase())
+            .context("Invalid file extension")?;
+
+        let parser = match ext.as_str() {
+            "cif" | "mcif" => bio::structure::MMCIFParser::new(),
+            "pdb" | "ent" => bio::structure::PDBParser::new(),
+            _ => return Err(anyhow::anyhow!("File format not recognized!")),
+        };
+
+        let structure = parser.parse_file(file)?;
+        let model = structure.models().nth(model).context("Model not found")?;
+
+        // Handle chain selection
+        let all_chains: Vec<_> = model.chains().map(|c| c.id().to_string()).collect();
+
+        let chains = if chain.to_lowercase() == "all" {
+            all_chains.clone()
+        } else {
+            chain.chars().map(|c| c.to_string()).collect()
+        };
+
+        // Initialize data structures
+        let mut residues = HashMap::new();
+        let mut sequence = HashMap::new();
+        let mut coord = Vec::new();
+        let mut ca_atoms = Vec::new();
+        let mut backbone_atoms = Vec::new();
+        let mut all_atoms = 0;
+
+        // Process each chain
+        for chain_id in &chains {
+            sequence.insert(chain_id.clone(), String::new());
+            residues.insert(chain_id.clone(), HashMap::new());
+
+            if let Some(chain) = model.chain(chain_id) {
+                for residue in chain.residues() {
+                    let res_id = residue.number();
+
+                    // Skip HETATM records and non-standard amino acids
+                    if residue.het_flag() || !AMINO_ACID_3LETTER.contains_key(residue.name()) {
+                        continue;
+                    }
+
+                    let res_aa = AMINO_ACID_3LETTER[residue.name()].to_string();
+                    sequence.get_mut(chain_id).unwrap().push_str(&res_aa);
+
+                    let mut residue_atoms = 0;
+                    let mut these_atoms = Vec::new();
+                    let mut backbone_atoms_local = Vec::new();
+                    let mut this_ca_atom = 0;
+
+                    for atom in residue.atoms() {
+                        coord.push(atom.position().coords);
+                        these_atoms.push(atom.name().to_string());
+
+                        if atom.name() == "CA" {
+                            this_ca_atom = all_atoms;
+                            ca_atoms.push(all_atoms);
+                        }
+
+                        if ["CA", "N", "C", "O"].contains(&atom.name()) {
+                            backbone_atoms_local.push(all_atoms);
+                            backbone_atoms.push(all_atoms);
+                        }
+
+                        all_atoms += 1;
+                        residue_atoms += 1;
+                    }
+
+                    // Create ResidueInfo
+                    residues.get_mut(chain_id).unwrap().insert(
+                        res_id,
+                        ResidueInfo {
+                            chain: chain_id.clone(),
+                            id: res_id,
+                            amino_acid: res_aa,
+                            object: residue.clone(),
+                            coord: (all_atoms - residue_atoms, all_atoms),
+                            coord_ca: (this_ca_atom, this_ca_atom + 1),
+                            coord_backbone: backbone_atoms_local,
+                            atoms: these_atoms,
+                            domain: None,
+                            topology: None,
+                            xyz: None,
+                            polygon: None,
+                            depth: None,
+                        },
+                    );
+                }
+            }
+        }
+
+        let coord = Array2::from_shape_vec((all_atoms, 3), coord.into_iter().flatten().collect())?;
+
+        let mut structure = Structure {
+            name: name
+                .unwrap_or_else(|| file_path.file_name().unwrap().to_str().unwrap())
+                .to_string(),
+            structure,
+            chains,
             is_opm,
             use_nglview: view,
             view_matrix: None,
-            residues: HashMap::new(),
-            residues_flat: vec![],
-            sequence: HashMap::new(),
-            coord: Array2::zeros((0, 3)),
+            residues,
+            residues_flat: Vec::new(),
+            sequence,
+            coord,
             rotated_coord: None,
-            ca_atoms: vec![],
-            backbone_atoms: vec![],
+            ca_atoms,
+            backbone_atoms,
             uniprot: None,
             uniprot_xml: None,
             uniprot_overlap: None,
             uniprot_offset: None,
-        })
+        };
+
+        // Handle UniProt data if provided
+        if let Some(uniprot_id) = uniprot {
+            structure.process_uniprot(uniprot_id)?;
+        }
+
+        Ok(structure)
     }
 
-    pub fn load_pymol_view(&mut self, file: &str) -> Result<()> {
-        // Mock implementation
-        self.view_matrix = Some(Matrix3::identity());
-        Ok(())
-    }
+    // pub fn load_pymol_view(&mut self, file: &str) -> Result<()> {
+    //     // Mock implementation
+    //     self.view_matrix = Some(Matrix3::identity());
+    //     Ok(())
+    // }
 
-    pub fn load_chimera_view(&mut self, file: &str) -> Result<()> {
-        // Mock implementation
-        self.view_matrix = Some(Matrix3::identity());
-        Ok(())
-    }
+    // pub fn load_chimera_view(&mut self, file: &str) -> Result<()> {
+    //     // Mock implementation
+    //     self.view_matrix = Some(Matrix3::identity());
+    //     Ok(())
+    // }
 
-    pub fn save_view_matrix(&self, path: &str) -> Result<()> {
-        // Mock implementation
-        Ok(())
-    }
+    // pub fn save_view_matrix(&self, path: &str) -> Result<()> {
+    //     // Mock implementation
+    //     Ok(())
+    // }
 
-    pub fn load_view_matrix(&mut self, path: &str) -> Result<()> {
-        // Mock implementation
-        self.view_matrix = Some(Matrix3::identity());
-        Ok(())
-    }
+    // pub fn load_view_matrix(&mut self, path: &str) -> Result<()> {
+    //     // Mock implementation
+    //     self.view_matrix = Some(Matrix3::identity());
+    //     Ok(())
+    // }
 
-    pub fn set_view_matrix(&mut self, matrix: Matrix3<f64>) -> Result<()> {
-        // Mock implementation
-        self.view_matrix = Some(matrix);
-        Ok(())
-    }
+    // pub fn set_view_matrix(&mut self, matrix: Matrix3<f64>) -> Result<()> {
+    //     // Mock implementation
+    //     self.view_matrix = Some(matrix);
+    //     Ok(())
+    // }
 
-    pub fn align_view(&mut self, v1: Vector3<f64>, v2: Vector3<f64>) -> Result<()> {
-        // Mock implementation
-        self.view_matrix = Some(Matrix3::identity());
-        Ok(())
-    }
+    // pub fn align_view(&mut self, v1: Vector3<f64>, v2: Vector3<f64>) -> Result<()> {
+    //     // Mock implementation
+    //     self.view_matrix = Some(Matrix3::identity());
+    //     Ok(())
+    // }
 
-    pub fn align_view_nc(&mut self, n_atoms: usize, c_atoms: usize, flip: bool) -> Result<()> {
-        // Mock implementation
-        self.view_matrix = Some(Matrix3::identity());
-        Ok(())
-    }
+    // pub fn align_view_nc(&mut self, n_atoms: usize, c_atoms: usize, flip: bool) -> Result<()> {
+    //     // Mock implementation
+    //     self.view_matrix = Some(Matrix3::identity());
+    //     Ok(())
+    // }
 
-    pub fn auto_view(&mut self, n_atoms: usize, c_atoms: usize, flip: Option<bool>) -> Result<()> {
-        // Mock implementation
-        self.view_matrix = Some(Matrix3::identity());
-        Ok(())
-    }
+    // pub fn auto_view(&mut self, n_atoms: usize, c_atoms: usize, flip: Option<bool>) -> Result<()> {
+    //     // Mock implementation
+    //     self.view_matrix = Some(Matrix3::identity());
+    //     Ok(())
+    // }
 
     pub fn outline(&mut self, options: OutlineOptions) -> Result<Cartoon> {
-        // Mock implementation
-        Ok(Cartoon::default())
+        // Validate options
+        if !["all", "residue", "chain", "domain", "topology"].contains(&options.by.as_str()) {
+            return Err(anyhow::anyhow!("Invalid 'by' option"));
+        }
+        if let Some(depth) = &options.depth {
+            if !["flat", "contours"].contains(&depth.as_str()) {
+                return Err(anyhow::anyhow!("Invalid depth option"));
+            }
+        }
+
+        // Flatten residue hierarchy
+        self.residues_flat = self
+            .residues
+            .iter()
+            .flat_map(|(_, chain_residues)| chain_residues.values().cloned())
+            .collect();
+
+        // Update view matrix based on configuration
+        if self.is_opm {
+            self.set_view_matrix(Matrix3::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0))?;
+        } else if self.use_nglview {
+            self.update_view_matrix()?;
+        }
+
+        // Transform coordinates
+        self.apply_view_matrix()?;
+
+        // Recenter coordinates
+        let offset_x = self.rotated_coord.as_ref().unwrap().column(0).min()?;
+        let offset_y = if self.is_opm {
+            0.0
+        } else {
+            self.rotated_coord.as_ref().unwrap().column(1).min()?
+        };
+
+        if let Some(mut coords) = self.rotated_coord.take() {
+            coords -= Array2::from_shape_vec((1, 3), vec![offset_x, offset_y, 0.0])?;
+            self.rotated_coord = Some(coords);
+        }
+
+        // Handle transmembrane alignment if requested
+        if options.align_transmembrane && self.uniprot_xml.is_some() {
+            self.align_transmembrane()?;
+        }
+
+        // Initialize containers for results
+        let mut polygons = Vec::new();
+        let mut groups = HashMap::new();
+        self.group_outlines = Vec::new();
+
+        // Determine radius for atom representation
+        let radius = match (options.radius, options.only_ca, options.only_backbone) {
+            (Some(r), _, _) => r,
+            (None, true, _) => 5.0,
+            (None, _, true) => 4.0,
+            (None, _, _) => 1.5,
+        };
+
+        // Process based on grouping method
+        match options.by.as_str() {
+            "all" => self.outline_all(&mut polygons, radius, &options)?,
+            "residue" => self.outline_by_residue(&mut polygons, radius, &options)?,
+            _ => self.outline_by_group(&mut polygons, &mut groups, radius, &options)?,
+        }
+
+        // Create back outline if requested
+        if options.back_outline {
+            self.back_outline = Some(create_back_outline(&polygons)?);
+        } else {
+            self.back_outline = None;
+        }
+
+        // Create and return Cartoon
+        Ok(Cartoon::new(
+            self.name.clone(),
+            polygons,
+            self.residues_flat.clone(),
+            options.by,
+            self.back_outline.clone(),
+            self.group_outlines.clone(),
+            self.num_groups,
+            get_dimensions(&self.rotated_coord.as_ref().unwrap())?,
+            groups.keys().cloned().collect(),
+        ))
+    }
+
+    fn outline_all(
+        &mut self,
+        polygons: &mut Vec<(HashMap<String, String>, Polygon)>,
+        radius: f64,
+        options: &OutlineOptions,
+    ) -> Result<()> {
+        self.num_groups = 1;
+        let coords = if options.only_ca {
+            self.get_ca_coordinates()?
+        } else if options.only_backbone {
+            self.get_backbone_coordinates()?
+        } else {
+            self.rotated_coord.as_ref().unwrap().clone()
+        };
+
+        if let Some(depth) = &options.depth {
+            if depth == "contours" {
+                let slice_labels = get_z_slice_labels(&coords, options.depth_contour_interval);
+                let slices = split_on_labels(&coords, &slice_labels);
+
+                for slice in slices {
+                    let slice_depth = self.calculate_z_scale(slice.column(2).mean()?);
+                    let outline = create_union_outline(&slice, radius)?;
+                    let mut metadata = HashMap::new();
+                    metadata.insert("depth".to_string(), slice_depth.to_string());
+                    polygons.push((metadata, outline));
+                }
+            }
+        } else {
+            let outline = create_union_outline(&coords, radius)?;
+            polygons.push((HashMap::new(), outline));
+        }
+        Ok(())
+    }
+
+    fn outline_by_residue(
+        &mut self,
+        polygons: &mut Vec<(HashMap<String, String>, Polygon)>,
+        radius: f64,
+        options: &OutlineOptions,
+    ) -> Result<()> {
+        self.num_groups = 1;
+
+        // Sort residues by Z-depth
+        let mut residues = self.residues_flat.clone();
+        residues.sort_by(|a, b| {
+            let a_depth = a.xyz.as_ref().unwrap().column(2).mean().unwrap_or(0.0);
+            let b_depth = b.xyz.as_ref().unwrap().column(2).mean().unwrap_or(0.0);
+            a_depth.partial_cmp(&b_depth).unwrap()
+        });
+
+        for res in residues {
+            let outline = create_union_outline(&res.xyz.unwrap(), radius)?;
+            let depth = self.calculate_z_scale(res.xyz.unwrap().column(2).mean()?);
+            let mut res_info = res.clone();
+            res_info.polygon = Some(outline.clone());
+            res_info.depth = Some(depth);
+            polygons.push((res_info.to_metadata(), outline));
+        }
+        Ok(())
+    }
+
+    fn outline_by_group(
+        &mut self,
+        polygons: &mut Vec<(HashMap<String, String>, Polygon)>,
+        groups: &mut HashMap<String, Vec<ResidueInfo>>,
+        radius: f64,
+        options: &OutlineOptions,
+    ) -> Result<()> {
+        if options.by == "domain" || options.by == "topology" {
+            if self.uniprot_xml.is_none() {
+                return Err(anyhow::anyhow!(
+                    "UniProt data required for domain/topology grouping"
+                ));
+            }
+        }
+
+        // Group residues
+        for res in &self.residues_flat {
+            let group_key = res.get_group_key(&options.by)?;
+            groups
+                .entry(group_key)
+                .or_insert_with(Vec::new)
+                .push(res.clone());
+        }
+
+        self.num_groups = groups.len();
+
+        if let Some(depth) = &options.depth {
+            self.process_depth_grouped_outlines(polygons, groups, radius, options, depth)?;
+        } else {
+            self.process_simple_grouped_outlines(polygons, groups, radius, options)?;
+        }
+
+        Ok(())
     }
 
     // Private helper methods
@@ -877,20 +1173,20 @@ impl Structure {
         Ok(())
     }
 
-    fn update_view_matrix(&mut self) -> Result<()> {
-        // Mock implementation
-        self.view_matrix = Some(Matrix3::identity());
-        Ok(())
-    }
+    // fn update_view_matrix(&mut self) -> Result<()> {
+    //     // Mock implementation
+    //     self.view_matrix = Some(Matrix3::identity());
+    //     Ok(())
+    // }
 
-    fn apply_view_matrix(&mut self) -> Result<()> {
-        // Mock implementation
-        self.rotated_coord = Some(self.coord.clone());
-        Ok(())
-    }
+    // fn apply_view_matrix(&mut self) -> Result<()> {
+    //     // Mock implementation
+    //     self.rotated_coord = Some(self.coord.clone());
+    //     Ok(())
+    // }
 
-    fn set_nglview_orientation(&mut self, matrix: Matrix3<f64>) -> Result<()> {
-        // Mock implementation
-        Ok(())
-    }
+    // fn set_nglview_orientation(&mut self, matrix: Matrix3<f64>) -> Result<()> {
+    //     // Mock implementation
+    //     Ok(())
+    // }
 }
