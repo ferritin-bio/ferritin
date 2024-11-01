@@ -364,7 +364,8 @@ mod tests {
     #[test]
     fn test_all_atom37_tensor() {
         let device = Device::Cpu;
-        let (pdb, _) = pdbtbx::open("data/101m.cif").unwrap();
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
+        let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
         let ac = AtomCollection::from(&pdb);
         let ac_backbone_tensor: Tensor = ac.to_numeric_atom37(&device).expect("REASON");
         // 154 residues; N/CA/C/O; positions
@@ -431,18 +432,7 @@ mod tests {
             ("CZ3", (0, 34, ..), vec![0.0, 0.0, 0.0]),
             ("NZ", (0, 35, ..), vec![0.0, 0.0, 0.0]),
             ("OXT", (0, 36, ..), vec![0.0, 0.0, 0.0]),
-            // Valine - AA01
-            // ("N", (1, 0, ..), vec![25.964, 11.453, -10.903]),
-            // ("CA", (1, 1, ..), vec![27.263, 11.924, -11.359]),
-            // ("C", (1, 2, ..), vec![27.392, 13.428, -11.115]),
-            // ("O", (1, 3, ..), vec![26.443, 14.184, -11.327]),
-            // Glycing - AAlast
-            // ("N", (153, 0, ..), vec![23.474, -3.227, 5.994]),
-            // ("CA", (153, 1, ..), vec![22.818, -2.798, 7.211]),
-            // ("C", (153, 2, ..), vec![22.695, -1.282, 7.219]),
-            // ("O", (153, 3, ..), vec![21.870, -0.745, 7.992]),
         ];
-
         for (atom_name, (i, j, k), expected) in allatom_coords {
             let actual: Vec<f32> = ac_backbone_tensor.i((i, j, k)).unwrap().to_vec1().unwrap();
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
@@ -452,12 +442,15 @@ mod tests {
     #[test]
     fn test_ligand_tensor() {
         let device = Device::Cpu;
-        let (pdb, _) = pdbtbx::open("data/101m.cif").unwrap();
+
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
+        let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
         let ac = AtomCollection::from(&pdb);
+
         let (ligand_coords, ligand_elements, _) =
             ac.to_numeric_ligand_atoms(&device).expect("REASON");
 
-        // 154 residues; N/CA/C/O; positions
+        // 54 residues; N/CA/C/O; positions
         assert_eq!(ligand_coords.dims(), &[54, 3]);
 
         // Check my residue coords in the Tensor
@@ -481,7 +474,6 @@ mod tests {
         }
 
         // Now check the elements
-
         let elements: Vec<&str> = ligand_elements
             .to_vec1::<f32>()
             .unwrap()
