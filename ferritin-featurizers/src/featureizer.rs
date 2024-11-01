@@ -122,7 +122,7 @@ impl LMPNNFeatures for AtomCollection {
 
     fn featurize(&self, device: &Device) -> Result<LigandMPNNDataDict> {
         let x_37 = self.to_numeric_atom37(device)?;
-        let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device);
+        let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
         let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
 
         // let mut xyz_37 = Array3::<f32>::zeros((atoms.len(), 37, 3));
@@ -323,9 +323,10 @@ mod tests {
 
     #[test]
     fn test_atom_backbone_tensor() {
+        let device = Device::Cpu;
         let (pdb, _) = pdbtbx::open("data/101m.cif").unwrap();
         let ac = AtomCollection::from(&pdb);
-        let ac_backbone_tensor: Tensor = ac.to_numeric_backbone_atoms().expect("REASON");
+        let ac_backbone_tensor: Tensor = ac.to_numeric_backbone_atoms(&device).expect("REASON");
         // 154 residues; N/CA/C/O; positions
         assert_eq!(ac_backbone_tensor.dims(), &[154, 4, 3]);
 
@@ -359,10 +360,11 @@ mod tests {
     }
 
     #[test]
-    fn test_all_atom_tensor() {
+    fn test_all_atom37_tensor() {
+        let device = Device::Cpu;
         let (pdb, _) = pdbtbx::open("data/101m.cif").unwrap();
         let ac = AtomCollection::from(&pdb);
-        let ac_backbone_tensor: Tensor = ac.to_numeric_atom37().expect("REASON");
+        let ac_backbone_tensor: Tensor = ac.to_numeric_atom37(&device).expect("REASON");
         // 154 residues; N/CA/C/O; positions
         assert_eq!(ac_backbone_tensor.dims(), &[154, 37, 3]);
 
@@ -443,5 +445,51 @@ mod tests {
             let actual: Vec<f32> = ac_backbone_tensor.i((i, j, k)).unwrap().to_vec1().unwrap();
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
         }
+    }
+
+    #[test]
+    fn test_ligand_tensor() {
+        let device = Device::Cpu;
+        let (pdb, _) = pdbtbx::open("data/101m.cif").unwrap();
+        let ac = AtomCollection::from(&pdb);
+        let (ligand_coords, ligand_elements, ligand_mask) =
+            ac.to_numeric_ligand_atoms(&device).expect("REASON");
+
+        // 154 residues; N/CA/C/O; positions
+        assert_eq!(ligand_coords.dims(), &[54, 3]);
+
+        // Check my residue coords in the Tensor
+        //
+        // HETATM 1222 S  S   . SO4 B 2 .   ? 30.746 18.706  28.896  1.00 47.98  ? 157 SO4 A S   1
+        // HETATM 1223 O  O1  . SO4 B 2 .   ? 30.697 20.077  28.620  1.00 48.06  ? 157 SO4 A O1  1
+        // HETATM 1224 O  O2  . SO4 B 2 .   ? 31.104 18.021  27.725  1.00 47.52  ? 157 SO4 A O2  1
+        // HETATM 1225 O  O3  . SO4 B 2 .   ? 29.468 18.179  29.331  1.00 47.79  ? 157 SO4 A O3  1
+        // HETATM 1226 O  O4  . SO4 B 2 .   ? 31.722 18.578  29.881  1.00 47.85  ? 157 SO4 A O4  1
+        let allatom_coords = [
+            ("S", (0, ..), vec![30.746, 18.706, 28.896]),
+            ("O1", (1, ..), vec![30.697, 20.077, 28.620]),
+            ("O2", (2, ..), vec![31.104, 18.021, 27.725]),
+            ("O3", (3, ..), vec![29.468, 18.179, 29.331]),
+            ("O4", (4, ..), vec![31.722, 18.578, 29.881]),
+        ];
+
+        for (atom_name, (i, j), expected) in allatom_coords {
+            let actual: Vec<f32> = ligand_coords.i((i, j)).unwrap().to_vec1().unwrap();
+            assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
+        }
+
+        // Now check the elements
+
+        let elements: Vec<&str> = ligand_elements
+            .to_vec1::<f32>()
+            .unwrap()
+            .into_iter()
+            .map(|elem| Element::new(elem as usize).unwrap().symbol())
+            .collect();
+
+        assert_eq!(elements[0], "S");
+        assert_eq!(elements[1], "O");
+        assert_eq!(elements[2], "O");
+        assert_eq!(elements[3], "O");
     }
 }
