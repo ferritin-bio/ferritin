@@ -27,6 +27,19 @@ fn is_heavy_atom(element: &Element) -> bool {
     !matches!(element, Element::H | Element::He)
 }
 
+fn create_backbone_mask_37(xyz_37: &Tensor) -> Result<Tensor> {
+    // Get backbone atoms
+    let backbone_indices = Tensor::new(&[0i64, 1, 2, 4], xyz_37.device())?;
+    let backbone_selection = xyz_37.index_select(&backbone_indices, 1)?; // [154, 4, 3]
+
+    // Check if coordinates exist (sum over xyz dimensions)
+    let exists = backbone_selection.sum(2)?; // [154, 4]
+
+    // All 4 atoms must exist
+    let all_exist = exists.sum_keepdim(1)?; // [154, 1]
+
+    Ok(all_exist)
+}
 // Create default
 impl LMPNNFeatures for AtomCollection {
     // create numeric Tensor of shape [<length>, 37, 3]
@@ -120,6 +133,7 @@ impl LMPNNFeatures for AtomCollection {
         Ok((y, y_t, y_m))
     }
 
+    // equivalent to protien MPNN's parse_PDB
     fn featurize(&self, device: &Device) -> Result<LigandMPNNDataDict> {
         let x_37 = self.to_numeric_atom37(device)?;
         let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
@@ -291,7 +305,7 @@ define_residues! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candle_core::IndexOp;
+    use candle_core::{IndexOp, Shape};
     use ferritin_test_data::TestFile;
     use pdbtbx;
 
@@ -442,11 +456,9 @@ mod tests {
     #[test]
     fn test_ligand_tensor() {
         let device = Device::Cpu;
-
         let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
         let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
         let ac = AtomCollection::from(&pdb);
-
         let (ligand_coords, ligand_elements, _) =
             ac.to_numeric_ligand_atoms(&device).expect("REASON");
 
@@ -485,5 +497,20 @@ mod tests {
         assert_eq!(elements[1], "O");
         assert_eq!(elements[2], "O");
         assert_eq!(elements[3], "O");
+    }
+
+    #[test]
+    fn test_backbone_tensor() {
+        let device = Device::Cpu;
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
+        let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
+        let ac = AtomCollection::from(&pdb);
+        let xyz_37 = ac
+            .to_numeric_atom37(&device)
+            .expect("XYZ creation for all-atoms");
+        assert_eq!(xyz_37.dims(), [154, 37, 3]);
+
+        let xyz_m = create_backbone_mask_37(&xyz_37).expect("masking procedure should work");
+        assert_eq!(xyz_m.dims(), &[154, 1]);
     }
 }
