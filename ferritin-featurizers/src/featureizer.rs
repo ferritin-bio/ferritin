@@ -10,12 +10,12 @@
 //! - Evolutionary features from MSA profiles
 
 use candle_core::{Device, Result, Tensor};
-use ferritin_core::AtomCollection;
+use ferritin_core::{AtomCollection, is_amino_acid};
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 
 /// Convert the AtomCollection into a struct that can be passed to a model.
 trait LMPNNFeatures {
-    fn featurize(&self) -> Result<LigandMPNNDataDict>;
+    fn featurize(&self, device: Device) -> Result<LigandMPNNDataDict>;
     fn to_numeric_backbone_atoms(&self, device: Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
     fn to_numeric_atom37(&self, device: Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
     fn to_numeric_non_protein_atoms(&self, device: Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
@@ -81,30 +81,37 @@ impl LMPNNFeatures for AtomCollection {
         //           y_t = elements
         //           y_m = mask
 
-        let res_count = self.iter_residues_aminoacid().count();
-        let mut backbone_data = vec![0f32; res_count * 4 * 3];
 
-        for residue in self.iter_residues_aminoacid() {
-            let resid = residue.res_id as usize;
-            let backbone_atoms = [
-                residue.find_atom_by_name("N"),
-                residue.find_atom_by_name("CA"),
-                residue.find_atom_by_name("C"),
-                residue.find_atom_by_name("O"),
-            ];
-
-            for (atom_idx, maybe_atom) in backbone_atoms.iter().enumerate() {
-                if let Some(atom) = maybe_atom {
-                    let [x, y, z] = atom.coords;
-                    let base_idx = (resid * 4 + atom_idx) * 3;
-                    backbone_data[base_idx] = *x;
-                    backbone_data[base_idx + 1] = *y;
-                    backbone_data[base_idx + 2] = *z;
-                }
+        let non_protein_on_water = self.iter_residues_all().filter(
+            |residue| {
+                let res_name = &residue.res_name;
+                !self.iter_residues_aminoacid()
             }
-        }
-        // Create tensor with shape [residues, 4, 3]
-        Tensor::from_vec(backbone_data, (res_count, 4, 3), &device)
+        )
+
+
+
+        //     let resid = residue.res_id as usize;
+        //     let backbone_atoms = [
+        //         residue.find_atom_by_name("N"),
+        //         residue.find_atom_by_name("CA"),
+        //         residue.find_atom_by_name("C"),
+        //         residue.find_atom_by_name("O"),
+        //     ];
+
+        //     for (atom_idx, maybe_atom) in backbone_atoms.iter().enumerate() {
+        //         if let Some(atom) = maybe_atom {
+        //             let [x, y, z] = atom.coords;
+        //             let base_idx = (resid * 4 + atom_idx) * 3;
+        //             backbone_data[base_idx] = *x;
+        //             backbone_data[base_idx + 1] = *y;
+        //             backbone_data[base_idx + 2] = *z;
+        //         }
+        //     }
+        // }
+        // // Create tensor with shape [residues, 4, 3]
+        // Tensor::from_vec(backbone_data, (res_count, 4, 3), &device)
+        (Tensor, Tensor, Tensor)
     }
 
     //    what are the 37 atoms????
@@ -198,8 +205,11 @@ impl LMPNNFeatures for AtomCollection {
     //     Ok((output_dict, backbone, other_atoms, ca_icodes, water_atoms))
     // }
 
-    fn featurize(&self) -> Result<LigandMPNNDataDict> {
+    fn featurize(&self, device: Device) -> Result<LigandMPNNDataDict> {
         let atoms = &self.get_coords();
+
+        let x = self.to_numeric_atom37(device);
+        let (y, y_t, y_m) = &self.to_numeric_non_protein_atoms(device);
 
         //    atoms = atoms.select("occupancy > 0")?;
 
