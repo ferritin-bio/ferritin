@@ -188,11 +188,11 @@ impl LMPNNFeatures for AtomCollection {
 ///
 pub struct LigandMPNNDataDict {
     //
-    x: Vec<f64>,    // Tensor,
-    mask: Vec<f64>, // Tensor,
-    y: Vec<Vec<f64>>,
-    y_t: Vec<f64>,          // Tensor,
-    y_m: Vec<f64>,          // Tensor,
+    x: Tensor,
+    mask: Tensor,
+    y: Tensor,
+    y_t: Tensor,
+    y_m: Tensor,
     r_idx: Vec<f64>,        // Tensor,
     chain_labels: Vec<f64>, // Tensor,
     chain_letters: Vec<String>,
