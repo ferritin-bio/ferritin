@@ -18,19 +18,18 @@ trait LMPNNFeatures {
     fn featurize(&self) -> Result<LigandMPNNDataDict>;
     fn to_numeric_backbone_atoms(&self) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
     fn to_numeric_atom37(&self) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
+    fn to_numeric_non_protein_atoms(&self) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
 }
 
 // Create default
 impl LMPNNFeatures for AtomCollection {
+    // create numeric Tensor of shape [<length>, 37, 3]
     fn to_numeric_atom37(&self) -> Result<Tensor> {
         let device = Device::Cpu;
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
-
         for residue in self.iter_residues_aminoacid() {
             let resid = residue.res_id as usize;
-
-            // Use the auto-generated iterator and string conversion
             for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
                 if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
                     let [x, y, z] = atom.coords;
@@ -41,10 +40,10 @@ impl LMPNNFeatures for AtomCollection {
                 }
             }
         }
-
         // Create tensor with shape [residues, 37, 3]
         Tensor::from_vec(atom37_data, (res_count, 37, 3), &device)
     }
+    // // create numeric Tensor of shape [<length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self) -> Result<Tensor> {
         let device = Device::Cpu;
         let res_count = self.iter_residues_aminoacid().count();
@@ -70,6 +69,43 @@ impl LMPNNFeatures for AtomCollection {
             }
         }
 
+        // Create tensor with shape [residues, 4, 3]
+        Tensor::from_vec(backbone_data, (res_count, 4, 3), &device)
+    }
+    // create numeric Tensor of shape [< unknow-until-parse >, 4, 3] where the 4 is N/CA/C/O
+    fn to_numeric_non_protein_atoms(&self) -> Result<(Tensor, Tensor, Tensor)> {
+        // from the AtomCollection:
+        //
+        // 1. Filter non-protein and water
+        // 2. Filter out H, and HE
+        // 3. convert to 3 tensors:
+        //           y == coords
+        //           y_t = elements
+        //           y_m = mask
+
+        let device = Device::Cpu;
+        let res_count = self.iter_residues_aminoacid().count();
+        let mut backbone_data = vec![0f32; res_count * 4 * 3];
+
+        for residue in self.iter_residues_aminoacid() {
+            let resid = residue.res_id as usize;
+            let backbone_atoms = [
+                residue.find_atom_by_name("N"),
+                residue.find_atom_by_name("CA"),
+                residue.find_atom_by_name("C"),
+                residue.find_atom_by_name("O"),
+            ];
+
+            for (atom_idx, maybe_atom) in backbone_atoms.iter().enumerate() {
+                if let Some(atom) = maybe_atom {
+                    let [x, y, z] = atom.coords;
+                    let base_idx = (resid * 4 + atom_idx) * 3;
+                    backbone_data[base_idx] = *x;
+                    backbone_data[base_idx + 1] = *y;
+                    backbone_data[base_idx + 2] = *z;
+                }
+            }
+        }
         // Create tensor with shape [residues, 4, 3]
         Tensor::from_vec(backbone_data, (res_count, 4, 3), &device)
     }
