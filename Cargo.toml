@@ -5,6 +5,7 @@ members = [
     "ferritin-pymol",
     "ferritin-bevy",
     "ferritin-molviewspec",
+    "ferritin-featurizers",
 ]
 resolver = "2"
 
