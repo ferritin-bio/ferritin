@@ -452,7 +452,7 @@ mod tests {
         let device = Device::Cpu;
         let (pdb, _) = pdbtbx::open("data/101m.cif").unwrap();
         let ac = AtomCollection::from(&pdb);
-        let (ligand_coords, ligand_elements, ligand_mask) =
+        let (ligand_coords, ligand_elements, _) =
             ac.to_numeric_ligand_atoms(&device).expect("REASON");
 
         // 154 residues; N/CA/C/O; positions
