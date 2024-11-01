@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "ferritin-core",
+    "ferritin-cellscape",
     "ferritin-pymol",
     "ferritin-bevy",
     "ferritin-molviewspec",
