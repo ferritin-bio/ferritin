@@ -8,8 +8,11 @@ description.workspace = true
 
 [dependencies]
 ferritin-core = { path = "../ferritin-core" }
-serde = { workspace = true }
 pdbtbx.workspace = true
 itertools.workspace = true
 candle-core = "0.7.2"
 strum = { version = "0.26", features = ["derive"] }
+
+
+[dev-dependencies]
+ferritin-test-data = { path = "../ferritin-test-data" }

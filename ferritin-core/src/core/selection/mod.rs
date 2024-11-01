@@ -4,4 +4,4 @@ mod view;
 
 pub use selection::Selection;
 pub use selector::AtomSelector;
-pub use view::{AtomIterator, AtomRef, AtomView};
+pub use view::AtomView;

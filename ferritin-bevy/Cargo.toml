@@ -11,3 +11,6 @@ bevy = "0.14"
 bon = "2.3.0"
 ferritin-core = { path = "../ferritin-core" }
 pdbtbx.workspace = true
+
+[dev-dependencies]
+ferritin-test-data = { path = "../ferritin-test-data" }

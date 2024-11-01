@@ -2,7 +2,7 @@ use ferritin_core::AtomCollection;
 use geo::{BooleanOps, Coord, LineString, MultiPolygon, Point, Polygon};
 
 use std::f64::consts::PI;
-use svg::node::element::{Circle, Path};
+use svg::node::element::Path;
 use svg::Document;
 
 // Traits -------------------------------------------------------------------------------------

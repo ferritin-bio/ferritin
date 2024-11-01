@@ -19,9 +19,6 @@
 
 use lazy_static::lazy_static;
 use std::collections::{HashMap, HashSet};
-use std::fs::read_to_string;
-use std::path::PathBuf;
-
 #[rustfmt::skip]
 pub fn default_distance_range(a: &str, b: &str) -> (f32, f32) {
     match (a, b) {

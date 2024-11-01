@@ -10,11 +10,9 @@ description.workspace = true
 ferritin-core = { path = "../ferritin-core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-urlencoding = { workspace = true }
 pdbtbx = { workspace = true }
 geo = "0.29.0"
 nalgebra = "0.33.2"
 ndarray = "0.16.1"
 plotters = "0.3.7"
 svg = "0.18.0"
-rand = "0.8.5"

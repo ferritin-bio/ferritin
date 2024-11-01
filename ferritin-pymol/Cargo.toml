@@ -18,3 +18,6 @@ once_cell = { workspace = true }
 bitflags = { workspace = true }
 pdbtbx.workspace = true
 itertools.workspace = true
+
+[dev-dependencies]
+ferritin-test-data = { path = "../ferritin-test-data" }
