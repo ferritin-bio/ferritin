@@ -22,12 +22,14 @@ impl TestFile {
         }
     }
 
-    pub fn to_tempfile(&self) -> std::io::Result<NamedTempFile> {
+    pub fn create_temp(&self) -> std::io::Result<(String, NamedTempFile)> {
         let temp = Builder::new()
             .suffix(&format!(".{}", self.suffix))
             .tempfile()?;
 
         fs::write(&temp, self.filebinary)?;
-        Ok(temp)
+        let path = temp.path().to_string_lossy().into_owned();
+
+        Ok((path, temp))
     }
 }
