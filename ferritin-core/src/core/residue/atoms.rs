@@ -96,13 +96,12 @@ impl<'a> ResidueAtoms<'a> {
 mod tests {
     use super::*;
     use crate::core::AtomCollection;
-    use ferritin_test_data::PROTEIN_EXAMPLE_01;
-    use std::str;
+    use ferritin_test_data::TestFile;
 
     #[test]
     fn test_iteration() {
-        let pdb_str = str::from_utf8(PROTEIN_EXAMPLE_01).unwrap();
-        let (pdb, _) = pdbtbx::open(pdb_str).unwrap();
+        let (prot_file, _temp) = TestFile::pymol_01().create_temp().unwrap();
+        let (pdb, _) = pdbtbx::open(prot_file).unwrap();
         let ac = AtomCollection::from(&pdb);
 
         assert_eq!(ac.iter_residues_aminoacid().count(), 154);
