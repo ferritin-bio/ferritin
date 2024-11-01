@@ -287,7 +287,6 @@ impl AtomCollection {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::test_utilities::get_atom_container;
     use crate::AtomCollection;
     use pdbtbx::Element;
 

@@ -88,12 +88,11 @@ impl<'a> FromIterator<ResidueAtoms<'a>> for AtomCollection {
 mod tests {
     use super::*;
     use crate::core::info::constants::is_amino_acid;
-    use crate::core::test_utilities::get_atom_container;
 
     #[test]
     fn test_collect_amino_acids() {
         // the collect creates a new AC. Improtant if we want to make new copies.
-        let ac: AtomCollection = get_atom_container();
+        // let ac: AtomCollection = get_atom_container();
         let amino_acids: AtomCollection = ac.iter_residues_aminoacid().collect();
         assert!(amino_acids.get_size() < ac.get_size());
 
