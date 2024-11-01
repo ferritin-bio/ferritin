@@ -16,16 +16,15 @@ use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 /// Convert the AtomCollection into a struct that can be passed to a model.
 trait LMPNNFeatures {
     fn featurize(&self) -> Result<LigandMPNNDataDict>;
-    fn to_numeric_backbone_atoms(&self) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
-    fn to_numeric_atom37(&self) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
-    fn to_numeric_non_protein_atoms(&self) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
+    fn to_numeric_backbone_atoms(&self, device: Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
+    fn to_numeric_atom37(&self, device: Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
+    fn to_numeric_non_protein_atoms(&self, device: Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
 }
 
 // Create default
 impl LMPNNFeatures for AtomCollection {
     // create numeric Tensor of shape [<length>, 37, 3]
-    fn to_numeric_atom37(&self) -> Result<Tensor> {
-        let device = Device::Cpu;
+    fn to_numeric_atom37(&self, device: Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
         for residue in self.iter_residues_aminoacid() {
@@ -44,8 +43,7 @@ impl LMPNNFeatures for AtomCollection {
         Tensor::from_vec(atom37_data, (res_count, 37, 3), &device)
     }
     // // create numeric Tensor of shape [<length>, 4, 3] where the 4 is N/CA/C/O
-    fn to_numeric_backbone_atoms(&self) -> Result<Tensor> {
-        let device = Device::Cpu;
+    fn to_numeric_backbone_atoms(&self, device: Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
 
@@ -73,7 +71,7 @@ impl LMPNNFeatures for AtomCollection {
         Tensor::from_vec(backbone_data, (res_count, 4, 3), &device)
     }
     // create numeric Tensor of shape [< unknow-until-parse >, 4, 3] where the 4 is N/CA/C/O
-    fn to_numeric_non_protein_atoms(&self) -> Result<(Tensor, Tensor, Tensor)> {
+    fn to_numeric_non_protein_atoms(&self, device: Device) -> Result<(Tensor, Tensor, Tensor)> {
         // from the AtomCollection:
         //
         // 1. Filter non-protein and water
@@ -83,7 +81,6 @@ impl LMPNNFeatures for AtomCollection {
         //           y_t = elements
         //           y_m = mask
 
-        let device = Device::Cpu;
         let res_count = self.iter_residues_aminoacid().count();
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
 
