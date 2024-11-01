@@ -12,3 +12,6 @@ pdbtbx.workspace = true
 itertools.workspace = true
 lazy_static = "1.5.0"
 ndarray = "0.16.1"
+
+[dev-dependencies]
+ferritin-test-data = { path = "../ferritin-test-data" }
