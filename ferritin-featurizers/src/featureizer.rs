@@ -9,22 +9,28 @@
 //! - Chemical features like hydrophobicity, charge
 //! - Evolutionary features from MSA profiles
 
-use candle_core::{Device, Result, Tensor};
-use ferritin_core::{AtomCollection, is_amino_acid};
+use candle_core::{DType, Device, Result, Tensor};
+use ferritin_core::{is_amino_acid, AtomCollection};
+use itertools::MultiUnzip;
+use pdbtbx::Element;
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 
 /// Convert the AtomCollection into a struct that can be passed to a model.
 trait LMPNNFeatures {
-    fn featurize(&self, device: Device) -> Result<LigandMPNNDataDict>;
-    fn to_numeric_backbone_atoms(&self, device: Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
-    fn to_numeric_atom37(&self, device: Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
-    fn to_numeric_non_protein_atoms(&self, device: Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
+    fn featurize(&self, device: &Device) -> Result<LigandMPNNDataDict>;
+    fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
+    fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
+    fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
+}
+
+fn is_heavy_atom(element: &Element) -> bool {
+    !matches!(element, Element::H | Element::He)
 }
 
 // Create default
 impl LMPNNFeatures for AtomCollection {
     // create numeric Tensor of shape [<length>, 37, 3]
-    fn to_numeric_atom37(&self, device: Device) -> Result<Tensor> {
+    fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
         for residue in self.iter_residues_aminoacid() {
@@ -43,7 +49,7 @@ impl LMPNNFeatures for AtomCollection {
         Tensor::from_vec(atom37_data, (res_count, 37, 3), &device)
     }
     // // create numeric Tensor of shape [<length>, 4, 3] where the 4 is N/CA/C/O
-    fn to_numeric_backbone_atoms(&self, device: Device) -> Result<Tensor> {
+    fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
 
@@ -70,164 +76,54 @@ impl LMPNNFeatures for AtomCollection {
         // Create tensor with shape [residues, 4, 3]
         Tensor::from_vec(backbone_data, (res_count, 4, 3), &device)
     }
-    // create numeric Tensor of shape [< unknow-until-parse >, 4, 3] where the 4 is N/CA/C/O
-    fn to_numeric_non_protein_atoms(&self, device: Device) -> Result<(Tensor, Tensor, Tensor)> {
-        // from the AtomCollection:
-        //
-        // 1. Filter non-protein and water
-        // 2. Filter out H, and HE
-        // 3. convert to 3 tensors:
-        //           y == coords
-        //           y_t = elements
-        //           y_m = mask
-
-
-        let non_protein_on_water = self.iter_residues_all().filter(
-            |residue| {
+    // create numeric tensor for ligands.
+    //
+    // 1. Filter non-protein and water
+    // 2. Filter out H, and HE
+    // 3. convert to 3 tensors:
+    //           y = coords
+    //           y_t = elements
+    //           y_m = mask
+    fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
+        let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
+            .iter_residues_all()
+            // keep only the non-protein, non-water residues
+            .filter(|residue| {
                 let res_name = &residue.res_name;
-                !self.iter_residues_aminoacid()
-            }
-        )
+                !is_amino_acid(res_name) && res_name != "HOH" && res_name != "WAT"
+            })
+            // keep only the heavy atoms
+            .flat_map(|residue| {
+                residue
+                    .iter_atoms()
+                    .filter(|atom| is_heavy_atom(&atom.element))
+                    .map(|atom| (*atom.coords, atom.element.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .multiunzip();
+        // Create coordinates tensor
+        let y = Tensor::from_slice(&coords.concat(), (coords.len(), 3), device)?;
 
+        // Create elements tensor
+        let y_t = Tensor::from_slice(
+            &elements
+                .iter()
+                .map(|e| e.atomic_number() as f32)
+                .collect::<Vec<_>>(),
+            (elements.len(),),
+            device,
+        )?;
 
+        // Create mask tensor (all ones in this case since we've already filtered)
+        let y_m = Tensor::ones_like(&y)?;
 
-        //     let resid = residue.res_id as usize;
-        //     let backbone_atoms = [
-        //         residue.find_atom_by_name("N"),
-        //         residue.find_atom_by_name("CA"),
-        //         residue.find_atom_by_name("C"),
-        //         residue.find_atom_by_name("O"),
-        //     ];
-
-        //     for (atom_idx, maybe_atom) in backbone_atoms.iter().enumerate() {
-        //         if let Some(atom) = maybe_atom {
-        //             let [x, y, z] = atom.coords;
-        //             let base_idx = (resid * 4 + atom_idx) * 3;
-        //             backbone_data[base_idx] = *x;
-        //             backbone_data[base_idx + 1] = *y;
-        //             backbone_data[base_idx + 2] = *z;
-        //         }
-        //     }
-        // }
-        // // Create tensor with shape [residues, 4, 3]
-        // Tensor::from_vec(backbone_data, (res_count, 4, 3), &device)
-        (Tensor, Tensor, Tensor)
+        Ok((y, y_t, y_m))
     }
 
-    //    what are the 37 atoms????
-    //
-    //     let n = xyz_37.slice(s![.., atom_order("N"), ..]);
-    //     let ca = xyz_37.slice(s![.., atom_order("CA"), ..]);
-    //     let c = xyz_37.slice(s![.., atom_order("C"), ..]);
-    //     let o = xyz_37.slice(s![.., atom_order("O"), ..]);
-    //     let n_m = xyz_37_m.slice(s![.., atom_order("N")]);
-    //     let ca_m = xyz_37_m.slice(s![.., atom_order("CA")]);
-    //     let c_m = xyz_37_m.slice(s![.., atom_order("C")]);
-    //     let o_m = xyz_37_m.slice(s![.., atom_order("O")]);
-    //     let mask = &n_m * &ca_m * &c_m * &o_m;
-    //     let b = &ca - &n;
-    //     let c = &c - &ca;
-    //     let a = b.cross(&c);
-    //     let cb = -0.58273431 * &a + 0.56802827 * &b - 0.54067466 * &c + &ca;
-    //
-    //     let chain_labels = ca_atoms.get_chindices()?;
-    //     let r_idx = ca_resnums;
-    //     let s = ca_atoms.get_resnames()?;
-    //     let s: Vec<char> = s.iter().map(|aa| restype_3to1(aa).unwrap_or('X')).collect();
-    //     let s: Vec<i32> = s.iter().map(|&aa| restype_str_to_int(aa)).collect();
-    //     let x = Array3::from_shape_vec(
-    //         (n.shape()[0], 4, 3),
-    //         [n.to_vec(), ca.to_vec(), c.to_vec(), o.to_vec()].concat(),
-    //     )?;
-    //
-    //     let (y, y_t, y_m) = if let Ok(other_coords) = other_atoms.get_coords() {
-    //         let y = Array2::from_shape_vec((other_coords.len(), 3), other_coords)?;
-    //         let y_t = other_atoms.get_elements()?;
-    //         let y_t: Vec<i32> = y_t
-    //             .iter()
-    //             .map(|y_t| *element_dict.get(&y_t.to_uppercase()).unwrap_or(&0) as i32)
-    //             .collect();
-    //         let y_m = y_t
-    //             .iter()
-    //             .map(|&y| (y != 1) as i32 * (y != 0) as i32)
-    //             .collect::<Vec<i32>>();
-    //
-    //         let y_mask = Array1::from_vec(y_m.clone());
-    //         let y = y.select(Axis(0), &y_mask.mapv(|v| v == 1));
-    //         let y_t = Array1::from_vec(y_t).select(Axis(0), &y_mask.mapv(|v| v == 1));
-    //         let y_m = Array1::from_vec(y_m).select(Axis(0), &y_mask.mapv(|v| v == 1));
-    //
-    //         (y, y_t, y_m)
-    //     } else {
-    //         (Array2::zeros((1, 3)), Array1::zeros(1), Array1::zeros(1))
-    //     };
-    //
-    //     let mut output_dict = HashMap::new();
-    //     output_dict.insert("X".to_string(), Tensor::from_array(&x, device)?);
-    //     output_dict.insert("mask".to_string(), Tensor::from_array(&mask, device)?);
-    //     output_dict.insert("Y".to_string(), Tensor::from_array(&y, device)?);
-    //     output_dict.insert("Y_t".to_string(), Tensor::from_array(&y_t, device)?);
-    //     output_dict.insert("Y_m".to_string(), Tensor::from_array(&y_m, device)?);
-    //     output_dict.insert("R_idx".to_string(), Tensor::from_slice(&r_idx, device)?);
-    //     output_dict.insert(
-    //         "chain_labels".to_string(),
-    //         Tensor::from_slice(&chain_labels, device)?,
-    //     );
-    //     output_dict.insert(
-    //         "chain_letters".to_string(),
-    //         Tensor::from_slice(&ca_chain_ids, device)?,
-    //     );
-    //
-    //     let mut mask_c = Vec::new();
-    //     let mut chain_list: Vec<char> = ca_chain_ids.iter().cloned().collect();
-    //     chain_list.sort_unstable();
-    //     chain_list.dedup();
-    //     for chain in &chain_list {
-    //         let mask = ca_chain_ids
-    //             .iter()
-    //             .map(|&c| c == *chain)
-    //             .collect::<Vec<bool>>();
-    //         mask_c.push(Tensor::from_slice(&mask, device)?);
-    //     }
-    //
-    //     output_dict.insert("mask_c".to_string(), Tensor::stack(&mask_c, 0)?);
-    //     output_dict.insert(
-    //         "chain_list".to_string(),
-    //         Tensor::from_slice(&chain_list, device)?,
-    //     );
-    //     output_dict.insert("S".to_string(), Tensor::from_slice(&s, device)?);
-    //     output_dict.insert("xyz_37".to_string(), Tensor::from_array(&xyz_37, device)?);
-    //     output_dict.insert(
-    //         "xyz_37_m".to_string(),
-    //         Tensor::from_array(&xyz_37_m, device)?,
-    //     );
-    //
-    //     Ok((output_dict, backbone, other_atoms, ca_icodes, water_atoms))
-    // }
-
-    fn featurize(&self, device: Device) -> Result<LigandMPNNDataDict> {
-        let atoms = &self.get_coords();
-
-        let x = self.to_numeric_atom37(device);
-        let (y, y_t, y_m) = &self.to_numeric_non_protein_atoms(device);
-
-        //    atoms = atoms.select("occupancy > 0")?;
-
-        //     let protein_atoms = atoms.select("protein")?;
-        //     let backbone = protein_atoms.select("backbone")?;
-        //     let other_atoms = atoms.select("not protein and not water")?;
-        //     let water_atoms = atoms.select("water")?;
-        //
-        //     let ca_atoms = protein_atoms.select("name CA")?;
-        //     let ca_resnums = ca_atoms.get_resnums()?;
-        //     let ca_chain_ids = ca_atoms.get_chids()?;
-        //     let ca_icodes = ca_atoms.get_icodes()?;
-        //
-        //     let mut ca_dict = HashMap::new();
-        //     for i in 0..ca_resnums.len() {
-        //         let code = format!("{}_{}{}", ca_chain_ids[i], ca_resnums[i], ca_icodes[i]);
-        //         ca_dict.insert(code, i);
-        //     }
+    fn featurize(&self, device: &Device) -> Result<LigandMPNNDataDict> {
+        let x_37 = self.to_numeric_atom37(device)?;
+        let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device);
+        let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
 
         // let mut xyz_37 = Array3::<f32>::zeros((atoms.len(), 37, 3));
         // let mut xyz_37_m = Array2::<i32>::zeros((atoms.len(), 37));
@@ -244,19 +140,19 @@ impl LMPNNFeatures for AtomCollection {
         //
         //
         Ok(LigandMPNNDataDict {
-            x: Vec::new(),
-            mask: Vec::new(),
-            y: Vec::new(),
-            y_t: Vec::new(),
-            y_m: Vec::new(),
+            x: x_37,
+            mask: x_37_m,
+            y,
+            y_t,
+            y_m,
             r_idx: Vec::new(),
             chain_labels: Vec::new(),
             chain_letters: Vec::new(),
             mask_c: Vec::new(),
             chain_list: Vec::new(),
             s: Vec::new(),
-            xyz_37: Vec::new(),
-            xyz_37_m: Vec::new(),
+            xyz_37: Vec::new(),   // I need to double chek this...
+            xyz_37_m: Vec::new(), //
             bias_AA: None,
             bias_AA_per_residue: None,
             omit_AA_per_residue_multi: None,
