@@ -1,0 +1,10 @@
+[package]
+name = "ferritin-test-data"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description.workspace = true
+
+[dependencies]
+tempfile = "3.13.0"
