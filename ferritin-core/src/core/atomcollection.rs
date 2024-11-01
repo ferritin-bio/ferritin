@@ -141,47 +141,9 @@ impl AtomCollection {
         println!("Updating bonds....");
         self.bonds = Some(bonds);
     }
+
     pub fn connect_via_distance(&self) -> Vec<Bond> {
-        // connect_via_distances(atoms, distance_range=None, atom_mask=None,
-        //                           inter_residue=True, default_bond_type=BondType.ANY,
-        //                           periodic=False)
-
-        //     Create a :class:`BondList` for a given atom array, based on
-        //     pairwise atom distances.
-
-        //     A :attr:`BondType.ANY`, bond is created for two atoms within the
-        //     same residue, if the distance between them is within the expected
-        //     bond distance range.
-        //     Bonds between two adjacent residues are created for the atoms
-        //     expected to connect these residues, i.e. ``'C'`` and ``'N'`` for
-        //     peptides and ``"O3'"`` and ``'P'`` for nucleotides.
-
-        //     Parameters
-        //     ----------
-        //     atoms : AtomArray
-        //         The structure to create the :class:`BondList` for.
-        //     distance_range : dict of tuple(str, str) -> tuple(float, float), optional
-        //         Custom minimum and maximum bond distances.
-        //         The dictionary keys are tuples of chemical elements representing
-        //         the atoms to be potentially bonded.
-        //         The order of elements within each tuple does not matter.
-        //         The dictionary values are the minimum and maximum bond distance,
-        //         respectively, for the given combination of elements.
-        //         This parameter updates the default dictionary.
-        //         Hence, the default bond distances for missing element pairs are
-        //         still taken from the default dictionary.
-        //         The default bond distances are taken from :footcite:`Allen1987`.
-        //     inter_residue : bool, optional
-        //         If true, connections between consecutive amino acids and
-        //         nucleotides are also added.
-        //     default_bond_type : BondType or int, optional
-        //         By default, all created bonds have :attr:`BondType.ANY`.
-        //         An alternative :class:`BondType` can be given in this parameter.
-        //     periodic : bool, optional
-        //         If set to true, bonds can also be detected in periodic
-        //         boundary conditions.
-        //         The `box` attribute of `atoms` is required in this case.
-
+        // note: was intendin to follow Biotite's algo
         unimplemented!()
     }
     pub fn get_size(&self) -> usize {
@@ -288,11 +250,16 @@ impl AtomCollection {
 #[cfg(test)]
 mod tests {
     use crate::AtomCollection;
+    use ferritin_test_data::PROTEIN_EXAMPLE_01;
     use pdbtbx::Element;
+    use std::str;
 
     #[test]
     fn test_selection_api() {
-        let ac: AtomCollection = get_atom_container();
+        let pdb_str = str::from_utf8(PROTEIN_EXAMPLE_01).unwrap();
+        let (pdb, _) = pdbtbx::open(pdb_str).unwrap();
+        let ac = AtomCollection::from(&pdb);
+
         let selected_atoms = ac
             .select()
             .chain("A")
@@ -310,7 +277,10 @@ mod tests {
 
     #[test]
     fn test_residue_iterator() {
-        let ac: AtomCollection = get_atom_container();
+        let pdb_str = str::from_utf8(PROTEIN_EXAMPLE_01).unwrap();
+        let (pdb, _) = pdbtbx::open(pdb_str).unwrap();
+        let ac = AtomCollection::from(&pdb);
+
         assert_eq!(ac.get_size(), 1413);
 
         // This includes Water Molecules

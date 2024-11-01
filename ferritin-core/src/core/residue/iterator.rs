@@ -88,11 +88,16 @@ impl<'a> FromIterator<ResidueAtoms<'a>> for AtomCollection {
 mod tests {
     use super::*;
     use crate::core::info::constants::is_amino_acid;
+    use ferritin_test_data::PROTEIN_EXAMPLE_01;
+    use std::str;
 
     #[test]
     fn test_collect_amino_acids() {
         // the collect creates a new AC. Improtant if we want to make new copies.
-        // let ac: AtomCollection = get_atom_container();
+        let pdb_str = str::from_utf8(PROTEIN_EXAMPLE_01).unwrap();
+        let (pdb, _) = pdbtbx::open(pdb_str).unwrap();
+        let ac = AtomCollection::from(&pdb);
+
         let amino_acids: AtomCollection = ac.iter_residues_aminoacid().collect();
         assert!(amino_acids.get_size() < ac.get_size());
 

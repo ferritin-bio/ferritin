@@ -95,12 +95,16 @@ impl<'a> ResidueAtoms<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::test_utilities::get_atom_container;
     use crate::core::AtomCollection;
+    use ferritin_test_data::PROTEIN_EXAMPLE_01;
+    use std::str;
 
     #[test]
     fn test_iteration() {
-        let ac: AtomCollection = get_atom_container();
+        let pdb_str = str::from_utf8(PROTEIN_EXAMPLE_01).unwrap();
+        let (pdb, _) = pdbtbx::open(pdb_str).unwrap();
+        let ac = AtomCollection::from(&pdb);
+
         assert_eq!(ac.iter_residues_aminoacid().count(), 154);
 
         let first_residue: ResidueAtoms = ac
