@@ -1,3 +1,3 @@
 pub mod core;
-pub use core::{AtomCollection, Bond, BondOrder};
+pub use core::{is_amino_acid, AtomCollection, Bond, BondOrder};
 pub use pdbtbx::Element;
