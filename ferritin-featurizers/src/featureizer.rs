@@ -1,6 +1,6 @@
 //! Protein Featurizer for ProteinMPNN/LignadMPNN
 //!
-//! Extract protein features for ligampnn
+//! Extract protein features for ligandmpnn
 //!
 //! Returns a set of features calculated from protein structure
 //! including:
@@ -292,6 +292,7 @@ define_residues! {
 mod tests {
     use super::*;
     use candle_core::IndexOp;
+    use ferritin_test_data::TestFile;
     use pdbtbx;
 
     #[test]
@@ -324,7 +325,8 @@ mod tests {
     #[test]
     fn test_atom_backbone_tensor() {
         let device = Device::Cpu;
-        let (pdb, _) = pdbtbx::open("data/101m.cif").unwrap();
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
+        let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
         let ac = AtomCollection::from(&pdb);
         let ac_backbone_tensor: Tensor = ac.to_numeric_backbone_atoms(&device).expect("REASON");
         // 154 residues; N/CA/C/O; positions
