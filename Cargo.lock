@@ -2117,6 +2117,7 @@ dependencies = [
  "bitflags 2.6.0",
  "clap",
  "ferritin-molviewspec",
+ "ferritin-test-data",
  "itertools 0.13.0",
  "once_cell",
  "pdbtbx",
@@ -2126,6 +2127,10 @@ dependencies = [
  "serde_json",
  "serde_repr",
 ]
+
+[[package]]
+name = "ferritin-test-data"
+version = "0.1.0"
 
 [[package]]
 name = "fixedbitset"
