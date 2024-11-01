@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn test_iteration() {
-        let (prot_file, _temp) = TestFile::pymol_01().create_temp().unwrap();
+        let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
         let (pdb, _) = pdbtbx::open(prot_file).unwrap();
         let ac = AtomCollection::from(&pdb);
 

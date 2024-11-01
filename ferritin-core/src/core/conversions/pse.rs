@@ -69,18 +69,12 @@ impl From<&PSEData> for AtomCollection {
 mod tests {
     use crate::core::AtomCollection;
     use ferritin_pymol::PSEData;
-
-    use std::path::PathBuf;
+    use ferritin_test_data::TestFile;
 
     #[test]
     fn test_pse_from() {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let file_path = PathBuf::from(manifest_dir)
-            .join("tests")
-            .join("data")
-            .join("example.pse");
-
-        let psedata = PSEData::load(file_path.to_str().unwrap()).expect("local pse path");
+        let (pymol_file, _temp) = TestFile::pymol_01().create_temp().unwrap();
+        let psedata = PSEData::load(&pymol_file).expect("local pse path");
 
         // check Atom Collection Numbers
         let ac = AtomCollection::from(&psedata);

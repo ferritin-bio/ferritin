@@ -93,7 +93,7 @@ mod tests {
     #[test]
     fn test_collect_amino_acids() {
         // the collect creates a new AC. Improtant if we want to make new copies.
-        let (prot_file, _temp) = TestFile::pymol_01().create_temp().unwrap();
+        let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
         let (pdb, _) = pdbtbx::open(prot_file).unwrap();
         let ac = AtomCollection::from(&pdb);
 

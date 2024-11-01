@@ -252,11 +252,10 @@ mod tests {
     use crate::AtomCollection;
     use ferritin_test_data::TestFile;
     use pdbtbx::Element;
-    use std::str;
 
     #[test]
     fn test_selection_api() {
-        let (prot_file, _temp) = TestFile::pymol_01().create_temp().unwrap();
+        let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
         let (pdb, _) = pdbtbx::open(prot_file).unwrap();
         let ac = AtomCollection::from(&pdb);
 
@@ -277,7 +276,7 @@ mod tests {
 
     #[test]
     fn test_residue_iterator() {
-        let (prot_file, _temp) = TestFile::pymol_01().create_temp().unwrap();
+        let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
         let (pdb, _) = pdbtbx::open(prot_file).unwrap();
         let ac = AtomCollection::from(&pdb);
         assert_eq!(ac.get_size(), 1413);

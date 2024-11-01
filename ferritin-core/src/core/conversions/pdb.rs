@@ -62,19 +62,14 @@ impl From<&PDB> for AtomCollection {
 #[cfg(test)]
 mod tests {
     use crate::core::AtomCollection;
+    use ferritin_test_data::TestFile;
     use itertools::Itertools;
     use pdbtbx::{self, Element};
-    use std::path::PathBuf;
 
     #[test]
     fn test_pdb_from() {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let file_path = PathBuf::from(manifest_dir)
-            .join("tests")
-            .join("data")
-            .join("101m.cif");
-
-        let (pdb_data, _errors) = pdbtbx::open(file_path.to_str().unwrap()).unwrap();
+        let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
+        let (pdb_data, _) = pdbtbx::open(prot_file).unwrap();
         assert_eq!(pdb_data.atom_count(), 1413);
 
         // check Atom Collection Numbers
