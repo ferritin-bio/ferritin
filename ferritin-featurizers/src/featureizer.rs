@@ -9,7 +9,7 @@
 //! - Chemical features like hydrophobicity, charge
 //! - Evolutionary features from MSA profiles
 
-use candle_core::{DType, Device, Result, Tensor};
+use candle_core::{DType, Device, IndexOp, Result, Tensor};
 use ferritin_core::{is_amino_acid, AtomCollection};
 use itertools::MultiUnzip;
 use pdbtbx::Element;
@@ -41,6 +41,45 @@ fn create_backbone_mask_37(xyz_37: &Tensor) -> Result<Tensor> {
                                              // All 4 atoms must exist
     let all_exist = exists.sum_keepdim(1)?; // [154, 1]
     Ok(all_exist)
+}
+
+fn calculate_cb(xyz_37: &Tensor) -> Result<Tensor> {
+    // Constants for CB calculation
+    let a_coeff = -0.58273431f32;
+    let b_coeff = 0.56802827f32;
+    let c_coeff = -0.54067466f32;
+
+    // Get N, CA, C coordinates
+    let n = xyz_37.i((.., 0, ..))?; // N  at index 0
+    let ca = xyz_37.i((.., 1, ..))?; // CA at index 1
+    let c = xyz_37.i((.., 2, ..))?; // C  at index 2
+
+    // Calculate vectors
+    let b = &ca - &n; // CA - N
+    let c = &c - &ca; // C - CA
+
+    // Manual cross product components
+    // a_x = b_y * c_z - b_z * c_y
+    // a_y = b_z * c_x - b_x * c_z
+    // a_z = b_x * c_y - b_y * c_x
+    let b_x = b.i((.., 0))?;
+    let b_y = b.i((.., 1))?;
+    let b_z = b.i((.., 2))?;
+    let c_x = c.i((.., 0))?;
+    let c_y = c.i((.., 1))?;
+    let c_z = c.i((.., 2))?;
+
+    let a_x = (&b_y * &c_z)? - (&b_z * &c_y)?;
+    let a_y = (&b_z * &c_x)? - (&b_x * &c_z)?;
+    let a_z = (&b_x * &c_y)? - (&b_y * &c_x)?;
+
+    // Stack the cross product components back together
+    let a = Tensor::stack(&[a_x, a_y, a_z], 1)?;
+
+    // Final CB calculation: -0.58273431 * a + 0.56802827 * b - 0.54067466 * c + CA
+    let cb = (&a * a_coeff)? + (&b * b_coeff)? + (&c * c_coeff)? + &ca;
+
+    Ok(cb)
 }
 
 // Create default
@@ -142,20 +181,21 @@ impl LMPNNFeatures for AtomCollection {
         let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
         let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
 
-        // let mut xyz_37 = Array3::<f32>::zeros((atoms.len(), 37, 3));
-        // let mut xyz_37_m = Array2::<i32>::zeros((atoms.len(), 37));
+        // get CB locations...
+        // although we have these already for our full set...
+        let cb = calculate_cb(&x_37);
 
-        //     for atom_name in &atom_types {
-        //         let (xyz, xyz_m) = get_aligned_coordinates(&protein_atoms, &ca_dict, atom_name)?;
-        //         xyz_37
-        //             .slice_mut(s![.., atom_order(atom_name), ..])
-        //             .assign(&xyz);
-        //         xyz_37_m
-        //             .slice_mut(s![.., atom_order(atom_name)])
-        //             .assign(&xyz_m);
-        //     }
-        //
-        //
+        // chain_labels = np.array(CA_atoms.getChindices(), dtype=np.int32)
+        // R_idx = np.array(CA_resnums, dtype=np.int32)
+        // S = CA_atoms.getResnames()
+        // S = [restype_3to1[AA] if AA in list(restype_3to1) else "X" for AA in list(S)]
+        // S = np.array([restype_STRtoINT[AA] for AA in list(S)], np.int32)
+        //  N = xyz_37[:, atom_order["N"], :]
+        // CA = xyz_37[:, atom_order["CA"], :]
+        // C = xyz_37[:, atom_order["C"], :]
+        // O = xyz_37[:, atom_order["O"], :]
+        // X = np.concatenate([N[:, None], CA[:, None], C[:, None], O[:, None]], 1)
+
         Ok(LigandMPNNDataDict {
             x: x_37,
             mask: x_37_m,
