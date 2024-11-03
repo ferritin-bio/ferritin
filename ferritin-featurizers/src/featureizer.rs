@@ -195,15 +195,22 @@ impl LMPNNFeatures for AtomCollection {
         // R_idx = np.array(CA_resnums, dtype=np.int32)
         let R_idx = self.get_resids(); // todo()!
 
-        //
-        // S = CA_atoms.getResnames()
-        // S = [restype_3to1[AA] if AA in list(restype_3to1) else "X" for AA in list(S)]
-        // S = np.array([restype_STRtoINT[AA] for AA in list(S)], np.int32)
-        // N = xyz_37[:, atom_order["N"], :]
-        // CA = xyz_37[:, atom_order["CA"], :]
-        // C = xyz_37[:, atom_order["C"], :]
-        // O = xyz_37[:, atom_order["O"], :]
-        // X = np.concatenate([N[:, None], CA[:, None], C[:, None], O[:, None]], 1)
+        // amino acid names as int....
+        let s: Vec<i32> = self
+            .iter_residues_aminoacid()
+            .map(|res| res.res_name)
+            .map(|res| aa3to1(&res))
+            .map(|res| aa1to_int(res))
+            .collect();
+
+        // coordaintes of the backbone atoms
+
+        let indices = Tensor::from_slice(
+            &[0., 1., 2., 4.], // index of N/CA/C/O
+            (4,),
+            &device,
+        )?;
+        let X = x_37.index_select(&indices, 1)?;
 
         Ok(LigandMPNNDataDict {
             x: x_37,
@@ -270,6 +277,32 @@ pub struct LigandMPNNDataDict {
     bias_AA: Option<Vec<f64>>,                   // Tensor,
     bias_AA_per_residue: Option<Vec<f64>>,       // Tensor,
     omit_AA_per_residue_multi: Option<Vec<f64>>, // Tensor,
+}
+
+#[rustfmt::skip]
+fn aa3to1(aa: &str) -> char {
+    match aa {
+        "ALA" => 'A', "CYS" => 'C', "ASP" => 'D',
+        "GLU" => 'E', "PHE" => 'F', "GLY" => 'G',
+        "HIS" => 'H', "ILE" => 'I', "LYS" => 'K',
+        "LEU" => 'L', "MET" => 'M', "ASN" => 'N',
+        "PRO" => 'P', "GLN" => 'Q', "ARG" => 'R',
+        "SER" => 'S', "THR" => 'T', "VAL" => 'V',
+        "TRP" => 'W', "TYR" => 'Y', _     => 'X',
+    }
+}
+
+#[rustfmt::skip]
+fn aa1to_int(aa: char) -> i32 {
+    match aa {
+        'A' => 0, 'C' => 1, 'D' => 2,
+        'E' => 3, 'F' => 4, 'G' => 5,
+        'H' => 6, 'I' => 7, 'K' => 8,
+        'L' => 9, 'M' => 10, 'N' => 11,
+        'P' => 12, 'Q' => 13, 'R' => 14,
+        'S' => 15, 'T' => 16, 'V' => 17,
+        'W' => 18, 'Y' => 19, _   => 20,
+    }
 }
 
 #[rustfmt::skip]
