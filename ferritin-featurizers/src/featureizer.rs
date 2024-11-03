@@ -44,10 +44,14 @@ fn create_backbone_mask_37(xyz_37: &Tensor) -> Result<Tensor> {
 }
 
 fn calculate_cb(xyz_37: &Tensor) -> Result<Tensor> {
+    let &[dim_residue, dim37, dim3] = xyz_37.dims();
+    assert_eq!(dim37, 37);
+    assert_eq!(dim3, 3);
+
     // Constants for CB calculation
-    let a_coeff = -0.58273431f32;
-    let b_coeff = 0.56802827f32;
-    let c_coeff = -0.54067466f32;
+    let a_coeff = -0.58273431f64;
+    let b_coeff = 0.56802827f64;
+    let c_coeff = -0.54067466f64;
 
     // Get N, CA, C coordinates
     let n = xyz_37.i((.., 0, ..))?; // N  at index 0
@@ -55,8 +59,8 @@ fn calculate_cb(xyz_37: &Tensor) -> Result<Tensor> {
     let c = xyz_37.i((.., 2, ..))?; // C  at index 2
 
     // Calculate vectors
-    let b = &ca - &n; // CA - N
-    let c = &c - &ca; // C - CA
+    let b = (&ca - &n)?; // CA - N
+    let c = (&c - &ca)?; // C - CA
 
     // Manual cross product components
     // a_x = b_y * c_z - b_z * c_y
@@ -69,17 +73,17 @@ fn calculate_cb(xyz_37: &Tensor) -> Result<Tensor> {
     let c_y = c.i((.., 1))?;
     let c_z = c.i((.., 2))?;
 
-    let a_x = (&b_y * &c_z)? - (&b_z * &c_y)?;
-    let a_y = (&b_z * &c_x)? - (&b_x * &c_z)?;
-    let a_z = (&b_x * &c_y)? - (&b_y * &c_x)?;
+    let a_x = ((&b_y * &c_z)? - (&b_z * &c_y)?)?;
+    let a_y = ((&b_z * &c_x)? - (&b_x * &c_z)?)?;
+    let a_z = ((&b_x * &c_y)? - (&b_y * &c_x)?)?;
 
     // Stack the cross product components back together
-    let a = Tensor::stack(&[a_x, a_y, a_z], 1)?;
+    let a = Tensor::stack(&[&a_x, &a_y, &a_z], 1)?;
 
     // Final CB calculation: -0.58273431 * a + 0.56802827 * b - 0.54067466 * c + CA
     let cb = (&a * a_coeff)? + (&b * b_coeff)? + (&c * c_coeff)? + &ca;
 
-    Ok(cb)
+    Ok(cb?)
 }
 
 // Create default
@@ -186,11 +190,16 @@ impl LMPNNFeatures for AtomCollection {
         let cb = calculate_cb(&x_37);
 
         // chain_labels = np.array(CA_atoms.getChindices(), dtype=np.int32)
+        let chain_labels = self.get_resids(); //  <- need to double check shape. I think this is all-atom
+
         // R_idx = np.array(CA_resnums, dtype=np.int32)
+        let R_idx = self.get_resids(); // todo()!
+
+        //
         // S = CA_atoms.getResnames()
         // S = [restype_3to1[AA] if AA in list(restype_3to1) else "X" for AA in list(S)]
         // S = np.array([restype_STRtoINT[AA] for AA in list(S)], np.int32)
-        //  N = xyz_37[:, atom_order["N"], :]
+        // N = xyz_37[:, atom_order["N"], :]
         // CA = xyz_37[:, atom_order["CA"], :]
         // C = xyz_37[:, atom_order["C"], :]
         // O = xyz_37[:, atom_order["O"], :]
