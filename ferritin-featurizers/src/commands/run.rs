@@ -1,48 +1,55 @@
-// 1. Basic Arguments:
-// - `--seed`
-// - `--pdb_path`
-// - `--out_folder`
-// - `--model_type`
+use crate::featurizer::LMPNNFeatures;
+use candle_core;
+use ferritin_core::AtomCollection;
+use pdbtbx;
 
-// 2. Configuration Arguments:
-// - `--temperature`
-// - `--verbose`
-// - `--save_stats`
-// - `--batch_size`
-// - `--number_of_batches`
-// - `--file_ending`
-// - `--zero_indexed`
-// - `--homo_oligomer`
-// - `--fasta_seq_separation`
-
-// 3. Residue Control:
-// - `--fixed_residues`
-// - `--redesigned_residues`
-// - `--symmetry_residues`
-// - `--symmetry_weights`
-// - `--chains_to_design`
-// - `--parse_these_chains_only`
-
-// 4. Amino Acid Biasing:
-// - `--bias_AA`
-// - `--bias_AA_per_residue`
-// - `--omit_AA`
-// - `--omit_AA_per_residue`
-
-// 5. Multi-PDB Related:
-// - `--pdb_path_multi`
-// - `--fixed_residues_multi`
-// - `--redesigned_residues_multi`
-// - `--omit_AA_per_residue_multi`
-// - `--bias_AA_per_residue_multi`
-
-// 6. LigandMPNN Specific:
-// - `--checkpoint_ligand_mpnn`
-// - `--ligand_mpnn_use_atom_context`
-// - `--ligand_mpnn_use_side_chain_context`
-// - `--ligand_mpnn_cutoff_for_score`
-
-// 7. Membrane MPNN Specific:
-// - `--global_transmembrane_label`
-// - `--transmembrane_buried`
-// - `--transmembrane_interface`
+// todo: refactor this commands out to
+// have lgincal, rlated grouping
+pub fn execute(
+    seed: i32,
+    pdb_path: String,
+    out_folder: String,
+    model_type: String,
+    temperature: Option<f32>,
+    verbose: Option<i32>,
+    save_stats: Option<i32>,
+    batch_size: Option<i32>,
+    number_of_batches: Option<i32>,
+    file_ending: Option<String>,
+    zero_indexed: Option<i32>,
+    homo_oligomer: Option<i32>,
+    fasta_seq_separation: Option<String>,
+    fixed_residues: Option<String>,
+    redesigned_residues: Option<String>,
+    symmetry_residues: Option<String>,
+    symmetry_weights: Option<String>,
+    chains_to_design: Option<String>,
+    parse_these_chains_only: Option<String>,
+    bias_AA: Option<String>,
+    bias_AA_per_residue: Option<String>,
+    omit_AA: Option<String>,
+    omit_AA_per_residue: Option<String>,
+    pdb_path_multi: Option<String>,
+    fixed_residues_multi: Option<String>,
+    redesigned_residues_multi: Option<String>,
+    omit_AA_per_residue_multi: Option<String>,
+    bias_AA_per_residue_multi: Option<String>,
+    checkpoint_ligand_mpnn: Option<String>,
+    ligand_mpnn_use_atom_context: Option<i32>,
+    ligand_mpnn_use_side_chain_context: Option<i32>,
+    ligand_mpnn_cutoff_for_score: Option<String>,
+    global_transmembrane_label: Option<i32>,
+    transmembrane_buried: Option<String>,
+    transmembrane_interface: Option<String>,
+) -> anyhow::Result<()> {
+    // seed: i32,
+    // pdb_path: String,
+    // out_folder: String,
+    // model_type: String,
+    println!("Need to implement the seed!");
+    let (pdb, _) = pdbtbx::open(input).expect("A PDB or CIF file");
+    let ac = AtomCollection::from(&pdb);
+    let features = ac.featurize(&candle_core::Device::Cpu)?;
+    let _ = features.save_to_safetensor(&output)?;
+    Ok(())
+}
