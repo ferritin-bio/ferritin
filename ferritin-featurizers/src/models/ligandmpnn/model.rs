@@ -306,6 +306,9 @@ impl ProteinMPNNConfig {
     fn ligandmpnn() {
         todo!()
     }
+    fn membranempnn() {
+        todo!()
+    }
 }
 
 // https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L10C7-L10C18
