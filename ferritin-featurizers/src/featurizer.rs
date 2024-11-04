@@ -36,7 +36,7 @@ fn is_heavy_atom(element: &Element) -> bool {
 /// backbone only [N/CA/C/O] and all-atom [N/CA/C/CB/O]....
 ///
 fn create_backbone_mask_37(xyz_37: &Tensor) -> Result<Tensor> {
-    let backbone_indices = Tensor::new(&[0f32, 1., 2., 4.], xyz_37.device())?;
+    let backbone_indices = Tensor::new(&[0u32, 1, 2, 4], xyz_37.device())?;
     let backbone_selection = xyz_37.index_select(&backbone_indices, 1)?; // [154, 4, 3]
 
     // Check if coordinates exist (sum over xyz dimensions)
@@ -186,22 +186,16 @@ impl LMPNNFeatures for AtomCollection {
 
     // equivalent to protien MPNN's parse_PDB
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
-        println!("In Featurize!");
         let x_37 = self.to_numeric_atom37(device)?;
-        println!("X37 okay");
         let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
-        println!("X37m okay");
         let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
-        println!("Y,Y-T,Y_m okay");
 
         // get CB locations...
         // although we have these already for our full set...
         let cb = calculate_cb(&x_37);
-        println!("cb okay");
 
         // chain_labels = np.array(CA_atoms.getChindices(), dtype=np.int32)
         let chain_labels = self.get_resids(); //  <- need to double check shape. I think this is all-atom
-        println!("chain_labels okay");
 
         // R_idx = np.array(CA_resnums, dtype=np.int32)
         // let _r_idx = self.get_resids(); // todo()!
@@ -214,24 +208,15 @@ impl LMPNNFeatures for AtomCollection {
             .map(|res| aa1to_int(res));
 
         let s = Tensor::from_iter(s, device)?;
-        println!("sequence okay");
 
-        // coordaintes of the backbone atoms
-
-        // let indices = Tensor::from_slice(
-        //     &[0., 1., 2., 4.], // index of N/CA/C/O
-        //     (4,),
-        //     &device,
-        // )?;
-
+        // coordinates of the backbone atoms
         let indices = Tensor::from_slice(
             &[0i64, 1i64, 2i64, 4i64], // index of N/CA/C/O as integers
             (4,),
             &device,
         )?;
-        println!("indices okay");
+
         let X = x_37.index_select(&indices, 1)?;
-        println!("indices slection okay");
 
         Ok(ProteinFeatures {
             s,
