@@ -36,7 +36,7 @@ fn is_heavy_atom(element: &Element) -> bool {
 /// backbone only [N/CA/C/O] and all-atom [N/CA/C/CB/O]....
 ///
 fn create_backbone_mask_37(xyz_37: &Tensor) -> Result<Tensor> {
-    let backbone_indices = Tensor::new(&[0i64, 1, 2, 4], xyz_37.device())?;
+    let backbone_indices = Tensor::new(&[0f32, 1., 2., 4.], xyz_37.device())?;
     let backbone_selection = xyz_37.index_select(&backbone_indices, 1)?; // [154, 4, 3]
 
     // Check if coordinates exist (sum over xyz dimensions)
@@ -207,7 +207,7 @@ impl LMPNNFeatures for AtomCollection {
             .map(|res| aa3to1(&res))
             .map(|res| aa1to_int(res));
 
-        let s = Tensor::from_iter(s, device);
+        let s = Tensor::from_iter(s, device)?;
 
         // coordaintes of the backbone atoms
 
@@ -246,7 +246,7 @@ pub struct ProteinFeatures {
     y: Tensor,
     // encoded ligand atom names
     y_t: Tensor,
-    // .ignamd mask
+    // ligand mask
     y_m: Option<Tensor>,
     // R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
     r_idx: Option<Vec<i32>>,
@@ -261,14 +261,10 @@ pub struct ProteinFeatures {
 }
 impl ProteinFeatures {
     pub fn save_to_safetensor(&self, path: &str) -> Result<()> {
-        let device = self.x.device();
         let mut tensors: HashMap<String, Tensor> = HashMap::new();
 
         // this is only one field. need to do the rest of the fields
-        tensors.insert(
-            "protein_atom_sequence".to_string(),
-            Tensor::new(self.s.clone()),
-        );
+        tensors.insert("protein_atom_sequence".to_string(), self.s.clone());
         tensors.insert("protein_atom_positions".to_string(), self.x.clone());
         tensors.insert("ligand_atom_positions".to_string(), self.y.clone());
         tensors.insert("ligand_atom_name".to_string(), self.y_t.clone());
