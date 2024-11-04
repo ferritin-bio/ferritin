@@ -10,16 +10,18 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Command1 {
+    Featurize {
         #[arg(short, long)]
-        name: String,
+        input: String,
+        #[arg(short, long)]
+        output: String,
     },
 }
 
 impl Cli {
     pub fn execute(self) -> anyhow::Result<()> {
         match self.command {
-            Commands::Command1 { name } => commands::featurize::execute(name),
+            Commands::Featurize { input, output } => commands::featurize::execute(input, output),
         }
     }
 }
