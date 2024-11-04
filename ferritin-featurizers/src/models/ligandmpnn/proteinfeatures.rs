@@ -60,7 +60,7 @@ impl ProteinFeaturesModel {
 
     /// This function calculates the nearest Ca coordinates and retunrs the ditances and indices.
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
-        compute_nearest_neighbors(x, mask, self.top_k, self.augment_eps)
+        compute_nearest_neighbors(x, mask, self.top_k, eps as f32)
     }
     fn _rbf(&self, d: &Tensor, device: &Device) -> Result<Tensor> {
         // 1. It takes a tensor `d` as input and creates a set of RBF features

@@ -83,7 +83,7 @@ pub fn compute_nearest_neighbors(
     //     true,
     // )?;
 
-    Ok(topk_last_dim(d_adjust, k.min(seq_len))?)
+    Ok(topk_last_dim(&d_adjust, k.min(seq_len))?)
 }
 
 // https://github.com/huggingface/candle/pull/2375/files#diff-e4d52a71060a80ac8c549f2daffcee77f9bf4de8252ad067c47b1c383c3ac828R957
