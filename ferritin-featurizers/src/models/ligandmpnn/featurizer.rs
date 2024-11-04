@@ -9,13 +9,15 @@
 //! - Chemical features like hydrophobicity, charge
 //! - Evolutionary features from MSA profiles
 
-use super::utilities::AAAtom;
-use candle_core::{DType, Device, IndexOp, Result, Tensor};
+use super::utilities::{
+    aa1to_int, aa3to1, calculate_cb, cat_neighbors_nodes, create_backbone_mask_37, AAAtom,
+};
+use candle_core::{DType, Device, Result, Tensor};
 use ferritin_core::{is_amino_acid, AtomCollection};
 use itertools::MultiUnzip;
 use pdbtbx::Element;
 use std::collections::HashMap;
-use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
+use strum::IntoEnumIterator;
 
 // Helper Fns --------------------------------------
 fn is_heavy_atom(element: &Element) -> bool {
@@ -31,9 +33,10 @@ pub trait LMPNNFeatures {
     fn to_pdb(&self); //
 }
 
-// Create default
+/// Methods for Convering an AtomCollection into a LigandMPNN-ready
+/// datasets
 impl LMPNNFeatures for AtomCollection {
-    // create numeric Tensor of shape [<length>, 37, 3]
+    /// create numeric Tensor of shape [<length>, 37, 3]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
@@ -52,11 +55,10 @@ impl LMPNNFeatures for AtomCollection {
         // Create tensor with shape [residues, 37, 3]
         Tensor::from_vec(atom37_data, (res_count, 37, 3), &device)
     }
-    // // create numeric Tensor of shape [<length>, 4, 3] where the 4 is N/CA/C/O
+    /// create numeric Tensor of shape [<length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
-
         for residue in self.iter_residues_aminoacid() {
             let resid = residue.res_id as usize;
             let backbone_atoms = [
@@ -65,7 +67,6 @@ impl LMPNNFeatures for AtomCollection {
                 residue.find_atom_by_name("C"),
                 residue.find_atom_by_name("O"),
             ];
-
             for (atom_idx, maybe_atom) in backbone_atoms.iter().enumerate() {
                 if let Some(atom) = maybe_atom {
                     let [x, y, z] = atom.coords;
@@ -76,7 +77,6 @@ impl LMPNNFeatures for AtomCollection {
                 }
             }
         }
-
         // Create tensor with shape [residues, 4, 3]
         Tensor::from_vec(backbone_data, (res_count, 4, 3), &device)
     }
@@ -284,7 +284,7 @@ pub struct ProteinFeatures {
     /// mask_c:        Tensor dimensions: torch.Size([93])
     mask_c: Option<Tensor>,
     chain_list: Option<Vec<String>>,
-    /// CA_icodes:     NumPy array dimensions: (93,)
+    // CA_icodes:     NumPy array dimensions: (93,)
 }
 impl ProteinFeatures {
     pub fn save_to_safetensor(&self, path: &str) -> Result<()> {
