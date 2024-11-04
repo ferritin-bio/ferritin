@@ -19,3 +19,4 @@ anyhow.workspace = true
 [dev-dependencies]
 ferritin-test-data = { path = "../ferritin-test-data" }
 assert_cmd = "2.0.16"
+tempfile = "3.13.0"
