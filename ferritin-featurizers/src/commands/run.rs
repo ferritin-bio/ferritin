@@ -5,85 +5,67 @@ use pdbtbx;
 
 // First, create separate structs for different argument groups
 #[derive(Debug)]
-struct RunConfig {
-    temperature: Option<f32>,
-    verbose: Option<i32>,
-    save_stats: Option<i32>,
-    batch_size: Option<i32>,
-    number_of_batches: Option<i32>,
-    file_ending: Option<String>,
-    zero_indexed: Option<i32>,
-    homo_oligomer: Option<i32>,
-    fasta_seq_separation: Option<String>,
-    // ... other config fields
+pub struct RunConfig {
+    pub temperature: Option<f32>,
+    pub verbose: Option<i32>,
+    pub save_stats: Option<i32>,
+    pub batch_size: Option<i32>,
+    pub number_of_batches: Option<i32>,
+    pub file_ending: Option<String>,
+    pub zero_indexed: Option<i32>,
+    pub homo_oligomer: Option<i32>,
+    pub fasta_seq_separation: Option<String>,
 }
 
 #[derive(Debug)]
-struct ResidueControl {
-    fixed_residues: Option<String>,
-    redesigned_residues: Option<String>,
-    symmetry_residues: Option<String>,
-    symmetry_weights: Option<String>,
-    chains_to_design: Option<String>,
-    parse_these_chains_only: Option<String>,
+pub struct ResidueControl {
+    pub fixed_residues: Option<String>,
+    pub redesigned_residues: Option<String>,
+    pub symmetry_residues: Option<String>,
+    pub symmetry_weights: Option<String>,
+    pub chains_to_design: Option<String>,
+    pub parse_these_chains_only: Option<String>,
 }
 
 #[derive(Debug)]
-struct AABiasConfig {
-    // // Amino Acid Biasing
-    // #[arg(long)]
-    // bias_AA: Option<String>,
-    // #[arg(long)]
-    // bias_AA_per_residue: Option<String>,
-    // #[arg(long)]
-    // omit_AA: Option<String>,
-    // #[arg(long)]
-    // omit_AA_per_residue: Option<String>,
+/// Amino Acid Biasing
+pub struct AABiasConfig {
+    pub bias_AA: Option<String>,
+    pub bias_AA_per_residue: Option<String>,
+    pub omit_AA: Option<String>,
+    pub omit_AA_per_residue: Option<String>,
 }
 
-struct MultiPDBConfig {
-    // // Multi-PDB Related
-    // #[arg(long)]
-    // pdb_path_multi: Option<String>,
-    // #[arg(long)]
-    // fixed_residues_multi: Option<String>,
-    // #[arg(long)]
-    // redesigned_residues_multi: Option<String>,
-    // #[arg(long)]
-    // omit_AA_per_residue_multi: Option<String>,
-    //       #[arg(long)]
-    // bias_AA_per_residue_multi: Option<String>,
+/// Multi-PDB Related
+pub struct MultiPDBConfig {
+    pub pdb_path_multi: Option<String>,
+    pub fixed_residues_multi: Option<String>,
+    pub redesigned_residues_multi: Option<String>,
+    pub omit_AA_per_residue_multi: Option<String>,
+    pub bias_AA_per_residue_multi: Option<String>,
 }
 
-struct LigandMPNNConfig {
-    // // LigandMPNN Specific
-    // #[arg(long)]
-    // checkpoint_ligand_mpnn: Option<String>,
-    // #[arg(long)]
-    // ligand_mpnn_use_atom_context: Option<i32>,
-    // #[arg(long)]
-    // ligand_mpnn_use_side_chain_context: Option<i32>,
-    // #[arg(long)]
-    // ligand_mpnn_cutoff_for_score: Option<String>,
+/// LigandMPNN Specific
+pub struct LigandMPNNConfig {
+    pub checkpoint_ligand_mpnn: Option<String>,
+    pub ligand_mpnn_use_atom_context: Option<i32>,
+    pub ligand_mpnn_use_side_chain_context: Option<i32>,
+    pub ligand_mpnn_cutoff_for_score: Option<String>,
 }
 
-struct MembraneMPNNConfig {
-    // // Membrane MPNN Specific
-    // #[arg(long)]
-    // global_transmembrane_label: Option<i32>,
-    // #[arg(long)]
-    // transmembrane_buried: Option<String>,
-    // #[arg(long)]
-    // transmembrane_interface: Option<String>,
+/// Membrane MPNN Specific
+pub struct MembraneMPNNConfig {
+    pub global_transmembrane_label: Option<i32>,
+    pub transmembrane_buried: Option<String>,
+    pub transmembrane_interface: Option<String>,
 }
 
-// todo: refactor this commands out to
-// have lgincal, rlated grouping
 pub fn execute(
     seed: i32,
     pdb_path: String,
     out_folder: String,
     model_type: String,
+
     temperature: Option<f32>,
     verbose: Option<i32>,
     save_stats: Option<i32>,

@@ -1,5 +1,8 @@
 use super::commands;
 use clap::{Parser, Subcommand};
+use commands::run::{
+    AABiasConfig, LigandMPNNConfig, MembraneMPNNConfig, MultiPDBConfig, ResidueControl, RunConfig,
+};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -80,7 +83,6 @@ enum Commands {
         redesigned_residues_multi: Option<String>,
         #[arg(long)]
         omit_AA_per_residue_multi: Option<String>,
-
         #[arg(long)]
         bias_AA_per_residue_multi: Option<String>,
 
@@ -144,43 +146,54 @@ impl Cli {
                 global_transmembrane_label,
                 transmembrane_buried,
                 transmembrane_interface,
-            } => commands::run::execute(
-                seed,
-                pdb_path,
-                out_folder,
-                model_type,
-                temperature,
-                verbose,
-                save_stats,
-                batch_size,
-                number_of_batches,
-                file_ending,
-                zero_indexed,
-                homo_oligomer,
-                fasta_seq_separation,
-                fixed_residues,
-                redesigned_residues,
-                symmetry_residues,
-                symmetry_weights,
-                chains_to_design,
-                parse_these_chains_only,
-                bias_AA,
-                bias_AA_per_residue,
-                omit_AA,
-                omit_AA_per_residue,
-                pdb_path_multi,
-                fixed_residues_multi,
-                redesigned_residues_multi,
-                omit_AA_per_residue_multi,
-                bias_AA_per_residue_multi,
-                checkpoint_ligand_mpnn,
-                ligand_mpnn_use_atom_context,
-                ligand_mpnn_use_side_chain_context,
-                ligand_mpnn_cutoff_for_score,
-                global_transmembrane_label,
-                transmembrane_buried,
-                transmembrane_interface,
-            ),
+            } => {
+                let residue_control = ResidueControl {
+                    fixed_residues,
+                    redesigned_residues,
+                    symmetry_residues,
+                    symmetry_weights,
+                    chains_to_design,
+                    parse_these_chains_only,
+                };
+                commands::run::execute(
+                    seed,
+                    pdb_path,
+                    out_folder,
+                    model_type,
+                    temperature,
+                    verbose,
+                    save_stats,
+                    batch_size,
+                    number_of_batches,
+                    file_ending,
+                    zero_indexed,
+                    homo_oligomer,
+                    fasta_seq_separation,
+                    fixed_residues,
+                    redesigned_residues,
+                    symmetry_residues,
+                    symmetry_weights,
+                    chains_to_design,
+                    parse_these_chains_only,
+                    bias_AA,
+                    bias_AA_per_residue,
+                    omit_AA,
+                    omit_AA_per_residue,
+                    pdb_path_multi,
+                    fixed_residues_multi,
+                    redesigned_residues_multi,
+                    omit_AA_per_residue_multi,
+                    bias_AA_per_residue_multi,
+                    checkpoint_ligand_mpnn,
+                    ligand_mpnn_use_atom_context,
+                    ligand_mpnn_use_side_chain_context,
+                    ligand_mpnn_cutoff_for_score,
+                    global_transmembrane_label,
+                    transmembrane_buried,
+                    transmembrane_interface,
+                )},
+            }
+
         }
     }
 }
