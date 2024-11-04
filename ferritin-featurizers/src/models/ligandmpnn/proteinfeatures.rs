@@ -149,9 +149,10 @@ impl ProteinFeaturesModel {
         device: &Device,
     ) -> Result<(Tensor, Tensor)> {
         let x = input_features.get_coords();
+
         // let mask = input_features.output_dict.mask.as_ref();
-        // todo: fix mask
-        let mask = Tensor::zeros_like(x)?;
+        let mask = Tensor::zeros_like(x)?; // todo: fix mask
+
         // let r_idx = input_features.output_dict.r_idx.as_ref();
         // let chain_labels = input_features.output_dict.chain_labels.as_ref();
         // let x = if self.augment_eps > 0.0 {
@@ -212,6 +213,7 @@ impl ProteinFeaturesModel {
         rbf_all.push(self._get_rbf(&c, &o, &e_idx, device)?);
 
         let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
+
         let offset = (&r_idx.unsqueeze(2)? - &r_idx.unsqueeze(1)?)?;
         let offset = offset
             .unsqueeze(D::Minus1)?
@@ -221,6 +223,7 @@ impl ProteinFeaturesModel {
         let d_chains = (&chain_labels.unsqueeze(2)? - &chain_labels.unsqueeze(1)?)?
             .eq(0.0)?
             .to_dtype(candle_core::DType::I64)?;
+
         let e_chains = d_chains
             .unsqueeze(D::Minus1)?
             .gather(&e_idx, 2)?
