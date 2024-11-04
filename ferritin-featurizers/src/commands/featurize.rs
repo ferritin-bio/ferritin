@@ -1,6 +1,16 @@
+use crate::featurizer::LMPNNFeatures;
+use candle_core;
+use ferritin_core::AtomCollection;
+use pdbtbx;
+
 // src/commands/command1.rs
 pub fn execute(input: String, output: String) -> anyhow::Result<()> {
-    println!("Executing command1 with name: {}", input);
+    let (pdb, _) = pdbtbx::open(input).expect("A PDB  or CIF file");
+    let ac = AtomCollection::from(&pdb);
+
+    let features = ac.featurize(&candle_core::Device::Cpu);
+
+    //println!("Executing command1 with name: {}", input);
     println!("Executing command1 with name: {}", output);
     Ok(())
 }

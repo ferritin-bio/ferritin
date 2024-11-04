@@ -16,7 +16,7 @@ use pdbtbx::Element;
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 
 /// Convert the AtomCollection into a struct that can be passed to a model.
-trait LMPNNFeatures {
+pub trait LMPNNFeatures {
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures>;
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
@@ -232,7 +232,7 @@ impl LMPNNFeatures for AtomCollection {
     }
 }
 
-struct ProteinFeatures {
+pub struct ProteinFeatures {
     // protein amino acids sequences as ints
     s: Vec<i32>,
     // protein co-ords by residue [1, 37, 4]
