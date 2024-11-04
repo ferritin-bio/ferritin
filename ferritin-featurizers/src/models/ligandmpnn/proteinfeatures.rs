@@ -184,8 +184,9 @@ impl ProteinFeatures {
             (&a_term? + &b_term? - &c_term? + &x_term)?
         }
         .contiguous()?;
-        let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
+        // N/CA/C/O
         let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
+        let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
         let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
         let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
 
