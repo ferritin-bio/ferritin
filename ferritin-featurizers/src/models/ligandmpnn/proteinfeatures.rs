@@ -1,15 +1,15 @@
-use super::inputs::LigandMPNNData;
+use super::featurizer::ProteinFeatures;
 use candle_core::{Device, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::{layer_norm, linear, LayerNorm, LayerNormConfig, Linear, VarBuilder};
 use candle_transformers::generation::{LogitsProcessor, Sampling};
 use std::cmp::min;
-use tokenizers::models::wordpiece::WordPiece; // We'll need to swap this out....
-use tokenizers::Tokenizer;
+// use tokenizers::models::wordpiece::WordPiece; // We'll need to swap this out....
+// use tokenizers::Tokenizer;
 
 #[derive(Clone, Debug)]
 /// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L669
-pub struct ProteinFeatures {
+pub struct ProteinFeaturesModel {
     edge_features: usize,
     node_features: usize,
     num_positional_embeddings: usize,
@@ -22,7 +22,7 @@ pub struct ProteinFeatures {
     norm_edges: LayerNorm,
 }
 
-impl ProteinFeatures {
+impl ProteinFeaturesModel {
     pub fn new(edge_features: usize, node_features: usize, vb: VarBuilder) -> Result<Self> {
         let augment_eps = 0.0; // hardcoding
         let top_k = 48; // hardcoding
@@ -136,7 +136,7 @@ impl ProteinFeatures {
 
         Ok(rbf_a_b)
     }
-    pub fn forward(&self, input_features: &LigandMPNNData) -> Result<(Tensor, Tensor)> {
+    pub fn forward(&self, input_features: &ProteinFeatures) -> Result<(Tensor, Tensor)> {
         let x = input_features.output_dict.x.as_ref();
         let mask = input_features.output_dict.mask.as_ref();
         let r_idx = input_features.output_dict.r_idx.as_ref();
