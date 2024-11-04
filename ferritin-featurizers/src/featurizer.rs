@@ -261,7 +261,22 @@ pub struct ProteinFeatures {
 impl ProteinFeatures {
     pub fn save_to_safetensor(&self, path: &str) -> Result<()> {
         let mut tensors: HashMap<String, Tensor> = HashMap::new();
+
+        // this is only one field. need to do the rest of the fields
+        tensors.insert("protein_atom_sequence".to_string(), self.s.clone());
         tensors.insert("protein_atom_positions".to_string(), self.x.clone());
+        tensors.insert("ligand_atom_positions".to_string(), self.y.clone());
+        tensors.insert("ligand_atom_name".to_string(), self.y_t.clone());
+
+        // // R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
+        // r_idx: Option<Vec<i32>>,
+        // // chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
+        // chain_labels: Option<Vec<f64>>,
+        // // chain_letters: NumPy array dimensions: (93,)
+        // chain_letters: Option<Vec<String>>,
+        // /// mask_c:        Tensor dimensions: torch.Size([93])
+        // mask_c: Option<Tensor>,
+        // chain_list: Option<Vec<String>>,
 
         candle_core::safetensors::save(&tensors, path)?;
 
