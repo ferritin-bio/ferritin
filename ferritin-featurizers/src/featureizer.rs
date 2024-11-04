@@ -183,7 +183,7 @@ impl LMPNNFeatures for AtomCollection {
     }
 
     // equivalent to protien MPNN's parse_PDB
-    fn featurize(&self, device: &Device) -> Result<LigandMPNNDataDict> {
+    fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
         let x_37 = self.to_numeric_atom37(device)?;
         let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
         let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
@@ -213,73 +213,48 @@ impl LMPNNFeatures for AtomCollection {
             (4,),
             &device,
         )?;
+
         let X = x_37.index_select(&indices, 1)?;
 
-        Ok(LigandMPNNDataDict {
-            x: x_37,
-            mask: x_37_m,
+        Ok(ProteinFeatures {
+            s,
+            x: X,
+            x_mask: Some(x_37_m),
             y,
             y_t,
-            y_m,
-            r_idx: Vec::new(),
-            chain_labels: Vec::new(),
-            chain_letters: Vec::new(),
-            mask_c: Vec::new(),
-            chain_list: Vec::new(),
-            s: Vec::new(),
-            xyz_37: Vec::new(),   // I need to double chek this...
-            xyz_37_m: Vec::new(), //
-            bias_AA: None,
-            bias_AA_per_residue: None,
-            omit_AA_per_residue_multi: None,
+            y_m: Some(y_m),
+            r_idx: None,
+            chain_labels: None,
+            chain_letters: None,
+            mask_c: None,
+            chain_list: None,
         })
     }
 }
 
-/// Features of Ligand MPNN
-///
-///
-/// output_dict
-/// X :            Tensor dimensions: torch.Size([93, 4, 3])    #[B,L,4,3] - backbone xyz coordinates for N,CA,C,O
-/// mask:          Tensor dimensions: torch.Size([93])          #[B, L]    - mask
-/// Y:             Tensor dimensions: torch.Size([406, 3])      #[B,L,num_context_atoms,3] - for ligandMPNN coords
-/// Y_t:           Tensor dimensions: torch.Size([406])         #[B,L,num_context_atoms] - element type
-/// Y_m:           Tensor dimensions: torch.Size([406])         #[B,L,num_context_atoms] - mask
-/// R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
-/// chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
-/// chain_letters: NumPy array dimensions: (93,)
-/// mask_c:        Tensor dimensions: torch.Size([93])
-/// S:             Tensor dimensions: torch.Size([93])
-/// xyz_37:        Tensor dimensions: torch.Size([93, 37, 3])   #[B,L,37,3] - xyz coordinates for all atoms if needed
-/// xyz_37_m       Tensor dimensions: torch.Size([93, 37])      #[B,L,37,3] - xyz coordinates for all atoms if needed
-/// CA_icodes:     NumPy array dimensions: (93,)
-///
-/// chain_list
-/// backbone
-/// Selection
-/// other_atoms
-/// Selection
-/// water_atoms
-/// Selection
-///
-pub struct LigandMPNNDataDict {
-    //
+struct ProteinFeatures {
+    // protein amino acids sequences as ints
+    s: Vec<i32>,
+    // protein co-ords by residue [1, 37, 4]
     x: Tensor,
-    mask: Tensor,
+    // protein mask by residue
+    x_mask: Option<Tensor>,
+    // ligand coords
     y: Tensor,
+    // encoded ligand atom names
     y_t: Tensor,
-    y_m: Tensor,
-    r_idx: Vec<f64>,        // Tensor,
-    chain_labels: Vec<f64>, // Tensor,
-    chain_letters: Vec<String>,
-    mask_c: Vec<Vec<bool>>,
-    chain_list: Vec<String>,
-    s: Vec<f64>,                                 // Tensor,
-    xyz_37: Vec<f64>,                            // Tensor,
-    xyz_37_m: Vec<f64>,                          // Tensor,
-    bias_AA: Option<Vec<f64>>,                   // Tensor,
-    bias_AA_per_residue: Option<Vec<f64>>,       // Tensor,
-    omit_AA_per_residue_multi: Option<Vec<f64>>, // Tensor,
+    // .ignamd mask
+    y_m: Option<Tensor>,
+    // R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
+    r_idx: Option<Vec<i32>>,
+    // chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
+    chain_labels: Option<Vec<f64>>,
+    // chain_letters: NumPy array dimensions: (93,)
+    chain_letters: Option<Vec<String>>,
+    /// mask_c:        Tensor dimensions: torch.Size([93])
+    mask_c: Option<Tensor>,
+    chain_list: Option<Vec<String>>,
+    // CA_icodes:     NumPy array dimensions: (93,)
 }
 
 #[rustfmt::skip]
