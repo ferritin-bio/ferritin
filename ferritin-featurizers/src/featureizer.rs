@@ -1,6 +1,6 @@
 //! Protein Featurizer for ProteinMPNN/LignadMPNN
 //!
-//! Extract protein features for ligampnn
+//! Extract protein features for ligandmpnn
 //!
 //! Returns a set of features calculated from protein structure
 //! including:
@@ -9,7 +9,7 @@
 //! - Chemical features like hydrophobicity, charge
 //! - Evolutionary features from MSA profiles
 
-use candle_core::{DType, Device, Result, Tensor};
+use candle_core::{DType, Device, IndexOp, Result, Tensor};
 use ferritin_core::{is_amino_acid, AtomCollection};
 use itertools::MultiUnzip;
 use pdbtbx::Element;
@@ -17,7 +17,7 @@ use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 
 /// Convert the AtomCollection into a struct that can be passed to a model.
 trait LMPNNFeatures {
-    fn featurize(&self, device: &Device) -> Result<LigandMPNNDataDict>;
+    fn featurize(&self, device: &Device) -> Result<ProteinFeatures>;
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
@@ -25,6 +25,68 @@ trait LMPNNFeatures {
 
 fn is_heavy_atom(element: &Element) -> bool {
     !matches!(element, Element::H | Element::He)
+}
+
+///
+/// Input coords. Output 1 <batch  x 1 > Tensor
+/// representing whether each residue has all 4 backbone atoms.
+/// note that the internal ordering is different between
+/// backbone only [N/CA/C/O] and all-atom [N/CA/C/CB/O]....
+///
+fn create_backbone_mask_37(xyz_37: &Tensor) -> Result<Tensor> {
+    let backbone_indices = Tensor::new(&[0i64, 1, 2, 4], xyz_37.device())?;
+    let backbone_selection = xyz_37.index_select(&backbone_indices, 1)?; // [154, 4, 3]
+
+    // Check if coordinates exist (sum over xyz dimensions)
+    let exists = backbone_selection.sum(2)?; // [154, 4]
+
+    // All 4 atoms must exist
+    let all_exist = exists.sum_keepdim(1)?; // [154, 1]
+    Ok(all_exist)
+}
+
+fn calculate_cb(xyz_37: &Tensor) -> Result<Tensor> {
+    // make sure we are dealing with
+    let (_, dim37, dim3) = xyz_37.dims3()?;
+    assert_eq!(dim37, 37);
+    assert_eq!(dim3, 3);
+
+    // Constants for CB calculation
+    let a_coeff = -0.58273431f64;
+    let b_coeff = 0.56802827f64;
+    let c_coeff = -0.54067466f64;
+
+    // Get N, CA, C coordinates
+    let n = xyz_37.i((.., 0, ..))?; // N  at index 0
+    let ca = xyz_37.i((.., 1, ..))?; // CA at index 1
+    let c = xyz_37.i((.., 2, ..))?; // C  at index 2
+
+    // Calculate vectors
+    let b = (&ca - &n)?; // CA - N
+    let c = (&c - &ca)?; // C - CA
+
+    // Manual cross product components
+    // a_x = b_y * c_z - b_z * c_y
+    // a_y = b_z * c_x - b_x * c_z
+    // a_z = b_x * c_y - b_y * c_x
+    let b_x = b.i((.., 0))?;
+    let b_y = b.i((.., 1))?;
+    let b_z = b.i((.., 2))?;
+    let c_x = c.i((.., 0))?;
+    let c_y = c.i((.., 1))?;
+    let c_z = c.i((.., 2))?;
+
+    let a_x = ((&b_y * &c_z)? - (&b_z * &c_y)?)?;
+    let a_y = ((&b_z * &c_x)? - (&b_x * &c_z)?)?;
+    let a_z = ((&b_x * &c_y)? - (&b_y * &c_x)?)?;
+
+    // Stack the cross product components back together
+    let a = Tensor::stack(&[&a_x, &a_y, &a_z], 1)?;
+
+    // Final CB calculation: -0.58273431 * a + 0.56802827 * b - 0.54067466 * c + CA
+    let cb = (&a * a_coeff)? + (&b * b_coeff)? + (&c * c_coeff)? + &ca;
+
+    Ok(cb?)
 }
 
 // Create default
@@ -120,90 +182,105 @@ impl LMPNNFeatures for AtomCollection {
         Ok((y, y_t, y_m))
     }
 
-    fn featurize(&self, device: &Device) -> Result<LigandMPNNDataDict> {
+    // equivalent to protien MPNN's parse_PDB
+    fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
         let x_37 = self.to_numeric_atom37(device)?;
         let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
         let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
 
-        // let mut xyz_37 = Array3::<f32>::zeros((atoms.len(), 37, 3));
-        // let mut xyz_37_m = Array2::<i32>::zeros((atoms.len(), 37));
+        // get CB locations...
+        // although we have these already for our full set...
+        let cb = calculate_cb(&x_37);
 
-        //     for atom_name in &atom_types {
-        //         let (xyz, xyz_m) = get_aligned_coordinates(&protein_atoms, &ca_dict, atom_name)?;
-        //         xyz_37
-        //             .slice_mut(s![.., atom_order(atom_name), ..])
-        //             .assign(&xyz);
-        //         xyz_37_m
-        //             .slice_mut(s![.., atom_order(atom_name)])
-        //             .assign(&xyz_m);
-        //     }
-        //
-        //
-        Ok(LigandMPNNDataDict {
-            x: x_37,
-            mask: x_37_m,
+        // chain_labels = np.array(CA_atoms.getChindices(), dtype=np.int32)
+        let chain_labels = self.get_resids(); //  <- need to double check shape. I think this is all-atom
+
+        // R_idx = np.array(CA_resnums, dtype=np.int32)
+        // let _r_idx = self.get_resids(); // todo()!
+
+        // amino acid names as int....
+        let s: Vec<i32> = self
+            .iter_residues_aminoacid()
+            .map(|res| res.res_name)
+            .map(|res| aa3to1(&res))
+            .map(|res| aa1to_int(res))
+            .collect();
+
+        // coordaintes of the backbone atoms
+
+        let indices = Tensor::from_slice(
+            &[0., 1., 2., 4.], // index of N/CA/C/O
+            (4,),
+            &device,
+        )?;
+
+        let X = x_37.index_select(&indices, 1)?;
+
+        Ok(ProteinFeatures {
+            s,
+            x: X,
+            x_mask: Some(x_37_m),
             y,
             y_t,
-            y_m,
-            r_idx: Vec::new(),
-            chain_labels: Vec::new(),
-            chain_letters: Vec::new(),
-            mask_c: Vec::new(),
-            chain_list: Vec::new(),
-            s: Vec::new(),
-            xyz_37: Vec::new(),   // I need to double chek this...
-            xyz_37_m: Vec::new(), //
-            bias_AA: None,
-            bias_AA_per_residue: None,
-            omit_AA_per_residue_multi: None,
+            y_m: Some(y_m),
+            r_idx: None,
+            chain_labels: None,
+            chain_letters: None,
+            mask_c: None,
+            chain_list: None,
         })
     }
 }
 
-/// Features of Ligand MPNN
-///
-///
-/// output_dict
-/// X :            Tensor dimensions: torch.Size([93, 4, 3])    #[B,L,4,3] - backbone xyz coordinates for N,CA,C,O
-/// mask:          Tensor dimensions: torch.Size([93])          #[B, L]    - mask
-/// Y:             Tensor dimensions: torch.Size([406, 3])      #[B,L,num_context_atoms,3] - for ligandMPNN coords
-/// Y_t:           Tensor dimensions: torch.Size([406])         #[B,L,num_context_atoms] - element type
-/// Y_m:           Tensor dimensions: torch.Size([406])         #[B,L,num_context_atoms] - mask
-/// R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
-/// chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
-/// chain_letters: NumPy array dimensions: (93,)
-/// mask_c:        Tensor dimensions: torch.Size([93])
-/// S:             Tensor dimensions: torch.Size([93])
-/// xyz_37:        Tensor dimensions: torch.Size([93, 37, 3])   #[B,L,37,3] - xyz coordinates for all atoms if needed
-/// xyz_37_m       Tensor dimensions: torch.Size([93, 37])      #[B,L,37,3] - xyz coordinates for all atoms if needed
-/// CA_icodes:     NumPy array dimensions: (93,)
-///
-/// chain_list
-/// backbone
-/// Selection
-/// other_atoms
-/// Selection
-/// water_atoms
-/// Selection
-///
-pub struct LigandMPNNDataDict {
-    //
+struct ProteinFeatures {
+    // protein amino acids sequences as ints
+    s: Vec<i32>,
+    // protein co-ords by residue [1, 37, 4]
     x: Tensor,
-    mask: Tensor,
+    // protein mask by residue
+    x_mask: Option<Tensor>,
+    // ligand coords
     y: Tensor,
+    // encoded ligand atom names
     y_t: Tensor,
-    y_m: Tensor,
-    r_idx: Vec<f64>,        // Tensor,
-    chain_labels: Vec<f64>, // Tensor,
-    chain_letters: Vec<String>,
-    mask_c: Vec<Vec<bool>>,
-    chain_list: Vec<String>,
-    s: Vec<f64>,                                 // Tensor,
-    xyz_37: Vec<f64>,                            // Tensor,
-    xyz_37_m: Vec<f64>,                          // Tensor,
-    bias_AA: Option<Vec<f64>>,                   // Tensor,
-    bias_AA_per_residue: Option<Vec<f64>>,       // Tensor,
-    omit_AA_per_residue_multi: Option<Vec<f64>>, // Tensor,
+    // .ignamd mask
+    y_m: Option<Tensor>,
+    // R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
+    r_idx: Option<Vec<i32>>,
+    // chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
+    chain_labels: Option<Vec<f64>>,
+    // chain_letters: NumPy array dimensions: (93,)
+    chain_letters: Option<Vec<String>>,
+    /// mask_c:        Tensor dimensions: torch.Size([93])
+    mask_c: Option<Tensor>,
+    chain_list: Option<Vec<String>>,
+    // CA_icodes:     NumPy array dimensions: (93,)
+}
+
+#[rustfmt::skip]
+fn aa3to1(aa: &str) -> char {
+    match aa {
+        "ALA" => 'A', "CYS" => 'C', "ASP" => 'D',
+        "GLU" => 'E', "PHE" => 'F', "GLY" => 'G',
+        "HIS" => 'H', "ILE" => 'I', "LYS" => 'K',
+        "LEU" => 'L', "MET" => 'M', "ASN" => 'N',
+        "PRO" => 'P', "GLN" => 'Q', "ARG" => 'R',
+        "SER" => 'S', "THR" => 'T', "VAL" => 'V',
+        "TRP" => 'W', "TYR" => 'Y', _     => 'X',
+    }
+}
+
+#[rustfmt::skip]
+fn aa1to_int(aa: char) -> i32 {
+    match aa {
+        'A' => 0, 'C' => 1, 'D' => 2,
+        'E' => 3, 'F' => 4, 'G' => 5,
+        'H' => 6, 'I' => 7, 'K' => 8,
+        'L' => 9, 'M' => 10, 'N' => 11,
+        'P' => 12, 'Q' => 13, 'R' => 14,
+        'S' => 15, 'T' => 16, 'V' => 17,
+        'W' => 18, 'Y' => 19, _   => 20,
+    }
 }
 
 #[rustfmt::skip]
@@ -291,7 +368,7 @@ define_residues! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candle_core::IndexOp;
+    use ferritin_test_data::TestFile;
     use pdbtbx;
 
     #[test]
@@ -324,7 +401,8 @@ mod tests {
     #[test]
     fn test_atom_backbone_tensor() {
         let device = Device::Cpu;
-        let (pdb, _) = pdbtbx::open("data/101m.cif").unwrap();
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
+        let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
         let ac = AtomCollection::from(&pdb);
         let ac_backbone_tensor: Tensor = ac.to_numeric_backbone_atoms(&device).expect("REASON");
         // 154 residues; N/CA/C/O; positions
@@ -362,7 +440,8 @@ mod tests {
     #[test]
     fn test_all_atom37_tensor() {
         let device = Device::Cpu;
-        let (pdb, _) = pdbtbx::open("data/101m.cif").unwrap();
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
+        let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
         let ac = AtomCollection::from(&pdb);
         let ac_backbone_tensor: Tensor = ac.to_numeric_atom37(&device).expect("REASON");
         // 154 residues; N/CA/C/O; positions
@@ -429,18 +508,7 @@ mod tests {
             ("CZ3", (0, 34, ..), vec![0.0, 0.0, 0.0]),
             ("NZ", (0, 35, ..), vec![0.0, 0.0, 0.0]),
             ("OXT", (0, 36, ..), vec![0.0, 0.0, 0.0]),
-            // Valine - AA01
-            // ("N", (1, 0, ..), vec![25.964, 11.453, -10.903]),
-            // ("CA", (1, 1, ..), vec![27.263, 11.924, -11.359]),
-            // ("C", (1, 2, ..), vec![27.392, 13.428, -11.115]),
-            // ("O", (1, 3, ..), vec![26.443, 14.184, -11.327]),
-            // Glycing - AAlast
-            // ("N", (153, 0, ..), vec![23.474, -3.227, 5.994]),
-            // ("CA", (153, 1, ..), vec![22.818, -2.798, 7.211]),
-            // ("C", (153, 2, ..), vec![22.695, -1.282, 7.219]),
-            // ("O", (153, 3, ..), vec![21.870, -0.745, 7.992]),
         ];
-
         for (atom_name, (i, j, k), expected) in allatom_coords {
             let actual: Vec<f32> = ac_backbone_tensor.i((i, j, k)).unwrap().to_vec1().unwrap();
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
@@ -450,12 +518,13 @@ mod tests {
     #[test]
     fn test_ligand_tensor() {
         let device = Device::Cpu;
-        let (pdb, _) = pdbtbx::open("data/101m.cif").unwrap();
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
+        let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
         let ac = AtomCollection::from(&pdb);
         let (ligand_coords, ligand_elements, _) =
             ac.to_numeric_ligand_atoms(&device).expect("REASON");
 
-        // 154 residues; N/CA/C/O; positions
+        // 54 residues; N/CA/C/O; positions
         assert_eq!(ligand_coords.dims(), &[54, 3]);
 
         // Check my residue coords in the Tensor
@@ -479,7 +548,6 @@ mod tests {
         }
 
         // Now check the elements
-
         let elements: Vec<&str> = ligand_elements
             .to_vec1::<f32>()
             .unwrap()
@@ -491,5 +559,20 @@ mod tests {
         assert_eq!(elements[1], "O");
         assert_eq!(elements[2], "O");
         assert_eq!(elements[3], "O");
+    }
+
+    #[test]
+    fn test_backbone_tensor() {
+        let device = Device::Cpu;
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
+        let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
+        let ac = AtomCollection::from(&pdb);
+        let xyz_37 = ac
+            .to_numeric_atom37(&device)
+            .expect("XYZ creation for all-atoms");
+        assert_eq!(xyz_37.dims(), [154, 37, 3]);
+
+        let xyz_m = create_backbone_mask_37(&xyz_37).expect("masking procedure should work");
+        assert_eq!(xyz_m.dims(), &[154, 1]);
     }
 }
