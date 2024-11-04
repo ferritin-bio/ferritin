@@ -196,7 +196,7 @@ impl LMPNNFeatures for AtomCollection {
         let chain_labels = self.get_resids(); //  <- need to double check shape. I think this is all-atom
 
         // R_idx = np.array(CA_resnums, dtype=np.int32)
-        let R_idx = self.get_resids(); // todo()!
+        // let _r_idx = self.get_resids(); // todo()!
 
         // amino acid names as int....
         let s: Vec<i32> = self
@@ -368,7 +368,6 @@ define_residues! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candle_core::{IndexOp, Shape};
     use ferritin_test_data::TestFile;
     use pdbtbx;
 
