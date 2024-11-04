@@ -5,7 +5,7 @@ use commands::run::{
 };
 
 #[derive(Debug, Clone, ValueEnum)] // Need Clone and ValueEnum for CLAP
-enum ModelTypes {
+pub enum ModelTypes {
     #[value(name = "protein_mpnn")] // Optional: customize CLI name
     ProteinMPNN,
     #[value(name = "ligand_mpnn")]

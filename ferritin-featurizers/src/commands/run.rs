@@ -1,3 +1,4 @@
+use crate::cli::ModelTypes;
 use crate::featurizer::LMPNNFeatures;
 use candle_core;
 use ferritin_core::AtomCollection;
@@ -64,22 +65,21 @@ pub fn execute(
     seed: i32,
     pdb_path: String,
     out_folder: String,
-    model_type: String,
+    model_type: ModelTypes,
     runconfig: RunConfig,
     residue_control: ResidueControl,
     aa_bias: AABiasConfig,
     lig_mpnn_specific: LigandMPNNConfig,
     membrane_mpnn_specific: MembraneMPNNConfig,
     multi_pdb: MultiPDBConfig,
-
 ) -> anyhow::Result<()> {
-    println!("This run script is very crude at the moment and does not handle MOST of the CLI args.....")
+    println!(
+        "This run script is very crude at the moment and does not handle MOST of the CLI args....."
+    );
 
-
-    println!("Need to implement the seed!");
     let (pdb, _) = pdbtbx::open(pdb_path).expect("A PDB or CIF file");
     let ac = AtomCollection::from(&pdb);
     let features = ac.featurize(&candle_core::Device::Cpu)?;
-    let _ = features.save_to_safetensor(&output)?;
+    // let _ = features.save_to_safetensor(&out_folder)?;
     Ok(())
 }
