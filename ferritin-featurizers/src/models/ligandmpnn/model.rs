@@ -6,6 +6,98 @@ use candle_nn::encoding::one_hot;
 use candle_nn::{layer_norm, linear, ops, Dropout, Linear, VarBuilder};
 use candle_transformers::generation::LogitsProcessor;
 
+/// Gather_edges
+/// Features [B,N,N,C] at Neighbor indices [B,N,K] => Neighbor features [B,N,K,C]
+pub fn gather_edges(edges: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
+    let (d1, d2, d3) = neighbor_idx.dims3()?;
+    let neighbors =
+        neighbor_idx
+            .unsqueeze(D::Minus1)?
+            .expand((d1, d2, d3, edges.dim(D::Minus1)?))?;
+    edges.gather(&neighbors, 2)
+}
+
+pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
+    // Features [B,N,C] at Neighbor indices [B,N,K] => [B,N,K,C]
+    // Flatten and expand indices per batch [B,N,K] => [B,NK] => [B,NK,C]
+    let neighbors_flat =
+        neighbor_idx.reshape((neighbor_idx.dim(0)?, neighbor_idx.dim(D::Minus1)?))?;
+    let (d1, d2, d3) = neighbor_idx.dims3()?;
+    let neighbors_flat = neighbors_flat
+        .unsqueeze(D::Minus1)?
+        .expand((d1, d2, nodes.dim(2)?))?;
+    let neighbor_features = nodes.gather(nodes, 1)?;
+    neighbor_features.reshape((d1, d2, d3, neighbor_features.dim(D::Minus1)?))
+}
+
+fn gather_nodes_t(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
+    // Features [B,N,C] at Neighbor index [B,K] => Neighbor features[B,K,C]
+    let (d1, d2, d3) = nodes.dims3()?;
+    let idx_flat = neighbor_idx.unsqueeze(D::Minus1)?.expand((d1, d2, d3))?;
+    nodes.gather(&idx_flat, 1)
+}
+
+pub fn cat_neighbors_nodes(
+    h_nodes: &Tensor,
+    h_neighbors: &Tensor,
+    e_idx: &Tensor,
+) -> Result<Tensor> {
+    let h_nodes_gathered = gather_nodes(h_nodes, e_idx)?;
+    Tensor::cat(&[h_neighbors, &h_nodes_gathered], D::Minus1)
+}
+
+fn get_seq_rec(s: &Tensor, s_pred: &Tensor, mask: &Tensor) -> Result<Tensor> {
+    // S: true sequence shape=[batch, length]
+    // S_pred: predicted sequence shape=[batch, length]
+    // mask: mask to compute average over the region shape=[batch, length]
+    // Returns: averaged sequence recovery shape=[batch]
+    //
+    // Compute the match tensor
+    let match_tensor = s.eq(s_pred)?;
+    let match_f32 = match_tensor.to_dtype(candle_core::DType::F32)?;
+    let numerator = (match_f32 * mask)?.sum_keepdim(1)?;
+    let denominator = mask.sum_keepdim(1)?;
+    let average = numerator.broadcast_div(&denominator)?;
+    // Remove the last dimension to get shape=[batch]
+    average.squeeze(1)
+}
+
+fn get_score(s: &Tensor, log_probs: &Tensor, mask: &Tensor) -> Result<(Tensor, Tensor)> {
+    //     S : true sequence shape=[batch, length]
+    //     log_probs : predicted sequence shape=[batch, length]
+    //     mask : mask to compute average over the region shape=[batch, length]
+    //     average_loss : averaged categorical cross entropy (CCE) [batch]
+    //     loss_per_resdue : per position CCE [batch, length]
+
+    //     """
+    //     S_one_hot = torch.nn.functional.one_hot(S, 21)
+    //     loss_per_residue = -(S_one_hot * log_probs).sum(-1)  # [B, L]
+    //     average_loss = torch.sum(loss_per_residue * mask, dim=-1) / (
+    //         torch.sum(mask, dim=-1) + 1e-8
+    //     )
+    //     return average_loss, loss_per_residue
+
+    // S: true sequence shape=[batch, length]
+    // log_probs: predicted sequence shape=[batch, length, 21]
+    // mask: mask to compute average over the region shape=[batch, length]
+    // Returns:
+    //   - average_loss: averaged categorical cross entropy (CCE) [batch]
+    //   - loss_per_residue: per position CCE [batch, length]
+
+    // Create one-hot encoding of S.
+    // see https://docs.rs/candle-nn/0.7.2/candle_nn/encoding/fn.one_hot.html
+    // this could be wrong...
+    let s_one_hot = one_hot(s.clone(), 21, 1., 0.)?;
+    let loss_per_residue = s_one_hot.mul(&log_probs.neg()?)?.sum(D::Minus1)?;
+    let average_loss = loss_per_residue
+        .mul(&mask)?
+        .sum_keepdim(D::Minus1)?
+        .div(&(mask.sum_keepdim(D::Minus1)? + 1e-8f64)?)?
+        .squeeze(D::Minus1)?;
+
+    Ok((average_loss, loss_per_residue))
+}
+
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
 struct ScoreOutput {
