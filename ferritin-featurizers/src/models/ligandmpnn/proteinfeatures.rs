@@ -77,7 +77,6 @@ impl ProteinFeaturesModel {
         const D_MAX: f64 = 22.0;
 
         // Create centers (μ)
-        // Todo: fix device!
         let d_mu =
             linspace(D_MIN, D_MAX, self.num_rbf, device)?.reshape((1, 1, 1, self.num_rbf))?;
 
@@ -94,7 +93,7 @@ impl ProteinFeaturesModel {
         Ok(rbf)
     }
 
-    fn _get_rbf(&self, a: &Tensor, b: &Tensor, e_idx: &Tensor) -> Result<Tensor> {
+    fn _get_rbf(&self, a: &Tensor, b: &Tensor, e_idx: &Tensor, device: &Device) -> Result<Tensor> {
         // Expand dimensions for broadcasting
         let a_expanded = a.unsqueeze(2)?;
         let b_expanded = b.unsqueeze(1)?;
@@ -111,10 +110,32 @@ impl ProteinFeaturesModel {
         let d_a_b_neighbors = d_a_b_neighbors.squeeze(D::Minus1)?;
 
         // Apply RBF
-        let rbf_a_b = self._rbf(&d_a_b_neighbors)?;
+        let rbf_a_b = self._rbf(&d_a_b_neighbors, device)?;
 
         Ok(rbf_a_b)
     }
+
+    fn compute_pairwise_distances(&self, a: &Tensor, b: &Tensor) -> Result<Tensor> {
+        const EPSILON: f64 = 1e-6; // Numerical stability constant
+
+        let a_expanded = a.unsqueeze(2)?;
+        let b_expanded = b.unsqueeze(1)?;
+
+        // Euclidean distance calculation
+        let diff = (a_expanded - b_expanded)?;
+        let squared_distances = diff.powf(2.0)?.sum(3)?;
+        let distances = (squared_distances + EPSILON)?.sqrt()?;
+
+        Ok(distances)
+    }
+
+    fn gather_edge_distances(&self, distances: &Tensor, edge_indices: &Tensor) -> Result<Tensor> {
+        distances
+            .unsqueeze(D::Minus1)?
+            .gather(edge_indices, 2)?
+            .squeeze(D::Minus1)
+    }
+
     pub fn forward(&self, input_features: &ProteinFeatures) -> Result<(Tensor, Tensor)> {
         let x = input_features.get_coords();
         // let mask = input_features.output_dict.mask.as_ref();
