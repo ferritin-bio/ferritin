@@ -7,28 +7,6 @@ use std::cmp::min;
 use tokenizers::models::wordpiece::WordPiece; // We'll need to swap this out....
 use tokenizers::Tokenizer;
 
-/// Custom Cross-Product Fn.
-fn cross_product(a: &Tensor, b: &Tensor) -> Result<Tensor> {
-    let last_dim = a.dims().len() - 1;
-
-    // Extract components
-    let a0 = a.narrow(last_dim, 0, 1)?;
-    let a1 = a.narrow(last_dim, 1, 1)?;
-    let a2 = a.narrow(last_dim, 2, 1)?;
-
-    let b0 = b.narrow(last_dim, 0, 1)?;
-    let b1 = b.narrow(last_dim, 1, 1)?;
-    let b2 = b.narrow(last_dim, 2, 1)?;
-
-    // Compute cross product components
-    let c0 = ((&a1 * &b2)? - (&a2 * &b1)?)?;
-    let c1 = ((&a2 * &b0)? - (&a0 * &b2)?)?;
-    let c2 = ((&a0 * &b1)? - (&a1 * &b0)?)?;
-
-    // Stack the results
-    Tensor::cat(&[&c0, &c1, &c2], last_dim)
-}
-
 #[derive(Clone, Debug)]
 /// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L669
 pub struct ProteinFeatures {

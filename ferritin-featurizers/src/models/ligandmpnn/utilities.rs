@@ -1,4 +1,4 @@
-use candle_core::{DType, Device, Result, Tensor};
+use candle_core::{DType, Device, Result, Tensor, D};
 use pdbtbx::Element;
 use strum::{Display, EnumIter, EnumString};
 
