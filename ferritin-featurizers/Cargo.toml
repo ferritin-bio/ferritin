@@ -14,6 +14,7 @@ candle-core = "0.7.2"
 strum = { version = "0.26", features = ["derive"] }
 clap = "4.5.20"
 anyhow.workspace = true
+safetensors = "0.4.5"
 
 
 [dev-dependencies]

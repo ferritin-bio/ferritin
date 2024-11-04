@@ -13,6 +13,8 @@ use candle_core::{DType, Device, IndexOp, Result, Tensor};
 use ferritin_core::{is_amino_acid, AtomCollection};
 use itertools::MultiUnzip;
 use pdbtbx::Element;
+use safetensors::serialize_to_file;
+use std::collections::HashMap;
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 
 /// Convert the AtomCollection into a struct that can be passed to a model.
@@ -255,6 +257,16 @@ pub struct ProteinFeatures {
     mask_c: Option<Tensor>,
     chain_list: Option<Vec<String>>,
     // CA_icodes:     NumPy array dimensions: (93,)
+}
+impl ProteinFeatures {
+    pub fn save_to_safetensor(&self, path: &str) -> Result<()> {
+        let mut tensors: HashMap<String, Tensor> = HashMap::new();
+        tensors.insert("protein_atom_positions".to_string(), self.x.clone());
+
+        candle_core::safetensors::save(&tensors, path)?;
+
+        Ok(())
+    }
 }
 
 #[rustfmt::skip]
