@@ -102,10 +102,6 @@ impl AtomCollection {
         let aa_bond_info = get_bonds_canonical20();
         let residue_starts = self.get_residue_starts();
 
-        println!("Number of residues: {}", residue_starts.len());
-        println!("First few residue names: {:?}", &self.res_names[..5]);
-        println!("First few atom names: {:?}", &self.atom_names[..5]);
-
         // Iterate through residues
         let mut bonds = Vec::new();
         for res_i in 0..residue_starts.len() - 1 {
@@ -208,7 +204,7 @@ impl AtomCollection {
     pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
         izip!(&self.coords, &self.elements)
     }
-    /// IterResiudees Will Iterate Through the AtomCollection one Residue at a time.
+    /// Iter_Residues Will Iterate Through the AtomCollection one Residue at a time.
     ///
     /// This is the base for any onther residue filtration code.
     pub fn iter_residues_all(&self) -> ResidueIter {

@@ -13,10 +13,12 @@ use candle_core::{DType, Device, IndexOp, Result, Tensor};
 use ferritin_core::{is_amino_acid, AtomCollection};
 use itertools::MultiUnzip;
 use pdbtbx::Element;
+use safetensors::serialize_to_file;
+use std::collections::HashMap;
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 
 /// Convert the AtomCollection into a struct that can be passed to a model.
-trait LMPNNFeatures {
+pub trait LMPNNFeatures {
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures>;
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
@@ -34,7 +36,7 @@ fn is_heavy_atom(element: &Element) -> bool {
 /// backbone only [N/CA/C/O] and all-atom [N/CA/C/CB/O]....
 ///
 fn create_backbone_mask_37(xyz_37: &Tensor) -> Result<Tensor> {
-    let backbone_indices = Tensor::new(&[0i64, 1, 2, 4], xyz_37.device())?;
+    let backbone_indices = Tensor::new(&[0u32, 1, 2, 4], xyz_37.device())?;
     let backbone_selection = xyz_37.index_select(&backbone_indices, 1)?; // [154, 4, 3]
 
     // Check if coordinates exist (sum over xyz dimensions)
@@ -199,17 +201,17 @@ impl LMPNNFeatures for AtomCollection {
         // let _r_idx = self.get_resids(); // todo()!
 
         // amino acid names as int....
-        let s: Vec<i32> = self
+        let s = self
             .iter_residues_aminoacid()
             .map(|res| res.res_name)
             .map(|res| aa3to1(&res))
-            .map(|res| aa1to_int(res))
-            .collect();
+            .map(|res| aa1to_int(res));
 
-        // coordaintes of the backbone atoms
+        let s = Tensor::from_iter(s, device)?;
 
+        // coordinates of the backbone atoms
         let indices = Tensor::from_slice(
-            &[0., 1., 2., 4.], // index of N/CA/C/O
+            &[0i64, 1i64, 2i64, 4i64], // index of N/CA/C/O as integers
             (4,),
             &device,
         )?;
@@ -232,9 +234,9 @@ impl LMPNNFeatures for AtomCollection {
     }
 }
 
-struct ProteinFeatures {
-    // protein amino acids sequences as ints
-    s: Vec<i32>,
+pub struct ProteinFeatures {
+    // protein amino acids sequences as 1D Tesnsor of u32
+    s: Tensor,
     // protein co-ords by residue [1, 37, 4]
     x: Tensor,
     // protein mask by residue
@@ -243,7 +245,7 @@ struct ProteinFeatures {
     y: Tensor,
     // encoded ligand atom names
     y_t: Tensor,
-    // .ignamd mask
+    // ligand mask
     y_m: Option<Tensor>,
     // R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
     r_idx: Option<Vec<i32>>,
@@ -255,6 +257,31 @@ struct ProteinFeatures {
     mask_c: Option<Tensor>,
     chain_list: Option<Vec<String>>,
     // CA_icodes:     NumPy array dimensions: (93,)
+}
+impl ProteinFeatures {
+    pub fn save_to_safetensor(&self, path: &str) -> Result<()> {
+        let mut tensors: HashMap<String, Tensor> = HashMap::new();
+
+        // this is only one field. need to do the rest of the fields
+        tensors.insert("protein_atom_sequence".to_string(), self.s.clone());
+        tensors.insert("protein_atom_positions".to_string(), self.x.clone());
+        tensors.insert("ligand_atom_positions".to_string(), self.y.clone());
+        tensors.insert("ligand_atom_name".to_string(), self.y_t.clone());
+
+        // // R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
+        // r_idx: Option<Vec<i32>>,
+        // // chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
+        // chain_labels: Option<Vec<f64>>,
+        // // chain_letters: NumPy array dimensions: (93,)
+        // chain_letters: Option<Vec<String>>,
+        // /// mask_c:        Tensor dimensions: torch.Size([93])
+        // mask_c: Option<Tensor>,
+        // chain_list: Option<Vec<String>>,
+
+        candle_core::safetensors::save(&tensors, path)?;
+
+        Ok(())
+    }
 }
 
 #[rustfmt::skip]
@@ -271,7 +298,7 @@ fn aa3to1(aa: &str) -> char {
 }
 
 #[rustfmt::skip]
-fn aa1to_int(aa: char) -> i32 {
+fn aa1to_int(aa: char) -> u32 {
     match aa {
         'A' => 0, 'C' => 1, 'D' => 2,
         'E' => 3, 'F' => 4, 'G' => 5,

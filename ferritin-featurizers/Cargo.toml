@@ -12,7 +12,12 @@ pdbtbx.workspace = true
 itertools.workspace = true
 candle-core = "0.7.2"
 strum = { version = "0.26", features = ["derive"] }
+clap = "4.5.20"
+anyhow.workspace = true
+safetensors = "0.4.5"
 
 
 [dev-dependencies]
 ferritin-test-data = { path = "../ferritin-test-data" }
+assert_cmd = "2.0.16"
+tempfile = "3.13.0"
