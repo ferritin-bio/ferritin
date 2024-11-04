@@ -201,12 +201,13 @@ impl LMPNNFeatures for AtomCollection {
         // let _r_idx = self.get_resids(); // todo()!
 
         // amino acid names as int....
-        let s: Vec<i32> = self
+        let s = self
             .iter_residues_aminoacid()
             .map(|res| res.res_name)
             .map(|res| aa3to1(&res))
-            .map(|res| aa1to_int(res))
-            .collect();
+            .map(|res| aa1to_int(res));
+
+        let s = Tensor::from_iter(s, device);
 
         // coordaintes of the backbone atoms
 
@@ -235,8 +236,8 @@ impl LMPNNFeatures for AtomCollection {
 }
 
 pub struct ProteinFeatures {
-    // protein amino acids sequences as ints
-    s: Vec<i32>,
+    // protein amino acids sequences as 1D Tesnsor of u32
+    s: Tensor,
     // protein co-ords by residue [1, 37, 4]
     x: Tensor,
     // protein mask by residue
@@ -260,10 +261,14 @@ pub struct ProteinFeatures {
 }
 impl ProteinFeatures {
     pub fn save_to_safetensor(&self, path: &str) -> Result<()> {
+        let device = self.x.device();
         let mut tensors: HashMap<String, Tensor> = HashMap::new();
 
         // this is only one field. need to do the rest of the fields
-        tensors.insert("protein_atom_sequence".to_string(), self.s.clone());
+        tensors.insert(
+            "protein_atom_sequence".to_string(),
+            Tensor::new(self.s.clone()),
+        );
         tensors.insert("protein_atom_positions".to_string(), self.x.clone());
         tensors.insert("ligand_atom_positions".to_string(), self.y.clone());
         tensors.insert("ligand_atom_name".to_string(), self.y_t.clone());
@@ -298,7 +303,7 @@ fn aa3to1(aa: &str) -> char {
 }
 
 #[rustfmt::skip]
-fn aa1to_int(aa: char) -> i32 {
+fn aa1to_int(aa: char) -> u32 {
     match aa {
         'A' => 0, 'C' => 1, 'D' => 2,
         'E' => 3, 'F' => 4, 'G' => 5,
