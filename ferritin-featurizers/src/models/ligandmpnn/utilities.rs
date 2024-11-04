@@ -43,6 +43,48 @@ pub fn cat_neighbors_nodes(
     Tensor::cat(&[h_neighbors, &h_nodes_gathered], D::Minus1)
 }
 
+/// Retrieve the nearest Neighbor of a set of coordinates.
+/// Usually used for CA carbon distance.
+pub fn compute_nearest_neighbors(
+    coords: &Tensor,
+    mask: &Tensor,
+    k: usize,
+    eps: f32,
+) -> Result<(Tensor, Tensor)> {
+    let batch_size = coords.dim(0)?;
+    let seq_len = coords.dim(1)?;
+
+    // Create 2D mask
+    let mask_2d = mask.unsqueeze(1)? * mask.unsqueeze(2)?;
+
+    // Compute pairwise distances
+    let coords1 = coords.unsqueeze(2)?; // [B, L, 1, 3]
+    let coords2 = coords.unsqueeze(1)?; // [B, 1, L, 3]
+    let diff = &coords1 - &coords2; // [B, L, L, 3]
+
+    // Add epsilon for numerical stability and take sqrt
+    let distances = ((&diff * &diff).sum(D::Minus1)? + eps)?.sqrt()?;
+
+    // Apply mask
+    let masked_distances = &distances * &mask_2d;
+
+    // Get max values for adjustment
+    let d_max = masked_distances.max_keepdim(D::Minus1)?;
+
+    // Adjust distances
+    let d_adjust = &masked_distances + (&(&mask_2d * -1.0)? + 1.0)? * &d_max;
+
+    // Get top k closest points
+    let (values, indices) = d_adjust.topk(
+        k.min(seq_len),
+        D::Minus1,
+        false, // largest=False
+        true,
+    )?;
+
+    Ok((values, indices))
+}
+
 /// Input coords. Output 1 <batch  x 1 > Tensor
 /// representing whether each residue has all 4 backbone atoms.
 /// note that the internal ordering is different between
@@ -649,5 +691,38 @@ mod tests {
 
         let xyz_m = create_backbone_mask_37(&xyz_37).expect("masking procedure should work");
         assert_eq!(xyz_m.dims(), &[154, 1]);
+    }
+    #[test]
+    fn test_compute_nearest_neighbors() {
+        let device = Device::Cpu;
+
+        // Create a simple 2x3x3 tensor representing 2 sequences of 3 points in 3D space
+        let coords = Tensor::new(
+            &[
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]], // First sequence
+                [[0.0, 1.0, 0.0], [1.0, 1.0, 0.0], [2.0, 1.0, 0.0]], // Second sequence
+            ],
+            &device,
+        )
+        .unwrap();
+
+        // Create mask indicating all points are valid
+        let mask = Tensor::ones((2, 3), DType::F32, &device).unwrap();
+
+        // Get 2 nearest neighbors for each point
+        let (distances, indices) = compute_nearest_neighbors(&coords, &mask, 2, 1e-6).unwrap();
+
+        // Check shapes
+        assert_eq!(distances.dims(), &[2, 3, 2]); // [batch, seq_len, k]
+        assert_eq!(indices.dims(), &[2, 3, 2]); // [batch, seq_len, k]
+
+        // For first sequence, point [1,0,0] should have [0,0,0] and [2,0,0] as nearest neighbors
+        let point_neighbors: Vec<i64> = indices.i((0, 1, ..)).unwrap().to_vec1().unwrap();
+        assert_eq!(point_neighbors, vec![0, 2]);
+
+        // Check distances are correct
+        let point_distances: Vec<f32> = distances.i((0, 1, ..)).unwrap().to_vec1().unwrap();
+        assert!((point_distances[0] - 1.0).abs() < 1e-5);
+        assert!((point_distances[1] - 1.0).abs() < 1e-5);
     }
 }
