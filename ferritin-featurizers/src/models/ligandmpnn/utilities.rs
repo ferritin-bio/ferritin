@@ -55,25 +55,44 @@ pub fn compute_nearest_neighbors(
     let batch_size = coords.dim(0)?;
     let seq_len = coords.dim(1)?;
 
-    // Create 2D mask
-    let mask_2d = (mask.unsqueeze(1)? * mask.unsqueeze(2)?)?;
+    let mask_unsqueeze1 = mask.unsqueeze(2)?; // Shape: [2, 3, 1]
+    let mask_unsqueeze2 = mask.unsqueeze(1)?; // Shape: [2, 1, 3]
+
+    // broadcast_matmul handles broadcasting automatically
+    // [2, 3, 1] × [2, 1, 3] -> [2, 3, 3]
+    let mask_2d = mask_unsqueeze1.broadcast_matmul(&mask_unsqueeze2)?;
+    println!("mask 2d shape: {:?}", mask_2d.shape());
 
     // Compute pairwise distances
     let coords1 = coords.unsqueeze(2)?; // [B, L, 1, 3]
     let coords2 = coords.unsqueeze(1)?; // [B, 1, L, 3]
-    let diff = (&coords1 - &coords2)?; // [B, L, L, 3]
+    let diff = coords1.broadcast_sub(&coords2)?;
+    println!("diff shape: {:?}", diff.shape());
 
     // Add epsilon for numerical stability and take sqrt
     let distances = ((&diff * &diff)?.sum(D::Minus1)? + eps as f64)?.sqrt()?;
+    println!("distances shape: {:?}", distances.shape());
 
     // Apply mask
-    let masked_distances = (&distances * &mask_2d)?;
+    // let masked_distances = (&distances * &mask_2d)?;
+    let masked_distances = (&distances * &mask_2d.to_dtype(DType::F64)?)?;
+    println!("masked_distances shape: {:?}", masked_distances.shape());
 
     // Get max values for adjustment
     let d_max = masked_distances.max_keepdim(D::Minus1)?;
+    println!("d_max shape: {:?}", d_max.shape());
+
+    let mask_term = ((&mask_2d.to_dtype(DType::F64)? * -1.0)? + 1.0)?;
+    println!("mask_term shape: {:?}", mask_term.shape());
+
+    let d_adjust = (&masked_distances + mask_term.broadcast_mul(&d_max)?)?;
+    let d_adjust = d_adjust.to_dtype(DType::F32)?;
+
+    println!("d_adjust shape: {:?}", d_adjust.shape());
 
     // Adjust distances
-    let d_adjust = (&masked_distances + (&(&mask_2d * -1.0)? + 1.0)? * &d_max)?;
+    // let d_adjust = (&masked_distances + (&(&mask_2d * -1.0)? + 1.0)? * &d_max)?;
+    // println!("d_adjust shape: {:?}", d_adjust.shape());
 
     // Get top k closest points
     // let (values, indices) = d_adjust.topk(
@@ -89,7 +108,7 @@ pub fn compute_nearest_neighbors(
 // https://github.com/huggingface/candle/pull/2375/files#diff-e4d52a71060a80ac8c549f2daffcee77f9bf4de8252ad067c47b1c383c3ac828R957
 pub fn topk_last_dim(xs: &Tensor, topk: usize) -> Result<(Tensor, Tensor)> {
     // Sorted descending
-    let sorted_indices = xs.arg_sort_last_dim(false)?;
+    let sorted_indices = xs.arg_sort_last_dim(false)?.to_dtype(DType::I64)?;
     let topk_indices = sorted_indices.narrow(D::Minus1, 0, topk)?.contiguous()?;
     Ok((xs.gather(&topk_indices, D::Minus1)?, topk_indices))
 }
