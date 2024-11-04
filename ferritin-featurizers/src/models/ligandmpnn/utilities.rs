@@ -55,18 +55,18 @@ pub fn compute_nearest_neighbors(
     let seq_len = coords.dim(1)?;
 
     // Create 2D mask
-    let mask_2d = mask.unsqueeze(1)? * mask.unsqueeze(2)?;
+    let mask_2d = (mask.unsqueeze(1)? * mask.unsqueeze(2)?)?;
 
     // Compute pairwise distances
     let coords1 = coords.unsqueeze(2)?; // [B, L, 1, 3]
     let coords2 = coords.unsqueeze(1)?; // [B, 1, L, 3]
-    let diff = &coords1 - &coords2; // [B, L, L, 3]
+    let diff = (&coords1 - &coords2)?; // [B, L, L, 3]
 
     // Add epsilon for numerical stability and take sqrt
-    let distances = ((&diff * &diff).sum(D::Minus1)? + eps)?.sqrt()?;
+    let distances = ((&diff * &diff)?.sum(D::Minus1)? + eps)?.sqrt()?;
 
     // Apply mask
-    let masked_distances = &distances * &mask_2d;
+    let masked_distances = (&distances * &mask_2d)?;
 
     // Get max values for adjustment
     let d_max = masked_distances.max_keepdim(D::Minus1)?;
