@@ -1,8 +1,9 @@
 use super::featurizer::ProteinFeatures;
-use super::utilities::{compute_nearest_neighbors, cross_product};
+use super::utilities::{compute_nearest_neighbors, cross_product, linspace};
 use candle_core::{Device, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::{layer_norm, linear, LayerNorm, LayerNormConfig, Linear, VarBuilder};
+use candle_transformers::models::bert::DTYPE;
 use std::cmp::min;
 
 #[derive(Clone, Debug)]
@@ -21,7 +22,12 @@ pub struct ProteinFeaturesModel {
 }
 
 impl ProteinFeaturesModel {
-    pub fn new(edge_features: usize, node_features: usize, vb: VarBuilder) -> Result<Self> {
+    pub fn new(
+        edge_features: usize,
+        node_features: usize,
+        vb: VarBuilder,
+        device: &Device,
+    ) -> Result<Self> {
         let augment_eps = 0.0; // hardcoding: Todo: refactor
         let top_k = 48; // hardcoding
         let num_rbf = 16; // hardcoding
@@ -30,7 +36,7 @@ impl ProteinFeaturesModel {
         let embeddings = PositionalEncodings::new(
             num_positional_embeddings, // num embeddings.
             32 as usize,               // max_relative_feature
-            &Device::Cpu,              // device this should be passed in as para,
+            device,                    // device this should be passed in as param,
             vb.clone(),                // VarBuilder,
         )?;
         let edge_embedding = linear::linear(edge_in, edge_features, vb.pp("w_out")).unwrap();
@@ -54,26 +60,37 @@ impl ProteinFeaturesModel {
         })
     }
 
-    /// This funciton calculates the nearest Ca coordinates.
+    /// This funciton calculates the nearest Ca coordinates and retunrs the ditances and indices.
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
         compute_nearest_neighbors(x, mask, self.top_k, self.augment_eps)
     }
-    fn _rbf(&self, d: &Tensor) -> Result<Tensor> {
-        let device = d.device();
-        let d_min = 2.0;
-        let d_max = 22.0;
-        let d_count = self.num_rbf;
-        // Create linspace manually
-        let step = (d_max - d_min) / (d_count - 1) as f64;
+    fn _rbf(&self, d: &Tensor, device: &Device) -> Result<Tensor> {
+        // 1. It takes a tensor `d` as input and creates a set of RBF features
+        // 2. Sets up parameters:
+        //    - `d_min` = 2.0 (minimum distance)
+        //    - `d_max` = 22.0 (maximum distance)
+        //    - `d_count` = number of RBF centers
+        // 3. Creates evenly spaced centers (μ) between d_min and d_max
+        // 4. Calculates the width (σ) of the Gaussian functions
+        // 5. Applies the RBF formula: exp(-(x-μ)²/σ²)
+        const D_MIN: f64 = 2.0;
+        const D_MAX: f64 = 22.0;
+
+        // Create centers (μ)
+        // Todo: fix device!
         let d_mu =
-            Tensor::arange(0.0, d_count as f64, device)?.to_dtype(candle_core::DType::F64)?;
-        let d_mu = ((&d_mu * step)? + d_min)?;
-        let d_mu = d_mu.reshape((1, 1, 1, d_count))?;
-        let d_sigma = (d_max - d_min) / d_count as f64;
-        let d_expand = d.unsqueeze(D::Minus1)?;
-        let diff = ((d_expand - &d_mu)? / d_sigma)?;
-        let squared_diff = diff.powf(2.0)?;
-        let rbf = squared_diff.neg()?.exp()?;
+            linspace(D_MIN, D_MAX, self.num_rbf, device)?.reshape((1, 1, 1, self.num_rbf))?;
+
+        // Calculate width (σ)
+        let d_sigma = (D_MAX - D_MIN) / self.num_rbf as f64;
+
+        // Expand input tensor
+        let d_expanded = d.unsqueeze(D::Minus1)?;
+
+        // Calculate RBF values
+        let diff = ((d_expanded - &d_mu)? / d_sigma)?;
+        let rbf = diff.powf(2.0)?.neg()?.exp()?;
+
         Ok(rbf)
     }
 

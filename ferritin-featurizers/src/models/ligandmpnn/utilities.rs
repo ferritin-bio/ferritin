@@ -281,7 +281,7 @@ pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     neighbor_features.reshape((d1, d2, d3, neighbor_features.dim(D::Minus1)?))
 }
 
-fn gather_nodes_t(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
+pub fn gather_nodes_t(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     // Features [B,N,C] at Neighbor index [B,K] => Neighbor features[B,K,C]
     let (d1, d2, d3) = nodes.dims3()?;
     let idx_flat = neighbor_idx.unsqueeze(D::Minus1)?.expand((d1, d2, d3))?;
@@ -382,6 +382,20 @@ fn get_score(s: &Tensor, log_probs: &Tensor, mask: &Tensor) -> Result<(Tensor, T
         .squeeze(D::Minus1)?;
 
     Ok((average_loss, loss_per_residue))
+}
+
+pub fn linspace(start: f64, stop: f64, steps: usize, device: &Device) -> Result<Tensor> {
+    if steps == 0 {
+        Tensor::from_vec(Vec::<f64>::new(), steps, device)
+    } else if steps == 1 {
+        Tensor::from_vec(vec![start], steps, device)
+    } else {
+        let delta = (stop - start) / (steps - 1) as f64;
+        let vs = (0..steps)
+            .map(|step| start + step as f64 * delta)
+            .collect::<Vec<_>>();
+        Tensor::from_vec(vs, steps, device)
+    }
 }
 
 const ALPHABET: [char; 21] = [
