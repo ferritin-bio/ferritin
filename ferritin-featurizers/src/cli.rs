@@ -147,19 +147,7 @@ impl Cli {
                 transmembrane_buried,
                 transmembrane_interface,
             } => {
-                let residue_control = ResidueControl {
-                    fixed_residues,
-                    redesigned_residues,
-                    symmetry_residues,
-                    symmetry_weights,
-                    chains_to_design,
-                    parse_these_chains_only,
-                };
-                commands::run::execute(
-                    seed,
-                    pdb_path,
-                    out_folder,
-                    model_type,
+                let run_config = RunConfig {
                     temperature,
                     verbose,
                     save_stats,
@@ -169,31 +157,58 @@ impl Cli {
                     zero_indexed,
                     homo_oligomer,
                     fasta_seq_separation,
+                };
+
+                let residue_control = ResidueControl {
                     fixed_residues,
                     redesigned_residues,
                     symmetry_residues,
                     symmetry_weights,
                     chains_to_design,
                     parse_these_chains_only,
+                };
+
+                let aa_bias = AABiasConfig {
                     bias_AA,
                     bias_AA_per_residue,
                     omit_AA,
                     omit_AA_per_residue,
+                };
+
+                let lig_mpnn_specific = LigandMPNNConfig {
+                    checkpoint_ligand_mpnn,
+                    ligand_mpnn_use_atom_context,
+                    ligand_mpnn_use_side_chain_context,
+                    ligand_mpnn_cutoff_for_score,
+                };
+
+                let membrane_mpnn_specific = MembraneMPNNConfig {
+                    global_transmembrane_label,
+                    transmembrane_buried,
+                    transmembrane_interface,
+                };
+
+                let multi_pdb = MultiPDBConfig {
                     pdb_path_multi,
                     fixed_residues_multi,
                     redesigned_residues_multi,
                     omit_AA_per_residue_multi,
                     bias_AA_per_residue_multi,
-                    checkpoint_ligand_mpnn,
-                    ligand_mpnn_use_atom_context,
-                    ligand_mpnn_use_side_chain_context,
-                    ligand_mpnn_cutoff_for_score,
-                    global_transmembrane_label,
-                    transmembrane_buried,
-                    transmembrane_interface,
-                )},
-            }
+                };
 
+                commands::run::execute(
+                    seed,
+                    pdb_path,
+                    out_folder,
+                    model_type,
+                    runconfig,
+                    residue_control,
+                    aa_bias,
+                    lig_mpnn_specific,
+                    membrane_mpnn_specific,
+                    multi_pdb,
+                );
+            }
         }
     }
 }
