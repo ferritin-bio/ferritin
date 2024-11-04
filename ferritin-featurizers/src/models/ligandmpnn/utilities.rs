@@ -103,7 +103,7 @@ pub fn calculate_cb(xyz_37: &Tensor) -> Result<Tensor> {
 }
 
 /// Custom Cross-Product Fn.
-fn cross_product(a: &Tensor, b: &Tensor) -> Result<Tensor> {
+pub fn cross_product(a: &Tensor, b: &Tensor) -> Result<Tensor> {
     let last_dim = a.dims().len() - 1;
 
     // Extract components

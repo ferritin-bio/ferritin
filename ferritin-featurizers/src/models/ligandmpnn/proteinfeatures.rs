@@ -1,11 +1,8 @@
 use super::featurizer::ProteinFeatures;
+use super::utilities::cross_product;
 use candle_core::{Device, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::{layer_norm, linear, LayerNorm, LayerNormConfig, Linear, VarBuilder};
-use candle_transformers::generation::{LogitsProcessor, Sampling};
-use std::cmp::min;
-// use tokenizers::models::wordpiece::WordPiece; // We'll need to swap this out....
-// use tokenizers::Tokenizer;
 
 #[derive(Clone, Debug)]
 /// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L669
@@ -24,7 +21,7 @@ pub struct ProteinFeaturesModel {
 
 impl ProteinFeaturesModel {
     pub fn new(edge_features: usize, node_features: usize, vb: VarBuilder) -> Result<Self> {
-        let augment_eps = 0.0; // hardcoding
+        let augment_eps = 0.0; // hardcoding: Todo: refactor
         let top_k = 48; // hardcoding
         let num_rbf = 16; // hardcoding
         let num_positional_embeddings = 16; // hardcoding
@@ -56,7 +53,6 @@ impl ProteinFeaturesModel {
         })
     }
     // fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
-
     //     let mask_2d = mask.unsqueeze(1)?.mul(&mask.unsqueeze(2)?)?;
     //     let dx = x.unsqueeze(1)?.sub(&x.unsqueeze(2)?)?;
     //     let dx = dx.powf(2.)?.sum_keepdim(3)?;
@@ -78,7 +74,7 @@ impl ProteinFeaturesModel {
     //     //     None, // presence_penalty
     //     //     None, // logits_bias
     //     // );
-
+    //
     //     // top k sampling.
     //     // this section needs some eyeballs.
     //     // https://github.com/EricLBuehler/candle-sampling/issues/4
@@ -91,7 +87,7 @@ impl ProteinFeaturesModel {
     //     let d_neighbors = Tensor::from_iter(d_neighbors_vec.into_iter(), x.device())?;
     //     let e_idx_vec: Vec<u32> = logprobs.top_logprobs.iter().map(|x| x.token).collect();
     //     let e_idx = Tensor::from_iter(e_idx_vec.into_iter(), x.device())?;
-
+    //
     //     Ok((d_neighbors, e_idx))
     // }
     fn _rbf(&self, d: &Tensor) -> Result<Tensor> {
@@ -105,13 +101,11 @@ impl ProteinFeaturesModel {
             Tensor::arange(0.0, d_count as f64, device)?.to_dtype(candle_core::DType::F64)?;
         let d_mu = ((&d_mu * step)? + d_min)?;
         let d_mu = d_mu.reshape((1, 1, 1, d_count))?;
-
         let d_sigma = (d_max - d_min) / d_count as f64;
         let d_expand = d.unsqueeze(D::Minus1)?;
         let diff = ((d_expand - &d_mu)? / d_sigma)?;
         let squared_diff = diff.powf(2.0)?;
         let rbf = squared_diff.neg()?.exp()?;
-
         Ok(rbf)
     }
 
@@ -137,16 +131,16 @@ impl ProteinFeaturesModel {
         Ok(rbf_a_b)
     }
     pub fn forward(&self, input_features: &ProteinFeatures) -> Result<(Tensor, Tensor)> {
-        let x = input_features.output_dict.x.as_ref();
-        let mask = input_features.output_dict.mask.as_ref();
-        let r_idx = input_features.output_dict.r_idx.as_ref();
-        let chain_labels = input_features.output_dict.chain_labels.as_ref();
-        let x = if self.augment_eps > 0.0 {
-            let noise = x.randn_like(0.0, self.augment_eps as f64)?;
-            (x + noise)?
-        } else {
-            x.clone()
-        };
+        let x = input_features.get_coords();
+        // let mask = input_features.output_dict.mask.as_ref();
+        // let r_idx = input_features.output_dict.r_idx.as_ref();
+        // let chain_labels = input_features.output_dict.chain_labels.as_ref();
+        // let x = if self.augment_eps > 0.0 {
+        //     let noise = x.randn_like(0.0, self.augment_eps as f64)?;
+        //     (x + noise)?
+        // } else {
+        //     x.clone()
+        // };
         let b = (&x.narrow(2, 1, 1)? - &x.narrow(2, 0, 1)?)?
             .squeeze(2)?
             .contiguous()?;
@@ -162,6 +156,7 @@ impl ProteinFeaturesModel {
             (&a_term? + &b_term? - &c_term? + &x_term)?
         }
         .contiguous()?;
+
         // N/CA/C/O
         let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
         let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;

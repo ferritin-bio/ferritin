@@ -287,6 +287,9 @@ pub struct ProteinFeatures {
     // CA_icodes:     NumPy array dimensions: (93,)
 }
 impl ProteinFeatures {
+    pub fn get_coords(&self) -> &Tensor {
+        &self.x
+    }
     pub fn save_to_safetensor(&self, path: &str) -> Result<()> {
         let mut tensors: HashMap<String, Tensor> = HashMap::new();
 
