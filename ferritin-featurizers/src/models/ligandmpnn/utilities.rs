@@ -55,30 +55,27 @@ pub fn compute_nearest_neighbors(
     let batch_size = coords.dim(0)?;
     let seq_len = coords.dim(1)?;
 
-    let mask_unsqueeze1 = mask.unsqueeze(2)?; // Shape: [2, 3, 1]
-    let mask_unsqueeze2 = mask.unsqueeze(1)?; // Shape: [2, 1, 3]
-
     // broadcast_matmul handles broadcasting automatically
     // [2, 3, 1] × [2, 1, 3] -> [2, 3, 3]
-    let mask_2d = mask_unsqueeze1.broadcast_matmul(&mask_unsqueeze2)?;
+    let mask_2d = mask
+        .unsqueeze(2)?
+        .broadcast_matmul(&mask.unsqueeze(1)?)?
+        .to_dtype(DType::F64)?; // Convert to f64 once, at the start
 
-    // Compute pairwise distances
-    let coords1 = coords.unsqueeze(2)?; // [B, L, 1, 3]
-    let coords2 = coords.unsqueeze(1)?; // [B, 1, L, 3]
-    let diff = coords1.broadcast_sub(&coords2)?;
-
-    // Add epsilon for numerical stability and take sqrt
-    let distances = ((&diff * &diff)?.sum(D::Minus1)? + eps as f64)?.sqrt()?;
+    // Compute pairwise distances with broadcasting
+    let distances = (coords
+        .unsqueeze(2)?
+        .broadcast_sub(&coords.unsqueeze(1)?)?
+        .powf(2.)?
+        .sum(D::Minus1)?
+        + eps as f64)?
+        .sqrt()?;
 
     // Apply mask
-    // let masked_distances = (&distances * &mask_2d)?;
-    let masked_distances = (&distances * &mask_2d.to_dtype(DType::F64)?)?;
-
     // Get max values for adjustment
+    let masked_distances = (&distances * &mask_2d.to_dtype(DType::F64)?)?;
     let d_max = masked_distances.max_keepdim(D::Minus1)?;
-
     let mask_term = ((&mask_2d.to_dtype(DType::F64)? * -1.0)? + 1.0)?;
-
     let d_adjust = (&masked_distances + mask_term.broadcast_mul(&d_max)?)?;
     let d_adjust = d_adjust.to_dtype(DType::F32)?;
 
@@ -87,7 +84,6 @@ pub fn compute_nearest_neighbors(
 
 // https://github.com/huggingface/candle/pull/2375/files#diff-e4d52a71060a80ac8c549f2daffcee77f9bf4de8252ad067c47b1c383c3ac828R957
 pub fn topk_last_dim(xs: &Tensor, topk: usize) -> Result<(Tensor, Tensor)> {
-    // Sorted descending
     let sorted_indices = xs.arg_sort_last_dim(false)?.to_dtype(DType::I64)?;
     let topk_indices = sorted_indices.narrow(D::Minus1, 0, topk)?.contiguous()?;
     Ok((xs.gather(&topk_indices, D::Minus1)?, topk_indices))
