@@ -1,6 +1,6 @@
 use candle_core::{DType, Device, Result, Tensor, D};
-use pdbtbx::Element;
-use strum::{Display, EnumIter, EnumString};
+use candle_nn::encoding::one_hot;
+use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 
 #[rustfmt::skip]
 fn aa3to1(aa: &str) -> char {
@@ -334,10 +334,6 @@ fn get_score(s: &Tensor, log_probs: &Tensor, mask: &Tensor) -> Result<(Tensor, T
         .squeeze(D::Minus1)?;
 
     Ok((average_loss, loss_per_residue))
-}
-
-fn is_heavy_atom(element: &Element) -> bool {
-    !matches!(element, Element::H | Element::He)
 }
 
 const ALPHABET: [char; 21] = [

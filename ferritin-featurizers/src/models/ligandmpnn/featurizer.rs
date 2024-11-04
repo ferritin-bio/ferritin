@@ -9,6 +9,7 @@
 //! - Chemical features like hydrophobicity, charge
 //! - Evolutionary features from MSA profiles
 
+use super::utilities::AAAtom;
 use candle_core::{DType, Device, IndexOp, Result, Tensor};
 use ferritin_core::{is_amino_acid, AtomCollection};
 use itertools::MultiUnzip;
@@ -17,6 +18,9 @@ use std::collections::HashMap;
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 
 // Helper Fns --------------------------------------
+fn is_heavy_atom(element: &Element) -> bool {
+    !matches!(element, Element::H | Element::He)
+}
 
 /// Convert the AtomCollection into a struct that can be passed to a model.
 pub trait LMPNNFeatures {
@@ -259,28 +263,28 @@ impl LMPNNFeatures for AtomCollection {
 }
 
 pub struct ProteinFeatures {
-    // protein amino acids sequences as 1D Tesnsor of u32
+    /// protein amino acids sequences as 1D Tesnsor of u32
     s: Tensor,
-    // protein co-ords by residue [1, 37, 4]
+    /// protein co-ords by residue [1, 37, 4]
     x: Tensor,
-    // protein mask by residue
+    /// protein mask by residue
     x_mask: Option<Tensor>,
-    // ligand coords
+    /// ligand coords
     y: Tensor,
-    // encoded ligand atom names
+    /// encoded ligand atom names
     y_t: Tensor,
-    // ligand mask
+    /// ligand mask
     y_m: Option<Tensor>,
-    // R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
+    /// R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
     r_idx: Option<Vec<i32>>,
-    // chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
+    /// chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
     chain_labels: Option<Vec<f64>>,
-    // chain_letters: NumPy array dimensions: (93,)
+    /// chain_letters: NumPy array dimensions: (93,)
     chain_letters: Option<Vec<String>>,
     /// mask_c:        Tensor dimensions: torch.Size([93])
     mask_c: Option<Tensor>,
     chain_list: Option<Vec<String>>,
-    // CA_icodes:     NumPy array dimensions: (93,)
+    /// CA_icodes:     NumPy array dimensions: (93,)
 }
 impl ProteinFeatures {
     pub fn save_to_safetensor(&self, path: &str) -> Result<()> {
@@ -291,19 +295,7 @@ impl ProteinFeatures {
         tensors.insert("protein_atom_positions".to_string(), self.x.clone());
         tensors.insert("ligand_atom_positions".to_string(), self.y.clone());
         tensors.insert("ligand_atom_name".to_string(), self.y_t.clone());
-
-        // // R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
-        // r_idx: Option<Vec<i32>>,
-        // // chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
-        // chain_labels: Option<Vec<f64>>,
-        // // chain_letters: NumPy array dimensions: (93,)
-        // chain_letters: Option<Vec<String>>,
-        // /// mask_c:        Tensor dimensions: torch.Size([93])
-        // mask_c: Option<Tensor>,
-        // chain_list: Option<Vec<String>>,
-
         candle_core::safetensors::save(&tensors, path)?;
-
         Ok(())
     }
 }
