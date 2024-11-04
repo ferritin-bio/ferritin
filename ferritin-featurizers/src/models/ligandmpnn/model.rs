@@ -1,5 +1,5 @@
-use super::inputs::{LigandMPNNData, LigandMPNNDataDict};
 use super::proteinfeatures::ProteinFeatures;
+use super::python_compat::{LigandMPNNData, LigandMPNNDataDict};
 use super::utils::{cat_neighbors_nodes, gather_nodes};
 use candle_core::{DType, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;

@@ -10,6 +10,7 @@ description.workspace = true
 anyhow.workspace = true
 candle-core = "0.7.2"
 candle-nn = "0.7.2"
+candle-transformers = "0.7.2"
 clap = "4.5.20"
 ferritin-core = { path = "../ferritin-core" }
 itertools.workspace = true
