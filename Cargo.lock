@@ -1403,6 +1403,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "candle-nn"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "898f8d21b8bdf559a1c8635e2db8386b2134015cd3003c18c1a30a22a67daec6"
+dependencies = [
+ "candle-core",
+ "half",
+ "num-traits",
+ "rayon",
+ "safetensors",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "cc"
 version = "1.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2138,6 +2153,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "candle-core",
+ "candle-nn",
  "clap",
  "ferritin-core",
  "ferritin-test-data",
