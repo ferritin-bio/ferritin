@@ -3,8 +3,6 @@ use super::utilities::{compute_nearest_neighbors, cross_product, linspace};
 use candle_core::{Device, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::{layer_norm, linear, LayerNorm, LayerNormConfig, Linear, VarBuilder};
-use candle_transformers::models::bert::DTYPE;
-use std::cmp::min;
 
 #[derive(Clone, Debug)]
 /// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L669
@@ -60,7 +58,7 @@ impl ProteinFeaturesModel {
         })
     }
 
-    /// This funciton calculates the nearest Ca coordinates and retunrs the ditances and indices.
+    /// This function calculates the nearest Ca coordinates and retunrs the ditances and indices.
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
         compute_nearest_neighbors(x, mask, self.top_k, self.augment_eps)
     }
@@ -93,6 +91,15 @@ impl ProteinFeaturesModel {
         Ok(rbf)
     }
 
+    /// Computes RBF features for pairs of points specified by edge indices
+    ///
+    /// # Arguments
+    /// * `a` - First set of points (N × D tensor)
+    /// * `b` - Second set of points (M × D tensor)
+    /// * `edge_indices` - Indices specifying which pairs to consider
+    ///
+    /// # Returns
+    /// * RBF features for the specified pairs
     fn _get_rbf(&self, a: &Tensor, b: &Tensor, e_idx: &Tensor, device: &Device) -> Result<Tensor> {
         // Expand dimensions for broadcasting
         let a_expanded = a.unsqueeze(2)?;
@@ -136,9 +143,15 @@ impl ProteinFeaturesModel {
             .squeeze(D::Minus1)
     }
 
-    pub fn forward(&self, input_features: &ProteinFeatures) -> Result<(Tensor, Tensor)> {
+    pub fn forward(
+        &self,
+        input_features: &ProteinFeatures,
+        device: &Device,
+    ) -> Result<(Tensor, Tensor)> {
         let x = input_features.get_coords();
         // let mask = input_features.output_dict.mask.as_ref();
+        // todo: fix mask
+        let mask = Tensor::zeros_like(x)?;
         // let r_idx = input_features.output_dict.r_idx.as_ref();
         // let chain_labels = input_features.output_dict.chain_labels.as_ref();
         // let x = if self.augment_eps > 0.0 {
@@ -172,31 +185,31 @@ impl ProteinFeaturesModel {
         let (d_neighbors, e_idx) = self._dist(&ca, &mask, self.augment_eps as f64)?;
 
         let mut rbf_all = Vec::new();
-        rbf_all.push(self._rbf(&d_neighbors)?);
-        rbf_all.push(self._get_rbf(&n, &n, &e_idx)?);
-        rbf_all.push(self._get_rbf(&c, &c, &e_idx)?);
-        rbf_all.push(self._get_rbf(&o, &o, &e_idx)?);
-        rbf_all.push(self._get_rbf(&cb, &cb, &e_idx)?);
-        rbf_all.push(self._get_rbf(&ca, &n, &e_idx)?);
-        rbf_all.push(self._get_rbf(&ca, &c, &e_idx)?);
-        rbf_all.push(self._get_rbf(&ca, &o, &e_idx)?);
-        rbf_all.push(self._get_rbf(&ca, &cb, &e_idx)?);
-        rbf_all.push(self._get_rbf(&n, &c, &e_idx)?);
-        rbf_all.push(self._get_rbf(&n, &o, &e_idx)?);
-        rbf_all.push(self._get_rbf(&n, &cb, &e_idx)?);
-        rbf_all.push(self._get_rbf(&cb, &c, &e_idx)?);
-        rbf_all.push(self._get_rbf(&cb, &o, &e_idx)?);
-        rbf_all.push(self._get_rbf(&o, &c, &e_idx)?);
-        rbf_all.push(self._get_rbf(&n, &ca, &e_idx)?);
-        rbf_all.push(self._get_rbf(&c, &ca, &e_idx)?);
-        rbf_all.push(self._get_rbf(&o, &ca, &e_idx)?);
-        rbf_all.push(self._get_rbf(&cb, &ca, &e_idx)?);
-        rbf_all.push(self._get_rbf(&c, &n, &e_idx)?);
-        rbf_all.push(self._get_rbf(&o, &n, &e_idx)?);
-        rbf_all.push(self._get_rbf(&cb, &n, &e_idx)?);
-        rbf_all.push(self._get_rbf(&c, &cb, &e_idx)?);
-        rbf_all.push(self._get_rbf(&o, &cb, &e_idx)?);
-        rbf_all.push(self._get_rbf(&c, &o, &e_idx)?);
+        rbf_all.push(self._rbf(&d_neighbors, device)?);
+        rbf_all.push(self._get_rbf(&n, &n, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&c, &c, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&o, &o, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&cb, &cb, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&ca, &n, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&ca, &c, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&ca, &o, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&ca, &cb, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&n, &c, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&n, &o, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&n, &cb, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&cb, &c, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&cb, &o, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&o, &c, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&n, &ca, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&c, &ca, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&o, &ca, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&cb, &ca, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&c, &n, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&o, &n, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&cb, &n, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&c, &cb, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&o, &cb, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&c, &o, &e_idx, device)?);
 
         let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
         let offset = (&r_idx.unsqueeze(2)? - &r_idx.unsqueeze(1)?)?;
