@@ -2144,6 +2144,7 @@ dependencies = [
  "itertools 0.13.0",
  "pdbtbx",
  "safetensors",
+ "serde",
  "strum",
  "tempfile",
 ]
