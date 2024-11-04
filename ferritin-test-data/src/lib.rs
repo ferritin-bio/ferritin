@@ -27,6 +27,13 @@ impl TestFile {
             suffix: "cif",
         }
     }
+    /// First Protein Use in the LigandMPNN dataset
+    pub fn protein_02() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/structures/1BC8.pdb"),
+            suffix: "pdb",
+        }
+    }
 
     pub fn pymol_01() -> Self {
         Self {

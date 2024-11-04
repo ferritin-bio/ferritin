@@ -7,14 +7,17 @@ license.workspace = true
 description.workspace = true
 
 [dependencies]
-ferritin-core = { path = "../ferritin-core" }
-pdbtbx.workspace = true
-itertools.workspace = true
-candle-core = "0.7.2"
-strum = { version = "0.26", features = ["derive"] }
-clap = "4.5.20"
 anyhow.workspace = true
+candle-core = "0.7.2"
+candle-nn = "0.7.2"
+candle-transformers = "0.7.2"
+clap = "4.5.20"
+ferritin-core = { path = "../ferritin-core" }
+itertools.workspace = true
+pdbtbx.workspace = true
 safetensors = "0.4.5"
+serde.workspace = true
+strum = { version = "0.26", features = ["derive"] }
 
 
 [dev-dependencies]

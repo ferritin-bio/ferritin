@@ -11,7 +11,7 @@ ferritin-core = { path = "../ferritin-core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 pdbtbx = { workspace = true }
-geo = "0.29.0"
+geo = "0.29.1"
 nalgebra = "0.33.2"
 ndarray = "0.16.1"
 plotters = "0.3.7"

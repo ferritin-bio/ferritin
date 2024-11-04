@@ -29,4 +29,4 @@ clean:
 
 # cargo install cargo-edit
 upgrade:
-    cargo upgrade --all
+    cargo upgrade
