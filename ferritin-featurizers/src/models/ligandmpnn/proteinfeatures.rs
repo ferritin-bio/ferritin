@@ -1,8 +1,9 @@
 use super::featurizer::ProteinFeatures;
-use super::utilities::cross_product;
+use super::utilities::{compute_nearest_neighbors, cross_product};
 use candle_core::{Device, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::{layer_norm, linear, LayerNorm, LayerNormConfig, Linear, VarBuilder};
+use std::cmp::min;
 
 #[derive(Clone, Debug)]
 /// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L669
@@ -52,16 +53,20 @@ impl ProteinFeaturesModel {
             norm_edges,
         })
     }
+
+    /// This funciton calculates the nearest Ca coordinates.
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
-        let mask_2d = mask.unsqueeze(1)?.mul(&mask.unsqueeze(2)?)?;
-        let dx = x.unsqueeze(1)?.sub(&x.unsqueeze(2)?)?;
-        let dx = dx.powf(2.)?.sum_keepdim(3)?;
-        let dx = (dx + eps)?.sqrt()?;
-        let d = mask_2d.mul(&dx)?;
-        let d_max = d.max_keepdim(D::Minus1)?;
-        let mask_tmp = (&mask_2d - 1.0)?.mul(&d_max)?;
-        let d_adjust = d.add(&mask_tmp)?;
-        let top_k = min(self.top_k, x.dim(1)?);
+        compute_nearest_neighbors(x, mask, self.top_k, self.augment_eps)
+
+        // let mask_2d = mask.unsqueeze(1)?.mul(&mask.unsqueeze(2)?)?;
+        // let dx = x.unsqueeze(1)?.sub(&x.unsqueeze(2)?)?;
+        // let dx = dx.powf(2.)?.sum_keepdim(3)?;
+        // let dx = (dx + eps)?.sqrt()?;
+        // let d = mask_2d.mul(&dx)?;
+        // let d_max = d.max_keepdim(D::Minus1)?;
+        // let mask_tmp = (&mask_2d - 1.0)?.mul(&d_max)?;
+        // let d_adjust = d.add(&mask_tmp)?;
+        // let top_k = min(self.top_k, x.dim(1)?);
 
         // let mut tokenizer = Tokenizer::new(WordPiece::default());
         // let mut logits_processor = LogitsProcessor::new(
@@ -88,7 +93,7 @@ impl ProteinFeaturesModel {
         // let e_idx_vec: Vec<u32> = logprobs.top_logprobs.iter().map(|x| x.token).collect();
         // let e_idx = Tensor::from_iter(e_idx_vec.into_iter(), x.device())?;
 
-        Ok((d_neighbors, e_idx))
+        // Ok((d_neighbors, e_idx))
     }
     fn _rbf(&self, d: &Tensor) -> Result<Tensor> {
         let device = d.device();
