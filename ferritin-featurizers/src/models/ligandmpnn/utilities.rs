@@ -1,6 +1,7 @@
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
 use candle_core::{DType, Device, IndexOp, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
+use candle_transformers::generation::{LogitsProcessor, Sampling};
 use ferritin_core::AtomCollection;
 use pdbtbx::Element;
 use std::collections::HashMap;
@@ -63,7 +64,7 @@ pub fn compute_nearest_neighbors(
     let diff = (&coords1 - &coords2)?; // [B, L, L, 3]
 
     // Add epsilon for numerical stability and take sqrt
-    let distances = ((&diff * &diff)?.sum(D::Minus1)? + eps)?.sqrt()?;
+    let distances = ((&diff * &diff)?.sum(D::Minus1)? + eps as f64)?.sqrt()?;
 
     // Apply mask
     let masked_distances = (&distances * &mask_2d)?;
@@ -72,17 +73,25 @@ pub fn compute_nearest_neighbors(
     let d_max = masked_distances.max_keepdim(D::Minus1)?;
 
     // Adjust distances
-    let d_adjust = &masked_distances + (&(&mask_2d * -1.0)? + 1.0)? * &d_max;
+    let d_adjust = (&masked_distances + (&(&mask_2d * -1.0)? + 1.0)? * &d_max)?;
 
     // Get top k closest points
-    let (values, indices) = d_adjust.topk(
-        k.min(seq_len),
-        D::Minus1,
-        false, // largest=False
-        true,
-    )?;
+    // let (values, indices) = d_adjust.topk(
+    //     k.min(seq_len),
+    //     D::Minus1,
+    //     false, // largest=False
+    //     true,
+    // )?;
 
-    Ok((values, indices))
+    Ok(topk_last_dim(d_adjust, k.min(seq_len))?)
+}
+
+// https://github.com/huggingface/candle/pull/2375/files#diff-e4d52a71060a80ac8c549f2daffcee77f9bf4de8252ad067c47b1c383c3ac828R957
+pub fn topk_last_dim(xs: &Tensor, topk: usize) -> Result<(Tensor, Tensor)> {
+    // Sorted descending
+    let sorted_indices = xs.arg_sort_last_dim(false)?;
+    let topk_indices = sorted_indices.narrow(D::Minus1, 0, topk)?.contiguous()?;
+    Ok((xs.gather(&topk_indices, D::Minus1)?, topk_indices))
 }
 
 /// Input coords. Output 1 <batch  x 1 > Tensor
@@ -94,7 +103,8 @@ pub fn create_backbone_mask_37(xyz_37: &Tensor) -> Result<Tensor> {
     let backbone_selection = xyz_37.index_select(&backbone_indices, 1)?; // [154, 4, 3]
                                                                          // Check if coordinates exist (sum over xyz dimensions)
     let exists = backbone_selection.sum(2)?; // [154, 4]
-                                             // All 4 atoms must exist
+
+    // All 4 atoms must exist
     let all_exist = exists.sum_keepdim(1)?; // [154, 1]
     Ok(all_exist)
 }
