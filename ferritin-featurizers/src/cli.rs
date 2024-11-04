@@ -1,8 +1,16 @@
 use super::commands;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use commands::run::{
     AABiasConfig, LigandMPNNConfig, MembraneMPNNConfig, MultiPDBConfig, ResidueControl, RunConfig,
 };
+
+#[derive(Debug, Clone, ValueEnum)] // Need Clone and ValueEnum for CLAP
+enum ModelTypes {
+    #[value(name = "protein_mpnn")] // Optional: customize CLI name
+    ProteinMPNN,
+    #[value(name = "ligand_mpnn")]
+    LigandMPNN,
+}
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -27,8 +35,8 @@ enum Commands {
         pdb_path: String,
         #[arg(long, required = true)]
         out_folder: String,
-        #[arg(long, required = true)]
-        model_type: String,
+        #[arg(long, required = true, value_enum)]
+        model_type: ModelTypes, // Use the enum type
 
         // Configuration Arguments
         #[arg(long)]
@@ -201,13 +209,15 @@ impl Cli {
                     pdb_path,
                     out_folder,
                     model_type,
-                    runconfig,
+                    run_config,
                     residue_control,
                     aa_bias,
                     lig_mpnn_specific,
                     membrane_mpnn_specific,
                     multi_pdb,
                 );
+
+                Ok(())
             }
         }
     }

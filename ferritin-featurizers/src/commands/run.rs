@@ -71,14 +71,13 @@ pub fn execute(
     lig_mpnn_specific: LigandMPNNConfig,
     membrane_mpnn_specific: MembraneMPNNConfig,
     multi_pdb: MultiPDBConfig,
+
 ) -> anyhow::Result<()> {
-    // seed: i32,
-    // pdb_path: String,
-    // out_folder: String,
-    // model_type: String,
+    println!("This run script is very crude at the moment and does not handle MOST of the CLI args.....")
+
 
     println!("Need to implement the seed!");
-    let (pdb, _) = pdbtbx::open(input).expect("A PDB or CIF file");
+    let (pdb, _) = pdbtbx::open(pdb_path).expect("A PDB or CIF file");
     let ac = AtomCollection::from(&pdb);
     let features = ac.featurize(&candle_core::Device::Cpu)?;
     let _ = features.save_to_safetensor(&output)?;

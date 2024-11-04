@@ -6,6 +6,11 @@ use candle_nn::encoding::one_hot;
 use candle_nn::{layer_norm, linear, ops, Dropout, Linear, VarBuilder};
 use candle_transformers::generation::LogitsProcessor;
 
+enum ModelTypes {
+    ProteinMNN,
+    LigandMPNN,
+}
+
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
 struct ScoreOutput {
