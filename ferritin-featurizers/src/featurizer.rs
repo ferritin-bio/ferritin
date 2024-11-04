@@ -13,7 +13,6 @@ use candle_core::{DType, Device, IndexOp, Result, Tensor};
 use ferritin_core::{is_amino_acid, AtomCollection};
 use itertools::MultiUnzip;
 use pdbtbx::Element;
-use safetensors::serialize_to_file;
 use std::collections::HashMap;
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 
@@ -23,6 +22,7 @@ pub trait LMPNNFeatures {
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
+    fn to_pdb(&self); //
 }
 
 fn is_heavy_atom(element: &Element) -> bool {
@@ -232,6 +232,94 @@ impl LMPNNFeatures for AtomCollection {
             chain_list: None,
         })
     }
+
+    fn to_pdb(&self) {
+        // Todo: finish this. will require somethign like prody....
+        // pub fn write_full_pdb(
+        //     save_path: &str,
+        //     x: &Tensor,
+        //     x_m: &Tensor,
+        //     b_factors: &Tensor,
+        //     r_idx: &Tensor,
+        //     chain_letters: &Tensor,
+        //     s: &Tensor,
+        //     other_atoms: Option<&Tensor>,
+        //     icodes: Option<&Tensor>,
+        //     force_hetatm: bool,
+        // ) -> Result<()> {
+        //     //     save_path : path where the PDB will be written to
+        //     //     X : protein atom xyz coordinates shape=[length, 14, 3]
+        //     //     X_m : protein atom mask shape=[length, 14]
+        //     //     b_factors: shape=[length, 14]
+        //     //     R_idx: protein residue indices shape=[length]
+        //     //     chain_letters: protein chain letters shape=[length]
+        //     //     S : protein amino acid sequence shape=[length]
+        //     //     other_atoms: other atoms parsed by prody
+        //     //     icodes: a list of insertion codes for the PDB; e.g. antibody loops
+        //     //     """
+
+        //     let s_str: Vec<&str> = s
+        //         .iter()
+        //         .map(|&aa| restype_int_to_str(aa))
+        //         .map(restype_1to3)
+        //         .collect();
+        //     let mut x_list = Vec::new();
+        //     let mut b_factor_list = Vec::new();
+        //     let mut atom_name_list = Vec::new();
+        //     let mut element_name_list = Vec::new();
+        //     let mut residue_name_list = Vec::new();
+        //     let mut residue_number_list = Vec::new();
+        //     let mut chain_id_list = Vec::new();
+        //     let mut icodes_list = Vec::new();
+
+        //     for (i, aa) in s_str.iter().enumerate() {
+        //         let sel = x_m.get(i)?.to_dtype(DType::I32)?.eq(&1)?;
+        //         let total = sel.sum_all()?.to_scalar::<i32>()?;
+        //         let tmp = Tensor::from_slice(&restype_name_to_atom14_names(aa))?.masked_select(&sel)?;
+        //         x_list.push(x.get(i)?.masked_select(&sel)?);
+        //         b_factor_list.push(b_factors.get(i)?.masked_select(&sel)?);
+        //         atom_name_list.push(tmp.clone());
+        //         element_name_list.extend(tmp.iter().map(|&atom| &atom[..1]));
+        //         residue_name_list.extend(std::iter::repeat(aa).take(total as usize));
+        //         residue_number_list.extend(std::iter::repeat(r_idx.get(i)?).take(total as usize));
+        //         chain_id_list.extend(std::iter::repeat(chain_letters.get(i)?).take(total as usize));
+        //         icodes_list.extend(std::iter::repeat(icodes.get(i)?).take(total as usize));
+        //     }
+
+        //     let x_stack = Tensor::cat(&x_list, 0)?;
+        //     let b_factor_stack = Tensor::cat(&b_factor_list, 0)?;
+        //     let atom_name_stack = Tensor::cat(&atom_name_list, 0)?;
+
+        //     let mut protein = prody::AtomGroup::new();
+        //     protein.set_coords(&x_stack)?;
+        //     protein.set_betas(&b_factor_stack)?;
+        //     protein.set_names(&atom_name_stack)?;
+        //     protein.set_resnames(&residue_name_list)?;
+        //     protein.set_elements(&element_name_list)?;
+        //     protein.set_occupancies(&Tensor::ones(x_stack.shape()[0])?)?;
+        //     protein.set_resnums(&residue_number_list)?;
+        //     protein.set_chids(&chain_id_list)?;
+        //     protein.set_icodes(&icodes_list)?;
+
+        //     if let Some(other_atoms) = other_atoms {
+        //         let mut other_atoms_g = prody::AtomGroup::new();
+        //         other_atoms_g.set_coords(&other_atoms.get_coords()?)?;
+        //         other_atoms_g.set_names(&other_atoms.get_names()?)?;
+        //         other_atoms_g.set_resnames(&other_atoms.get_resnames()?)?;
+        //         other_atoms_g.set_elements(&other_atoms.get_elements()?)?;
+        //         other_atoms_g.set_occupancies(&other_atoms.get_occupancies()?)?;
+        //         other_atoms_g.set_resnums(&other_atoms.get_resnums()?)?;
+        //         other_atoms_g.set_chids(&other_atoms.get_chids()?)?;
+        //         if force_hetatm {
+        //             other_atoms_g.set_flags("hetatm", &other_atoms.get_flags("hetatm")?)?;
+        //         }
+        //         prody::write_pdb(save_path, &(protein + other_atoms_g))?;
+        //     } else {
+        //         prody::write_pdb(save_path, &protein)?;
+        //     }
+        // }
+        unimplemented!()
+    }
 }
 
 pub struct ProteinFeatures {
@@ -367,6 +455,22 @@ macro_rules! define_residues {
         }
     }
 }
+
+const ALPHABET: [char; 21] = [
+    'A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W',
+    'Y', 'X',
+];
+
+const ELEMENT_LIST: [&str; 118] = [
+    "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl",
+    "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As",
+    "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In",
+    "Sn", "Sb", "Te", "I", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb",
+    "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg", "Tl",
+    "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk",
+    "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn", "Nh",
+    "Fl", "Mc", "Lv", "Ts", "Og",
+];
 
 define_residues! {
     ALA: "ALA", 'A', 0,  [1.0, 0.0], [AAAtom::N, AAAtom::CA, AAAtom::C, AAAtom::O, AAAtom::CB, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown],
