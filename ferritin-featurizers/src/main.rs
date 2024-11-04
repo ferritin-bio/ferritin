@@ -1,7 +1,10 @@
 use clap::Parser;
 mod cli;
 mod commands;
-mod featurizer;
+mod models;
+
+use models::ligandmpnn::featurizer::LMPNNFeatures;
+
 // mod config;
 // mod error;
 

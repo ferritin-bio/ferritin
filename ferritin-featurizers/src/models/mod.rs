@@ -1,1 +1,1 @@
-mod ligandmpnn;
+pub mod ligandmpnn;
