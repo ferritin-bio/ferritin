@@ -36,15 +36,17 @@ fn is_heavy_atom(element: &Element) -> bool {
 fn create_backbone_mask_37(xyz_37: &Tensor) -> Result<Tensor> {
     let backbone_indices = Tensor::new(&[0i64, 1, 2, 4], xyz_37.device())?;
     let backbone_selection = xyz_37.index_select(&backbone_indices, 1)?; // [154, 4, 3]
-                                                                         // Check if coordinates exist (sum over xyz dimensions)
+
+    // Check if coordinates exist (sum over xyz dimensions)
     let exists = backbone_selection.sum(2)?; // [154, 4]
-                                             // All 4 atoms must exist
+
+    // All 4 atoms must exist
     let all_exist = exists.sum_keepdim(1)?; // [154, 1]
     Ok(all_exist)
 }
 
 fn calculate_cb(xyz_37: &Tensor) -> Result<Tensor> {
-    let &[dim_residue, dim37, dim3] = xyz_37.dims();
+    let (_, dim37, dim3) = xyz_37.dims3()?;
     assert_eq!(dim37, 37);
     assert_eq!(dim3, 3);
 
