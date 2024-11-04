@@ -46,6 +46,7 @@ fn create_backbone_mask_37(xyz_37: &Tensor) -> Result<Tensor> {
 }
 
 fn calculate_cb(xyz_37: &Tensor) -> Result<Tensor> {
+    // make sure we are dealing with
     let (_, dim37, dim3) = xyz_37.dims3()?;
     assert_eq!(dim37, 37);
     assert_eq!(dim3, 3);
