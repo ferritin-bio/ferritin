@@ -57,43 +57,6 @@ impl ProteinFeaturesModel {
     /// This funciton calculates the nearest Ca coordinates.
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
         compute_nearest_neighbors(x, mask, self.top_k, self.augment_eps)
-
-        // let mask_2d = mask.unsqueeze(1)?.mul(&mask.unsqueeze(2)?)?;
-        // let dx = x.unsqueeze(1)?.sub(&x.unsqueeze(2)?)?;
-        // let dx = dx.powf(2.)?.sum_keepdim(3)?;
-        // let dx = (dx + eps)?.sqrt()?;
-        // let d = mask_2d.mul(&dx)?;
-        // let d_max = d.max_keepdim(D::Minus1)?;
-        // let mask_tmp = (&mask_2d - 1.0)?.mul(&d_max)?;
-        // let d_adjust = d.add(&mask_tmp)?;
-        // let top_k = min(self.top_k, x.dim(1)?);
-
-        // let mut tokenizer = Tokenizer::new(WordPiece::default());
-        // let mut logits_processor = LogitsProcessor::new(
-        //     1,    // seed
-        //     None, // temperature
-        //     Sampling::TopK{top_k, 1.0},
-        //     top_k as usize, // top_n_logprobs
-        //     tokenizer,
-        //     None, // repeat_penalty
-        //     None, // presence_penalty
-        //     None, // logits_bias
-        // );
-
-        // top k sampling.
-        // this section needs some eyeballs.
-        // https://github.com/EricLBuehler/candle-sampling/issues/4
-        // LogProbs: https://github.com/EricLBuehler/candle-sampling/blob/master/src/logits_processor.rs#L46
-        // This will be in Candle after this PR:
-        // https://github.com/huggingface/candle/pull/2375
-        // Todo: update
-        // let logprobs = logits_processor.sample(&d_adjust, None)?;
-        // let d_neighbors_vec: Vec<f32> = logprobs.top_logprobs.iter().map(|x| x.logprob).collect();
-        // let d_neighbors = Tensor::from_iter(d_neighbors_vec.into_iter(), x.device())?;
-        // let e_idx_vec: Vec<u32> = logprobs.top_logprobs.iter().map(|x| x.token).collect();
-        // let e_idx = Tensor::from_iter(e_idx_vec.into_iter(), x.device())?;
-
-        // Ok((d_neighbors, e_idx))
     }
     fn _rbf(&self, d: &Tensor) -> Result<Tensor> {
         let device = d.device();
