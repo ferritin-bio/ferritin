@@ -1,3 +1,3 @@
 mod cli;
 mod commands;
-mod featurizer;
+pub mod featurizer;
