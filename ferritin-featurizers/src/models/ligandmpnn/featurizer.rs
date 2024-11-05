@@ -2,7 +2,7 @@
 //!
 //! Extract protein features for ligandmpnn
 //!
-//! Returns a set of features calculated from protein structure
+//! Retunns a set of features calculated from protein structure
 //! including:
 //! - Residue-level features like amino acid type, secondary structure
 //! - Geometric features like distances, angles
@@ -263,9 +263,9 @@ impl LMPNNFeatures for AtomCollection {
 }
 
 pub struct ProteinFeatures {
-    /// protein amino acids sequences as 1D Tesnsor of u32
+    /// protein amino acids sequences as 1D Tensor of u32
     s: Tensor,
-    /// protein co-ords by residue [1, 37, 4]
+    /// protein co-oords by residue [1, 37, 4]
     x: Tensor,
     /// protein mask by residue
     x_mask: Option<Tensor>,
@@ -285,10 +285,31 @@ pub struct ProteinFeatures {
     mask_c: Option<Tensor>,
     chain_list: Option<Vec<String>>,
     // CA_icodes:     NumPy array dimensions: (93,)
+    // put these here temporarily
+    // bias_AA: Option<Tensor>,
+    // bias_AA_per_residue: Option<Tensor>,
+    // omit_AA_per_residue_multi: Option<Tensor>,
+    // backbone: String,
+    // other_atoms: String,
+    // ca_icodes: Vec<String>,
+    // water_atoms: String,
+    // // [[0, 1, 14], [10,11,14,15], [20, 21]]
+    // pub symmetry_residues: Option<Vec<Vec<i64>>>,
+    // // [[1.0, 1.0, 1.0], [-2.0,1.1,0.2,1.1], [2.3, 1.1]]
+    // pub symmetry_weights: Option<Vec<Vec<f64>>>,
+    // homo_oligomer: Option<bool>,
+    // pub batch_size: Option<i64>,
 }
+
 impl ProteinFeatures {
     pub fn get_coords(&self) -> &Tensor {
         &self.x
+    }
+    pub fn get_sequence(&self) -> &Tensor {
+        &self.s
+    }
+    pub fn get_sequence_mask(&self) -> Option<&Tensor> {
+        self.x_mask.as_ref()
     }
     pub fn save_to_safetensor(&self, path: &str) -> Result<()> {
         let mut tensors: HashMap<String, Tensor> = HashMap::new();

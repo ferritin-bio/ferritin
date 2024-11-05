@@ -1,16 +1,9 @@
 use super::commands;
-use clap::{Parser, Subcommand, ValueEnum};
-use commands::run::{
-    AABiasConfig, LigandMPNNConfig, MembraneMPNNConfig, MultiPDBConfig, ResidueControl, RunConfig,
+use crate::models::ligandmpnn::configs::{
+    AABiasConfig, LigandMPNNConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig, ResidueControl,
+    RunConfig,
 };
-
-#[derive(Debug, Clone, ValueEnum)] // Need Clone and ValueEnum for CLAP
-pub enum ModelTypes {
-    #[value(name = "protein_mpnn")] // Optional: customize CLI name
-    ProteinMPNN,
-    #[value(name = "ligand_mpnn")]
-    LigandMPNN,
-}
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]

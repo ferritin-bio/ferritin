@@ -1,5 +1,6 @@
+pub mod configs;
 pub mod featurizer;
-// mod model;
+pub mod model;
 mod proteinfeatures;
-// mod python_compat;
 mod utilities;
+// mod python_compat;

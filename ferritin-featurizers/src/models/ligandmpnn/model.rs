@@ -1,14 +1,17 @@
-// use super::proteinfeatures::ProteinFeatures;
 // use super::python_compat::{LigandMPNNData, LigandMPNNDataDict};
-use super::utils::{cat_neighbors_nodes, gather_nodes};
-use candle_core::{DType, IndexOp, Module, Result, Tensor, D};
+use super::configs::{ModelTypes, ProteinMPNNConfig};
+use super::featurizer::ProteinFeatures;
+use super::proteinfeatures::ProteinFeaturesModel;
+use super::utilities::{cat_neighbors_nodes, gather_nodes};
+use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::{layer_norm, linear, ops, Dropout, Linear, VarBuilder};
 use candle_transformers::generation::LogitsProcessor;
 
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
-struct ScoreOutput {
+pub struct ScoreOutput {
+    // Sequence
     s: Tensor,
     log_probs: Tensor,
     logits: Tensor,
@@ -257,74 +260,20 @@ impl DecLayer {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum PMPNNModelType {
-    LigandMPNN,
-    ProteinMPNN,
-    SolubleMPNN,
-}
-
-#[derive(Clone, Debug)]
-pub struct ProteinMPNNConfig {
-    atom_context_num: usize,
-    augment_eps: f32,
-    dropout_ratio: f32,
-    edge_features: i64,
-    hidden_dim: i64,
-    k_neighbors: i64,
-    ligand_mpnn_use_side_chain_context: bool,
-    model_type: PMPNNModelType,
-    node_features: i64,
-    num_decoder_layers: i64,
-    num_encoder_layers: i64,
-    num_letters: i64,
-    num_rbf: i64,
-    scale_factor: f64,
-    vocab: i64,
-}
-
-impl ProteinMPNNConfig {
-    fn proteinmpnn() -> Self {
-        Self {
-            atom_context_num: 0,
-            augment_eps: 0.0,
-            dropout_ratio: 0.1,
-            edge_features: 128,
-            hidden_dim: 128,
-            k_neighbors: 24,
-            ligand_mpnn_use_side_chain_context: false,
-            model_type: PMPNNModelType::ProteinMPNN,
-            node_features: 128,
-            num_decoder_layers: 3,
-            num_encoder_layers: 3,
-            num_letters: 48,
-            num_rbf: 16,
-            scale_factor: 30.0,
-            vocab: 48,
-        }
-    }
-    fn ligandmpnn() {
-        todo!()
-    }
-    fn membranempnn() {
-        todo!()
-    }
-}
-
 // https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L10C7-L10C18
 pub struct ProteinMPNN {
     config: ProteinMPNNConfig, // device here ??
     decoder_layers: Vec<DecLayer>,
     device: Option<String>,
     encoder_layers: Vec<EncLayer>,
-    features: ProteinFeatures, // this needs to be a model with weights etc
+    features: ProteinFeaturesModel, // this needs to be a model with weights etc
     w_e: Linear,
     w_out: Linear,
     w_s: Linear,
 }
 
 impl ProteinMPNN {
-    fn new(config: ProteinMPNNConfig, vb: VarBuilder) -> Self {
+    pub fn new(config: ProteinMPNNConfig, vb: VarBuilder) -> Self {
         let decoder_layers: Vec<DecLayer> = (0..config.num_decoder_layers)
             .map(|_| {
                 DecLayer::new(
@@ -372,10 +321,11 @@ impl ProteinMPNN {
         )
         .unwrap();
 
-        let features = ProteinFeatures::new(
+        let features = ProteinFeaturesModel::new(
             config.edge_features as usize,
             config.node_features as usize,
             vb.clone(),
+            &Device::Cpu, // Todo: move out
         )
         .unwrap();
 
@@ -396,14 +346,17 @@ impl ProteinMPNN {
     }
     fn train(&mut self) {
         // Implement training logic
+        // .forward()?
         todo!()
     }
-
-    fn encode(&self, feature_dict: &LigandMPNNData) -> Result<(Tensor, Tensor, Tensor)> {
+    fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
         let device = &candle_core::Device::Cpu;
-        let s_true = &feature_dict.output_dict.s;
+        let s_true = &features.get_sequence();
         let (b, l) = s_true.dims2()?;
-        let mask = &feature_dict.output_dict.mask.clone();
+        let mask = match features.get_sequence_mask() {
+            Some(m) => m,
+            None => &Tensor::zeros_like(&s_true)?,
+        };
 
         match self.config.model_type {
             // PMPNNModelType::LigandMPNN => {
@@ -439,8 +392,8 @@ impl ProteinMPNN {
             //     h_v = &h_v + &self.v_c_norm.forward(&self.dropout.forward(&h_v_c)?)?;
             //     Ok((h_v, h_e, e_idx))
             // }
-            PMPNNModelType::ProteinMPNN | PMPNNModelType::SolubleMPNN => {
-                let (e, e_idx) = self.features.forward(feature_dict)?;
+            ModelTypes::ProteinMPNN => {
+                let (e, e_idx) = self.features.forward(features)?;
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     DType::F64,
@@ -486,16 +439,25 @@ impl ProteinMPNN {
             _ => Err(candle_core::Error::Msg("Unknown model type".into())),
         }
     }
-    fn sample(&self, feature_dict: &LigandMPNNData) -> Result<ScoreOutput> {
-        let LigandMPNNData {
-            output_dict,
-            batch_size,
-            symmetry_residues,
-            symmetry_weights,
-            ..
-        } = feature_dict;
+    fn sample(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
+        // let LigandMPNNData {
+        //     output_dict,
+        //     batch_size,
+        //     symmetry_residues,
+        //     symmetry_weights,
+        //     ..
+        // } = feature_dict;
 
-        let LigandMPNNDataDict { x, s, mask, .. } = &output_dict;
+        // let LigandMPNNDataDict { x, s, mask, .. } = &output_dict;
+
+        let ProteinFeatures {
+            x,
+            s,
+            x_mask,
+            // symmetry_residues,
+            // symmetry_weights,
+            ..
+        } = features;
 
         let b_decoder = batch_size.unwrap() as usize;
         let (b, l) = s.shape().dims2()?;
@@ -1000,7 +962,7 @@ impl ProteinMPNN {
     //     })
     // }
 
-    pub fn score(&self, feature_dict: &LigandMPNNData, use_sequence: bool) -> Result<ScoreOutput> {
+    pub fn score(&self, feature_dict: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
         let LigandMPNNData {
             symmetry_residues,
             batch_size,
