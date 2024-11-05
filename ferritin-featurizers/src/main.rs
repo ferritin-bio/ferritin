@@ -3,10 +3,7 @@ mod cli;
 mod commands;
 mod models;
 
-use models::ligandmpnn::featurizer::LMPNNFeatures;
-
-// mod config;
-// mod error;
+// use models::ligandmpnn::featurizer::LMPNNFeatures;
 
 fn main() -> anyhow::Result<()> {
     let cli = cli::Cli::parse();
