@@ -273,7 +273,7 @@ impl DecLayer {
 pub struct ProteinMPNN {
     config: ProteinMPNNConfig, // device here ??
     decoder_layers: Vec<DecLayer>,
-    device: Option<String>,
+    device: Device,
     encoder_layers: Vec<EncLayer>,
     features: ProteinFeaturesModel, // this needs to be a model with weights etc
     w_e: Linear,

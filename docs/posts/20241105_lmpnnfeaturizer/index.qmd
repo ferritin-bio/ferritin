@@ -1,0 +1,183 @@
+---
+title: "LMPNN Featurizers"
+description: "Protein MPNN Featurizer"
+author: "Zachary Charlop-Powers"
+date: "2024-11-05"
+categories: [rust, ai, proteins]
+image: "images/protein_features.jpg"
+
+---
+
+
+# Initial Featurizer
+
+Many of the Protein language models require converting our proteins into
+compact, `Tensor` representations of the molecule. This is the `trait`
+that captures the key functions.
+
+
+```rust
+/// Convert the AtomCollection into a struct that can be passed to a model.
+pub trait LMPNNFeatures {
+    /// convert AtomCollection to a set of Features.
+    fn featurize(&self, device: &Device) -> Result<ProteinFeatures>;
+    ///  Create a Tensor of dimensions [ <# residues>, 4 <N/CA/C/O> , 3 <xyz>]
+    fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>;
+    /// Create a Tensor of dimensions [ <# of residues>, 37, 3 <xyz>]
+    fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>;
+    /// Create a 3 Tensors of dimensions [ <# heavy atoms>, 3 <xyz>]
+    /// ( positions , elements, mask )
+    fn to_numeric_ligand_atoms(&self, device: &Device)
+        -> Result<(Tensor, Tensor, Tensor)>;
+}
+
+/// ProteinFeatures
+/// Essential Tensors are Aligned Coordinates of Atoms by Atom Type
+pub struct ProteinFeatures {
+    s: Tensor,   // protein amino acids as i32 Tensor
+    x: Tensor,   // protein co-oords by residue [1, 37, 4]
+    y: Tensor,   // ligand coords
+    y_t: Tensor, // encoded ligand atom names
+    ...
+    ...
+}
+```
+
+
+Using the [strum](https://docs.rs/strum/latest/strum/) crate lets us have some nice ENUM handling. We can represent
+the integers as symbols but also iterate over them as below. Getting the coords is then straightforward.
+
+```rust
+/// AAAtom. This is where the different Atom types are registered.
+#[derive(Debug, Clone, Copy, PartialEq, Display, EnumString, EnumIter)]
+pub enum AAAtom {
+    N = 0,    CA = 1,   C = 2,    CB = 3,   O = 4,
+    CG = 5,   CG1 = 6,  CG2 = 7,  OG = 8,   OG1 = 9,
+    SG = 10,  CD = 11,  CD1 = 12, CD2 = 13, ND1 = 14,
+    ND2 = 15, OD1 = 16, OD2 = 17, SD = 18,  CE = 19,
+    CE1 = 20, CE2 = 21, CE3 = 22, NE = 23,  NE1 = 24,
+    NE2 = 25, OE1 = 26, OE2 = 27, CH2 = 28, NH1 = 29,
+    NH2 = 30, OH = 31,  CZ = 32,  CZ2 = 33, CZ3 = 34,
+    NZ = 35,  OXT = 36,
+    Unknown = -1,
+}
+
+
+// by iterating over the ENUM we can extract all of our coordinate data as follows.
+impl LMPNNFeatures for AtomCollection {
+    fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
+        let res_count = self.iter_residues_aminoacid().count();
+        let mut atom37_data = vec![0f32; res_count * 37 * 3];
+        for residue in self.iter_residues_aminoacid() {
+            let resid = residue.res_id as usize;
+            for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
+                if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
+                    let [x, y, z] = atom.coords;
+                    let base_idx = (resid * 37 + atom_type as usize) * 3;
+                    atom37_data[base_idx] = *x;
+                    atom37_data[base_idx + 1] = *y;
+                    atom37_data[base_idx + 2] = *z;
+                }
+            }
+        }
+        // Create tensor with shape [residues, 37, 3]
+        Tensor::from_vec(atom37_data, (res_count, 37, 3), &device)
+    }
+}
+```
+
+
+# Core Model
+
+```rust
+pub struct ProteinMPNN {
+    config: ProteinMPNNConfig, // device here ??
+    decoder_layers: Vec<DecLayer>,
+    device: Device,
+    encoder_layers: Vec<EncLayer>,
+    features: ProteinFeaturesModel, // this needs to be a model with weights etc
+    w_e: Linear,
+    w_out: Linear,
+    w_s: Linear,
+}
+
+impl ProteinMPNN {
+    pub fn new(config: ProteinMPNNConfig, vb: VarBuilder) {}
+    fn predict(&self) {}
+    fn train(&mut self) {}
+    fn encode(&self, features: &ProteinFeatures) {}
+    fn sample(&self, features: &ProteinFeatures) {}
+    pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) {}
+}
+
+// Model Params Contained here.
+impl ProteinMPNNConfig {
+    pub fn proteinmpnn() -> Self {
+        Self {
+            atom_context_num: 0,
+            augment_eps: 0.0,
+            dropout_ratio: 0.1,
+            edge_features: 128,
+            hidden_dim: 128,
+            k_neighbors: 24,
+            ligand_mpnn_use_side_chain_context: false,
+            model_type: ModelTypes::ProteinMPNN,
+            node_features: 128,
+            num_decoder_layers: 3,
+            num_encoder_layers: 3,
+            num_letters: 48,
+            num_rbf: 16,
+            scale_factor: 30.0,
+            vocab: 48,
+        }
+    }
+}
+```
+
+
+# Protein MPNN Configs
+
+There are a LOT of possible configurations that LigandMPNN supports. Based on aggregating
+all of the [example CLI options](https://github.com/dauparas/LigandMPNN/blob/main/run_examples.sh)
+the LigandMPNN CLI repo, I partitioned them into related functions - e.g. AABias, ResidueControl etc.
+I also moved the `ProteinMPNNConfig` into the same file - this contains the parameters for the model itself.
+
+
+
+```rust
+//ligandmpnn/config.rs
+
+//! - `ModelTypes` - Enum of supported model architectures
+//! - `ProteinMPNNConfig` - Core model parameters
+//! - `AABiasConfig` - Amino acid biasing controls
+//! - `LigandMPNNConfig` - LigandMPNN specific settings
+//! - `MembraneMPNNConfig` - MembraneMPNN specific settings
+//! - `MultiPDBConfig` - Multi-PDB mode configuration
+//! - `ResidueControl` - Residue-level design controls
+//! - `RunConfig` - Runtime execution parameters// Core Configs for handling CLI ARGs and Model Params
+
+
+```
+
+
+# CLI
+
+```rust
+/// Convert the AtomCollection into a struct that can be passed to a model.
+
+```
+
+
+
+# Wiring It Up
+
+```rust
+/// Convert the AtomCollection into a struct that can be passed to a model.
+pub trait LMPNNFeatures {
+    fn featurize(&self, device: &Device) -> Result<ProteinFeatures>;
+    fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
+    fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
+    fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
+    fn to_pdb(&self); //
+}
+```
