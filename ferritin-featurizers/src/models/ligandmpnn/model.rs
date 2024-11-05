@@ -1,4 +1,3 @@
-// use super::proteinfeatures::ProteinFeatures;
 // use super::python_compat::{LigandMPNNData, LigandMPNNDataDict};
 use super::featurizer::ProteinFeatures;
 use super::proteinfeatures::ProteinFeaturesModel;
@@ -447,7 +446,7 @@ impl ProteinMPNN {
             //     Ok((h_v, h_e, e_idx))
             // }
             PMPNNModelType::ProteinMPNN | PMPNNModelType::SolubleMPNN => {
-                let (e, e_idx) = self.features.forward(feature_dict)?;
+                let (e, e_idx) = self.features.forward(features)?;
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     DType::F64,
@@ -493,8 +492,8 @@ impl ProteinMPNN {
             _ => Err(candle_core::Error::Msg("Unknown model type".into())),
         }
     }
-    fn sample(&self, feature_dict: &LigandMPNNData) -> Result<ScoreOutput> {
-        let LigandMPNNData {
+    fn sample(&self, feature_dict: &ProteinFeatures) -> Result<ScoreOutput> {
+        let ProteinFeatures {
             output_dict,
             batch_size,
             symmetry_residues,

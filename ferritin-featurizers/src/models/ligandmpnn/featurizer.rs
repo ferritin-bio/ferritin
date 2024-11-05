@@ -285,7 +285,22 @@ pub struct ProteinFeatures {
     mask_c: Option<Tensor>,
     chain_list: Option<Vec<String>>,
     // CA_icodes:     NumPy array dimensions: (93,)
+    // put these here temporarily
+    // bias_AA: Option<Tensor>,
+    // bias_AA_per_residue: Option<Tensor>,
+    // omit_AA_per_residue_multi: Option<Tensor>,
+    // backbone: String,
+    // other_atoms: String,
+    // ca_icodes: Vec<String>,
+    // water_atoms: String,
+    // // [[0, 1, 14], [10,11,14,15], [20, 21]]
+    // pub symmetry_residues: Option<Vec<Vec<i64>>>,
+    // // [[1.0, 1.0, 1.0], [-2.0,1.1,0.2,1.1], [2.3, 1.1]]
+    // pub symmetry_weights: Option<Vec<Vec<f64>>>,
+    // homo_oligomer: Option<bool>,
+    // pub batch_size: Option<i64>,
 }
+
 impl ProteinFeatures {
     pub fn get_coords(&self) -> &Tensor {
         &self.x
