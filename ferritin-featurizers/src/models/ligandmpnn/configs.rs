@@ -1,4 +1,17 @@
-// Core Configs for handling CLI ARGs and Model Params
+//! PMPNN Core Config and Builder API
+//!
+//! This module provides configuration structs and builders for the PMPNN protein design system.
+//!
+//! # Core Configuration Types
+//!
+//! - `ModelTypes` - Enum of supported model architectures
+//! - `ProteinMPNNConfig` - Core model parameters
+//! - `AABiasConfig` - Amino acid biasing controls
+//! - `LigandMPNNConfig` - LigandMPNN specific settings
+//! - `MembraneMPNNConfig` - MembraneMPNN specific settings
+//! - `MultiPDBConfig` - Multi-PDB mode configuration
+//! - `ResidueControl` - Residue-level design controls
+//! - `RunConfig` - Runtime execution parameters// Core Configs for handling CLI ARGs and Model Params
 
 use clap::ValueEnum;
 
@@ -72,7 +85,7 @@ impl ProteinMPNNConfig {
             hidden_dim: 128,
             k_neighbors: 24,
             ligand_mpnn_use_side_chain_context: false,
-            model_type: PMPNNModelType::ProteinMPNN,
+            model_type: ModelTypes::ProteinMPNN,
             node_features: 128,
             num_decoder_layers: 3,
             num_encoder_layers: 3,
