@@ -1,10 +1,10 @@
 use crate::cli::ModelTypes;
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
-use crate::models::ligandmpnn::model::{ProteinMPNN, ProteinMPNNConfig};
+use crate::models::ligandmpnn::model::{ProteinMPNN, ProteinMPNNConfig, ScoreOutput};
 use candle_core::{DType, Device};
-use candle_nn::{Embedding, Module, VarBuilder};
+use candle_nn::{Module, VarBuilder};
 use ferritin_core::AtomCollection;
-use pdbtbx;
+// use pdbtbx;
 
 // First, create separate structs for different argument groups
 #[derive(Debug)]
@@ -90,6 +90,21 @@ pub fn execute(
 
     // initialize the model
     let model = ProteinMPNN::new(model_config, vb);
+
+    // Predict
+    // model.predict()
+
+    // Train
+    // model.train()
+
+    // Encode
+    // model.encode() ->  Ok((h_v, h_e, e_idx)) // ??
+
+    // Score
+    // model.score() -> Result<ScoreOutput>
+
+    // Sample
+    // model.sample() -> Result<ScoreOutput>
 
     Ok(())
 }

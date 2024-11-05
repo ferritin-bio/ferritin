@@ -9,7 +9,7 @@ use candle_transformers::generation::LogitsProcessor;
 
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
-struct ScoreOutput {
+pub struct ScoreOutput {
     // Sequence
     s: Tensor,
     log_probs: Tensor,
@@ -399,9 +399,9 @@ impl ProteinMPNN {
     }
     fn train(&mut self) {
         // Implement training logic
+        // .forward()?
         todo!()
     }
-
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
         let device = &candle_core::Device::Cpu;
         let s_true = &features.get_sequence();
