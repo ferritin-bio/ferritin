@@ -1,5 +1,5 @@
 use crate::models::ligandmpnn::configs::{
-    AABiasConfig, LigandMPNNConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig,
+    AABiasConfig, LigandMPNNConfig, MPNNExecConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig,
     ProteinMPNNConfig, ResidueControl, RunConfig,
 };
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
@@ -13,40 +13,34 @@ pub fn execute(
     pdb_path: String,
     out_folder: String,
     model_type: ModelTypes,
-    runconfig: RunConfig,
-    residue_control: ResidueControl,
-    aa_bias: AABiasConfig,
+    run_config: RunConfig,
+    residue_control_config: ResidueControl,
+    aa_bias_config: AABiasConfig,
     lig_mpnn_specific: LigandMPNNConfig,
     membrane_mpnn_specific: MembraneMPNNConfig,
-    multi_pdb: MultiPDBConfig,
+    multi_pdb_config: MultiPDBConfig,
 ) -> anyhow::Result<()> {
     println!(
         "This run script is very crude at the moment and does not handle MOST of the CLI args....."
     );
 
-    // From File -> Protein Features
-    let (pdb, _) = pdbtbx::open(pdb_path).expect("A PDB  or CIF file");
-    let ac = AtomCollection::from(&pdb);
-    let features = ac.featurize(&candle_core::Device::Cpu)?;
+    // todo - whats the best way to handle device?
+    let device = &Device::Cpu;
 
-    // runconfig: RunConfig,
-    // residue_control: ResidueControl,
-    // aa_bias: AABiasConfig,
-    // lig_mpnn_specific: LigandMPNNConfig,
-    // membrane_mpnn_specific: MembraneMPNNConfig,
-    // multi_pdb: MultiPDBConfig,
+    let exec = MPNNExecConfig::new(
+        seed,
+        device,
+        pdb_path,
+        model_type,
+        run_config,
+        Some(residue_control_config),
+        Some(aa_bias_config),
+        Some(lig_mpnn_specific),
+        Some(membrane_mpnn_specific),
+        Some(multi_pdb_config),
+    )?;
 
-    // get basic mocdel params
-    let model_config = match model_type {
-        ModelTypes::ProteinMPNN => ProteinMPNNConfig::proteinmpnn(),
-        _ => panic!(),
-    };
-
-    // not sure this is the best wat to init the VarBuilder
-    let vb = VarBuilder::zeros(DType::F32, &Device::Cpu);
-
-    // initialize the model
-    let model = ProteinMPNN::new(model_config, vb);
+    let model = exec.create_model();
 
     // Predict
     // model.predict()

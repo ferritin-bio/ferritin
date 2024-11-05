@@ -13,7 +13,74 @@
 //! - `ResidueControl` - Residue-level design controls
 //! - `RunConfig` - Runtime execution parameters// Core Configs for handling CLI ARGs and Model Params
 
+use super::featurizer::ProteinFeatures;
+use super::model::ProteinMPNN;
+use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
+use anyhow::Error;
+use candle_core::Device;
+use candle_nn::VarBuilder;
 use clap::ValueEnum;
+use ferritin_core::AtomCollection;
+
+// All Data Needed for running a model
+pub struct MPNNExecConfig {
+    pub protein_data: ProteinFeatures,
+    pub run_config: RunConfig,
+    pub protein_mpnn_model_config: ProteinMPNNConfig,
+    pub aabias_config: Option<AABiasConfig>,
+    pub ligandMPNN_config: Option<LigandMPNNConfig>,
+    pub membraneMPNN_config: Option<MembraneMPNNConfig>,
+    pub multi_PDB_config: Option<MultiPDBConfig>,
+    pub residue_control_config: Option<ResidueControl>,
+    // device: &candle_core::Device,
+    seed: i32,
+}
+
+impl MPNNExecConfig {
+    pub fn new(
+        seed: i32,
+        device: &Device,
+        pdb_path: String,
+        model_type: ModelTypes,
+        run_config: RunConfig,
+        residue_config: Option<ResidueControl>,
+        aa_bias: Option<AABiasConfig>,
+        lig_mpnn_specific: Option<LigandMPNNConfig>,
+        membrane_mpnn_specific: Option<MembraneMPNNConfig>,
+        multi_pdb_specific: Option<MultiPDBConfig>,
+    ) -> Result<Self, Error> {
+        // seed?
+
+        // Core Protein Features
+        let (pdb, _) = pdbtbx::open(pdb_path).expect("A PDB  or CIF file");
+        let ac = AtomCollection::from(&pdb);
+        let features = ac.featurize(device)?;
+
+        // Model parameters
+        let model_config = match model_type {
+            ModelTypes::ProteinMPNN => ProteinMPNNConfig::proteinmpnn(),
+            _ => todo!(),
+        };
+
+        Ok(MPNNExecConfig {
+            protein_data: features,
+            protein_mpnn_model_config: model_config,
+            run_config,
+            aabias_config: aa_bias,
+            ligandMPNN_config: lig_mpnn_specific,
+            membraneMPNN_config: membrane_mpnn_specific,
+            residue_control_config: residue_config,
+            multi_PDB_config: multi_pdb_specific,
+            seed,
+            // device: device,
+        })
+    }
+    pub fn create_model(&self) -> ProteinMPNN {
+        let dtype_default = candle_core::DType::F32;
+        let vb = VarBuilder::zeros(dtype_default, &Device::Cpu);
+        ProteinMPNN::new(self.protein_mpnn_model_config.clone(), vb)
+    }
+}
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum ModelTypes {
