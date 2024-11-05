@@ -156,6 +156,10 @@ impl ProteinFeaturesModel {
         let r_idx = input_features.get_residue_index().unwrap();
         // let chain_labels = input_features.chain_labels.as_ref();
 
+        // todo: fix
+        // let chain_labels = input_features.get_chain_labels();
+        let chain_labels = Tensor::zeros_like(r_idx)?;
+
         let x = if self.augment_eps > 0.0 {
             let noise = x.randn_like(0.0, self.augment_eps as f64)?;
             (x + noise)?

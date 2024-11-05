@@ -32,7 +32,7 @@ pub struct MPNNExecConfig {
     pub membraneMPNN_config: Option<MembraneMPNNConfig>,
     pub multi_PDB_config: Option<MultiPDBConfig>,
     pub residue_control_config: Option<ResidueControl>,
-    device: &candle_core::Device,
+    // device: &candle_core::Device,
     seed: i32,
 }
 
@@ -72,12 +72,12 @@ impl MPNNExecConfig {
             residue_control_config: residue_config,
             multi_PDB_config: multi_pdb_specific,
             seed,
-            device,
+            // device: device,
         })
     }
     pub fn create_model(&self) -> ProteinMPNN {
         let dtype_default = candle_core::DType::F32;
-        let vb = VarBuilder::zeros(dtype_default, &self.device);
+        let vb = VarBuilder::zeros(dtype_default, &Device::Cpu);
         ProteinMPNN::new(self.protein_mpnn_model_config.clone(), vb)
     }
 }
