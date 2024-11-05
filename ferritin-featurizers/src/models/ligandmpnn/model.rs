@@ -1,4 +1,13 @@
-// use super::python_compat::{LigandMPNNData, LigandMPNNDataDict};
+//! A message passing protein design neural network
+//! that samples sequences diffusing conditional probabilities.
+//!
+//!
+//! Consider factoring out model creation of the DEC
+//! and ENC layers using a function.
+//!
+//! here is an example of paramatereizable netowrk creation:
+//! https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/resnet.rs
+//!
 use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::featurizer::ProteinFeatures;
 use super::proteinfeatures::ProteinFeaturesModel;

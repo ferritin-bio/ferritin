@@ -37,16 +37,6 @@ pub struct MPNNExecConfig {
 }
 
 impl MPNNExecConfig {
-    // seed: i32,
-    // pdb_path: String,
-    // out_folder: String,
-    // model_type: ModelTypes,
-    // runconfig: RunConfig,
-    // residue_control: ResidueControl,
-    // aa_bias: AABiasConfig,
-    // lig_mpnn_specific: LigandMPNNConfig,
-    // membrane_mpnn_specific: MembraneMPNNConfig,
-    // multi_pdb: MultiPDBConfig,
     pub fn new(
         seed: i32,
         device: &Device,

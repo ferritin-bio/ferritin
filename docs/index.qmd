@@ -19,6 +19,7 @@ Protein utilities for Rust
 ::::
 
 
+** Please note that ferritin is alpha-stage software and can change it's API at any time **
 
 ## Crates
 

@@ -24,6 +24,7 @@ pub fn execute(
         "This run script is very crude at the moment and does not handle MOST of the CLI args....."
     );
 
+    // todo - whats the best way to handle device?
     let device = &Device::Cpu;
 
     let exec = MPNNExecConfig::new(
