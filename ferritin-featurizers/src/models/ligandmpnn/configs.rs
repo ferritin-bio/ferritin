@@ -1,12 +1,5 @@
 use clap::ValueEnum;
 
-// #[derive(Clone, Debug)]
-// pub enum PMPNNModelType {
-//     LigandMPNN,
-//     ProteinMPNN,
-//     SolubleMPNN,
-// }
-
 #[derive(Debug, Clone, ValueEnum)] // Need Clone and ValueEnum for CLAP
 pub enum ModelTypes {
     #[value(name = "protein_mpnn")] // Optional: customize CLI name

@@ -1,5 +1,5 @@
 // use super::python_compat::{LigandMPNNData, LigandMPNNDataDict};
-use super::configs::{ModelType, ProteinMPNNConfig};
+use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::featurizer::ProteinFeatures;
 use super::proteinfeatures::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes};
@@ -392,7 +392,7 @@ impl ProteinMPNN {
             //     h_v = &h_v + &self.v_c_norm.forward(&self.dropout.forward(&h_v_c)?)?;
             //     Ok((h_v, h_e, e_idx))
             // }
-            PMPNNModelType::ProteinMPNN | PMPNNModelType::SolubleMPNN => {
+            ModelTypes::ProteinMPNN => {
                 let (e, e_idx) = self.features.forward(features)?;
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
@@ -962,7 +962,7 @@ impl ProteinMPNN {
     //     })
     // }
 
-    pub fn score(&self, feature_dict: &LigandMPNNData, use_sequence: bool) -> Result<ScoreOutput> {
+    pub fn score(&self, feature_dict: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
         let LigandMPNNData {
             symmetry_residues,
             batch_size,

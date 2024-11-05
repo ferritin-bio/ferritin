@@ -6,7 +6,6 @@ use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
 use crate::models::ligandmpnn::model::{ProteinMPNN, ScoreOutput};
 use candle_core::{DType, Device};
 use candle_nn::{Module, VarBuilder};
-use clap::{Parser, Subcommand, ValueEnum};
 use ferritin_core::AtomCollection;
 
 pub fn execute(
