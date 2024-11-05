@@ -2,7 +2,7 @@
 //!
 //! Extract protein features for ligandmpnn
 //!
-//! Retunns a set of features calculated from protein structure
+//! Returns a set of features calculated from protein structure
 //! including:
 //! - Residue-level features like amino acid type, secondary structure
 //! - Geometric features like distances, angles
