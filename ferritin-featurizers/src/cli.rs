@@ -1,8 +1,9 @@
 use super::commands;
 use crate::models::ligandmpnn::configs::{
-    AABiasConfig, LigandMPNNConfig, MembraneMPNNConfig, MultiPDBConfig, ResidueControl, RunConfig,
+    AABiasConfig, LigandMPNNConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig, ResidueControl,
+    RunConfig,
 };
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
