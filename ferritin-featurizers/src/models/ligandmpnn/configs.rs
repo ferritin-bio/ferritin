@@ -13,7 +13,72 @@
 //! - `ResidueControl` - Residue-level design controls
 //! - `RunConfig` - Runtime execution parameters// Core Configs for handling CLI ARGs and Model Params
 
+use super::featurizer::ProteinFeatures;
+use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
+use anyhow::Error;
+use candle_core::Device;
 use clap::ValueEnum;
+use ferritin_core::AtomCollection;
+
+// All Data Needed for running a model
+pub struct MPNNExecConfig {
+    //
+    protein_data: ProteinFeatures,
+    run_config: RunConfig,
+    protein_mpnn_model_config: ProteinMPNNConfig,
+    aabias_config: Option<AABiasConfig>,
+    ligandMPNN_config: Option<LigandMPNNConfig>,
+    membraneMPNN_config: Option<MembraneMPNNConfig>,
+    residue_control_config: Option<ResidueControl>,
+}
+
+impl MPNNExecConfig {
+    // seed: i32,
+    // pdb_path: String,
+    // out_folder: String,
+    // model_type: ModelTypes,
+    // runconfig: RunConfig,
+    // residue_control: ResidueControl,
+    // aa_bias: AABiasConfig,
+    // lig_mpnn_specific: LigandMPNNConfig,
+    // membrane_mpnn_specific: MembraneMPNNConfig,
+    // multi_pdb: MultiPDBConfig,
+    pub fn new(
+        seed: i32,
+        device: &Device,
+        pdb_path: String,
+        model_type: ModelTypes,
+        run_config: RunConfig,
+        residue_config: Option<ResidueControl>,
+        aa_bias: Option<AABiasConfig>,
+        lig_mpnn_specific: Option<LigandMPNNConfig>,
+        membrane_mpnn_specific: Option<MembraneMPNNConfig>,
+        multi_pdb_specific: Option<MultiPDBConfig>,
+    ) -> Result<Self, Error> {
+        // seed?
+
+        // Core Protein Features
+        let (pdb, _) = pdbtbx::open(pdb_path).expect("A PDB  or CIF file");
+        let ac = AtomCollection::from(&pdb);
+        let features = ac.featurize(device)?;
+
+        // Model parameters
+        let model_config = match model_type {
+            ModelTypes::ProteinMPNN => ProteinMPNNConfig::proteinmpnn(),
+            _ => todo!(),
+        };
+
+        Ok(MPNNExecConfig {
+            protein_data: features,
+            protein_mpnn_model_config: model_config,
+            run_config: run_config,
+            aabias_config: aa_bias,
+            ligandMPNN_config: lig_mpnn_specific,
+            membraneMPNN_config: membrane_mpnn_specific,
+            residue_control_config: residue_config,
+        })
+    }
+}
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum ModelTypes {

@@ -276,7 +276,7 @@ pub struct ProteinFeatures {
     /// ligand mask
     y_m: Option<Tensor>,
     /// R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
-    r_idx: Option<Vec<i32>>,
+    r_idx: Option<Tensor>,
     /// chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
     chain_labels: Option<Vec<f64>>,
     /// chain_letters: NumPy array dimensions: (93,)
@@ -310,6 +310,9 @@ impl ProteinFeatures {
     }
     pub fn get_sequence_mask(&self) -> Option<&Tensor> {
         self.x_mask.as_ref()
+    }
+    pub fn get_residue_index(&self) -> Option<&Tensor> {
+        self.r_idx.as_ref()
     }
     pub fn save_to_safetensor(&self, path: &str) -> Result<()> {
         let mut tensors: HashMap<String, Tensor> = HashMap::new();

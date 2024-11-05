@@ -962,15 +962,19 @@ impl ProteinMPNN {
     //     })
     // }
 
-    pub fn score(&self, feature_dict: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
-        let LigandMPNNData {
-            symmetry_residues,
-            batch_size,
-            symmetry_weights,
-            output_dict,
-            ..
-        } = feature_dict;
-        let LigandMPNNDataDict { s, mask, .. } = &output_dict;
+    pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
+        // let LigandMPNNData {
+        //     symmetry_residues,
+        //     batch_size,
+        //     symmetry_weights,
+        //     output_dict,
+        //     ..
+        // } = feature_dict;
+        // let LigandMPNNDataDict { s, mask, .. } = &output_dict;
+
+
+        let ProteinFeatures { s, x x_mask,} = &features;
+
         let b_decoder = batch_size.unwrap().clone();
         let s_true = &s.clone();
         let mask = &mask.clone();
