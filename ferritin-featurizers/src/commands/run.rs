@@ -1,7 +1,8 @@
 use crate::cli::ModelTypes;
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
 use crate::models::ligandmpnn::model::{ProteinMPNN, ProteinMPNNConfig};
-// use candle_core;
+use candle_core::{DType, Device};
+use candle_nn::{Embedding, Module, VarBuilder};
 use ferritin_core::AtomCollection;
 use pdbtbx;
 
@@ -78,9 +79,17 @@ pub fn execute(
         "This run script is very crude at the moment and does not handle MOST of the CLI args....."
     );
 
-    let (pdb, _) = pdbtbx::open(pdb_path).expect("A PDB or CIF file");
-    let ac = AtomCollection::from(&pdb);
-    let features = ac.featurize(&candle_core::Device::Cpu)?;
-    // let _ = features.save_to_safetensor(&out_folder)?;
+    // get basic mocdel params
+    let model_config = match model_type {
+        ModelTypes::ProteinMPNN => ProteinMPNNConfig::proteinmpnn(),
+        _ => panic!(),
+    };
+
+    // not sure this is the best wat to init the VarBuilder
+    let vb = VarBuilder::zeros(DType::F32, &Device::Cpu);
+
+    // initialize the model
+    let model = ProteinMPNN::new(model_config, vb);
+
     Ok(())
 }

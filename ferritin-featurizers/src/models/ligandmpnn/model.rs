@@ -286,7 +286,7 @@ pub struct ProteinMPNNConfig {
 }
 
 impl ProteinMPNNConfig {
-    fn proteinmpnn() -> Self {
+    pub fn proteinmpnn() -> Self {
         Self {
             atom_context_num: 0,
             augment_eps: 0.0,
@@ -326,7 +326,7 @@ pub struct ProteinMPNN {
 }
 
 impl ProteinMPNN {
-    fn new(config: ProteinMPNNConfig, vb: VarBuilder) -> Self {
+    pub fn new(config: ProteinMPNNConfig, vb: VarBuilder) -> Self {
         let decoder_layers: Vec<DecLayer> = (0..config.num_decoder_layers)
             .map(|_| {
                 DecLayer::new(
