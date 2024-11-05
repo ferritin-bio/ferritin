@@ -14,22 +14,26 @@
 //! - `RunConfig` - Runtime execution parameters// Core Configs for handling CLI ARGs and Model Params
 
 use super::featurizer::ProteinFeatures;
+use super::model::ProteinMPNN;
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
 use anyhow::Error;
 use candle_core::Device;
+use candle_nn::VarBuilder;
 use clap::ValueEnum;
 use ferritin_core::AtomCollection;
 
 // All Data Needed for running a model
 pub struct MPNNExecConfig {
-    //
-    protein_data: ProteinFeatures,
-    run_config: RunConfig,
-    protein_mpnn_model_config: ProteinMPNNConfig,
-    aabias_config: Option<AABiasConfig>,
-    ligandMPNN_config: Option<LigandMPNNConfig>,
-    membraneMPNN_config: Option<MembraneMPNNConfig>,
-    residue_control_config: Option<ResidueControl>,
+    pub protein_data: ProteinFeatures,
+    pub run_config: RunConfig,
+    pub protein_mpnn_model_config: ProteinMPNNConfig,
+    pub aabias_config: Option<AABiasConfig>,
+    pub ligandMPNN_config: Option<LigandMPNNConfig>,
+    pub membraneMPNN_config: Option<MembraneMPNNConfig>,
+    pub multi_PDB_config: Option<MultiPDBConfig>,
+    pub residue_control_config: Option<ResidueControl>,
+    device: &candle_core::Device,
+    seed: i32,
 }
 
 impl MPNNExecConfig {
@@ -71,12 +75,20 @@ impl MPNNExecConfig {
         Ok(MPNNExecConfig {
             protein_data: features,
             protein_mpnn_model_config: model_config,
-            run_config: run_config,
+            run_config,
             aabias_config: aa_bias,
             ligandMPNN_config: lig_mpnn_specific,
             membraneMPNN_config: membrane_mpnn_specific,
             residue_control_config: residue_config,
+            multi_PDB_config: multi_pdb_specific,
+            seed,
+            device,
         })
+    }
+    pub fn create_model(&self) -> ProteinMPNN {
+        let dtype_default = candle_core::DType::F32;
+        let vb = VarBuilder::zeros(dtype_default, &self.device);
+        ProteinMPNN::new(self.protein_mpnn_model_config.clone(), vb)
     }
 }
 

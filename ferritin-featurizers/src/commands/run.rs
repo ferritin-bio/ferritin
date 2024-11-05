@@ -1,5 +1,5 @@
 use crate::models::ligandmpnn::configs::{
-    AABiasConfig, LigandMPNNConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig,
+    AABiasConfig, LigandMPNNConfig, MPNNExecConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig,
     ProteinMPNNConfig, ResidueControl, RunConfig,
 };
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
