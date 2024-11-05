@@ -1,7 +1,9 @@
 // use super::proteinfeatures::ProteinFeatures;
 // use super::python_compat::{LigandMPNNData, LigandMPNNDataDict};
-use super::utils::{cat_neighbors_nodes, gather_nodes};
-use candle_core::{DType, IndexOp, Module, Result, Tensor, D};
+use super::featurizer::ProteinFeatures;
+use super::proteinfeatures::ProteinFeaturesModel;
+use super::utilities::{cat_neighbors_nodes, gather_nodes};
+use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::{layer_norm, linear, ops, Dropout, Linear, VarBuilder};
 use candle_transformers::generation::LogitsProcessor;
@@ -9,6 +11,7 @@ use candle_transformers::generation::LogitsProcessor;
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
 struct ScoreOutput {
+    // Sequence
     s: Tensor,
     log_probs: Tensor,
     logits: Tensor,
@@ -317,7 +320,7 @@ pub struct ProteinMPNN {
     decoder_layers: Vec<DecLayer>,
     device: Option<String>,
     encoder_layers: Vec<EncLayer>,
-    features: ProteinFeatures, // this needs to be a model with weights etc
+    features: ProteinFeaturesModel, // this needs to be a model with weights etc
     w_e: Linear,
     w_out: Linear,
     w_s: Linear,
@@ -372,10 +375,11 @@ impl ProteinMPNN {
         )
         .unwrap();
 
-        let features = ProteinFeatures::new(
+        let features = ProteinFeaturesModel::new(
             config.edge_features as usize,
             config.node_features as usize,
             vb.clone(),
+            &Device::Cpu, // Todo: move out
         )
         .unwrap();
 
@@ -399,11 +403,14 @@ impl ProteinMPNN {
         todo!()
     }
 
-    fn encode(&self, feature_dict: &LigandMPNNData) -> Result<(Tensor, Tensor, Tensor)> {
+    fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
         let device = &candle_core::Device::Cpu;
-        let s_true = &feature_dict.output_dict.s;
+        let s_true = &features.get_sequence();
         let (b, l) = s_true.dims2()?;
-        let mask = &feature_dict.output_dict.mask.clone();
+        let mask = match features.get_sequence_mask() {
+            Some(m) => m,
+            None => &Tensor::zeros_like(&s_true)?,
+        };
 
         match self.config.model_type {
             // PMPNNModelType::LigandMPNN => {

@@ -263,9 +263,9 @@ impl LMPNNFeatures for AtomCollection {
 }
 
 pub struct ProteinFeatures {
-    /// protein amino acids sequences as 1D Tesnsor of u32
+    /// protein amino acids sequences as 1D Tensor of u32
     s: Tensor,
-    /// protein co-ords by residue [1, 37, 4]
+    /// protein co-oords by residue [1, 37, 4]
     x: Tensor,
     /// protein mask by residue
     x_mask: Option<Tensor>,
@@ -289,6 +289,12 @@ pub struct ProteinFeatures {
 impl ProteinFeatures {
     pub fn get_coords(&self) -> &Tensor {
         &self.x
+    }
+    pub fn get_sequence(&self) -> &Tensor {
+        &self.s
+    }
+    pub fn get_sequence_mask(&self) -> Option<&Tensor> {
+        self.x_mask.as_ref()
     }
     pub fn save_to_safetensor(&self, path: &str) -> Result<()> {
         let mut tensors: HashMap<String, Tensor> = HashMap::new();

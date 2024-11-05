@@ -1,7 +1,6 @@
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
 use candle_core::{DType, Device, IndexOp, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
-use candle_transformers::generation::{LogitsProcessor, Sampling};
 use ferritin_core::AtomCollection;
 use pdbtbx::Element;
 use std::collections::HashMap;
