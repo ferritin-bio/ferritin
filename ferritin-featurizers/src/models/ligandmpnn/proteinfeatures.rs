@@ -143,102 +143,103 @@ impl ProteinFeaturesModel {
             .squeeze(D::Minus1)
     }
 
-    // pub fn forward(
-    //     &self,
-    //     input_features: &ProteinFeatures,
-    //     device: &Device,
-    // ) -> Result<(Tensor, Tensor)> {
-    //     let x = input_features.get_coords();
+    pub fn forward(
+        &self,
+        input_features: &ProteinFeatures,
+        device: &Device,
+    ) -> Result<(Tensor, Tensor)> {
+        let x = input_features.get_coords();
 
-    //     // let mask = input_features.output_dict.mask.as_ref();
-    //     let mask = Tensor::zeros_like(x)?; // todo: fix mask
+        // let mask = input_features.output_dict.mask.as_ref();
+        let mask = Tensor::zeros_like(x)?; // todo: fix mask
 
-    //     // let r_idx = input_features.output_dict.r_idx.as_ref();
-    //     // let chain_labels = input_features.output_dict.chain_labels.as_ref();
-    //     // let x = if self.augment_eps > 0.0 {
-    //     //     let noise = x.randn_like(0.0, self.augment_eps as f64)?;
-    //     //     (x + noise)?
-    //     // } else {
-    //     //     x.clone()
-    //     // };
-    //     let b = (&x.narrow(2, 1, 1)? - &x.narrow(2, 0, 1)?)?
-    //         .squeeze(2)?
-    //         .contiguous()?;
-    //     let c = (&x.narrow(2, 2, 1)? - &x.narrow(2, 1, 1)?)?
-    //         .squeeze(2)?
-    //         .contiguous()?;
-    //     let a = cross_product(&b, &c)?;
-    //     let cb = {
-    //         let a_term = &a * -0.58273431;
-    //         let b_term = &b * 0.56802827;
-    //         let c_term = &c * -0.54067466;
-    //         let x_term = x.narrow(2, 1, 1)?.squeeze(2)?;
-    //         (&a_term? + &b_term? - &c_term? + &x_term)?
-    //     }
-    //     .contiguous()?;
+        let r_idx = input_features.output_dict.r_idx.as_ref();
+        let chain_labels = input_features.output_dict.chain_labels.as_ref();
+        let x = if self.augment_eps > 0.0 {
+            let noise = x.randn_like(0.0, self.augment_eps as f64)?;
+            (x + noise)?
+        } else {
+            x.clone()
+        };
 
-    //     // N/CA/C/O
-    //     let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
-    //     let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
-    //     let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
-    //     let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
+        let b = (&x.narrow(2, 1, 1)? - &x.narrow(2, 0, 1)?)?
+            .squeeze(2)?
+            .contiguous()?;
+        let c = (&x.narrow(2, 2, 1)? - &x.narrow(2, 1, 1)?)?
+            .squeeze(2)?
+            .contiguous()?;
+        let a = cross_product(&b, &c)?;
+        let cb = {
+            let a_term = &a * -0.58273431;
+            let b_term = &b * 0.56802827;
+            let c_term = &c * -0.54067466;
+            let x_term = x.narrow(2, 1, 1)?.squeeze(2)?;
+            (&a_term? + &b_term? - &c_term? + &x_term)?
+        }
+        .contiguous()?;
 
-    //     let (d_neighbors, e_idx) = self._dist(&ca, &mask, self.augment_eps as f64)?;
+        // N/CA/C/O
+        let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
+        let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
+        let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
+        let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
 
-    //     let mut rbf_all = Vec::new();
-    //     rbf_all.push(self._rbf(&d_neighbors, device)?);
-    //     rbf_all.push(self._get_rbf(&n, &n, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&c, &c, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&o, &o, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&cb, &cb, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&ca, &n, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&ca, &c, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&ca, &o, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&ca, &cb, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&n, &c, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&n, &o, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&n, &cb, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&cb, &c, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&cb, &o, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&o, &c, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&n, &ca, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&c, &ca, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&o, &ca, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&cb, &ca, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&c, &n, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&o, &n, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&cb, &n, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&c, &cb, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&o, &cb, &e_idx, device)?);
-    //     rbf_all.push(self._get_rbf(&c, &o, &e_idx, device)?);
+        let (d_neighbors, e_idx) = self._dist(&ca, &mask, self.augment_eps as f64)?;
 
-    //     let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
+        let mut rbf_all = Vec::new();
+        rbf_all.push(self._rbf(&d_neighbors, device)?);
+        rbf_all.push(self._get_rbf(&n, &n, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&c, &c, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&o, &o, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&cb, &cb, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&ca, &n, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&ca, &c, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&ca, &o, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&ca, &cb, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&n, &c, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&n, &o, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&n, &cb, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&cb, &c, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&cb, &o, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&o, &c, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&n, &ca, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&c, &ca, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&o, &ca, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&cb, &ca, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&c, &n, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&o, &n, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&cb, &n, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&c, &cb, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&o, &cb, &e_idx, device)?);
+        rbf_all.push(self._get_rbf(&c, &o, &e_idx, device)?);
 
-    //     let offset = (&r_idx.unsqueeze(2)? - &r_idx.unsqueeze(1)?)?;
-    //     let offset = offset
-    //         .unsqueeze(D::Minus1)?
-    //         .gather(&e_idx, 2)?
-    //         .squeeze(D::Minus1)?;
+        let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
 
-    //     let d_chains = (&chain_labels.unsqueeze(2)? - &chain_labels.unsqueeze(1)?)?
-    //         .eq(0.0)?
-    //         .to_dtype(candle_core::DType::I64)?;
+        let offset = (&r_idx.unsqueeze(2)? - &r_idx.unsqueeze(1)?)?;
+        let offset = offset
+            .unsqueeze(D::Minus1)?
+            .gather(&e_idx, 2)?
+            .squeeze(D::Minus1)?;
 
-    //     let e_chains = d_chains
-    //         .unsqueeze(D::Minus1)?
-    //         .gather(&e_idx, 2)?
-    //         .squeeze(D::Minus1)?;
+        let d_chains = (&chain_labels.unsqueeze(2)? - &chain_labels.unsqueeze(1)?)?
+            .eq(0.0)?
+            .to_dtype(candle_core::DType::I64)?;
 
-    //     let e_positional = self
-    //         .embeddings
-    //         .forward(&offset.to_dtype(candle_core::DType::I64)?, &e_chains)?;
+        let e_chains = d_chains
+            .unsqueeze(D::Minus1)?
+            .gather(&e_idx, 2)?
+            .squeeze(D::Minus1)?;
 
-    //     let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
-    //     let e = self.edge_embedding.forward(&e)?;
-    //     let e = self.norm_edges.forward(&e)?;
+        let e_positional = self
+            .embeddings
+            .forward(&offset.to_dtype(candle_core::DType::I64)?, &e_chains)?;
 
-    //     Ok((e, e_idx))
-    // }
+        let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
+        let e = self.edge_embedding.forward(&e)?;
+        let e = self.norm_edges.forward(&e)?;
+
+        Ok((e, e_idx))
+    }
 }
 
 #[derive(Clone, Debug)]

@@ -55,24 +55,23 @@ pub struct MultiPDBConfig {
     pub omit_AA_per_residue_multi: Option<String>,
     pub bias_AA_per_residue_multi: Option<String>,
 }
-
 #[derive(Clone, Debug)]
 pub struct ProteinMPNNConfig {
-    atom_context_num: usize,
-    augment_eps: f32,
-    dropout_ratio: f32,
-    edge_features: i64,
-    hidden_dim: i64,
-    k_neighbors: i64,
-    ligand_mpnn_use_side_chain_context: bool,
-    model_type: ModelTypes,
-    node_features: i64,
-    num_decoder_layers: i64,
-    num_encoder_layers: i64,
-    num_letters: i64,
-    num_rbf: i64,
-    scale_factor: f64,
-    vocab: i64,
+    pub atom_context_num: usize,
+    pub augment_eps: f32,
+    pub dropout_ratio: f32,
+    pub edge_features: i64,
+    pub hidden_dim: i64,
+    pub k_neighbors: i64,
+    pub ligand_mpnn_use_side_chain_context: bool,
+    pub model_type: ModelTypes,
+    pub node_features: i64,
+    pub num_decoder_layers: i64,
+    pub num_encoder_layers: i64,
+    pub num_letters: i64,
+    pub num_rbf: i64,
+    pub scale_factor: f64,
+    pub vocab: i64,
 }
 
 impl ProteinMPNNConfig {
