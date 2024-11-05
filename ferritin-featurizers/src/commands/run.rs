@@ -1,6 +1,7 @@
 use crate::cli::ModelTypes;
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
-use candle_core;
+use crate::models::ligandmpnn::model::{ProteinMPNN, ProteinMPNNConfig};
+// use candle_core;
 use ferritin_core::AtomCollection;
 use pdbtbx;
 

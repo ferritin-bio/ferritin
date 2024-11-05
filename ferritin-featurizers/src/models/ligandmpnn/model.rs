@@ -492,16 +492,25 @@ impl ProteinMPNN {
             _ => Err(candle_core::Error::Msg("Unknown model type".into())),
         }
     }
-    fn sample(&self, feature_dict: &ProteinFeatures) -> Result<ScoreOutput> {
-        let ProteinFeatures {
-            output_dict,
-            batch_size,
-            symmetry_residues,
-            symmetry_weights,
-            ..
-        } = feature_dict;
+    fn sample(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
+        // let LigandMPNNData {
+        //     output_dict,
+        //     batch_size,
+        //     symmetry_residues,
+        //     symmetry_weights,
+        //     ..
+        // } = feature_dict;
 
-        let LigandMPNNDataDict { x, s, mask, .. } = &output_dict;
+        // let LigandMPNNDataDict { x, s, mask, .. } = &output_dict;
+
+        let ProteinFeatures {
+            x,
+            s,
+            x_mask,
+            // symmetry_residues,
+            // symmetry_weights,
+            ..
+        } = features;
 
         let b_decoder = batch_size.unwrap() as usize;
         let (b, l) = s.shape().dims2()?;
