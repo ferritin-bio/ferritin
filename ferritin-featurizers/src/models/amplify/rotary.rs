@@ -1,0 +1,3 @@
+struct AmplifyConfig {}
+
+struct Amplify {}
