@@ -9,11 +9,22 @@ image: "images/protein_features.jpg"
 ---
 
 
-# Initial Featurizer
+# Intro
 
-Many of the Protein language models require converting our proteins into
-compact, `Tensor` representations of the molecule. This is the `trait`
-that captures the key functions.
+One of the motivating reasons of creating `ferritin` was to be able to recreate and run protein lanaguage
+models in the browser via WASM. This post describes a work-in-progress effort to port
+the [ligand-mpnn](https://github.com/dauparas/LigandMPNN) protein model from python/pytorch to Rust/[Candle](https://github.com/huggingface/candle).
+My general strategy was to nibble at the model form both ends: begin a naive translation of the Model,
+and begin to recreate in Rust the protein processing portion.
+
+# Coordinates --> Tensors
+
+Many of the protein language models require converting our proteins into
+compact, `Tensor` representations of molecular features. I defined the `LMPNNFeatures` trait
+to define the functions that I need. These functions operate on `AtomCollections`
+and return `candle_core::Tensor`s. You can see the function signatures
+below as well as the `ProteinFeatures` struct which holds a set of
+these `Tensor`s and mimics the LigandMPNN dictionary.
 
 
 ```rust
@@ -35,7 +46,7 @@ pub trait LMPNNFeatures {
 /// Essential Tensors are Aligned Coordinates of Atoms by Atom Type
 pub struct ProteinFeatures {
     s: Tensor,   // protein amino acids as i32 Tensor
-    x: Tensor,   // protein co-oords by residue [1, 37, 4]
+    x: Tensor,   // protein co-oords by residue [1, #res, 37, 4]
     y: Tensor,   // ligand coords
     y_t: Tensor, // encoded ligand atom names
     ...
@@ -43,9 +54,12 @@ pub struct ProteinFeatures {
 }
 ```
 
+One nice ergonomic crate I came accross was [strum](https://docs.rs/strum/latest/strum/).
+In order to generate a `Tensor` with aligned coordinates I would like to iterate
+through the atomtypes and the `EnumIter` lets me do that. Below you can see
+how that enum is used to build up preallocated vector which we popluate and
+then reshape into a Tensor. Very nice.
 
-Using the [strum](https://docs.rs/strum/latest/strum/) crate lets us have some nice ENUM handling. We can represent
-the integers as symbols but also iterate over them as below. Getting the coords is then straightforward.
 
 ```rust
 /// AAAtom. This is where the different Atom types are registered.
@@ -87,7 +101,21 @@ impl LMPNNFeatures for AtomCollection {
 ```
 
 
-# Core Model
+# The LigandMPNN/ProteinMPNN Model
+
+The section above discusses the first part of the problem - converting
+the proteins to features. This section starts from the other direction
+which is to take the pytorch code and translate it into Candle code.
+
+As of Nov 5th this is still a work in progress but is not in terrible shape.
+Below I show a snippet of the high-level model where you can see there
+are a set of decoder and encoder layers and set of deaults.  Internally,
+there are some tricky bits that are made potentially more tricky than
+needed due to the many ways that LigandMPNN can be invoked. This results
+in a lot of branches and conditions within the model and I had some
+trouble teasing out the model code from the data. But hopefully you
+can catchthe glimpse of what the model should look like.
+
 
 ```rust
 pub struct ProteinMPNN {
@@ -111,6 +139,10 @@ impl ProteinMPNN {
 }
 
 // Model Params Contained here.
+// this use of a `Config` struct with
+// methods to supply the model-specific values is
+// how most of the models in candle_transformers get their
+// args.
 impl ProteinMPNNConfig {
     pub fn proteinmpnn() -> Self {
         Self {
@@ -135,12 +167,15 @@ impl ProteinMPNNConfig {
 ```
 
 
-# Protein MPNN Configs
+# CLI and Invocation Configs
 
 There are a LOT of possible configurations that LigandMPNN supports. Based on aggregating
 all of the [example CLI options](https://github.com/dauparas/LigandMPNN/blob/main/run_examples.sh)
-the LigandMPNN CLI repo, I partitioned them into related functions - e.g. AABias, ResidueControl etc.
-I also moved the `ProteinMPNNConfig` into the same file - this contains the parameters for the model itself.
+the LigandMPNN CLI repo, I partitioned them into related structs - e.g. AABias, ResidueControl etc -
+and consolidated all of the configs into a common file.  The complicated structure of this config is
+not great and I am not sure I am going to stick with it.  But I do have the beginnings of a testing setup
+ that can run CLI tests. At the moment there is only one `ferritin-featurizer featurize <input> <output>`
+ which will take a PDB or CIF and create a featurized `safetensor` file.
 
 
 
@@ -154,30 +189,31 @@ I also moved the `ProteinMPNNConfig` into the same file - this contains the para
 //! - `MembraneMPNNConfig` - MembraneMPNN specific settings
 //! - `MultiPDBConfig` - Multi-PDB mode configuration
 //! - `ResidueControl` - Residue-level design controls
-//! - `RunConfig` - Runtime execution parameters// Core Configs for handling CLI ARGs and Model Params
+//! - `RunConfig` - Runtime execution parameters
 
-
-```
-
-
-# CLI
-
-```rust
-/// Convert the AtomCollection into a struct that can be passed to a model.
-
-```
-
-
-
-# Wiring It Up
-
-```rust
-/// Convert the AtomCollection into a struct that can be passed to a model.
-pub trait LMPNNFeatures {
-    fn featurize(&self, device: &Device) -> Result<ProteinFeatures>;
-    fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
-    fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
-    fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
-    fn to_pdb(&self); //
+pub struct RunConfig {
+    pub temperature: Option<f32>,
+    pub verbose: Option<i32>,
+    pub save_stats: Option<i32>,
+    pub batch_size: Option<i32>,
+    pub number_of_batches: Option<i32>,
+    pub file_ending: Option<String>,
+    pub zero_indexed: Option<i32>,
+    pub homo_oligomer: Option<i32>,
+    pub fasta_seq_separation: Option<String>,
 }
 ```
+
+
+
+# Todo
+
+I am happy with the progress so far but the next portion of work needs to tie the pieces together into
+a coherent, usable model. Because this is my first foray into `Candle` and because Protein-MPNN is a graph
+network its not an easy first project to implement. Therefore, I think I am going to take a detour to
+implement a simpler model and then once I have my bearings to return to finish the job.
+
+I think the best candidate for the first complete model would be [Amplify](https://github.com/chandar-lab/AMPLIFY),
+a model that is touting its small size relative to incumbents; whose weights are already in `safetensor` format
+and available on HuggingFace; and whose model architecture looks to be more of a standard transformer-style model
+which matched Candle's

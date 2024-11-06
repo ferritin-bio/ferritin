@@ -341,7 +341,7 @@ impl ProteinMPNN {
         Self {
             config,
             decoder_layers,
-            device: None,
+            device: Device::Cpu,
             encoder_layers,
             features,
             w_e,
