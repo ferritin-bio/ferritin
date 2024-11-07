@@ -217,8 +217,8 @@ impl EncoderBlock {
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
 
         // names
-        let k_name = format!("{}.k.weight", &layer);
         let q_name = format!("{}.q.weight", &layer);
+        let k_name = format!("{}.k.weight", &layer);
         let v_name = format!("{}.v.weight", &layer);
         let wo_name = format!("{}.wo.weight", &layer);
         let ffn_w12_name = format!("{}.ffn.w12.weight", &layer);
@@ -231,6 +231,7 @@ impl EncoderBlock {
             vb.get(&[cfg.hidden_size, cfg.hidden_size], q_name.as_str())?,
             None,
         );
+
         let k = Linear::new(
             vb.get(&[cfg.hidden_size, cfg.hidden_size], k_name.as_str())?,
             None,
