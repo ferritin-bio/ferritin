@@ -111,12 +111,10 @@ pub struct EncoderBlock {
 }
 
 impl EncoderBlock {
-    pub fn new(config: &AMPLIFYConfig, vb: VarBuilder) -> Result<Self> {
+    pub fn new(config: &AMPLIFYConfig, vb: VarBuilder, layer :i32) -> Result<Self> {
         let d_head = config.hidden_size / config.num_attention_heads;
-
         let multiple_of = 8;
-        let multiple_of = 8;
-        let intermediate_size = (cfg.intermediate_size * 2) / 3;
+        let intermediate_size = (config.intermediate_size * 2) / 3;
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
         let q = linear(config.hidden_size, config.hidden_size, vb.pp("q"))?;
         let k = linear(config.hidden_size, config.hidden_size, vb.pp("k"))?;
@@ -124,10 +122,8 @@ impl EncoderBlock {
         let wo = linear(config.hidden_size, config.hidden_size, vb.pp("wo"))?;
         let w12 = linear_no_bias(intermediate_size * 2, config.hidden_size, vb.pp("ffn.w12"))?;
         let w3 = linear_no_bias(config.hidden_size, intermediate_size, vb.pp("ffn.w3"))?;
-        let [ffn_norm, attention_norm] = [
-            rms_norm(config.hidden_size, config.norm_eps, vb.pp("ffn_norm"))?,
-            rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?,
-        ];
+        let ffn_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("ffn_norm"))?,
+        let attention_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?;
 
         Ok(Self {
             q,
@@ -182,7 +178,6 @@ impl EncoderBlock {
         #[rustfmt::skip]
         let names = ["q", "k", "v", "wo", "ffn.w12", "ffn.w3", "ffn_norm", "attention_norm"]
             .map(|suffix| format!("{}.{}", layer, suffix));
-
         // Linear layers
         let [q, k, v, wo, w12, w3] = [
             linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[0]))?,
@@ -192,7 +187,6 @@ impl EncoderBlock {
             linear_no_bias(intermediate_size * 2, cfg.hidden_size, vb.pp(&names[4]))?,
             linear_no_bias(cfg.hidden_size, intermediate_size, vb.pp(&names[5]))?,
         ];
-
         // Norm layers
         let [ffn_norm, attention_norm] = [
             rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(&names[6]))?,
