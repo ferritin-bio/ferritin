@@ -249,8 +249,12 @@ impl EncoderBlock {
             vb.get(&[cfg.vocab_size, cfg.hidden_size], ffn_w3_name.as_str())?,
             None,
         );
-        let ffn_norm = RMSNorm::load(vb, cfg, ffn_norm_name.as_str())?;
-        let attention_norm = RMSNorm::load(vb, cfg, attention_norm_name.as_str())?;
+        let ffn_norm = RMSNorm::load(vb.pp(ffn_norm_name.as_str()), cfg, ffn_norm_name.as_str())?;
+        let attention_norm = RMSNorm::load(
+            vb.pp(attention_norm_name.as_str()),
+            cfg,
+            attention_norm_name.as_str(),
+        )?;
 
         Ok(Self {
             q,
@@ -300,11 +304,15 @@ impl AMPLIFY {
         // process the transformer section
         let mut transformer_encoder = Vec::with_capacity(cfg.num_hidden_layers);
         for i in 0..cfg.num_hidden_layers {
-            transformer_encoder.push(EncoderBlock::load(vb, cfg, i as i32)?);
+            transformer_encoder.push(EncoderBlock::load(vb.pp("EncoderBlock"), cfg, i as i32)?);
         }
 
         let layer_norm_2 = if cfg.layer_norm_before_last_layer {
-            Some(RMSNorm::load(vb, cfg, "layer_norm_2.weight")?)
+            Some(RMSNorm::load(
+                vb.pp("layer_norm_2.weight"),
+                cfg,
+                "layer_norm_2.weight",
+            )?)
         } else {
             None
         };
