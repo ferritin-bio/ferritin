@@ -8,7 +8,7 @@
 // - Attention mechanism
 // - FFN structure
 
-// use super::rmsnorm::RMSNorm;
+use super::rmsnorm::RMSNorm;
 // use super::rotary::{apply_rotary_emb, reshape_for_broadcast};
 use candle_core::{DType, Device, Module, Result, Tensor};
 use candle_nn::{Activation, Dropout, Embedding, Linear, VarBuilder};
@@ -21,6 +21,7 @@ pub struct AMPLIFYConfig {
     pub num_hidden_layers: usize,
     pub num_attention_heads: usize,
     pub intermediate_size: usize,
+    // max-position-embeddings ??
     pub dropout_prob: f64,
     pub embedding_init_range: f64,
     pub decoder_init_range: f64,
@@ -60,144 +61,179 @@ impl Default for AMPLIFYConfig {
     }
 }
 
+impl AMPLIFYConfig {
+    pub fn amp_120m(&self) -> Self {
+        Self {
+            hidden_size: 640,
+            num_hidden_layers: 24,
+            num_attention_heads: 10,
+            intermediate_size: 2560,
+            dropout_prob: 0.0,
+            embedding_init_range: 0.02,
+            decoder_init_range: 0.02,
+            rms_norm: true,
+            norm_eps: 1e-5,
+            hidden_act: Activation::Swiglu,
+            layer_norm_after_embedding: false,
+            layer_norm_before_last_layer: true,
+            vocab_size: 27,
+            ffn_bias: false,
+            att_bias: false,
+            pad_token_id: 0,
+            max_length: 2048,
+        }
+    }
+    pub fn amp_350m(self) -> Self {
+        AMPLIFYConfig::default()
+    }
+}
+
 // EncoderBlock implementation
 //
 // example 01: T5: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331
 //
-// pub struct EncoderBlock {
-//     config: AMPLIFYConfig,
-//     q: Linear,
-//     k: Linear,
-//     v: Linear,
-//     wo: Linear,
-//     resid_dropout: Dropout,
-//     // Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
-//     ffn: FFN,
-//     attention_norm: RMSNorm, // <----- Check
-//     ffn_norm: RMSNorm,
-//     ffn_dropout: Dropout,
-// }
+pub struct EncoderBlock {
+    config: AMPLIFYConfig,
+    q: Linear,
+    k: Linear,
+    v: Linear,
+    wo: Linear,
+    resid_dropout: Dropout,
+    // Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
+    // ffn: FFN,
+    // attention_norm: RMSNorm, // <----- Check
+    // ffn_norm: RMSNorm,
+    // ffn_dropout: Dropout,
+}
 
-// impl EncoderBlock {
-//     pub fn new(config: &AMPLIFYConfig, vb: VarBuilder) -> Result<Self> {
-//         let d_head = config.hidden_size / config.num_attention_heads;
+impl EncoderBlock {
+    // pub fn new(config: &AMPLIFYConfig, vb: VarBuilder) -> Result<Self> {
+    //     let d_head = config.hidden_size / config.num_attention_heads;
 
-//         // Attention layers
-//         let q = Linear::new(
-//             vb.pp("q").get_with_hints(
-//                 (config.hidden_size, config.hidden_size),
-//                 "weight",
-//                 candle_nn::init::ZERO,
-//             )?,
-//             if config.att_bias {
-//                 Some(vb.pp("q").get_with_hints(
-//                     config.hidden_size,
-//                     "bias",
-//                     candle_nn::init::ZERO,
-//                 )?)
-//             } else {
-//                 None
-//             },
-//         );
+    //     // Attention layers
+    //     let q = Linear::new(
+    //         vb.pp("q").get_with_hints(
+    //             (config.hidden_size, config.hidden_size),
+    //             "weight",
+    //             candle_nn::init::ZERO,
+    //         )?,
+    //         if config.att_bias {
+    //             Some(vb.pp("q").get_with_hints(
+    //                 config.hidden_size,
+    //                 "bias",
+    //                 candle_nn::init::ZERO,
+    //             )?)
+    //         } else {
+    //             None
+    //         },
+    //     );
 
-//         // Similar initialization for k, v, and wo...
+    //     // Similar initialization for k, v, and wo...
 
-//         // FFN initialization based on activation type
-//         let ffn = match config.hidden_act.to_lowercase().as_str() {
-//             "swiglu" => {
-//                 let multiple_of = 8;
-//                 let intermediate_size =
-//                     (2 * config.intermediate_size / 3).div_ceil(multiple_of) * multiple_of;
-//                 FFN::SwiGLU(SwiGLUFFN::new(
-//                     config.hidden_size,
-//                     intermediate_size,
-//                     config.hidden_size,
-//                     config.ffn_bias,
-//                     vb.pp("ffn"),
-//                 )?)
-//             }
-//             "relu" => FFN::ReLU(Sequential::new(vec![
-//                 Linear::new(/* ... */),
-//                 ReLU::new(),
-//                 Linear::new(/* ... */),
-//             ])),
-//             // Add other activation types...
-//             _ => {
-//                 return Err(candle_core::Error::Msg(format!(
-//                     "Unsupported activation: {}",
-//                     config.hidden_act
-//                 )))
-//             }
-//         };
+    //     // FFN initialization based on activation type
+    //     let ffn = match config.hidden_act.to_lowercase().as_str() {
+    //         "swiglu" => {
+    //             let multiple_of = 8;
+    //             let intermediate_size =
+    //                 (2 * config.intermediate_size / 3).div_ceil(multiple_of) * multiple_of;
+    //             FFN::SwiGLU(SwiGLUFFN::new(
+    //                 config.hidden_size,
+    //                 intermediate_size,
+    //                 config.hidden_size,
+    //                 config.ffn_bias,
+    //                 vb.pp("ffn"),
+    //             )?)
+    //         }
+    //         "relu" => FFN::ReLU(Sequential::new(vec![
+    //             Linear::new(/* ... */),
+    //             ReLU::new(),
+    //             Linear::new(/* ... */),
+    //         ])),
+    //         // Add other activation types...
+    //         _ => {
+    //             return Err(candle_core::Error::Msg(format!(
+    //                 "Unsupported activation: {}",
+    //                 config.hidden_act
+    //             )))
+    //         }
+    //     };
 
-//         let attention_norm: Box<dyn Module> = if config.rms_norm {
-//             Box::new(RMSNorm::new(
-//                 config.hidden_size,
-//                 config.norm_eps,
-//                 vb.pp("attention_norm"),
-//             )?)
-//         } else {
-//             Box::new(LayerNorm::new(
-//                 config.hidden_size,
-//                 config.norm_eps,
-//                 vb.pp("attention_norm"),
-//             )?)
-//         };
+    //     let attention_norm: Box<dyn Module> = if config.rms_norm {
+    //         Box::new(RMSNorm::new(
+    //             config.hidden_size,
+    //             config.norm_eps,
+    //             vb.pp("attention_norm"),
+    //         )?)
+    //     } else {
+    //         Box::new(LayerNorm::new(
+    //             config.hidden_size,
+    //             config.norm_eps,
+    //             vb.pp("attention_norm"),
+    //         )?)
+    //     };
 
-//         // Similar for ffn_norm...
+    //     // Similar for ffn_norm...
 
-//         Ok(Self {
-//             config: config.clone(),
-//             q,
-//             k,
-//             v,
-//             wo,
-//             resid_dropout: Dropout::new(config.dropout_prob),
-//             ffn,
-//             attention_norm,
-//             ffn_norm,
-//             ffn_dropout: Dropout::new(config.dropout_prob),
-//         })
-//     }
+    //     Ok(Self {
+    //         config: config.clone(),
+    //         q,
+    //         k,
+    //         v,
+    //         wo,
+    //         resid_dropout: Dropout::new(config.dropout_prob),
+    //         ffn,
+    //         attention_norm,
+    //         ffn_norm,
+    //         ffn_dropout: Dropout::new(config.dropout_prob),
+    //     })
+    // }
 
-//     fn forward(
-//         &self,
-//         x: &Tensor,
-//         pad_mask: Option<&Tensor>,
-//         freqs_cis: &Tensor,
-//         output_attentions: bool,
-//     ) -> Result<(Tensor, Option<Tensor>)> {
-//         let normed = self.attention_norm.forward(x)?;
-//         let (attn, contacts) =
-//             self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
-//         let x = x.add(&attn)?;
+    // fn forward(
+    //     &self,
+    //     x: &Tensor,
+    //     pad_mask: Option<&Tensor>,
+    //     freqs_cis: &Tensor,
+    //     output_attentions: bool,
+    // ) -> Result<(Tensor, Option<Tensor>)> {
+    //     let normed = self.attention_norm.forward(x)?;
+    //     let (attn, contacts) =
+    //         self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
+    //     let x = x.add(&attn)?;
 
-//         let normed = self.ffn_norm.forward(&x)?;
-//         let ff = self.ff_block(&normed)?;
-//         let x = x.add(&ff)?;
+    //     let normed = self.ffn_norm.forward(&x)?;
+    //     let ff = self.ff_block(&normed)?;
+    //     let x = x.add(&ff)?;
 
-//         Ok((x, contacts))
-//     }
+    //     Ok((x, contacts))
+    // }
 
-//     fn attention_block(
-//         &self,
-//         x: &Tensor,
-//         pad_mask: Option<&Tensor>,
-//         freqs_cis: &Tensor,
-//         output_attentions: bool,
-//     ) -> Result<(Tensor, Option<Tensor>)> {
-//         // Implementation of attention mechanism...
-//         // Similar to PyTorch implementation but using Candle operations
-//     }
-// }
+    // fn attention_block(
+    //     &self,
+    //     x: &Tensor,
+    //     pad_mask: Option<&Tensor>,
+    //     freqs_cis: &Tensor,
+    //     output_attentions: bool,
+    // ) -> Result<(Tensor, Option<Tensor>)> {
+    //     // Implementation of attention mechanism...
+    //     // Similar to PyTorch implementation but using Candle operations
+    // }
+
+    pub fn load() -> Self {
+        unimplemented!()
+    }
+}
 
 // Main AMPLIFY model
 pub struct AMPLIFY {
-    config: AMPLIFYConfig,
+    // config: AMPLIFYConfig,
     encoder: Embedding,
-    layer_norm_1: Option<Box<dyn Module>>,
-    // transformer_encoder: Vec<EncoderBlock>,
-    layer_norm_2: Option<Box<dyn Module>>,
+    layer_norm_1: Option<RMSNorm>,
+
+    // self.transformer_encoder = nn.ModuleList()
+    // for _ in range(config.num_hidden_layers):
+    //     self.transformer_encoder.append(EncoderBlock(config))
+    transformer_encoder: Vec<EncoderBlock>,
+    layer_norm_2: Option<RMSNorm>,
     decoder: Linear,
     freqs_cis: Tensor,
 }
@@ -207,17 +243,25 @@ impl AMPLIFY {
         unimplemented!()
     }
 
-    // pub fn forward(
-    //     &self,
-    //     src: &Tensor,
-    //     pad_mask: Option<&Tensor>,
-    //     output_hidden_states: bool,
-    //     output_attentions: bool,
-    // ) -> Result<ModelOutput> {
-    //     // Forward pass implementation...
-    // }
+    pub fn forward(
+        &self,
+        src: &Tensor,
+        pad_mask: Option<&Tensor>,
+        output_hidden_states: bool,
+        output_attentions: bool,
+    ) -> Result<ModelOutput> {
+        unimplemented!()
+    }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
+        // def _init_weights(self, module):
+        //     if isinstance(module, nn.Linear):
+        //         module.weight.data.uniform_(-self.config.decoder_init_range, self.config.decoder_init_range)
+        //         if module.bias is not None:
+        //             module.bias.data.zero_()
+        //     elif isinstance(module, nn.Embedding):
+        //         module.weight.data.uniform_(-self.config.embedding_init_range, self.config.embedding_init_range)
+
         // Ok(Self {
         //     // config: AMPLIFYConfig,
         //     // encoder: Embedding,

@@ -1,3 +1,3 @@
 pub mod amplify;
-// mod rmsnorm;
+mod rmsnorm;
 // mod rotary;
