@@ -209,9 +209,13 @@ impl EncoderBlock {
     }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
+        // To keep the number of parameters and the amount of computation constant, we reduce the number of
+        // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
+        // avoid RuntimeError due to misaligned operand
+
         let multiple_of = 8;
-        let intermediate_size =
-            div_ceil(div_ceil(2 * cfg.intermediate_size, 3), multiple_of) * multiple_of;
+        let intermediate_size = (cfg.intermediate_size * 2) / 3;
+        let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
 
         // names
         let k_name = format!("{}.k.weight", &layer);
@@ -245,7 +249,7 @@ impl EncoderBlock {
             None,
         );
         let w12 = Linear::new(
-            vb.get(&[cfg.vocab_size, cfg.hidden_size], ffn_w12_name.as_str())?,
+            vb.get(&[intermediate_size, cfg.hidden_size], ffn_w12_name.as_str())?,
             None,
         );
         let w3 = Linear::new(
