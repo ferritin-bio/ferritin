@@ -1,3 +1,13 @@
+// 1. **Llama2 implementations** as your primary reference, especially for:
+// - RMSNorm implementation
+// - Rotary embeddings
+// - Overall architecture structure
+
+// 2. **PaLM implementations** as a secondary reference for:
+// - SwiGLU implementation
+// - Attention mechanism
+// - FFN structure
+
 use super::rmsnorm::RMSNorm;
 use super::rotary::{apply_rotary_emb, reshape_for_broadcast};
 use candle_core::{DType, Device, Module, Result, Tensor};
@@ -51,6 +61,9 @@ impl Default for AMPLIFYConfig {
 }
 
 // EncoderBlock implementation
+//
+// example 01: T5: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331
+//
 pub struct EncoderBlock {
     config: AMPLIFYConfig,
     q: Linear,
@@ -58,9 +71,10 @@ pub struct EncoderBlock {
     v: Linear,
     wo: Linear,
     resid_dropout: Dropout,
+    // Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
     ffn: FFN,
-    attention_norm: Box<dyn Module>,
-    ffn_norm: Box<dyn Module>,
+    attention_norm: RMSNorm, // <----- Check
+    ffn_norm: RMSNorm,
     ffn_dropout: Dropout,
 }
 
