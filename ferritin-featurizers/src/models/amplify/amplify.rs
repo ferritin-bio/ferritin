@@ -111,7 +111,7 @@ pub struct EncoderBlock {
 }
 
 impl EncoderBlock {
-    pub fn new(config: &AMPLIFYConfig, vb: VarBuilder, layer :i32) -> Result<Self> {
+    pub fn new(config: &AMPLIFYConfig, vb: VarBuilder, layer: i32) -> Result<Self> {
         let d_head = config.hidden_size / config.num_attention_heads;
         let multiple_of = 8;
         let intermediate_size = (config.intermediate_size * 2) / 3;
@@ -122,8 +122,9 @@ impl EncoderBlock {
         let wo = linear(config.hidden_size, config.hidden_size, vb.pp("wo"))?;
         let w12 = linear_no_bias(intermediate_size * 2, config.hidden_size, vb.pp("ffn.w12"))?;
         let w3 = linear_no_bias(config.hidden_size, intermediate_size, vb.pp("ffn.w3"))?;
-        let ffn_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("ffn_norm"))?,
-        let attention_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?;
+        let ffn_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("ffn_norm"))?;
+        let attention_norm =
+            rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?;
 
         Ok(Self {
             q,
@@ -167,6 +168,45 @@ impl EncoderBlock {
         unimplemented!()
     }
 
+    // pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
+    //     // To keep the number of parameters and the amount of computation constant, we reduce the number of
+    //     // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
+    //     // avoid RuntimeError due to misaligned operand
+    //     let multiple_of = 8;
+    //     let intermediate_size = (cfg.intermediate_size * 2) / 3;
+    //     let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
+
+    //     #[rustfmt::skip]
+    //     let names = ["q", "k", "v", "wo", "ffn.w12", "ffn.w3", "ffn_norm", "attention_norm"]
+    //         .map(|suffix| format!("{}.{}", layer, suffix));
+    //     // Linear layers
+    //     let [q, k, v, wo, w12, w3] = [
+    //         linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[0]))?,
+    //         linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[1]))?,
+    //         linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[2]))?,
+    //         linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[3]))?,
+    //         linear_no_bias(intermediate_size * 2, cfg.hidden_size, vb.pp(&names[4]))?,
+    //         linear_no_bias(cfg.hidden_size, intermediate_size, vb.pp(&names[5]))?,
+    //     ];
+    //     // Norm layers
+    //     let [ffn_norm, attention_norm] = [
+    //         rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(&names[6]))?,
+    //         rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(&names[7]))?,
+    //     ];
+
+    //     Ok(Self {
+    //         q,
+    //         k,
+    //         v,
+    //         wo,
+    //         w12,
+    //         w3,
+    //         attention_norm,
+    //         ffn_norm,
+    //         // resid_dropout,
+    //         // ffn_dropout,
+    //     })
+    // }
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
         // To keep the number of parameters and the amount of computation constant, we reduce the number of
         // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
@@ -174,24 +214,15 @@ impl EncoderBlock {
         let multiple_of = 8;
         let intermediate_size = (cfg.intermediate_size * 2) / 3;
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
-
-        #[rustfmt::skip]
-        let names = ["q", "k", "v", "wo", "ffn.w12", "ffn.w3", "ffn_norm", "attention_norm"]
-            .map(|suffix| format!("{}.{}", layer, suffix));
-        // Linear layers
-        let [q, k, v, wo, w12, w3] = [
-            linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[0]))?,
-            linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[1]))?,
-            linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[2]))?,
-            linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[3]))?,
-            linear_no_bias(intermediate_size * 2, cfg.hidden_size, vb.pp(&names[4]))?,
-            linear_no_bias(cfg.hidden_size, intermediate_size, vb.pp(&names[5]))?,
-        ];
-        // Norm layers
-        let [ffn_norm, attention_norm] = [
-            rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(&names[6]))?,
-            rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(&names[7]))?,
-        ];
+        let vb = vb.pp(layer); // handle the layer nubmer here.
+        let q = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("q"))?;
+        let k = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("k"))?;
+        let v = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("v"))?;
+        let wo = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("wo"))?;
+        let w12 = linear_no_bias(cfg.hidden_size, intermediate_size * 2, vb.pp("ffn.w12"))?;
+        let w3 = linear_no_bias(intermediate_size, cfg.hidden_size, vb.pp("ffn.w3"))?;
+        let ffn_norm = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("ffn_norm"))?;
+        let attention_norm = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("attention_norm"))?;
 
         Ok(Self {
             q,
@@ -227,75 +258,75 @@ impl AMPLIFY {
         unimplemented!()
     }
 
-    pub fn forward(
-        &self,
-        src: &Tensor,
-        pad_mask: Option<&Tensor>,
-        output_hidden_states: bool,
-        output_attentions: bool,
-    ) -> Result<ModelOutput> {
-        let mut hidden_states = vec![];
-        let mut attentions = vec![];
+    // pub fn forward(
+    //     &self,
+    //     src: &Tensor,
+    //     pad_mask: Option<&Tensor>,
+    //     output_hidden_states: bool,
+    //     output_attentions: bool,
+    // ) -> Result<ModelOutput> {
+    //     let mut hidden_states = vec![];
+    //     let mut attentions = vec![];
 
-        // Process attention mask if provided
-        let attention_mask = if let Some(mask) = pad_mask {
-            if !mask.all_close(&mask.zeros_like()?, 1e-6, 1e-6)? {
-                Some(mask.unsqueeze(1)?.unsqueeze(1)?.expand((
-                    mask.dim(0)?,
-                    self.config.num_attention_heads,
-                    mask.dim(-1)?,
-                    mask.dim(-1)?,
-                ))?)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+    //     // Process attention mask if provided
+    //     let attention_mask = if let Some(mask) = pad_mask {
+    //         if !mask.all_close(&mask.zeros_like()?, 1e-6, 1e-6)? {
+    //             Some(mask.unsqueeze(1)?.unsqueeze(1)?.expand((
+    //                 mask.dim(0)?,
+    //                 self.config.num_attention_heads,
+    //                 mask.dim(-1)?,
+    //                 mask.dim(-1)?,
+    //             ))?)
+    //         } else {
+    //             None
+    //         }
+    //     } else {
+    //         None
+    //     };
 
-        // Get appropriate length of freqs_cis
-        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
+    //     // Get appropriate length of freqs_cis
+    //     let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
 
-        // Embedding layer
-        let mut x = self.encoder.forward(src)?;
+    //     // Embedding layer
+    //     let mut x = self.encoder.forward(src)?;
 
-        // Transform through encoder blocks
-        for layer in self.transformer_encoder.iter() {
-            let (new_x, attn) =
-                layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
-            x = new_x;
+    //     // Transform through encoder blocks
+    //     for layer in self.transformer_encoder.iter() {
+    //         let (new_x, attn) =
+    //             layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
+    //         x = new_x;
 
-            if output_hidden_states {
-                hidden_states.push(x.clone()?);
-            }
-            if output_attentions {
-                if let Some(attn) = attn {
-                    attentions.push(attn);
-                }
-            }
-        }
+    //         if output_hidden_states {
+    //             hidden_states.push(x.clone()?);
+    //         }
+    //         if output_attentions {
+    //             if let Some(attn) = attn {
+    //                 attentions.push(attn);
+    //             }
+    //         }
+    //     }
 
-        // Final layer norm and decoder
-        let logits = if self.config.layer_norm_before_last_layer {
-            self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
-        } else {
-            self.decoder.forward(&x)?
-        };
+    //     // Final layer norm and decoder
+    //     let logits = if self.config.layer_norm_before_last_layer {
+    //         self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
+    //     } else {
+    //         self.decoder.forward(&x)?
+    //     };
 
-        Ok(ModelOutput {
-            logits,
-            hidden_states: if output_hidden_states {
-                Some(hidden_states)
-            } else {
-                None
-            },
-            attentions: if output_attentions {
-                Some(attentions)
-            } else {
-                None
-            },
-        })
-    }
+    //     Ok(ModelOutput {
+    //         logits,
+    //         hidden_states: if output_hidden_states {
+    //             Some(hidden_states)
+    //         } else {
+    //             None
+    //         },
+    //         attentions: if output_attentions {
+    //             Some(attentions)
+    //         } else {
+    //             None
+    //         },
+    //     })
+    // }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
         // process the transformer section
