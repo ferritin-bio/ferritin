@@ -1,14 +1,13 @@
-// 1. **Llama2 implementations** as your primary reference, especially for:
-// - RMSNorm implementation
-// - Rotary embeddings
-// - Overall architecture structure
+//! AMPLIFY is a optimized transformer model focused on optimizing the context of sequence models
+//! while maintaining computational efficiency.
+//!
+//! Key features:
+//! - Rotary positional embeddings
+//! - RMSNorm for improved training stability
+//! - SwiGLU activation function
+//! - Specialized architecture optimizations
+//! - Memory efficient inference
 
-// 2. **PaLM implementations** as a secondary reference for:
-// - SwiGLU implementation
-// - Attention mechanism
-// - FFN structure
-
-// use super::rotary::{apply_rotary_emb, reshape_for_broadcast};
 use candle_core::{DType, Device, Result, Tensor};
 use candle_nn::{linear, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm, VarBuilder};
 
@@ -56,10 +55,6 @@ impl Default for AMPLIFYConfig {
             max_length: 2048,
         }
     }
-}
-
-fn div_ceil(a: usize, b: usize) -> usize {
-    (a + b - 1) / b
 }
 
 impl AMPLIFYConfig {
