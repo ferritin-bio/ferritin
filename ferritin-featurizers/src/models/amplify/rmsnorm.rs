@@ -9,19 +9,19 @@ pub struct RMSNorm {
 
 impl RMSNorm {
     pub fn new(dim: usize, vb: VarBuilder, eps: f64) -> Result<Self> {
-        // Initialize the weight parameter with ones
-        let weight = vb.get_with_hints(dim, "weight", candle_nn::init::Const::new(1.0))?;
-        Ok(Self { weight, eps })
+        // // Initialize the weight parameter with ones
+        // let weight = vb.get_with_hints(dim, "weight", candle_nn::init::Const::new(1.0))?;
+        // Ok(Self { weight, eps })
+        unimplemented!()
     }
-    pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result(Self){
+    pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, name: &str) -> Result<Self> {
         let eps = cfg.norm_eps;
-        let rms_tensor = vb.get(&[cfg.vocab_size, cfg.hidden_size], "attention_norm.weight")?,
-        //
-        Self {
-            weight:rms_tensor,
-            eps: eps:
-        }
-    })
+        let rms_tensor = vb.get(&[cfg.vocab_size, cfg.hidden_size], name)?;
+        Ok(Self {
+            weight: rms_tensor,
+            eps: eps,
+        })
+    }
 }
 
 impl Module for RMSNorm {

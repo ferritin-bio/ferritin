@@ -110,10 +110,9 @@ pub struct EncoderBlock {
     // resid_dropout: Dropout,
     w12: Linear,
     w3: Linear,
-    attention_norm: RMSNorm, // <----- Check
-
-                             // ffn_norm: RMSNorm,
-                             // ffn_dropout: Dropout,
+    attention_norm: RMSNorm, // <----- Check These
+    ffn_norm: RMSNorm,
+    // ffn_dropout: Dropout,
 }
 
 impl EncoderBlock {
@@ -216,45 +215,53 @@ impl EncoderBlock {
         let basename = "transformer_encoder";
 
         // names
-        let k_name = format!("{}.{}.k.weight", basename, layer).as_str();
-        let q_name = format!("{}.{}.q.weight", basename, layer).as_str();
-        let v_name = format!("{}.{}.v.weight", basename, layer).as_str();
-        let wo_name = format!("{}.{}.wo.weight", basename, layer).as_str();
-        let ffn_w12_name = format!("{}.{}.ffn.w12.weight", basename, layer).as_str();
-        let ffn_w3_name = format!("{}.{}.ffn.w3.weight", basename, layer).as_str();
-        let ffn_norm_name = format!("{}.{}.ffn_norm.weight", basename, layer).as_str();
+        let k_name = format!("{}.{}.k.weight", &basename, &layer);
+        let q_name = format!("{}.{}.q.weight", &basename, &layer);
+        let v_name = format!("{}.{}.v.weight", &basename, &layer);
+        let wo_name = format!("{}.{}.wo.weight", &basename, layer);
+        let ffn_w12_name = format!("{}.{}.ffn.w12.weight", &basename, layer);
+        let ffn_w3_name = format!("{}.{}.ffn.w3.weight", &basename, layer);
+        let ffn_norm_name = format!("{}.{}.ffn_norm.weight", &basename, layer);
+        let attention_norm_name = format!("{}.{}.attention_norm.weight", &basename, layer);
 
         // layers
-        let q = Linear::new(vb.get(&[cfg.vocab_size, cfg.hidden_size], q_name)?, None);
-        let k = Linear::new(vb.get(&[cfg.vocab_size, cfg.hidden_size], k_name)?, None);
-        let v = Linear::new(vb.get(&[cfg.vocab_size, cfg.hidden_size], v_name)?, None);
-        let wo = Linear::new(vb.get(&[cfg.vocab_size, cfg.hidden_size], wo_name)?, None);
-
+        let q = Linear::new(
+            vb.get(&[cfg.vocab_size, cfg.hidden_size], q_name.as_str())?,
+            None,
+        );
+        let k = Linear::new(
+            vb.get(&[cfg.vocab_size, cfg.hidden_size], k_name.as_str())?,
+            None,
+        );
+        let v = Linear::new(
+            vb.get(&[cfg.vocab_size, cfg.hidden_size], v_name.as_str())?,
+            None,
+        );
+        let wo = Linear::new(
+            vb.get(&[cfg.vocab_size, cfg.hidden_size], wo_name.as_str())?,
+            None,
+        );
         let w12 = Linear::new(
-            vb.get(&[cfg.vocab_size, cfg.hidden_size], ffn_w12_name)?,
+            vb.get(&[cfg.vocab_size, cfg.hidden_size], ffn_w12_name.as_str())?,
             None,
         );
         let w3 = Linear::new(
-            vb.get(&[cfg.vocab_size, cfg.hidden_size], ffn_w3_name)?,
+            vb.get(&[cfg.vocab_size, cfg.hidden_size], ffn_w3_name.as_str())?,
             None,
         );
-        let norm = Linear::new(
-            vb.get(&[cfg.vocab_size, cfg.hidden_size], ffn_norm_name)?,
-            None,
-        );
-
-        let attention_norm = RMSNorm::load(cfg, vb)?;
+        let ffn_norm = RMSNorm::load(vb, cfg, ffn_norm_name.as_str())?;
+        let attention_norm = RMSNorm::load(vb, cfg, attention_norm_name.as_str())?;
 
         Ok(Self {
             q,
             k,
             v,
             wo,
-            // resid_dropout,
             w12,
             w3,
             attention_norm,
-            // ffn_norm,
+            ffn_norm,
+            // resid_dropout,
             // ffn_dropout,
         })
     }
@@ -293,7 +300,12 @@ impl AMPLIFY {
         // process the transformer section
         let mut transformer_encoder = Vec::with_capacity(cfg.num_hidden_layers);
         for i in 0..cfg.num_hidden_layers {
-            transformer_encoder.push(EncoderBlock::load(vb, cfg, i));
+            transformer_encoder.push(EncoderBlock::load(
+                vb,
+                cfg,
+                i as i32,
+                "attention_norm.weight",
+            ));
         }
 
         let layer_norm_2 = if cfg.layer_norm_before_last_layer {
