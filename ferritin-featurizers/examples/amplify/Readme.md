@@ -9,6 +9,32 @@
 cargo run --example amplify
 ```
 
+## Model Tensors
+
+Sorting this alphabetically its a bit clearer to see the architecture:
+
+```rust
+pub struct AMPLIFY {
+    encoder: Embedding,              // <- encoder.weight
+    layer_norm_1: Option<RMSNorm>,   // <- not used
+    encoder: Vec<EncoderBlock>,      // <- 24x levels
+    layer_norm_2: Option<RMSNorm>,   // <- layer_norm_2
+    decoder: Linear,                 // <- decoder.weight
+    freqs_cis: Tensor,               // <- decoder.bias
+}
+
+// hidden_size: 640,
+//
+// transformer_encoder.<>.
+//    .attention_norm.weight   ||  Shape: [640]
+//    .k.weight                ||  Shape: [640, 640]
+//    .q.weight                ||  Shape: [640, 640]
+//    .v.weight                ||  Shape: [640, 640]
+//    .0.wo.weight             ||  Shape: [640, 640]
+//    .ffn.w12.weight          ||  Shape: [3424, 640]
+//    .ffn.w3.weight           ||  Shape: [640, 1712]
+//    .ffn_norm.weight         ||  Shape: [640]
+```
 
 ```txt
 Model tensors:
