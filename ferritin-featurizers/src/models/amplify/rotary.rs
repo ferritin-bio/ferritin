@@ -1,6 +1,9 @@
 use candle_core::{DType, Device, Result, Tensor};
 use std::f64::consts::PI;
 
+// Example1: https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/starcoder2.rs#L22
+// Example 2: phi3: https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/phi3.rs#L32
+//
 pub fn precompute_freqs_cis(dim: usize, end: usize, theta: f64) -> Result<Tensor> {
     let device = Device::Cpu; // Or pass device as parameter
 

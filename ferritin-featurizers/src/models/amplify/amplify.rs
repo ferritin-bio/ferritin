@@ -217,9 +217,18 @@ impl AMPLIFY {
     //     // Forward pass implementation...
     // }
 
-    // pub fn load(checkpoint_path: &str, config_path: &str) -> Result<(Self, ProteinTokenizer)> {
-    //     // Loading implementation...
-    // }
+    pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
+        // Ok(Self {
+        //     // config: AMPLIFYConfig,
+        //     // encoder: Embedding,
+        //     // layer_norm_1: Option<Box<dyn Module>>,
+        //     // // transformer_encoder: Vec<EncoderBlock>,
+        //     // layer_norm_2: Option<Box<dyn Module>>,
+        //     // decoder: Linear,
+        //     // freqs_cis: Tensor,
+        // })
+        unimplemented!()
+    }
 }
 
 // Helper structs and enums

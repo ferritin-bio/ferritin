@@ -3,8 +3,7 @@ use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
 use ferritin_featurizers::{AMPLIFYConfig, AMPLIFY};
 use hf_hub::{api::sync::Api, Repo, RepoType};
-use safetensors::{Dtype, SafeTensors};
-use std::path::PathBuf;
+use safetensors::SafeTensors;
 
 fn main() -> Result<()> {
     // Setup HF API and model info
@@ -46,10 +45,9 @@ fn main() -> Result<()> {
     // Pull a specific Tensor out of the variable builder...
     let Tensor1 = vb.get(&[3424, 640], "transformer_encoder.0.ffn.w12.weight")?;
     println!("Example Tensor Shape: {:?}", Tensor1.shape());
-    // let amplify = AMPLIFY::new(config, vb)
 
     let config = AMPLIFYConfig::default();
-    let model = AMPLIFY::new(&config, vb)?;
+    let model = AMPLIFY::load(vb, &config)?;
 
     Ok(())
 }
