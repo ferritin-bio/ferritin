@@ -116,6 +116,7 @@ impl EncoderBlock {
         let multiple_of = 8;
         let intermediate_size = (config.intermediate_size * 2) / 3;
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
+        let vb = vb.pp(layer);
         let q = linear(config.hidden_size, config.hidden_size, vb.pp("q"))?;
         let k = linear(config.hidden_size, config.hidden_size, vb.pp("k"))?;
         let v = linear(config.hidden_size, config.hidden_size, vb.pp("v"))?;
@@ -167,46 +168,6 @@ impl EncoderBlock {
     ) -> Result<(Tensor, Option<Tensor>)> {
         unimplemented!()
     }
-
-    // pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
-    //     // To keep the number of parameters and the amount of computation constant, we reduce the number of
-    //     // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
-    //     // avoid RuntimeError due to misaligned operand
-    //     let multiple_of = 8;
-    //     let intermediate_size = (cfg.intermediate_size * 2) / 3;
-    //     let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
-
-    //     #[rustfmt::skip]
-    //     let names = ["q", "k", "v", "wo", "ffn.w12", "ffn.w3", "ffn_norm", "attention_norm"]
-    //         .map(|suffix| format!("{}.{}", layer, suffix));
-    //     // Linear layers
-    //     let [q, k, v, wo, w12, w3] = [
-    //         linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[0]))?,
-    //         linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[1]))?,
-    //         linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[2]))?,
-    //         linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[3]))?,
-    //         linear_no_bias(intermediate_size * 2, cfg.hidden_size, vb.pp(&names[4]))?,
-    //         linear_no_bias(cfg.hidden_size, intermediate_size, vb.pp(&names[5]))?,
-    //     ];
-    //     // Norm layers
-    //     let [ffn_norm, attention_norm] = [
-    //         rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(&names[6]))?,
-    //         rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(&names[7]))?,
-    //     ];
-
-    //     Ok(Self {
-    //         q,
-    //         k,
-    //         v,
-    //         wo,
-    //         w12,
-    //         w3,
-    //         attention_norm,
-    //         ffn_norm,
-    //         // resid_dropout,
-    //         // ffn_dropout,
-    //     })
-    // }
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
         // To keep the number of parameters and the amount of computation constant, we reduce the number of
         // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
