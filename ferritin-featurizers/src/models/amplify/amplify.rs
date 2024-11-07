@@ -87,6 +87,22 @@ impl AMPLIFYConfig {
     }
 }
 
+// Clean Implementation
+//
+// Example: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340
+//
+// SwiGLu Implementation:  https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462
+//
+pub struct FeedForward {
+    w12: Linear,
+    w3: Linear,
+}
+impl FeedForward {
+    pub fn load(&self, config: &AMPLIFYConfig, vb: VarBuilder) -> Self {
+        unimplemented!()
+    }
+}
+
 // EncoderBlock implementation
 //
 // example 01: T5: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331
@@ -99,7 +115,7 @@ pub struct EncoderBlock {
     wo: Linear,
     resid_dropout: Dropout,
     // Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
-    ffn: FFN,
+    ffn: FeedForward,
     attention_norm: RMSNorm, // <----- Check
     ffn_norm: RMSNorm,
     ffn_dropout: Dropout,
@@ -125,26 +141,22 @@ impl EncoderBlock {
         //         None
         //     },
         // );
-
         // // Similar initialization for k, v, and wo...
-
         // // FFN initialization based on activation type
-        let ffn = match config.hidden_act {
-            Activation::Swiglu => {
-                let multiple_of = 8;
-                let intermediate_size =
-                    (2 * config.intermediate_size / 3).div_ceil(multiple_of) * multiple_of;
-                FFN::SwiGLU(SwiGLUFFN::new(
-                    config.hidden_size,
-                    intermediate_size,
-                    config.hidden_size,
-                    config.ffn_bias,
-                    vb.pp("ffn"),
-                )?)
-            }
-            _ => {
-                panic!()
-            }
+        let multiple_of = 8;
+        let intermediate_size =
+            (2 * config.intermediate_size / 3).div_ceil(multiple_of) * multiple_of;
+
+        let ffn = FeedForward::load(config, vb);
+
+        // FFN::SwiGLU(SwiGLUFFN::new(
+        //     config.hidden_size,
+        //     intermediate_size,
+        //     config.hidden_size,
+        //     config.ffn_bias,
+        //     vb.pp("ffn"),
+        // )?)
+
         };
 
         // let attention_norm: Box<dyn Module> = if config.rms_norm {
