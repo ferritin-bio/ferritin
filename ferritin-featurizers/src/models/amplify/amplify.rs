@@ -233,10 +233,18 @@ impl EncoderBlock {
             rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(&names[7]))?,
         ];
 
-        #[rustfmt::skip]
-        // resid_dropout,
-        // ffn_dropout,
-        Ok(Self { q, k, v, wo, w12, w3, attention_norm, ffn_norm,})
+        Ok(Self {
+            q,
+            k,
+            v,
+            wo,
+            w12,
+            w3,
+            attention_norm,
+            ffn_norm,
+            // resid_dropout,
+            // ffn_dropout,
+        })
     }
 }
 
