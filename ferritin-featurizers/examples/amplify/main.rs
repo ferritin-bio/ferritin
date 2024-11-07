@@ -27,10 +27,11 @@ fn main() -> Result<()> {
     println!("Model tensors:");
     for tensor_name in tensors.names() {
         if let Ok(tensor_info) = tensors.tensor(tensor_name) {
-            println!("Tensor: {}", tensor_name);
-            println!("  Shape: {:?}", tensor_info.shape());
-            println!("  DType: {:?}", tensor_info.dtype());
-            println!("---");
+            println!(
+                "Tensor: {:<44}  ||  Shape: {:?}",
+                tensor_name,
+                tensor_info.shape(),
+            );
         }
     }
 
