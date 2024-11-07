@@ -9,7 +9,10 @@
 //! - Memory efficient inference
 
 use candle_core::{DType, Device, Result, Tensor};
-use candle_nn::{linear, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm, VarBuilder};
+use candle_nn::{
+    embedding, linear, linear_no_bias, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm,
+    VarBuilder,
+};
 
 // Config struct
 #[derive(Debug, Clone)]
@@ -212,44 +215,22 @@ impl EncoderBlock {
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
 
         // names
-        let q_name = format!("{}.q.weight", &layer);
-        let k_name = format!("{}.k.weight", &layer);
-        let v_name = format!("{}.v.weight", &layer);
-        let wo_name = format!("{}.wo.weight", &layer);
-        let ffn_w12_name = format!("{}.ffn.w12.weight", &layer);
-        let ffn_w3_name = format!("{}.ffn.w3.weight", &layer);
+        let q_name = format!("{}.q", &layer);
+        let k_name = format!("{}.k", &layer);
+        let v_name = format!("{}.v", &layer);
+        let wo_name = format!("{}.wo", &layer);
+        let ffn_w12_name = format!("{}.ffn.w12", &layer);
+        let ffn_w3_name = format!("{}.ffn.w3", &layer);
         let ffn_norm_name = format!("{}.ffn_norm", &layer);
         let attention_norm_name = format!("{}.attention_norm", &layer);
 
         // layers
-        let q = Linear::new(
-            vb.get(&[cfg.hidden_size, cfg.hidden_size], q_name.as_str())?,
-            None,
-        );
-
-        let k = Linear::new(
-            vb.get(&[cfg.hidden_size, cfg.hidden_size], k_name.as_str())?,
-            None,
-        );
-        let v = Linear::new(
-            vb.get(&[cfg.hidden_size, cfg.hidden_size], v_name.as_str())?,
-            None,
-        );
-        let wo = Linear::new(
-            vb.get(&[cfg.hidden_size, cfg.hidden_size], wo_name.as_str())?,
-            None,
-        );
-        let w12 = Linear::new(
-            vb.get(
-                &[intermediate_size * 2, cfg.hidden_size], // swiglu combines these layers
-                ffn_w12_name.as_str(),
-            )?,
-            None,
-        );
-        let w3 = Linear::new(
-            vb.get(&[cfg.hidden_size, intermediate_size], ffn_w3_name.as_str())?,
-            None,
-        );
+        let q = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(q_name))?;
+        let k = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(k_name))?;
+        let v = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(v_name))?;
+        let wo = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(wo_name))?;
+        let w12 = linear_no_bias(intermediate_size * 2, cfg.hidden_size, vb.pp(ffn_w12_name))?;
+        let w3 = linear_no_bias(cfg.hidden_size, intermediate_size, vb.pp(ffn_w3_name))?;
         let ffn_norm = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(ffn_norm_name.as_str()))?;
         let attention_norm = rms_norm(
             cfg.hidden_size,
@@ -272,10 +253,14 @@ impl EncoderBlock {
     }
 }
 
-// Main AMPLIFY model
+/// The AMPLIFY model
+///
+/// - [GH PythonModel](https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/src/amplify/model/amplify.py)
+/// - [paper](https://www.biorxiv.org/content/10.1101/2024.09.23.614603v1)
+/// - [HF](https://huggingface.co/chandar-lab/AMPLIFY_120M)
+///
 pub struct AMPLIFY {
     encoder: Embedding,
-    // layer_norm_1:  Option<RMSNorm>, // unused
     transformer_encoder: Vec<EncoderBlock>,
     layer_norm_2: RmsNorm,
     decoder: Linear,
@@ -298,10 +283,6 @@ impl AMPLIFY {
     }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
-        // initial encoding layer
-        let weight: Tensor = vb.get(&[cfg.vocab_size, cfg.hidden_size], "encoder.weight")?;
-        let encoder = Embedding::new(weight, cfg.hidden_size.clone());
-
         // process the transformer section
         let mut transformer_encoder = Vec::with_capacity(cfg.num_hidden_layers);
         for i in 0..cfg.num_hidden_layers {
@@ -311,11 +292,11 @@ impl AMPLIFY {
                 i as i32,
             )?);
         }
-
+        let encoder = embedding(cfg.vocab_size, cfg.hidden_size, vb.pp("encoder"))?;
         let layer_norm_2 = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("layer_norm_2"))?;
-
         let decoder = linear(cfg.hidden_size, cfg.vocab_size, vb.pp("decoder"))?;
 
+        // Todo: Double check this....
         let freqs_cis = Tensor::zeros(
             (cfg.max_length, cfg.num_attention_heads, 2),
             DType::F32,
@@ -324,7 +305,6 @@ impl AMPLIFY {
 
         Ok(Self {
             encoder,
-            //layer_norm_1,
             transformer_encoder,
             layer_norm_2,
             decoder,
