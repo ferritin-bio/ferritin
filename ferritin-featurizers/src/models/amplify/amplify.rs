@@ -1,11 +1,11 @@
 use super::rmsnorm::RMSNorm;
 use super::rotary::{apply_rotary_emb, reshape_for_broadcast};
 use candle_core::{DType, Device, Module, Result, Tensor};
-use candle_nn::{Dropout, Embedding, Linear, VarBuilder};
+use candle_nn::{Activation, Dropout, Embedding, Linear, VarBuilder};
 use serde::{Deserialize, Serialize};
 
 // Config struct
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AMPLIFYConfig {
     pub hidden_size: usize,
     pub num_hidden_layers: usize,
@@ -16,7 +16,7 @@ pub struct AMPLIFYConfig {
     pub decoder_init_range: f64,
     pub rms_norm: bool,
     pub norm_eps: f64,
-    pub hidden_act: String,
+    pub hidden_act: Activation,
     pub layer_norm_after_embedding: bool,
     pub layer_norm_before_last_layer: bool,
     pub vocab_size: usize,
@@ -38,7 +38,7 @@ impl Default for AMPLIFYConfig {
             decoder_init_range: 0.02,
             rms_norm: true,
             norm_eps: 1e-5,
-            hidden_act: "SwiGLU".to_string(),
+            hidden_act: Activation::Swiglu,
             layer_norm_after_embedding: false,
             layer_norm_before_last_layer: true,
             vocab_size: 27,
