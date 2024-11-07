@@ -300,20 +300,11 @@ impl AMPLIFY {
         // process the transformer section
         let mut transformer_encoder = Vec::with_capacity(cfg.num_hidden_layers);
         for i in 0..cfg.num_hidden_layers {
-            transformer_encoder.push(EncoderBlock::load(
-                vb,
-                cfg,
-                i as i32,
-                "attention_norm.weight",
-            ));
+            transformer_encoder.push(EncoderBlock::load(vb, cfg, i as i32)?);
         }
 
         let layer_norm_2 = if cfg.layer_norm_before_last_layer {
-            Some(RMSNorm::new(
-                cfg.hidden_size,
-                cfg.norm_eps,
-                vb.pp("layer_norm_2.weight"),
-            )?)
+            Some(RMSNorm::load(vb, cfg, "layer_norm_2.weight")?)
         } else {
             None
         };
