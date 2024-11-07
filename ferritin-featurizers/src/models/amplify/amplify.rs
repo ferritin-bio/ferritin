@@ -8,9 +8,8 @@
 // - Attention mechanism
 // - FFN structure
 
-// use super::rmsnorm::RMSNorm;
 // use super::rotary::{apply_rotary_emb, reshape_for_broadcast};
-use candle_core::{DType, Device, Module, Result, Tensor};
+use candle_core::{DType, Device, Result, Tensor};
 use candle_nn::{linear, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm, VarBuilder};
 
 // Config struct
