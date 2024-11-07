@@ -254,24 +254,56 @@ impl AMPLIFY {
     }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
-        // def _init_weights(self, module):
-        //     if isinstance(module, nn.Linear):
-        //         module.weight.data.uniform_(-self.config.decoder_init_range, self.config.decoder_init_range)
-        //         if module.bias is not None:
-        //             module.bias.data.zero_()
-        //     elif isinstance(module, nn.Embedding):
-        //         module.weight.data.uniform_(-self.config.embedding_init_range, self.config.embedding_init_range)
+        let encoder = Embedding::new(cfg.vocab_size, cfg.hidden_size, vb.pp("encoder"))?;
 
-        // Ok(Self {
-        //     // config: AMPLIFYConfig,
-        //     // encoder: Embedding,
-        //     // layer_norm_1: Option<Box<dyn Module>>,
-        //     // // transformer_encoder: Vec<EncoderBlock>,
-        //     // layer_norm_2: Option<Box<dyn Module>>,
-        //     // decoder: Linear,
-        //     // freqs_cis: Tensor,
-        // })
-        unimplemented!()
+        let layer_norm_1 = if cfg.layer_norm_after_embedding {
+            Some(RMSNorm::new(
+                cfg.hidden_size,
+                cfg.norm_eps,
+                vb.pp("layer_norm_1"),
+            )?)
+        } else {
+            None
+        };
+
+        let mut transformer_encoder = Vec::with_capacity(cfg.num_hidden_layers);
+        for i in 0..cfg.num_hidden_layers {
+            transformer_encoder.push(EncoderBlock::load());
+        }
+
+        let layer_norm_2 = if cfg.layer_norm_before_last_layer {
+            Some(RMSNorm::new(
+                cfg.hidden_size,
+                cfg.norm_eps,
+                vb.pp("layer_norm_2"),
+            )?)
+        } else {
+            None
+        };
+
+        let decoder = Linear::new(
+            vb.pp("decoder").get_with_hints(
+                (cfg.hidden_size, cfg.vocab_size),
+                "weight",
+                candle_nn::init::ZERO,
+            )?,
+            None,
+        );
+
+        let freqs_cis = Tensor::zeros(
+            (cfg.max_length, cfg.num_attention_heads, 2),
+            DType::F32,
+            &Device::Cpu,
+        )?;
+
+        Ok(Self {
+            encoder,
+            layer_norm_1,
+            transformer_encoder,
+            layer_norm_2,
+            decoder,
+            freqs_cis,
+        })
     }
 }
 
