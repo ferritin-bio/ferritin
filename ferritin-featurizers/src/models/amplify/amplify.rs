@@ -8,10 +8,10 @@
 // - Attention mechanism
 // - FFN structure
 
-use super::rmsnorm::RMSNorm;
+// use super::rmsnorm::RMSNorm;
 // use super::rotary::{apply_rotary_emb, reshape_for_broadcast};
 use candle_core::{DType, Device, Module, Result, Tensor};
-use candle_nn::{linear, Activation, Dropout, Embedding, Linear, VarBuilder};
+use candle_nn::{linear, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm, VarBuilder};
 
 // Config struct
 #[derive(Debug, Clone)]
@@ -110,8 +110,8 @@ pub struct EncoderBlock {
     // resid_dropout: Dropout,
     w12: Linear,
     w3: Linear,
-    attention_norm: RMSNorm, // <----- Check These
-    ffn_norm: RMSNorm,
+    attention_norm: candle_nn::RmsNorm, // <----- Check These
+    ffn_norm: candle_nn::RmsNorm,
     // ffn_dropout: Dropout,
 }
 
@@ -212,33 +212,36 @@ impl EncoderBlock {
         let multiple_of = 8;
         let intermediate_size =
             div_ceil(div_ceil(2 * cfg.intermediate_size, 3), multiple_of) * multiple_of;
-        let basename = "transformer_encoder";
 
         // names
-        let k_name = format!("{}.{}.k.weight", &basename, &layer);
-        let q_name = format!("{}.{}.q.weight", &basename, &layer);
-        let v_name = format!("{}.{}.v.weight", &basename, &layer);
-        let wo_name = format!("{}.{}.wo.weight", &basename, layer);
-        let ffn_w12_name = format!("{}.{}.ffn.w12.weight", &basename, layer);
-        let ffn_w3_name = format!("{}.{}.ffn.w3.weight", &basename, layer);
-        let ffn_norm_name = format!("{}.{}.ffn_norm.weight", &basename, layer);
-        let attention_norm_name = format!("{}.{}.attention_norm.weight", &basename, layer);
+        let k_name = format!("{}.k.weight", &layer);
+        let q_name = format!("{}.q.weight", &layer);
+        let v_name = format!("{}.v.weight", &layer);
+        let wo_name = format!("{}.wo.weight", &layer);
+        let ffn_w12_name = format!("{}.ffn.w12.weight", &layer);
+        let ffn_w3_name = format!("{}.ffn.w3.weight", &layer);
+        let ffn_norm_name = format!("{}.ffn_norm.weight", &layer);
+        let attention_norm_name = format!("{}.attention_norm.weight", &layer);
 
         // layers
         let q = Linear::new(
-            vb.get(&[cfg.vocab_size, cfg.hidden_size], q_name.as_str())?,
+            vb.get(
+                &[cfg.hidden_size, cfg.hidden_size],
+                format!("{}.q.weight", layer).as_str(),
+            )?,
             None,
         );
+
         let k = Linear::new(
-            vb.get(&[cfg.vocab_size, cfg.hidden_size], k_name.as_str())?,
+            vb.get(&[cfg.hidden_size, cfg.hidden_size], k_name.as_str())?,
             None,
         );
         let v = Linear::new(
-            vb.get(&[cfg.vocab_size, cfg.hidden_size], v_name.as_str())?,
+            vb.get(&[cfg.hidden_size, cfg.hidden_size], v_name.as_str())?,
             None,
         );
         let wo = Linear::new(
-            vb.get(&[cfg.vocab_size, cfg.hidden_size], wo_name.as_str())?,
+            vb.get(&[cfg.hidden_size, cfg.hidden_size], wo_name.as_str())?,
             None,
         );
         let w12 = Linear::new(
@@ -249,13 +252,20 @@ impl EncoderBlock {
             vb.get(&[cfg.vocab_size, cfg.hidden_size], ffn_w3_name.as_str())?,
             None,
         );
-        let ffn_norm = RMSNorm::load(vb.pp(ffn_norm_name.as_str()), cfg, ffn_norm_name.as_str())?;
-        let attention_norm = RMSNorm::load(
-            vb.pp(attention_norm_name.as_str()),
-            cfg,
-            attention_norm_name.as_str(),
-        )?;
 
+        let ffn_norm = rms_norm(400, cfg.norm_eps, vb.pp(ffn_norm_name.as_str()))?;
+        // let ffn_norm = RMSNorm::load(vb.pp(ffn_norm_name.as_str()), cfg, ffn_norm_name.as_str())?;
+
+        let attention_norm = rms_norm(400, cfg.norm_eps, vb.pp(attention_norm_name.as_str()))?;
+
+        // let attention_norm = RMSNorm::load(
+        //     vb.pp(attention_norm_name.as_str()),
+        //     cfg,
+        //     attention_norm_name.as_str(),
+        // )?;
+
+        // RmsNorm::new()
+        //
         Ok(Self {
             q,
             k,
@@ -276,7 +286,7 @@ pub struct AMPLIFY {
     encoder: Embedding,
     // layer_norm_1:  Option<RMSNorm>, // unused
     transformer_encoder: Vec<EncoderBlock>,
-    layer_norm_2: Option<RMSNorm>,
+    layer_norm_2: RmsNorm,
     decoder: Linear,
     freqs_cis: Tensor,
 }
@@ -304,18 +314,19 @@ impl AMPLIFY {
         // process the transformer section
         let mut transformer_encoder = Vec::with_capacity(cfg.num_hidden_layers);
         for i in 0..cfg.num_hidden_layers {
-            transformer_encoder.push(EncoderBlock::load(vb.pp("EncoderBlock"), cfg, i as i32)?);
+            transformer_encoder.push(EncoderBlock::load(
+                vb.pp("transformer_encoder"),
+                cfg,
+                i as i32,
+            )?);
         }
 
-        let layer_norm_2 = if cfg.layer_norm_before_last_layer {
-            Some(RMSNorm::load(
-                vb.pp("layer_norm_2.weight"),
-                cfg,
-                "layer_norm_2.weight",
-            )?)
-        } else {
-            None
-        };
+        let layer_norm_2 = rms_norm(400, cfg.norm_eps, vb.pp("layer_norm_2.weight"))?;
+        // let layer_norm_2 = if cfg.layer_norm_before_last_layer {
+        //     Some(rms_norm(400, cfg.norm_eps, vb.pp("layer_norm_2.weight")))
+        // } else {
+        //     None
+        // };
 
         let decoder = Linear::new(
             vb.pp("decoder").get_with_hints(

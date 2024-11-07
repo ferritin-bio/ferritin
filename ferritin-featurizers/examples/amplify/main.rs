@@ -46,7 +46,7 @@ fn main() -> Result<()> {
     let Tensor1 = vb.get(&[3424, 640], "transformer_encoder.0.ffn.w12.weight")?;
     println!("Example Tensor Shape: {:?}", Tensor1.shape());
 
-    let config = AMPLIFYConfig::default();
+    let config = AMPLIFYConfig::default().amp_120m();
     let model = AMPLIFY::load(vb, &config)?;
 
     Ok(())
