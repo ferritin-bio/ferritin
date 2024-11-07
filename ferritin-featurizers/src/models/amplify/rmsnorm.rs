@@ -1,3 +1,4 @@
+use super::amplify::AMPLIFYConfig;
 use candle_core::{Module, Result, Tensor};
 use candle_nn::VarBuilder;
 
@@ -12,6 +13,15 @@ impl RMSNorm {
         let weight = vb.get_with_hints(dim, "weight", candle_nn::init::Const::new(1.0))?;
         Ok(Self { weight, eps })
     }
+    pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result(Self){
+        let eps = cfg.norm_eps;
+        let rms_tensor = vb.get(&[cfg.vocab_size, cfg.hidden_size], "attention_norm.weight")?,
+        //
+        Self {
+            weight:rms_tensor,
+            eps: eps:
+        }
+    })
 }
 
 impl Module for RMSNorm {
