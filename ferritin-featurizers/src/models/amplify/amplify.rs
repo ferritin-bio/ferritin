@@ -224,18 +224,14 @@ impl EncoderBlock {
         let wo_name = format!("{}.wo.weight", &layer);
         let ffn_w12_name = format!("{}.ffn.w12.weight", &layer);
         let ffn_w3_name = format!("{}.ffn.w3.weight", &layer);
-        let ffn_norm_name = format!("{}.ffn_norm.weight", &layer);
-        let attention_norm_name = format!("{}.attention_norm.weight", &layer);
+        let ffn_norm_name = format!("{}.ffn_norm", &layer);
+        let attention_norm_name = format!("{}.attention_norm", &layer);
 
         // layers
         let q = Linear::new(
-            vb.get(
-                &[cfg.hidden_size, cfg.hidden_size],
-                format!("{}.q.weight", layer).as_str(),
-            )?,
+            vb.get(&[cfg.hidden_size, cfg.hidden_size], q_name.as_str())?,
             None,
         );
-
         let k = Linear::new(
             vb.get(&[cfg.hidden_size, cfg.hidden_size], k_name.as_str())?,
             None,
@@ -249,27 +245,23 @@ impl EncoderBlock {
             None,
         );
         let w12 = Linear::new(
-            vb.get(&[intermediate_size, cfg.hidden_size], ffn_w12_name.as_str())?,
+            vb.get(
+                &[intermediate_size * 2, cfg.hidden_size], // swiglu combines these layers
+                ffn_w12_name.as_str(),
+            )?,
             None,
         );
         let w3 = Linear::new(
-            vb.get(&[cfg.vocab_size, cfg.hidden_size], ffn_w3_name.as_str())?,
+            vb.get(&[cfg.hidden_size, intermediate_size], ffn_w3_name.as_str())?,
             None,
         );
+        let ffn_norm = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(ffn_norm_name.as_str()))?;
+        let attention_norm = rms_norm(
+            cfg.hidden_size,
+            cfg.norm_eps,
+            vb.pp(attention_norm_name.as_str()),
+        )?;
 
-        let ffn_norm = rms_norm(400, cfg.norm_eps, vb.pp(ffn_norm_name.as_str()))?;
-        // let ffn_norm = RMSNorm::load(vb.pp(ffn_norm_name.as_str()), cfg, ffn_norm_name.as_str())?;
-
-        let attention_norm = rms_norm(400, cfg.norm_eps, vb.pp(attention_norm_name.as_str()))?;
-
-        // let attention_norm = RMSNorm::load(
-        //     vb.pp(attention_norm_name.as_str()),
-        //     cfg,
-        //     attention_norm_name.as_str(),
-        // )?;
-
-        // RmsNorm::new()
-        //
         Ok(Self {
             q,
             k,
@@ -325,21 +317,9 @@ impl AMPLIFY {
             )?);
         }
 
-        let layer_norm_2 = rms_norm(400, cfg.norm_eps, vb.pp("layer_norm_2.weight"))?;
-        // let layer_norm_2 = if cfg.layer_norm_before_last_layer {
-        //     Some(rms_norm(400, cfg.norm_eps, vb.pp("layer_norm_2.weight")))
-        // } else {
-        //     None
-        // };
+        let layer_norm_2 = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("layer_norm_2"))?;
 
-        let decoder = Linear::new(
-            vb.pp("decoder").get_with_hints(
-                (cfg.hidden_size, cfg.vocab_size),
-                "weight",
-                candle_nn::init::ZERO,
-            )?,
-            None,
-        );
+        let decoder = linear(cfg.hidden_size, cfg.vocab_size, vb.pp("decoder"))?;
 
         let freqs_cis = Tensor::zeros(
             (cfg.max_length, cfg.num_attention_heads, 2),
