@@ -107,8 +107,8 @@ pub struct EncoderBlock {
     // resid_dropout: Dropout,
     w12: Linear,
     w3: Linear,
-    attention_norm: candle_nn::RmsNorm, // <----- Check These
-    ffn_norm: candle_nn::RmsNorm,
+    attention_norm: RmsNorm, // <----- Check These
+    ffn_norm: RmsNorm,
     // ffn_dropout: Dropout,
 }
 
@@ -209,47 +209,34 @@ impl EncoderBlock {
         // To keep the number of parameters and the amount of computation constant, we reduce the number of
         // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
         // avoid RuntimeError due to misaligned operand
-
         let multiple_of = 8;
         let intermediate_size = (cfg.intermediate_size * 2) / 3;
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
 
-        // names
-        let q_name = format!("{}.q", &layer);
-        let k_name = format!("{}.k", &layer);
-        let v_name = format!("{}.v", &layer);
-        let wo_name = format!("{}.wo", &layer);
-        let ffn_w12_name = format!("{}.ffn.w12", &layer);
-        let ffn_w3_name = format!("{}.ffn.w3", &layer);
-        let ffn_norm_name = format!("{}.ffn_norm", &layer);
-        let attention_norm_name = format!("{}.attention_norm", &layer);
+        #[rustfmt::skip]
+        let names = ["q", "k", "v", "wo", "ffn.w12", "ffn.w3", "ffn_norm", "attention_norm"]
+            .map(|suffix| format!("{}.{}", layer, suffix));
 
-        // layers
-        let q = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(q_name))?;
-        let k = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(k_name))?;
-        let v = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(v_name))?;
-        let wo = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(wo_name))?;
-        let w12 = linear_no_bias(intermediate_size * 2, cfg.hidden_size, vb.pp(ffn_w12_name))?;
-        let w3 = linear_no_bias(cfg.hidden_size, intermediate_size, vb.pp(ffn_w3_name))?;
-        let ffn_norm = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(ffn_norm_name.as_str()))?;
-        let attention_norm = rms_norm(
-            cfg.hidden_size,
-            cfg.norm_eps,
-            vb.pp(attention_norm_name.as_str()),
-        )?;
+        // Linear layers
+        let [q, k, v, wo, w12, w3] = [
+            linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[0]))?,
+            linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[1]))?,
+            linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[2]))?,
+            linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp(&names[3]))?,
+            linear_no_bias(intermediate_size * 2, cfg.hidden_size, vb.pp(&names[4]))?,
+            linear_no_bias(cfg.hidden_size, intermediate_size, vb.pp(&names[5]))?,
+        ];
 
-        Ok(Self {
-            q,
-            k,
-            v,
-            wo,
-            w12,
-            w3,
-            attention_norm,
-            ffn_norm,
-            // resid_dropout,
-            // ffn_dropout,
-        })
+        // Norm layers
+        let [ffn_norm, attention_norm] = [
+            rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(&names[6]))?,
+            rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(&names[7]))?,
+        ];
+
+        #[rustfmt::skip]
+        // resid_dropout,
+        // ffn_dropout,
+        Ok(Self { q, k, v, wo, w12, w3, attention_norm, ffn_norm,})
     }
 }
 
