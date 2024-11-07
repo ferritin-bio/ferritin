@@ -87,35 +87,27 @@ impl AMPLIFYConfig {
     }
 }
 
-// Clean Implementation
-//
-// Example: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340
-//
-// SwiGLu Implementation:  https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462
-//
-pub struct FeedForward {
-    w12: Linear,
-    w3: Linear,
-}
-impl FeedForward {
-    pub fn load(&self, config: &AMPLIFYConfig, vb: VarBuilder) -> Self {
-        unimplemented!()
-    }
-}
 
 // EncoderBlock implementation
 //
 // example 01: T5: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331
 //
+// Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
+// ffn: FeedForward,
+//
+// // Clean Implementation
+//
+// Example: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340
+// SwiGLu Implementation:  https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462
+//
 pub struct EncoderBlock {
-    config: AMPLIFYConfig,
     q: Linear,
     k: Linear,
     v: Linear,
     wo: Linear,
     resid_dropout: Dropout,
-    // Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
-    ffn: FeedForward,
+    w12: Linear,
+    w3: Linear,
     attention_norm: RMSNorm, // <----- Check
     ffn_norm: RMSNorm,
     ffn_dropout: Dropout,
@@ -143,11 +135,12 @@ impl EncoderBlock {
         // );
         // // Similar initialization for k, v, and wo...
         // // FFN initialization based on activation type
-        let multiple_of = 8;
-        let intermediate_size =
-            (2 * config.intermediate_size / 3).div_ceil(multiple_of) * multiple_of;
+        // let multiple_of = 8;
+        // let intermediate_size =-
+        //     (2 * config.intermediate_size / 3).div_ceil(multiple_of) * multiple_of;
 
-        let ffn = FeedForward::load(config, vb);
+
+        // let ffn = FeedForward::load(config, vb);
 
         // FFN::SwiGLU(SwiGLUFFN::new(
         //     config.hidden_size,
@@ -220,34 +213,60 @@ impl EncoderBlock {
         unimplemented!()
     }
 
-    pub fn load() -> Self {
-        // if act == "swiglu":
-        //     # To keep the number of parameters and the amount of computation constant, we reduce the number of
-        //     # hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
-        //     # avoid RuntimeError due to misaligned operand
-        //     multiple_of = 8
-        //     intermediate_size = int(2 * config.intermediate_size / 3)
-        //     intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) // multiple_of)
-        //     self.ffn = SwiGLU(
-        //         config.hidden_size,
-        //         intermediate_size,
-        //         config.hidden_size,
-        //         bias=config.ffn_bias
-        //     )
-        unimplemented!()
+    pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Self {
+        let multiple_of = 8;
+        let intermediate_size =-
+            (2 * cfg.intermediate_size / 3).div_ceil(multiple_of) * multiple_of;
+
+        let basename = "transformer_encoder";
+
+        let k_name =  format!("{}.{}.k.weight", basename, i);
+        let q_name =  format!("{}.{}.q.weight", basename, i);
+        let v_name =  format!("{}.{}.v.weight", basename, i);
+        let wo_name =  format!("{}.{}.wo.weight", basename, i);
+
+        let ffn_w12_name =  format!("{}.{}.ffn.w12.weight", basename, i);
+        let ffn_w3_name =  format!("{}.{}.ffn.w3.weight", basename, i);
+        let ffn_norm_name =  format!("{}.{}.ffn_norm.weight", basename, i);
+        let ffn_attention_norm_name =  format!("{}.{}.attention_norm.weight", basename, i);
+
+        let weight: Tensor = vb.get(&[cfg.vocab_size, cfg.hidden_size], "encoder.weight")?;
+        let encoder = Embedding::new(weight, cfg.hidden_size.clone());
+
+        // Tensor: transformer_encoder.0.attention_norm.weight   ||  Shape: [640]
+        // Tensor: transformer_encoder.0.ffn.w12.weight          ||  Shape: [3424, 640]
+        // Tensor: transformer_encoder.0.ffn.w3.weight           ||  Shape: [640, 1712]
+        // Tensor: transformer_encoder.0.ffn_norm.weight         ||  Shape: [640]
+        // Tensor: transformer_encoder.0.k.weight                ||  Shape: [640, 640]
+        // Tensor: transformer_encoder.0.q.weight                ||  Shape: [640, 640]
+        // Tensor: transformer_encoder.0.v.weight                ||  Shape: [640, 640]
+        // Tensor: transformer_encoder.0.wo.weight
+        let q   = Embedding::new(
+            vb.get(&[cfg.vocab_size, cfg.hidden_size], "encoder.weight")?,
+            cfg.hidden_size.clone()
+        );
+
+        Ok(
+            Self {
+                q,
+                k,
+                v,
+                wo,
+                resid_dropout,
+                w12,
+                w3,
+                attention_norm,
+                ffn_norm,
+                ffn_dropout,
+            });
+        // unimplemented!()
     }
 }
 
 // Main AMPLIFY model
 pub struct AMPLIFY {
-    // config: AMPLIFYConfig,
     encoder: Embedding,
-
-    // layer_norm_1: Option<RMSNorm>,
-
-    // self.transformer_encoder = nn.ModuleList()
-    // for _ in range(config.num_hidden_layers):
-    //     self.transformer_encoder.append(EncoderBlock(config))
+    // layer_norm_1:  Option<RMSNorm>, // unused
     transformer_encoder: Vec<EncoderBlock>,
     layer_norm_2: Option<RMSNorm>,
     decoder: Linear,
@@ -274,19 +293,17 @@ impl AMPLIFY {
         let weight: Tensor = vb.get(&[cfg.vocab_size, cfg.hidden_size], "encoder.weight")?;
         let encoder = Embedding::new(weight, cfg.hidden_size.clone());
 
-        // skipping layer_1 norm which doens't seem to be used.
-
         // process the transformer section
         let mut transformer_encoder = Vec::with_capacity(cfg.num_hidden_layers);
         for i in 0..cfg.num_hidden_layers {
-            transformer_encoder.push(EncoderBlock::load());
+            transformer_encoder.push(EncoderBlock::load(vb, cfg, i));
         }
 
         let layer_norm_2 = if cfg.layer_norm_before_last_layer {
             Some(RMSNorm::new(
                 cfg.hidden_size,
                 cfg.norm_eps,
-                vb.pp("layer_norm_2"),
+                vb.pp("layer_norm_2.weight"),
             )?)
         } else {
             None
