@@ -203,7 +203,7 @@ pub struct AMPLIFY {
 }
 
 impl AMPLIFY {
-    pub fn new(config: AMPLIFYConfig, vb: VarBuilder) -> Result<Self> {
+    pub fn new(config: &AMPLIFYConfig, vb: VarBuilder) -> Result<Self> {
         unimplemented!()
     }
 
