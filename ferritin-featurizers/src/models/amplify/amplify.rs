@@ -11,8 +11,7 @@
 use super::rmsnorm::RMSNorm;
 // use super::rotary::{apply_rotary_emb, reshape_for_broadcast};
 use candle_core::{DType, Device, Module, Result, Tensor};
-use candle_nn::{Activation, Dropout, Embedding, Linear, VarBuilder};
-use serde::{Deserialize, Serialize};
+use candle_nn::{Activation, Dropout, Embedding, EmbeddingConfig, Linear, VarBuilder};
 
 // Config struct
 #[derive(Debug, Clone)]
@@ -227,7 +226,8 @@ impl EncoderBlock {
 pub struct AMPLIFY {
     // config: AMPLIFYConfig,
     encoder: Embedding,
-    layer_norm_1: Option<RMSNorm>,
+
+    // layer_norm_1: Option<RMSNorm>,
 
     // self.transformer_encoder = nn.ModuleList()
     // for _ in range(config.num_hidden_layers):
@@ -254,7 +254,12 @@ impl AMPLIFY {
     }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
-        let encoder = Embedding::new(cfg.vocab_size, cfg.hidden_size, vb.pp("encoder"))?;
+        // let weight = vb.get_with_hints("encoder.weight", &[cfg.vocab_size, cfg.hidden_size])?;
+        let weight: Tensor = vb.get(&[cfg.vocab_size, cfg.hidden_size], "encoder.weight")?;
+        let encoder = Embedding::new(weight, cfg.hidden_size.clone());
+
+        // self.encoder = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        // let encoder = Embedding::new(cfg.vocab_size, cfg.hidden_size, vb.pp("encoder.weight"))?;
 
         let layer_norm_1 = if cfg.layer_norm_after_embedding {
             Some(RMSNorm::new(
