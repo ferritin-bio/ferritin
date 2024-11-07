@@ -1,6 +1,10 @@
 use anyhow::Result;
+use candle_core::Device;
+use candle_nn::VarBuilder;
+// use candle_transformers::models::bert::DTYPE;
+use ferritin_featurizers::{AMPLIFYConfig, AMPLIFY};
 use hf_hub::{api::sync::Api, Repo, RepoType};
-use safetensors::SafeTensors;
+use safetensors::{Dtype, SafeTensors};
 use std::path::PathBuf;
 
 fn main() -> Result<()> {
@@ -34,6 +38,17 @@ fn main() -> Result<()> {
             );
         }
     }
+    let weights_path = repo.get("model.safetensors")?;
+    let vb = VarBuilder::from_buffered_safetensors(
+        weights,
+        // candle_core::safetensors::DType::F32,
+        candle_core::DType::F32,
+        &Device::Cpu,
+    )?;
 
+    // Pull a specific Tensor out of the variable builder...
+    let Tensor1 = vb.get(&[3424, 640], "transformer_encoder.0.ffn.w12.weight")?;
+    println!("Example Tensor Shape: {:?}", Tensor1.shape());
+    // let amplify = AMPLIFY::new(config, vb)
     Ok(())
 }
