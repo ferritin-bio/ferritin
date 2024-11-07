@@ -11,7 +11,7 @@
 use super::rmsnorm::RMSNorm;
 // use super::rotary::{apply_rotary_emb, reshape_for_broadcast};
 use candle_core::{DType, Device, Module, Result, Tensor};
-use candle_nn::{Activation, Dropout, Embedding, Linear, VarBuilder};
+use candle_nn::{linear, Activation, Dropout, Embedding, Linear, VarBuilder};
 
 // Config struct
 #[derive(Debug, Clone)]
@@ -20,7 +20,6 @@ pub struct AMPLIFYConfig {
     pub num_hidden_layers: usize,
     pub num_attention_heads: usize,
     pub intermediate_size: usize,
-    // max-position-embeddings ??
     pub dropout_prob: f64,
     pub embedding_init_range: f64,
     pub decoder_init_range: f64,
@@ -87,7 +86,6 @@ impl AMPLIFYConfig {
     }
 }
 
-
 // EncoderBlock implementation
 //
 // example 01: T5: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331
@@ -138,10 +136,7 @@ impl EncoderBlock {
         // let multiple_of = 8;
         // let intermediate_size =-
         //     (2 * config.intermediate_size / 3).div_ceil(multiple_of) * multiple_of;
-
-
         // let ffn = FeedForward::load(config, vb);
-
         // FFN::SwiGLU(SwiGLUFFN::new(
         //     config.hidden_size,
         //     intermediate_size,
@@ -149,8 +144,6 @@ impl EncoderBlock {
         //     config.ffn_bias,
         //     vb.pp("ffn"),
         // )?)
-
-        };
 
         // let attention_norm: Box<dyn Module> = if config.rms_norm {
         //     Box::new(RMSNorm::new(
@@ -180,7 +173,7 @@ impl EncoderBlock {
         //     ffn_norm,
         //     ffn_dropout: Dropout::new(config.dropout_prob),
         // })
-        unimplemented!()
+        unimplemented!();
     }
 
     fn forward(
@@ -194,11 +187,9 @@ impl EncoderBlock {
         // let (attn, contacts) =
         //     self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
         // let x = x.add(&attn)?;
-
         // let normed = self.ffn_norm.forward(&x)?;
         // let ff = self.ff_block(&normed)?;
         // let x = x.add(&ff)?;
-
         // Ok((x, contacts))
         unimplemented!()
     }
@@ -213,22 +204,20 @@ impl EncoderBlock {
         unimplemented!()
     }
 
-    pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Self {
+    pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
         let multiple_of = 8;
-        let intermediate_size =-
-            (2 * cfg.intermediate_size / 3).div_ceil(multiple_of) * multiple_of;
+        let intermediate_size =
+            -(2 * cfg.intermediate_size / 3).div_ceil(multiple_of) * multiple_of;
 
         let basename = "transformer_encoder";
-
-        let k_name =  format!("{}.{}.k.weight", basename, i);
-        let q_name =  format!("{}.{}.q.weight", basename, i);
-        let v_name =  format!("{}.{}.v.weight", basename, i);
-        let wo_name =  format!("{}.{}.wo.weight", basename, i);
-
-        let ffn_w12_name =  format!("{}.{}.ffn.w12.weight", basename, i);
-        let ffn_w3_name =  format!("{}.{}.ffn.w3.weight", basename, i);
-        let ffn_norm_name =  format!("{}.{}.ffn_norm.weight", basename, i);
-        let ffn_attention_norm_name =  format!("{}.{}.attention_norm.weight", basename, i);
+        let k_name = format!("{}.{}.k.weight", basename, i);
+        let q_name = format!("{}.{}.q.weight", basename, i);
+        let v_name = format!("{}.{}.v.weight", basename, i);
+        let wo_name = format!("{}.{}.wo.weight", basename, i);
+        let ffn_w12_name = format!("{}.{}.ffn.w12.weight", basename, i);
+        let ffn_w3_name = format!("{}.{}.ffn.w3.weight", basename, i);
+        let ffn_norm_name = format!("{}.{}.ffn_norm.weight", basename, i);
+        let ffn_attention_norm_name = format!("{}.{}.attention_norm.weight", basename, i);
 
         let weight: Tensor = vb.get(&[cfg.vocab_size, cfg.hidden_size], "encoder.weight")?;
         let encoder = Embedding::new(weight, cfg.hidden_size.clone());
@@ -241,25 +230,24 @@ impl EncoderBlock {
         // Tensor: transformer_encoder.0.q.weight                ||  Shape: [640, 640]
         // Tensor: transformer_encoder.0.v.weight                ||  Shape: [640, 640]
         // Tensor: transformer_encoder.0.wo.weight
-        let q   = Embedding::new(
+
+        let q = Linear::new(
             vb.get(&[cfg.vocab_size, cfg.hidden_size], "encoder.weight")?,
-            cfg.hidden_size.clone()
+            None,
         );
 
-        Ok(
-            Self {
-                q,
-                k,
-                v,
-                wo,
-                resid_dropout,
-                w12,
-                w3,
-                attention_norm,
-                ffn_norm,
-                ffn_dropout,
-            });
-        // unimplemented!()
+        Ok(Self {
+            q,
+            k,
+            v,
+            wo,
+            resid_dropout,
+            w12,
+            w3,
+            attention_norm,
+            ffn_norm,
+            ffn_dropout,
+        })
     }
 }
 
