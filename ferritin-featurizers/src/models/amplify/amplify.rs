@@ -8,8 +8,11 @@
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
 
-use candle_core::{DType, Device, Result, Tensor};
-use candle_nn::{linear, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm, VarBuilder};
+use candle_core::{DType, Device, Module, Result, Tensor, D};
+use candle_nn::{
+    embedding, linear, linear_no_bias, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm,
+    VarBuilder,
+};
 
 // Config struct
 #[derive(Debug, Clone)]
@@ -84,94 +87,55 @@ impl AMPLIFYConfig {
     }
 }
 
-// EncoderBlock implementation
+/// Amplify EncoderBlock implementation
+///
+/// example 01: T5: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331
 //
-// example 01: T5: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331
-//
-// Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
-// ffn: FeedForward,
-//
-// // Clean Implementation
-//
-// Example: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340
-// SwiGLu Implementation:  https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462
-//
+/// Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
+/// Example: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340
+/// SwiGLu Implementation:  https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462
 pub struct EncoderBlock {
     q: Linear,
     k: Linear,
     v: Linear,
     wo: Linear,
-    // resid_dropout: Dropout,
+    resid_dropout: Dropout,
     w12: Linear,
     w3: Linear,
-    attention_norm: candle_nn::RmsNorm, // <----- Check These
-    ffn_norm: candle_nn::RmsNorm,
-    // ffn_dropout: Dropout,
+    ffn_norm: RmsNorm,
+    attention_norm: RmsNorm,
+    ffn_dropout: Dropout,
 }
 
 impl EncoderBlock {
-    pub fn new(config: &AMPLIFYConfig, vb: VarBuilder) -> Result<Self> {
-        // let d_head = config.hidden_size / config.num_attention_heads;
-        // // Attention layers
-        // let q = Linear::new(
-        //     vb.pp("q").get_with_hints(
-        //         (config.hidden_size, config.hidden_size),
-        //         "weight",
-        //         candle_nn::init::ZERO,
-        //     )?,
-        //     if config.att_bias {
-        //         Some(vb.pp("q").get_with_hints(
-        //             config.hidden_size,
-        //             "bias",
-        //             candle_nn::init::ZERO,
-        //         )?)
-        //     } else {
-        //         None
-        //     },
-        // );
-        // // Similar initialization for k, v, and wo...
-        // // FFN initialization based on activation type
-        // let multiple_of = 8;
-        // let intermediate_size =-
-        //     (2 * config.intermediate_size / 3).div_ceil(multiple_of) * multiple_of;
-        // let ffn = FeedForward::load(config, vb);
-        // FFN::SwiGLU(SwiGLUFFN::new(
-        //     config.hidden_size,
-        //     intermediate_size,
-        //     config.hidden_size,
-        //     config.ffn_bias,
-        //     vb.pp("ffn"),
-        // )?)
+    pub fn new(config: &AMPLIFYConfig, vb: VarBuilder, layer: i32) -> Result<Self> {
+        let d_head = config.hidden_size / config.num_attention_heads;
+        let multiple_of = 8;
+        let intermediate_size = (config.intermediate_size * 2) / 3;
+        let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
+        let vb = vb.pp(layer);
+        let q = linear(config.hidden_size, config.hidden_size, vb.pp("q"))?;
+        let k = linear(config.hidden_size, config.hidden_size, vb.pp("k"))?;
+        let v = linear(config.hidden_size, config.hidden_size, vb.pp("v"))?;
+        let wo = linear(config.hidden_size, config.hidden_size, vb.pp("wo"))?;
+        let w12 = linear_no_bias(intermediate_size * 2, config.hidden_size, vb.pp("ffn.w12"))?;
+        let w3 = linear_no_bias(config.hidden_size, intermediate_size, vb.pp("ffn.w3"))?;
+        let ffn_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("ffn_norm"))?;
+        let attention_norm =
+            rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?;
 
-        // let attention_norm: Box<dyn Module> = if config.rms_norm {
-        //     Box::new(RMSNorm::new(
-        //         config.hidden_size,
-        //         config.norm_eps,
-        //         vb.pp("attention_norm"),
-        //     )?)
-        // } else {
-        //     Box::new(LayerNorm::new(
-        //         config.hidden_size,
-        //         config.norm_eps,
-        //         vb.pp("attention_norm"),
-        //     )?)
-        // };
-
-        // // Similar for ffn_norm...
-
-        // Ok(Self {
-        //     config: config.clone(),
-        //     q,
-        //     k,
-        //     v,
-        //     wo,
-        //     resid_dropout: Dropout::new(config.dropout_prob),
-        //     ffn,
-        //     attention_norm,
-        //     ffn_norm,
-        //     ffn_dropout: Dropout::new(config.dropout_prob),
-        // })
-        unimplemented!();
+        Ok(Self {
+            q,
+            k,
+            v,
+            wo,
+            resid_dropout: Dropout::new(config.dropout_prob as f32),
+            w12,
+            w3,
+            attention_norm,
+            ffn_norm,
+            ffn_dropout: Dropout::new(config.dropout_prob as f32),
+        })
     }
 
     fn forward(
@@ -182,11 +146,17 @@ impl EncoderBlock {
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
         // let normed = self.attention_norm.forward(x)?;
+        // // Todo: confirm the attention block
         // let (attn, contacts) =
         //     self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
+        // // add encoded bits and the self-attention...
         // let x = x.add(&attn)?;
+        // // FFN add ...
         // let normed = self.ffn_norm.forward(&x)?;
-        // let ff = self.ff_block(&normed)?;
+        // // ffn.forward needs to do teh swiglu stesp with w12 and w3
+        // let ffn_output = self.ffn.forward(&normed)?;
+        // let ff = self.ffn_dropout.forward(&ffn_output, false); // Todo: pass in the Inference/Training bit
+        // // Todo: see if the apply or add can be done differently in idiomatic Candle
         // let x = x.add(&ff)?;
         // Ok((x, contacts))
         unimplemented!()
@@ -199,6 +169,65 @@ impl EncoderBlock {
         freqs_cis: &Tensor,
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
+        // // Get dimensions
+        // let batch_size = x.dim(0)?;
+        // let seq_len = x.dim(1)?;
+        // // Query, Key, Value projections
+        // let xq = self.q.forward(x)?;
+        // let xk = self.k.forward(x)?;
+        // let xv = self.v.forward(x)?;
+        // // Reshape for rotary embeddings
+        // let xq = xq.reshape((
+        //     batch_size,
+        //     seq_len,
+        //     self.config.num_attention_heads,
+        //     self.d_head,
+        // ))?;
+        // let xk = xk.reshape((
+        //     batch_size,
+        //     seq_len,
+        //     self.config.num_attention_heads,
+        //     self.d_head,
+        // ))?;
+        // let xv = xv.reshape((
+        //     batch_size,
+        //     seq_len,
+        //     self.config.num_attention_heads,
+        //     self.d_head,
+        // ))?;
+        // // Apply rotary embeddings
+        // let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
+        // // Attention computation
+        // let dropout_prob = if self.training {
+        //     self.config.dropout_prob
+        // } else {
+        //     0.0
+        // };
+        // let attn = memory_efficient_attention(&xq, &xk, &xv, pad_mask, dropout_prob)?;
+        // // Optional attention matrix computation for output
+        // let _attn = if output_attentions {
+        //     let xq_t = xq.permute((0, 2, 1, 3))?;
+        //     let xk_t = xk.permute((0, 2, 3, 1))?;
+        //     let mut attn_weights = xq_t.matmul(&xk_t)?;
+        //     let scale = (xq.dim(D::Minus1)? as f64).sqrt();
+        //     attn_weights = attn_weights.div_scalar(scale)?;
+        //     if let Some(mask) = pad_mask {
+        //         attn_weights = attn_weights.add(mask)?;
+        //     }
+        //     Some(attn_weights.softmax(D::Minus1)?)
+        // } else {
+        //     None
+        // };
+
+        // // Final projection and dropout
+        // let output = attn.reshape((
+        //     batch_size,
+        //     seq_len,
+        //     self.config.num_attention_heads * self.d_head,
+        // ))?;
+        // let output = self.wo.forward(&output)?;
+        // let output = self.resid_dropout.forward(&output, false);
+        // Ok((output, _attn))
         unimplemented!()
     }
 
@@ -206,76 +235,42 @@ impl EncoderBlock {
         // To keep the number of parameters and the amount of computation constant, we reduce the number of
         // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
         // avoid RuntimeError due to misaligned operand
-
         let multiple_of = 8;
         let intermediate_size = (cfg.intermediate_size * 2) / 3;
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
-
-        // names
-        let q_name = format!("{}.q.weight", &layer);
-        let k_name = format!("{}.k.weight", &layer);
-        let v_name = format!("{}.v.weight", &layer);
-        let wo_name = format!("{}.wo.weight", &layer);
-        let ffn_w12_name = format!("{}.ffn.w12.weight", &layer);
-        let ffn_w3_name = format!("{}.ffn.w3.weight", &layer);
-        let ffn_norm_name = format!("{}.ffn_norm", &layer);
-        let attention_norm_name = format!("{}.attention_norm", &layer);
-
-        // layers
-        let q = Linear::new(
-            vb.get(&[cfg.hidden_size, cfg.hidden_size], q_name.as_str())?,
-            None,
-        );
-
-        let k = Linear::new(
-            vb.get(&[cfg.hidden_size, cfg.hidden_size], k_name.as_str())?,
-            None,
-        );
-        let v = Linear::new(
-            vb.get(&[cfg.hidden_size, cfg.hidden_size], v_name.as_str())?,
-            None,
-        );
-        let wo = Linear::new(
-            vb.get(&[cfg.hidden_size, cfg.hidden_size], wo_name.as_str())?,
-            None,
-        );
-        let w12 = Linear::new(
-            vb.get(
-                &[intermediate_size * 2, cfg.hidden_size], // swiglu combines these layers
-                ffn_w12_name.as_str(),
-            )?,
-            None,
-        );
-        let w3 = Linear::new(
-            vb.get(&[cfg.hidden_size, intermediate_size], ffn_w3_name.as_str())?,
-            None,
-        );
-        let ffn_norm = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp(ffn_norm_name.as_str()))?;
-        let attention_norm = rms_norm(
-            cfg.hidden_size,
-            cfg.norm_eps,
-            vb.pp(attention_norm_name.as_str()),
-        )?;
+        let vb = vb.pp(layer); // handle the layer nubmer here.
+        let q = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("q"))?;
+        let k = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("k"))?;
+        let v = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("v"))?;
+        let wo = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("wo"))?;
+        let w12 = linear_no_bias(cfg.hidden_size, intermediate_size * 2, vb.pp("ffn.w12"))?;
+        let w3 = linear_no_bias(intermediate_size, cfg.hidden_size, vb.pp("ffn.w3"))?;
+        let ffn_norm = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("ffn_norm"))?;
+        let attention_norm = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("attention_norm"))?;
 
         Ok(Self {
             q,
             k,
             v,
             wo,
+            resid_dropout: Dropout::new(cfg.dropout_prob as f32),
             w12,
             w3,
             attention_norm,
             ffn_norm,
-            // resid_dropout,
-            // ffn_dropout,
+            ffn_dropout: Dropout::new(cfg.dropout_prob as f32),
         })
     }
 }
 
-// Main AMPLIFY model
+/// The AMPLIFY model
+///
+/// - [GH PythonModel](https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/src/amplify/model/amplify.py)
+/// - [paper](https://www.biorxiv.org/content/10.1101/2024.09.23.614603v1)
+/// - [HF](https://huggingface.co/chandar-lab/AMPLIFY_120M)
+///
 pub struct AMPLIFY {
     encoder: Embedding,
-    // layer_norm_1:  Option<RMSNorm>, // unused
     transformer_encoder: Vec<EncoderBlock>,
     layer_norm_2: RmsNorm,
     decoder: Linear,
@@ -287,6 +282,27 @@ impl AMPLIFY {
         unimplemented!()
     }
 
+    fn process_attention_mask(
+        &self,
+        pad_mask: Option<&Tensor>,
+        num_attention_heads: i64,
+    ) -> Result<Option<Tensor>> {
+        let Some(mask) = pad_mask else {
+            return Ok(None);
+        };
+        if mask.sum_all()?.to_scalar::<f32>()? == 0.0 {
+            return Ok(None);
+        }
+        let batch_size = mask.dim(0)? as usize;
+        let seq_length = mask.dim(D::Minus1)? as usize;
+        let num_heads = num_attention_heads as usize;
+        let expanded_mask = mask
+            .unsqueeze(1)? // Add head dimension
+            .unsqueeze(1)? // Add query dimension
+            .expand((batch_size, num_heads, seq_length, seq_length))?;
+        Ok(Some(expanded_mask))
+    }
+
     pub fn forward(
         &self,
         src: &Tensor,
@@ -294,14 +310,57 @@ impl AMPLIFY {
         output_hidden_states: bool,
         output_attentions: bool,
     ) -> Result<ModelOutput> {
+        // let mut hidden_states = vec![];
+        // let mut attentions = vec![];
+
+        // // Process attention mask if provided
+        // let attention_mask =
+        //     self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
+        // // Get appropriate length of freqs_cis
+        // let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
+        // // Embedding layer
+        // let mut x = self.encoder.forward(src)?;
+        // // Transform through encoder blocks
+        // for layer in self.transformer_encoder.iter() {
+        //     let (new_x, attn) =
+        //         layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
+        //     x = new_x;
+
+        //     if output_hidden_states {
+        //         hidden_states.push(x.clone());
+        //     }
+        //     if output_attentions {
+        //         if let Some(attn) = attn {
+        //             attentions.push(attn);
+        //         }
+        //     }
+        // }
+
+        // // Final layer norm and decoder
+        // let logits = if self.config.layer_norm_before_last_layer {
+        //     self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
+        // } else {
+        //     self.decoder.forward(&x)?
+        // };
+
+        // Ok(ModelOutput {
+        //     logits,
+        //     hidden_states: if output_hidden_states {
+        //         Some(hidden_states)
+        //     } else {
+        //         None
+        //     },
+        //     attentions: if output_attentions {
+        //         Some(attentions)
+        //     } else {
+        //         None
+        //     },
+        // })
+
         unimplemented!()
     }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
-        // initial encoding layer
-        let weight: Tensor = vb.get(&[cfg.vocab_size, cfg.hidden_size], "encoder.weight")?;
-        let encoder = Embedding::new(weight, cfg.hidden_size.clone());
-
         // process the transformer section
         let mut transformer_encoder = Vec::with_capacity(cfg.num_hidden_layers);
         for i in 0..cfg.num_hidden_layers {
@@ -311,11 +370,11 @@ impl AMPLIFY {
                 i as i32,
             )?);
         }
-
+        let encoder = embedding(cfg.vocab_size, cfg.hidden_size, vb.pp("encoder"))?;
         let layer_norm_2 = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("layer_norm_2"))?;
-
         let decoder = linear(cfg.hidden_size, cfg.vocab_size, vb.pp("decoder"))?;
 
+        // Todo: Double check this....
         let freqs_cis = Tensor::zeros(
             (cfg.max_length, cfg.num_attention_heads, 2),
             DType::F32,
@@ -324,7 +383,6 @@ impl AMPLIFY {
 
         Ok(Self {
             encoder,
-            //layer_norm_1,
             transformer_encoder,
             layer_norm_2,
             decoder,

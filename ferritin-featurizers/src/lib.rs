@@ -3,4 +3,5 @@ mod commands;
 mod models;
 
 pub use models::amplify::amplify::{AMPLIFYConfig, AMPLIFY};
-use models::ligandmpnn::featurizer::LMPNNFeatures;
+pub use models::amplify::tokenizer::ProteinTokenizer;
+pub use models::ligandmpnn::featurizer::LMPNNFeatures;

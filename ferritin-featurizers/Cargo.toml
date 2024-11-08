@@ -15,9 +15,11 @@ clap = "4.5.20"
 ferritin-core = { path = "../ferritin-core" }
 itertools.workspace = true
 pdbtbx.workspace = true
+rand = "0.8.5"
 safetensors = "0.4.5"
 serde.workspace = true
 strum = { version = "0.26", features = ["derive"] }
+tokenizers = "0.20.3"
 
 
 [dev-dependencies]
