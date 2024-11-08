@@ -241,11 +241,7 @@ impl EncoderBlock {
         // Apply rotary embeddings
         let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
         // Attention computation
-        let dropout_prob = if self.training {
-            self.config.dropout_prob
-        } else {
-            0.0
-        };
+        let dropout_prob = self.config.dropout_prob; // still need to toggle if in Training....
 
         // from xformers.ops import SwiGLU, memory_efficient_attention
         let attn = memory_efficient_attention(&xq, &xk, &xv, pad_mask, dropout_prob)?;
@@ -306,8 +302,8 @@ impl EncoderBlock {
             attention_norm,
             ffn_norm,
             ffn_dropout: Dropout::new(cfg.dropout_prob as f32),
-            d_head, // i32,
-            config, // AMPLIFYConfig,
+            d_head: cfg.hidden_size / cfg.num_attention_heads,
+            config: cfg.clone(),
         })
     }
 }
