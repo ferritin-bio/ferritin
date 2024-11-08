@@ -1,9 +1,15 @@
+//! A protein tokenizer module that provides functionality for encoding and decoding protein sequences.
+//!
+//! This module includes the `ProteinTokenizer` struct which handles tokenization of protein sequences,
+//! including special tokens like padding, masking, beginning/end of sequence markers, etc.
+//!
+//! The tokenizer can be loaded from a file and supports operations like token-to-id conversion,
+//! id-to-token conversion, encoding sequences to tensors, and decoding ids back to sequences.
 use anyhow::{anyhow, Result};
 use candle_core::Tensor;
 use rand;
 use std::path::Path;
 use tokenizers::Encoding;
-// use tokenizers::Result as TokenResult;
 use tokenizers::Tokenizer;
 
 pub struct ProteinTokenizer {
@@ -128,31 +134,4 @@ impl ProteinTokenizer {
                 .map_err(|e| anyhow!("Failed to decode: {}", e))
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // #[test]
-    // fn test_tokenizer() -> Result<()> {
-    //     let tokenizer = ProteinTokenizer::new("path/to/tokenizer.json")?;
-
-    //     let tokens = vec![
-    //         "M".to_string(),
-    //         "E".to_string(),
-    //         "T".to_string(),
-    //         "V".to_string(),
-    //         "A".to_string(),
-    //         "L".to_string(),
-    //     ];
-
-    //     let encoded = tokenizer.encode(&tokens, Some(10), true, true)?;
-    //     let decoded = tokenizer.decode(&encoded.to_vec1::<u32>()?, true)?;
-
-    //     println!("Encoded: {:?}", encoded);
-    //     println!("Decoded: {}", decoded);
-
-    //     Ok(())
-    // }
 }

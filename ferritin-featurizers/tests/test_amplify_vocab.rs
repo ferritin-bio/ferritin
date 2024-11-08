@@ -45,10 +45,3 @@ fn test_amplify_tokens() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
-// #[test]
-// fn test_amplify_token_download() {
-//     // let model_id = "chandar-lab/AMPLIFY_120M";
-//     // let revision = "main";
-//     let tokenizer = Tokenizer::from_pretrained("chandar-lab/AMPLIFY_120M", None)?;
-// }
