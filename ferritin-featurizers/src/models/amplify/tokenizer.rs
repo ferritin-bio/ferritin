@@ -1,64 +1,53 @@
-use candle_core::{DType, Device, Result, Tensor};
-use rand::Rng;
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+use anyhow::{anyhow, Result};
+use candle_core::Tensor;
+use rand;
 use std::path::Path;
+// use tokenizers::Result as TokenResult;
+use tokenizers::Tokenizer;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProteinTokenizer {
-    token_to_id: HashMap<String, usize>,
-    id_to_token: HashMap<usize, String>,
-    pad_token_id: usize,
-    mask_token_id: usize,
-    bos_token_id: usize,
-    eos_token_id: usize,
-    unk_token_id: usize,
-    special_token_ids: HashSet<usize>,
+    tokenizer: Tokenizer,
+    pad_token_id: u32,
+    mask_token_id: u32,
+    bos_token_id: u32,
+    eos_token_id: u32,
+    unk_token_id: u32,
+    special_token_ids: std::collections::HashSet<u32>,
 }
 
 impl ProteinTokenizer {
-    pub fn new(
-        vocab_path: &Path,
-        pad_token_id: usize,
-        mask_token_id: usize,
-        bos_token_id: usize,
-        eos_token_id: usize,
-        unk_token_id: usize,
-        other_special_token_ids: Option<Vec<usize>>,
-    ) -> Result<Self> {
-        let mut token_to_id = HashMap::new();
-        let mut id_to_token = HashMap::new();
+    pub fn new<P: AsRef<Path>>(tokenizer_path: P) -> Result<Self> {
+        // Load the tokenizer from file
+        let tokenizer = Tokenizer::from_file(tokenizer_path)
+            .map_err(|e| anyhow!("Failed to load tokenizer: {}", e))?;
 
-        // Read vocabulary file
-        let file = File::open(vocab_path)
-            .map_err(|e| candle_core::Error::Msg(format!("Failed to open vocab file: {}", e)))?;
-        let reader = BufReader::new(file);
+        // Get special token IDs
+        let pad_token_id = tokenizer
+            .token_to_id("<pad>")
+            .ok_or_else(|| anyhow!("Missing pad token"))? as u32;
+        let mask_token_id = tokenizer
+            .token_to_id("<mask>")
+            .ok_or_else(|| anyhow!("Missing mask token"))? as u32;
+        let bos_token_id = tokenizer
+            .token_to_id("<bos>")
+            .ok_or_else(|| anyhow!("Missing bos token"))? as u32;
+        let eos_token_id = tokenizer
+            .token_to_id("<eos>")
+            .ok_or_else(|| anyhow!("Missing eos token"))? as u32;
+        let unk_token_id = tokenizer
+            .token_to_id("<unk>")
+            .ok_or_else(|| anyhow!("Missing unk token"))? as u32;
 
-        for (i, line) in reader.lines().enumerate() {
-            let token =
-                line.map_err(|e| candle_core::Error::Msg(format!("Failed to read line: {}", e)))?;
-            let token = token.trim().to_string();
-            token_to_id.insert(token.clone(), i);
-            id_to_token.insert(i, token);
-        }
-
-        // Create special tokens set
-        let mut special_token_ids = HashSet::new();
+        // Create set of special token IDs
+        let mut special_token_ids = std::collections::HashSet::new();
         special_token_ids.insert(pad_token_id);
         special_token_ids.insert(mask_token_id);
         special_token_ids.insert(bos_token_id);
         special_token_ids.insert(eos_token_id);
         special_token_ids.insert(unk_token_id);
 
-        if let Some(other_tokens) = other_special_token_ids {
-            special_token_ids.extend(other_tokens);
-        }
-
         Ok(Self {
-            token_to_id,
-            id_to_token,
+            tokenizer,
             pad_token_id,
             mask_token_id,
             bos_token_id,
@@ -69,18 +58,19 @@ impl ProteinTokenizer {
     }
 
     pub fn len(&self) -> usize {
-        self.token_to_id.len()
+        self.tokenizer.get_vocab_size(true)
     }
 
-    pub fn token_to_id(&self, token: &str) -> usize {
-        *self.token_to_id.get(token).unwrap_or(&self.unk_token_id)
+    pub fn token_to_id(&self, token: &str) -> u32 {
+        self.tokenizer
+            .token_to_id(token)
+            .unwrap_or(self.unk_token_id)
     }
 
-    pub fn id_to_token(&self, index: usize) -> String {
-        self.id_to_token
-            .get(&index)
-            .map(String::from)
-            .unwrap_or_else(|| self.id_to_token[&self.unk_token_id].clone())
+    pub fn id_to_token(&self, id: u32) -> String {
+        self.tokenizer
+            .id_to_token(id)
+            .unwrap_or_else(|| "<unk>".to_string())
     }
 
     pub fn encode(
@@ -90,93 +80,78 @@ impl ProteinTokenizer {
         add_special_tokens: bool,
         random_truncate: bool,
     ) -> Result<Tensor> {
-        let mut token_ids: Vec<usize> =
-            tokens.iter().map(|token| self.token_to_id(token)).collect();
+        // Join tokens with spaces as the tokenizer expects text
+        let text = tokens.join(" ");
 
-        if add_special_tokens {
-            token_ids.insert(0, self.bos_token_id);
-            token_ids.push(self.eos_token_id);
-        }
-
-        if let Some(max_len) = max_length {
-            if max_len < token_ids.len() {
-                let offset = if random_truncate {
-                    let mut rng = rand::thread_rng();
-                    rng.gen_range(0..token_ids.len() - max_len)
-                } else {
-                    0
-                };
-                token_ids = token_ids[offset..offset + max_len].to_vec();
+        let encoding: ProteinTokenizer = if random_truncate && max_length.is_some() {
+            let max_len = max_length.unwrap();
+            if tokens.len() + 2 > max_len {
+                let available_start = tokens.len() - max_len + 2;
+                let offset = rand::random::<usize>() % available_start;
+                let truncated_tokens = &tokens[offset..offset + max_len - 2];
+                self.tokenizer
+                    .encode(truncated_tokens.join(" ").as_str(), add_special_tokens)
+                    .into()?
+            } else {
+                self.tokenizer
+                    .encode(text.as_str(), add_special_tokens)
+                    .into()?
             }
-        }
+        } else {
+            self.tokenizer
+                .encode(text.as_str(), add_special_tokens)
+                .into()?
+        };
 
         // Convert to Tensor
-        Tensor::from_slice(&token_ids, (token_ids.len(),), &Device::Cpu)
+        let ids: Vec<i64> = encoding.get_ids().iter().map(|&x| x as i64).collect();
+
+        Tensor::new(ids, &candle_core::Device::Cpu)
+            .map_err(|e| anyhow!("Failed to create tensor: {}", e))
     }
 
-    pub fn decode(&self, token_ids: &[usize], skip_special_tokens: bool) -> String {
-        let mut tokens: Vec<usize> = token_ids.to_vec();
-
+    pub fn decode(&self, token_ids: &[u32], skip_special_tokens: bool) -> Result<String> {
         if skip_special_tokens {
-            // Remove special tokens from start and end
-            if !tokens.is_empty() && self.special_token_ids.contains(&tokens[0]) {
-                tokens.remove(0);
-            }
-            if !tokens.is_empty() && self.special_token_ids.contains(tokens.last().unwrap()) {
-                tokens.pop();
-            }
+            let filtered: Vec<u32> = token_ids
+                .iter()
+                .filter(|&&id| !self.special_token_ids.contains(&id))
+                .copied()
+                .collect();
+
+            self.tokenizer
+                .decode(&filtered, true)
+                .map_err(|e| anyhow!("Failed to decode: {}", e))
+        } else {
+            self.tokenizer
+                .decode(token_ids, true)
+                .map_err(|e| anyhow!("Failed to decode: {}", e))
         }
-
-        tokens
-            .iter()
-            .map(|&id| self.id_to_token(id))
-            .collect::<Vec<String>>()
-            .join(" ")
-    }
-
-    // Helper method to decode from Tensor
-    pub fn decode_tensor(&self, tensor: &Tensor, skip_special_tokens: bool) -> Result<String> {
-        let token_ids: Vec<usize> = tensor.to_vec1()?.into_iter().map(|x| x as usize).collect();
-        Ok(self.decode(&token_ids, skip_special_tokens))
     }
 }
 
-// Implementation of additional utility traits
-impl Default for ProteinTokenizer {
-    fn default() -> Self {
-        Self::new(
-            Path::new("vocab.txt"),
-            0, // pad_token_id
-            1, // mask_token_id
-            2, // bos_token_id
-            3, // eos_token_id
-            4, // unk_token_id
-            None,
-        )
-        .unwrap()
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tokenizer() -> Result<()> {
+        let tokenizer = ProteinTokenizer::new("path/to/tokenizer.json")?;
+
+        let tokens = vec![
+            "M".to_string(),
+            "E".to_string(),
+            "T".to_string(),
+            "V".to_string(),
+            "A".to_string(),
+            "L".to_string(),
+        ];
+
+        let encoded = tokenizer.encode(&tokens, Some(10), true, true)?;
+        let decoded = tokenizer.decode(&encoded.to_vec1::<u32>()?, true)?;
+
+        println!("Encoded: {:?}", encoded);
+        println!("Decoded: {}", decoded);
+
+        Ok(())
     }
 }
-
-// use std::path::Path;
-
-// fn main() -> Result<()> {
-//     let tokenizer = ProteinTokenizer::new(
-//         Path::new("vocab.txt"),
-//         0,  // pad_token_id
-//         1,  // mask_token_id
-//         2,  // bos_token_id
-//         3,  // eos_token_id
-//         4,  // unk_token_id
-//         None,
-//     )?;
-
-//     // Encode example
-//     let tokens = vec!["A".to_string(), "B".to_string(), "C".to_string()];
-//     let encoded = tokenizer.encode(&tokens, Some(10), true, true)?;
-
-//     // Decode example
-//     let decoded = tokenizer.decode_tensor(&encoded, true)?;
-//     println!("Decoded: {}", decoded);
-
-//     Ok(())
-// }
