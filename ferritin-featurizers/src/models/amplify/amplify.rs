@@ -157,6 +157,7 @@ impl EncoderBlock {
         // FFN add ...
         let normed = self.ffn_norm.forward(&x)?;
 
+        // ffn.forward needs to do teh swiglu stesp with w12 and w3
         let ffn_output = self.ffn.forward(&normed)?;
         let ff = self.ffn_dropout.forward(&ffn_output, false); // Todo: pass in the Inference/Training bit
 
@@ -165,7 +166,7 @@ impl EncoderBlock {
         Ok((x, contacts))
     }
 
-    fn att_block(
+    fn attention_block(
         &self,
         x: &Tensor,
         pad_mask: Option<&Tensor>,
@@ -317,7 +318,7 @@ impl AMPLIFY {
 
         // Process attention mask if provided
         let attention_mask =
-            self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64);
+            self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
 
         // Get appropriate length of freqs_cis
         let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
