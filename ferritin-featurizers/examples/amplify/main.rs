@@ -46,7 +46,7 @@ fn main() -> Result<()> {
     let pmatrix = protein_tokenizer.encode(&["METVAL".to_string()], Some(20), true, false);
 
     // begin encoding the model....
-    let encoded = model.forward(pmatrix, None, false, false);
+    // let encoded = model.forward(pmatrix, None, false, false);
 
     Ok(())
 }

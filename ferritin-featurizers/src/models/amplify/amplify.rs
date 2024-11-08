@@ -145,25 +145,21 @@ impl EncoderBlock {
         freqs_cis: &Tensor,
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
-        let normed = self.attention_norm.forward(x)?;
-
-        // Todo: confirm the attention block
-        let (attn, contacts) =
-            self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
-
-        // add encoded bits and the self-attention...
-        let x = x.add(&attn)?;
-
-        // FFN add ...
-        let normed = self.ffn_norm.forward(&x)?;
-
-        // ffn.forward needs to do teh swiglu stesp with w12 and w3
-        let ffn_output = self.ffn.forward(&normed)?;
-        let ff = self.ffn_dropout.forward(&ffn_output, false); // Todo: pass in the Inference/Training bit
-
-        // Todo: see if the apply or add can be done differently in idiomatic Candle
-        let x = x.add(&ff)?;
-        Ok((x, contacts))
+        // let normed = self.attention_norm.forward(x)?;
+        // // Todo: confirm the attention block
+        // let (attn, contacts) =
+        //     self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
+        // // add encoded bits and the self-attention...
+        // let x = x.add(&attn)?;
+        // // FFN add ...
+        // let normed = self.ffn_norm.forward(&x)?;
+        // // ffn.forward needs to do teh swiglu stesp with w12 and w3
+        // let ffn_output = self.ffn.forward(&normed)?;
+        // let ff = self.ffn_dropout.forward(&ffn_output, false); // Todo: pass in the Inference/Training bit
+        // // Todo: see if the apply or add can be done differently in idiomatic Candle
+        // let x = x.add(&ff)?;
+        // Ok((x, contacts))
+        unimplemented!()
     }
 
     fn attention_block(
@@ -173,65 +169,66 @@ impl EncoderBlock {
         freqs_cis: &Tensor,
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
-        // Get dimensions
-        let batch_size = x.dim(0)?;
-        let seq_len = x.dim(1)?;
-        // Query, Key, Value projections
-        let xq = self.q.forward(x)?;
-        let xk = self.k.forward(x)?;
-        let xv = self.v.forward(x)?;
-        // Reshape for rotary embeddings
-        let xq = xq.reshape((
-            batch_size,
-            seq_len,
-            self.config.num_attention_heads,
-            self.d_head,
-        ))?;
-        let xk = xk.reshape((
-            batch_size,
-            seq_len,
-            self.config.num_attention_heads,
-            self.d_head,
-        ))?;
-        let xv = xv.reshape((
-            batch_size,
-            seq_len,
-            self.config.num_attention_heads,
-            self.d_head,
-        ))?;
-        // Apply rotary embeddings
-        let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
-        // Attention computation
-        let dropout_prob = if self.training {
-            self.config.dropout_prob
-        } else {
-            0.0
-        };
-        let attn = memory_efficient_attention(&xq, &xk, &xv, pad_mask, dropout_prob)?;
-        // Optional attention matrix computation for output
-        let _attn = if output_attentions {
-            let xq_t = xq.permute((0, 2, 1, 3))?;
-            let xk_t = xk.permute((0, 2, 3, 1))?;
-            let mut attn_weights = xq_t.matmul(&xk_t)?;
-            let scale = (xq.dim(D::Minus1)? as f64).sqrt();
-            attn_weights = attn_weights.div_scalar(scale)?;
-            if let Some(mask) = pad_mask {
-                attn_weights = attn_weights.add(mask)?;
-            }
-            Some(attn_weights.softmax(D::Minus1)?)
-        } else {
-            None
-        };
+        // // Get dimensions
+        // let batch_size = x.dim(0)?;
+        // let seq_len = x.dim(1)?;
+        // // Query, Key, Value projections
+        // let xq = self.q.forward(x)?;
+        // let xk = self.k.forward(x)?;
+        // let xv = self.v.forward(x)?;
+        // // Reshape for rotary embeddings
+        // let xq = xq.reshape((
+        //     batch_size,
+        //     seq_len,
+        //     self.config.num_attention_heads,
+        //     self.d_head,
+        // ))?;
+        // let xk = xk.reshape((
+        //     batch_size,
+        //     seq_len,
+        //     self.config.num_attention_heads,
+        //     self.d_head,
+        // ))?;
+        // let xv = xv.reshape((
+        //     batch_size,
+        //     seq_len,
+        //     self.config.num_attention_heads,
+        //     self.d_head,
+        // ))?;
+        // // Apply rotary embeddings
+        // let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
+        // // Attention computation
+        // let dropout_prob = if self.training {
+        //     self.config.dropout_prob
+        // } else {
+        //     0.0
+        // };
+        // let attn = memory_efficient_attention(&xq, &xk, &xv, pad_mask, dropout_prob)?;
+        // // Optional attention matrix computation for output
+        // let _attn = if output_attentions {
+        //     let xq_t = xq.permute((0, 2, 1, 3))?;
+        //     let xk_t = xk.permute((0, 2, 3, 1))?;
+        //     let mut attn_weights = xq_t.matmul(&xk_t)?;
+        //     let scale = (xq.dim(D::Minus1)? as f64).sqrt();
+        //     attn_weights = attn_weights.div_scalar(scale)?;
+        //     if let Some(mask) = pad_mask {
+        //         attn_weights = attn_weights.add(mask)?;
+        //     }
+        //     Some(attn_weights.softmax(D::Minus1)?)
+        // } else {
+        //     None
+        // };
 
-        // Final projection and dropout
-        let output = attn.reshape((
-            batch_size,
-            seq_len,
-            self.config.num_attention_heads * self.d_head,
-        ))?;
-        let output = self.wo.forward(&output)?;
-        let output = self.resid_dropout.forward(&output, false);
-        Ok((output, _attn))
+        // // Final projection and dropout
+        // let output = attn.reshape((
+        //     batch_size,
+        //     seq_len,
+        //     self.config.num_attention_heads * self.d_head,
+        // ))?;
+        // let output = self.wo.forward(&output)?;
+        // let output = self.resid_dropout.forward(&output, false);
+        // Ok((output, _attn))
+        unimplemented!()
     }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
@@ -313,55 +310,54 @@ impl AMPLIFY {
         output_hidden_states: bool,
         output_attentions: bool,
     ) -> Result<ModelOutput> {
-        let mut hidden_states = vec![];
-        let mut attentions = vec![];
+        // let mut hidden_states = vec![];
+        // let mut attentions = vec![];
 
-        // Process attention mask if provided
-        let attention_mask =
-            self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
+        // // Process attention mask if provided
+        // let attention_mask =
+        //     self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
+        // // Get appropriate length of freqs_cis
+        // let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
+        // // Embedding layer
+        // let mut x = self.encoder.forward(src)?;
+        // // Transform through encoder blocks
+        // for layer in self.transformer_encoder.iter() {
+        //     let (new_x, attn) =
+        //         layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
+        //     x = new_x;
 
-        // Get appropriate length of freqs_cis
-        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
+        //     if output_hidden_states {
+        //         hidden_states.push(x.clone());
+        //     }
+        //     if output_attentions {
+        //         if let Some(attn) = attn {
+        //             attentions.push(attn);
+        //         }
+        //     }
+        // }
 
-        // Embedding layer
-        let mut x = self.encoder.forward(src)?;
+        // // Final layer norm and decoder
+        // let logits = if self.config.layer_norm_before_last_layer {
+        //     self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
+        // } else {
+        //     self.decoder.forward(&x)?
+        // };
 
-        // Transform through encoder blocks
-        for layer in self.transformer_encoder.iter() {
-            let (new_x, attn) =
-                layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
-            x = new_x;
+        // Ok(ModelOutput {
+        //     logits,
+        //     hidden_states: if output_hidden_states {
+        //         Some(hidden_states)
+        //     } else {
+        //         None
+        //     },
+        //     attentions: if output_attentions {
+        //         Some(attentions)
+        //     } else {
+        //         None
+        //     },
+        // })
 
-            if output_hidden_states {
-                hidden_states.push(x.clone());
-            }
-            if output_attentions {
-                if let Some(attn) = attn {
-                    attentions.push(attn);
-                }
-            }
-        }
-
-        // Final layer norm and decoder
-        let logits = if self.config.layer_norm_before_last_layer {
-            self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
-        } else {
-            self.decoder.forward(&x)?
-        };
-
-        Ok(ModelOutput {
-            logits,
-            hidden_states: if output_hidden_states {
-                Some(hidden_states)
-            } else {
-                None
-            },
-            attentions: if output_attentions {
-                Some(attentions)
-            } else {
-                None
-            },
-        })
+        unimplemented!()
     }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
