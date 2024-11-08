@@ -245,6 +245,10 @@ impl EncoderBlock {
         let dropout_prob = self.config.dropout_prob; // still need to toggle if in Training....
 
         // from xformers.ops import SwiGLU, memory_efficient_attention
+        //  https://github.com/facebookresearch/xformers/blob/f3a41aeca041217921ba836971ab3aa37923911d/xformers/ops/fmha/__init__.py#L194
+        //     - Input tensors must be in format ``[B, M, H, K]``, where B is the batch size, M \
+        //   the sequence length, H the number of heads, and K the embeding size per head
+        //   - If inputs have dimension 3, it is assumed that the dimensions are ``[B, M, K]`` and ``H=1``
         let attn = memory_efficient_attention(&xq, &xk, &xv, pad_mask, dropout_prob)?;
 
         // Optional attention matrix computation for output
