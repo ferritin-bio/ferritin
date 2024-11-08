@@ -175,12 +175,10 @@ impl EncoderBlock {
         // Get dimensions
         let batch_size = x.dim(0)?;
         let seq_len = x.dim(1)?;
-
         // Query, Key, Value projections
         let xq = self.q.forward(x)?;
         let xk = self.k.forward(x)?;
         let xv = self.v.forward(x)?;
-
         // Reshape for rotary embeddings
         let xq = xq.reshape((
             batch_size,
@@ -200,38 +198,25 @@ impl EncoderBlock {
             self.config.num_attention_heads,
             self.d_head,
         ))?;
-
         // Apply rotary embeddings
         let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
-
         // Attention computation
         let dropout_prob = if self.training {
             self.config.dropout_prob
         } else {
             0.0
         };
-
-        let attn = memory_efficient_attention(
-            &xq,
-            &xk,
-            &xv,
-            pad_mask,
-            dropout_prob,
-        )?;
-
+        let attn = memory_efficient_attention(&xq, &xk, &xv, pad_mask, dropout_prob)?;
         // Optional attention matrix computation for output
         let _attn = if output_attentions {
             let xq_t = xq.permute((0, 2, 1, 3))?;
             let xk_t = xk.permute((0, 2, 3, 1))?;
-
             let mut attn_weights = xq_t.matmul(&xk_t)?;
             let scale = (xq.dim(D::Minus1)? as f64).sqrt();
             attn_weights = attn_weights.div_scalar(scale)?;
-
             if let Some(mask) = pad_mask {
                 attn_weights = attn_weights.add(mask)?;
             }
-
             Some(attn_weights.softmax(D::Minus1)?)
         } else {
             None
@@ -245,7 +230,6 @@ impl EncoderBlock {
         ))?;
         let output = self.wo.forward(&output)?;
         let output = self.resid_dropout.forward(&output, false);
-
         Ok((output, _attn))
     }
 
@@ -277,6 +261,8 @@ impl EncoderBlock {
             attention_norm,
             ffn_norm,
             ffn_dropout: Dropout::new(cfg.dropout_prob as f32),
+        })
+    }
 }
 
 /// The AMPLIFY model
