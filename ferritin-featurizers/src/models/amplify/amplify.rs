@@ -107,7 +107,7 @@ pub struct EncoderBlock {
     ffn_dropout: Dropout,
     //
     //
-    d_head: i32,
+    d_head: usize,
     config: AMPLIFYConfig,
 }
 
@@ -139,7 +139,7 @@ impl EncoderBlock {
             attention_norm,
             ffn_norm,
             ffn_dropout: Dropout::new(config.dropout_prob as f32),
-            d_head: (config.hidden_size / config.num_attention_heads) as i32,
+            d_head: config.hidden_size / config.num_attention_heads,
             config: config.clone(), // Todo: remove this clone
         })
     }
@@ -172,47 +172,13 @@ impl EncoderBlock {
     fn ffn_forward(&self, x: &Tensor) -> Result<Tensor> {
         // Swiglu
         //
-        // Todo: see if the apply or add can be done differently in idiomatic Candle
-
-        // def forward(self, x: torch.Tensor) -> torch.Tensor:
-        //     """Computes :attr:`swiglu` with the module's weights
-        //     Args:
-        //         x (torch.Tensor): A Tensor of shape ``[..., in_features]``
-        //     Returns:
-        //         torch.Tensor: A Tensor of shape ``[..., out_features]``
-        //     """
-        //     if self.w12 is not None:
-        //         if self.op is not None:
-        //             assert (
-        //                 self.op.PACKED_WEIGHTS
-        //             ), "_pack_weights and self.op.PACKED_WEIGHTS should match"
-        //             return swiglu_packed(x, *self._packed_ordered_params(), op=self.op)
-        //
-        //
-        // def swiglu_packed(
-        //     x: torch.Tensor,
-        //     w1w2: torch.Tensor,
-        //     b1b2: Optional[torch.Tensor],
-        //     w3: torch.Tensor,
-        //     b3: Optional[torch.Tensor],
-        //     *,
-        //     op: SwiGLUOp,
-        // ) -> torch.Tensor:
-        //     """
-        //     Computes a SwiGLU block given the weights/bias of the 3
-        //     linear layers.
-        //     :Equivalent pytorch code:
-        //     .. code-block:: python
-        //         x1 = F.linear(x, w1, b1)
-        //         x2 = F.linear(x, w2, b2)
-        //         hidden = F.silu(x1) * x2
-        //         return F.linear(hidden, w3, b3)
-        //
+        // Todo: see if the apply or add can be done di
         // Store original batch dimensions
         let dims = x.dims();
         let batch_shape = &dims[..dims.len() - 1];
         // Reshape input to 2D: (batch_size, input_dim)
-        let x_flat = x.reshape((-1, dims[dims.len() - 1]))?;
+        let x_flat = self.flatten_last_dim(&x)?;
+
         // Apply packed W1W2 linear transformation
         let w12_out = self.w12.forward(&x_flat)?;
         // Split the output into two halves (for SwiGLU activation)
@@ -228,6 +194,14 @@ impl EncoderBlock {
         let mut new_shape = batch_shape.to_vec();
         new_shape.push(output.dim(1)?);
         output.reshape(new_shape)
+    }
+
+    fn flatten_last_dim(&self, x: &Tensor) -> Result<Tensor> {
+        let dims = x.dims();
+        let last_dim = dims[dims.len() - 1];
+        let total_elements = dims.iter().product::<usize>();
+        let first_dim = total_elements / last_dim;
+        x.reshape((first_dim, last_dim))
     }
 
     fn attention_block(
