@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use candle_core::Tensor;
 use rand;
 use std::path::Path;
+use tokenizers::Encoding;
 // use tokenizers::Result as TokenResult;
 use tokenizers::Tokenizer;
 
@@ -83,7 +84,7 @@ impl ProteinTokenizer {
         // Join tokens with spaces as the tokenizer expects text
         let text = tokens.join(" ");
 
-        let encoding: ProteinTokenizer = if random_truncate && max_length.is_some() {
+        let encoding: Encoding = if random_truncate && max_length.is_some() {
             let max_len = max_length.unwrap();
             if tokens.len() + 2 > max_len {
                 let available_start = tokens.len() - max_len + 2;
@@ -91,16 +92,16 @@ impl ProteinTokenizer {
                 let truncated_tokens = &tokens[offset..offset + max_len - 2];
                 self.tokenizer
                     .encode(truncated_tokens.join(" ").as_str(), add_special_tokens)
-                    .into()?
+                    .map_err(|e| anyhow!("Failed to encode truncated tokens: {}", e))?
             } else {
                 self.tokenizer
                     .encode(text.as_str(), add_special_tokens)
-                    .into()?
+                    .map_err(|e| anyhow!("Failed to encode text: {}", e))?
             }
         } else {
             self.tokenizer
                 .encode(text.as_str(), add_special_tokens)
-                .into()?
+                .map_err(|e| anyhow!("Failed to encode text: {}", e))?
         };
 
         // Convert to Tensor
