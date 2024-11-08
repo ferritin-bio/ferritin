@@ -206,6 +206,36 @@ impl EncoderBlock {
         x.reshape((first_dim, last_dim))
     }
 
+    fn scaled_dot_product_attention(
+        &self,
+        query: &Tensor,
+        key: &Tensor,
+        value: &Tensor,
+        attn_mask: Option<&Tensor>,
+        dropout_p: f64,
+        is_causal: bool,
+    ) -> Result<Tensor> {
+        // Calculate attention scores
+        let d_k = key.dim(key.dims().len() - 1)? as f64;
+        let scaling = 1.0 / d_k.sqrt();
+        // (B, H, L, S) = (batch, heads, query_length, key_length)
+        let scores = (query.matmul(&key.transpose(D::Minus2, D::Minus1)?)? * scaling)?;
+        // Apply mask if provided
+        if let Some(mask) = attn_mask {
+            let scores = scores.add(mask)?;
+        }
+        // Apply softmax
+        let attn = candle_nn::ops::softmax(&scores, scores.dims().len() - 1)?;
+        // Apply dropout if needed
+        let attn = if dropout_p > 0.0 {
+            candle_nn::ops::dropout(&attn, dropout_p as f32)?
+        } else {
+            attn
+        };
+        // Final matrix multiplication with values
+        attn.matmul(value)
+    }
+
     fn attention_block(
         &self,
         x: &Tensor,
@@ -243,24 +273,18 @@ impl EncoderBlock {
         let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
         // Attention computation
         let dropout_prob = self.config.dropout_prob; // still need to toggle if in Training....
+        let zeros = Tensor::zeros_like(&xq)?;
+        let pad_mask = pad_mask.unwrap_or_else(|| &zeros);
+        let attn =
+            self.scaled_dot_product_attention(&xq, &xk, &xv, Some(pad_mask), dropout_prob, false)?;
 
-        // from xformers.ops import SwiGLU, memory_efficient_attention
-        //  https://github.com/facebookresearch/xformers/blob/f3a41aeca041217921ba836971ab3aa37923911d/xformers/ops/fmha/__init__.py#L194
-        //     - Input tensors must be in format ``[B, M, H, K]``, where B is the batch size, M \
-        //   the sequence length, H the number of heads, and K the embeding size per head
-        //   - If inputs have dimension 3, it is assumed that the dimensions are ``[B, M, K]`` and ``H=1``
-        let attn = memory_efficient_attention(&xq, &xk, &xv, pad_mask, dropout_prob)?;
-
-        // Optional attention matrix computation for output
         let _attn = if output_attentions {
             let xq_t = xq.permute((0, 2, 1, 3))?;
             let xk_t = xk.permute((0, 2, 3, 1))?;
             let mut attn_weights = xq_t.matmul(&xk_t)?;
             let scale = (xq.dim(D::Minus1)? as f64).sqrt();
             attn_weights = (attn_weights / scale)?;
-            if let Some(mask) = pad_mask {
-                attn_weights = attn_weights.add(mask)?;
-            }
+            attn_weights = attn_weights.add(&pad_mask)?;
             Some(softmax(&attn_weights, D::Minus1)?)
         } else {
             None
@@ -275,7 +299,6 @@ impl EncoderBlock {
         let output = self.wo.forward(&output)?;
         let output = self.resid_dropout.forward(&output, false)?;
         Ok((output, _attn))
-        // unimplemented!()
     }
 
     /// Load Weights from a Model.
