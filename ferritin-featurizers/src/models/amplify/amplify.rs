@@ -138,7 +138,7 @@ impl EncoderBlock {
         })
     }
 
-    fn forward(
+    pub fn forward(
         &self,
         x: &Tensor,
         pad_mask: Option<&Tensor>,
@@ -154,12 +154,92 @@ impl EncoderBlock {
         // FFN add ...
         let normed = self.ffn_norm.forward(&x)?;
         // ffn.forward needs to do teh swiglu stesp with w12 and w3
-        let ffn_output = self.ffn.forward(&normed)?;
+        let ffn_output = self.ffn_forward(&normed)?;
         let ff = self.ffn_dropout.forward(&ffn_output, false); // Todo: pass in the Inference/Training bit
-                                                               // Todo: see if the apply or add can be done differently in idiomatic Candle
         let x = x.add(&ff)?;
         Ok((x, contacts))
         // unimplemented!()
+    }
+
+    // process the FFN BLock using swiglu
+    //
+    fn ffn_forward(&self, x: &Tensor) -> Tensor {
+        // Swiglu
+        //
+        // Todo: see if the apply or add can be done differently in idiomatic Candle
+
+        // def forward(self, x: torch.Tensor) -> torch.Tensor:
+        //     """Computes :attr:`swiglu` with the module's weights
+        //     Args:
+        //         x (torch.Tensor): A Tensor of shape ``[..., in_features]``
+        //     Returns:
+        //         torch.Tensor: A Tensor of shape ``[..., out_features]``
+        //     """
+        //     if self.w12 is not None:
+        //         if self.op is not None:
+        //             assert (
+        //                 self.op.PACKED_WEIGHTS
+        //             ), "_pack_weights and self.op.PACKED_WEIGHTS should match"
+        //             return swiglu_packed(x, *self._packed_ordered_params(), op=self.op)
+        //
+
+        // def swiglu_packed(
+        //     x: torch.Tensor,
+        //     w1w2: torch.Tensor,
+        //     b1b2: Optional[torch.Tensor],
+        //     w3: torch.Tensor,
+        //     b3: Optional[torch.Tensor],
+        //     *,
+        //     op: SwiGLUOp,
+        // ) -> torch.Tensor:
+        //     """
+        //     Computes a SwiGLU block given the weights/bias of the 3
+        //     linear layers.
+
+        //     :Equivalent pytorch code:
+
+        //     .. code-block:: python
+
+        //         x1 = F.linear(x, w1, b1)
+        //         x2 = F.linear(x, w2, b2)
+        //         hidden = F.silu(x1) * x2
+        //         return F.linear(hidden, w3, b3)
+
+        //     :Supported hardware:
+
+        //     This operator is only optimized on A100+ on ``torch.half`` or ``torch.bfloat16`` \
+        //         (autocast is supported), and will fallback to a functional pytorch \
+        //         implementation otherwise.
+        //     """
+        //     batch_shape = x.shape[:-1]
+        //     x = x.reshape([-1, x.shape[-1]])
+
+        //     if b3 is not None:
+        //         if b3.ndim != 1 or b3.shape[0] != w3.shape[0]:
+        //             raise ValueError(f"Invalid shapes for w3: {w3.shape} / b3: {b3.shape}")
+
+        //     assert op.PACKED_WEIGHTS, "Not implemented PACKED_WEIGHTS"
+
+        //     return op(x, w1w2, b1b2, w3, b3).reshape([*batch_shape, -1])
+
+        // Store original batch dimensions
+        let batch_shape = x.size()[..x.dim() - 1].to_vec();
+        // Reshape input to 2D: (batch_size, input_dim)
+        let x_flat = x.reshape(&[-1, x.size()[x.dim() - 1]]);
+        // Apply packed W1W2 linear transformation
+        let w12_out = self.w12.forward(&x_flat);
+        // Split the output into two halves (for SwiGLU activation)
+        let chunks = w12_out.chunk(2, -1);
+        let x1 = &chunks[0];
+        let x2 = &chunks[1];
+        // Apply SwiGLU: silu(x1) * x2
+        let hidden = x1.silu() * x2;
+        // Final linear transformation
+        let output = self.w3.forward(&hidden);
+        // Reshape back to original batch dimensions
+        let mut new_shape = batch_shape;
+        new_shape.push(output.size()[output.dim() - 1]);
+        output.reshape(&new_shape[..])
     }
 
     fn attention_block(
@@ -231,6 +311,7 @@ impl EncoderBlock {
         // unimplemented!()
     }
 
+    /// Load Weights from a Model.
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
         // To keep the number of parameters and the amount of computation constant, we reduce the number of
         // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
