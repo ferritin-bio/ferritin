@@ -75,16 +75,16 @@ impl<'a> AtomSelector<'a> {
         self.current_selection = Selection::new(filtered);
         self
     }
-    pub fn filter_backbone(mut self) -> Self {
+    pub fn filter_backbone(self) -> Self {
         unimplemented!()
     }
-    pub fn filter_protein(mut self) -> Self {
+    pub fn filter_protein(self) -> Self {
         unimplemented!()
     }
-    pub fn filter_polymer(mut self) -> Self {
+    pub fn filter_polymer(self) -> Self {
         unimplemented!()
     }
-    pub fn filter_solvent(mut self) -> Self {
+    pub fn filter_solvent(self) -> Self {
         unimplemented!()
     }
     pub fn residue(mut self, res_name: &str) -> Self {
