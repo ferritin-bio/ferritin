@@ -115,7 +115,7 @@ pub struct EncoderBlock {
 
 impl EncoderBlock {
     pub fn new(config: &AMPLIFYConfig, vb: VarBuilder, layer: i32) -> Result<Self> {
-        let d_head = config.hidden_size / config.num_attention_heads;
+        let _d_head = config.hidden_size / config.num_attention_heads;
         let multiple_of = 8;
         let intermediate_size = (config.intermediate_size * 2) / 3;
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
