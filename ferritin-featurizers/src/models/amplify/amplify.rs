@@ -158,7 +158,7 @@ impl EncoderBlock {
         let normed = self.ffn_norm.forward(&x)?;
 
         let ffn_output = self.ffn.forward(&normed)?;
-        let ff = self.ffn_dropout.forward(&ffn_output);
+        let ff = self.ffn_dropout.forward(&ffn_output, false); // Todo: pass in the Inference/Training bit
 
         // Todo: see if the apply or add can be done differently in idiomatic Candle
         let x = x.add(&ff)?;
@@ -244,45 +244,10 @@ impl EncoderBlock {
             self.config.num_attention_heads * self.d_head,
         ))?;
         let output = self.wo.forward(&output)?;
-        let output = self.resid_dropout.forward(&output);
+        let output = self.resid_dropout.forward(&output, false);
 
         Ok((output, _attn))
     }
-    // fn attention_block(
-    //     &self,
-    //     x: &Tensor,
-    //     pad_mask: Option<&Tensor>,
-    //     freqs_cis: &Tensor,
-    //     output_attentions: bool,
-    // ) -> Result<(Tensor, Option<Tensor>)> {
-    //     // def _att_block(self, x: torch.Tensor, pad_mask: torch.Tensor, freqs_cis: torch.Tensor, output_attentions: bool):
-    //     //         batch_size, seq_len, _ = x.shape
-    //     //         xq, xk, xv = self.q(x), self.k(x), self.v(x)
-
-    //     //         # Reshape for rotary embeddings
-    //     //         xq = xq.view(batch_size, seq_len, self.config.num_attention_heads, self.d_head)
-    //     //         xk = xk.view(batch_size, seq_len, self.config.num_attention_heads, self.d_head)
-    //     //         xv = xv.view(batch_size, seq_len, self.config.num_attention_heads, self.d_head)
-    //     //         xq, xk = apply_rotary_emb(xq, xk, freqs_cis)
-
-    //     //         attn = memory_efficient_attention(
-    //     //             query=xq,
-    //     //             key=xk,
-    //     //             value=xv,
-    //     //             attn_bias=pad_mask,
-    //     //             p=self.config.dropout_prob if self.training else 0,
-    //     //         )
-
-    //     //         _attn = None
-    //     //         if output_attentions:
-    //     //             _attn = xq.permute(0, 2, 1, 3) @ xk.permute(0, 2, 3, 1) / (xq.size(-1) ** 0.5)
-    //     //             if pad_mask is not None:
-    //     //                 _attn = _attn + pad_mask
-    //     //             _attn = _attn.softmax(-1)
-    //     //         return self.resid_dropout(self.wo(attn.view(batch_size, seq_len, self.config.num_attention_heads * self.d_head))), _attn
-
-    //     unimplemented!()
-    // }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
         // To keep the number of parameters and the amount of computation constant, we reduce the number of
