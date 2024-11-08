@@ -145,21 +145,21 @@ impl EncoderBlock {
         freqs_cis: &Tensor,
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
-        // let normed = self.attention_norm.forward(x)?;
-        // // Todo: confirm the attention block
-        // let (attn, contacts) =
-        //     self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
-        // // add encoded bits and the self-attention...
-        // let x = x.add(&attn)?;
-        // // FFN add ...
-        // let normed = self.ffn_norm.forward(&x)?;
-        // // ffn.forward needs to do teh swiglu stesp with w12 and w3
-        // let ffn_output = self.ffn.forward(&normed)?;
-        // let ff = self.ffn_dropout.forward(&ffn_output, false); // Todo: pass in the Inference/Training bit
-        // // Todo: see if the apply or add can be done differently in idiomatic Candle
-        // let x = x.add(&ff)?;
-        // Ok((x, contacts))
-        unimplemented!()
+        let normed = self.attention_norm.forward(x)?;
+        // Todo: confirm the attention block
+        let (attn, contacts) =
+            self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
+        // add encoded bits and the self-attention...
+        let x = x.add(&attn)?;
+        // FFN add ...
+        let normed = self.ffn_norm.forward(&x)?;
+        // ffn.forward needs to do teh swiglu stesp with w12 and w3
+        let ffn_output = self.ffn.forward(&normed)?;
+        let ff = self.ffn_dropout.forward(&ffn_output, false); // Todo: pass in the Inference/Training bit
+                                                               // Todo: see if the apply or add can be done differently in idiomatic Candle
+        let x = x.add(&ff)?;
+        Ok((x, contacts))
+        // unimplemented!()
     }
 
     fn attention_block(
@@ -310,54 +310,53 @@ impl AMPLIFY {
         output_hidden_states: bool,
         output_attentions: bool,
     ) -> Result<ModelOutput> {
-        // let mut hidden_states = vec![];
-        // let mut attentions = vec![];
+        let mut hidden_states = vec![];
+        let mut attentions = vec![];
 
-        // // Process attention mask if provided
-        // let attention_mask =
-        //     self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
-        // // Get appropriate length of freqs_cis
-        // let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
-        // // Embedding layer
-        // let mut x = self.encoder.forward(src)?;
-        // // Transform through encoder blocks
-        // for layer in self.transformer_encoder.iter() {
-        //     let (new_x, attn) =
-        //         layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
-        //     x = new_x;
+        // Process attention mask if provided
+        let attention_mask =
+            self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
+        // Get appropriate length of freqs_cis
+        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
+        // Embedding layer
+        let mut x = self.encoder.forward(src)?;
+        // Transform through encoder blocks
+        for layer in self.transformer_encoder.iter() {
+            let (new_x, attn) =
+                layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
+            x = new_x;
+            if output_hidden_states {
+                hidden_states.push(x.clone());
+            }
+            if output_attentions {
+                if let Some(attn) = attn {
+                    attentions.push(attn);
+                }
+            }
+        }
 
-        //     if output_hidden_states {
-        //         hidden_states.push(x.clone());
-        //     }
-        //     if output_attentions {
-        //         if let Some(attn) = attn {
-        //             attentions.push(attn);
-        //         }
-        //     }
-        // }
+        // Final layer norm and decoder
+        let logits = if self.config.layer_norm_before_last_layer {
+            self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
+        } else {
+            self.decoder.forward(&x)?
+        };
 
-        // // Final layer norm and decoder
-        // let logits = if self.config.layer_norm_before_last_layer {
-        //     self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
-        // } else {
-        //     self.decoder.forward(&x)?
-        // };
+        Ok(ModelOutput {
+            logits,
+            hidden_states: if output_hidden_states {
+                Some(hidden_states)
+            } else {
+                None
+            },
+            attentions: if output_attentions {
+                Some(attentions)
+            } else {
+                None
+            },
+        })
 
-        // Ok(ModelOutput {
-        //     logits,
-        //     hidden_states: if output_hidden_states {
-        //         Some(hidden_states)
-        //     } else {
-        //         None
-        //     },
-        //     attentions: if output_attentions {
-        //         Some(attentions)
-        //     } else {
-        //         None
-        //     },
-        // })
-
-        unimplemented!()
+        // unimplemented!()
     }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
