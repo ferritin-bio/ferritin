@@ -53,11 +53,15 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
     let last_dim = *xq_shape.last().unwrap();
 
     // Reshape inputs to separate real and imaginary parts
-    let xq_reshaped = xq.reshape((-1, last_dim / 2, 2))?;
-    let xk_reshaped = xk.reshape((-1, last_dim / 2, 2))?;
+    let total_elements = xq.elem_count();
+    let inferred_dim = total_elements / (last_dim / 2) / 2;
+    let xq_reshaped = xq.reshape((inferred_dim, last_dim / 2, 2))?;
+    let xk_reshaped = xk.reshape((inferred_dim, last_dim / 2, 2))?;
 
     // Split freqs_cis into cos and sin
-    let (cos, sin) = freqs_cis.split(2, -1)?;
+    let chunks = freqs_cis.chunk(2, D::Minus1)?;
+    let cos = &chunks[0];
+    let sin = &chunks[1];
     let cos = reshape_for_broadcast(&cos, &xq_reshaped)?;
     let sin = reshape_for_broadcast(&sin, &xq_reshaped)?;
 
