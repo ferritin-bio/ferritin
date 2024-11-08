@@ -8,7 +8,7 @@
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
 
-use candle_core::{DType, Device, Result, Tensor};
+use candle_core::{DType, Device, Result, Tensor, D};
 use candle_nn::{
     embedding, linear, linear_no_bias, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm,
     VarBuilder,
@@ -219,6 +219,31 @@ impl AMPLIFY {
         unimplemented!()
     }
 
+    fn process_attention_mask(
+        pad_mask: Option<&Tensor>,
+        num_attention_heads: i64,
+    ) -> Result<Option<Tensor>> {
+        let Some(mask) = pad_mask else {
+            return Ok(None);
+        };
+
+        // If mask is all zeros (within tolerance), return None
+        if mask.all_close(&mask.zeros_like()?, 1e-6, 1e-6)? {
+            return Ok(None);
+        }
+
+        // Otherwise, prepare the attention mask
+        let batch_size = mask.dim(0)?;
+        let seq_length = mask.dim(D::Minus1)?;
+
+        let expanded_mask = mask
+            .unsqueeze(1)? // Add head dimension
+            .unsqueeze(1)? // Add query dimension
+            .expand((batch_size, num_attention_heads, seq_length, seq_length))?;
+
+        Ok(Some(expanded_mask))
+    }
+
     pub fn forward(
         &self,
         src: &Tensor,
@@ -230,20 +255,7 @@ impl AMPLIFY {
         let mut attentions = vec![];
 
         // Process attention mask if provided
-        let attention_mask = if let Some(mask) = pad_mask {
-            if !mask.all_close(&mask.zeros_like()?, 1e-6, 1e-6)? {
-                Some(mask.unsqueeze(1)?.unsqueeze(1)?.expand((
-                    mask.dim(0)?,
-                    self.config.num_attention_heads,
-                    mask.dim(-1)?,
-                    mask.dim(-1)?,
-                ))?)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let attention_mask = self.process_attention_mask(pad_mask, self.transformer_encoder.len());
 
         // Get appropriate length of freqs_cis
         let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
