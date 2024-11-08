@@ -1,7 +1,7 @@
 use anyhow::Result;
 use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
-use ferritin_featurizers::{AMPLIFYConfig, AMPLIFY};
+use ferritin_featurizers::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use safetensors::SafeTensors;
 
@@ -49,6 +49,32 @@ fn main() -> Result<()> {
     // Load the Weights into the Model
     let config = AMPLIFYConfig::default().amp_120m();
     let model = AMPLIFY::load(vb, &config)?;
+
+    // try loading the tokenizer
+    let tokenizer = repo.get("tokenizer.json")?;
+    let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
+
+    let tokens = vec![
+        "M".to_string(),
+        "E".to_string(),
+        "T".to_string(),
+        "V".to_string(),
+        "A".to_string(),
+        "L".to_string(),
+    ];
+
+    let encoded = protein_tokenizer.encode(&tokens, Some(10), true, true)?;
+    let decoded = protein_tokenizer.decode(
+        &encoded
+            .to_vec1::<i64>()?
+            .iter()
+            .map(|&x| x as u32)
+            .collect::<Vec<u32>>(),
+        true,
+    )?;
+
+    println!("Encoded: {:?}", encoded);
+    println!("Decoded: {}", decoded);
 
     Ok(())
 }

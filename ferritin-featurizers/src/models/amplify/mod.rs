@@ -1,3 +1,3 @@
 pub mod amplify;
-mod tokenizer;
+pub mod tokenizer;
 // mod rotary;
