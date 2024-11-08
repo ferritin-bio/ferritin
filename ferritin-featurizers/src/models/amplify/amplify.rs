@@ -219,75 +219,75 @@ impl AMPLIFY {
         unimplemented!()
     }
 
-    // pub fn forward(
-    //     &self,
-    //     src: &Tensor,
-    //     pad_mask: Option<&Tensor>,
-    //     output_hidden_states: bool,
-    //     output_attentions: bool,
-    // ) -> Result<ModelOutput> {
-    //     let mut hidden_states = vec![];
-    //     let mut attentions = vec![];
+    pub fn forward(
+        &self,
+        src: &Tensor,
+        pad_mask: Option<&Tensor>,
+        output_hidden_states: bool,
+        output_attentions: bool,
+    ) -> Result<ModelOutput> {
+        let mut hidden_states = vec![];
+        let mut attentions = vec![];
 
-    //     // Process attention mask if provided
-    //     let attention_mask = if let Some(mask) = pad_mask {
-    //         if !mask.all_close(&mask.zeros_like()?, 1e-6, 1e-6)? {
-    //             Some(mask.unsqueeze(1)?.unsqueeze(1)?.expand((
-    //                 mask.dim(0)?,
-    //                 self.config.num_attention_heads,
-    //                 mask.dim(-1)?,
-    //                 mask.dim(-1)?,
-    //             ))?)
-    //         } else {
-    //             None
-    //         }
-    //     } else {
-    //         None
-    //     };
+        // Process attention mask if provided
+        let attention_mask = if let Some(mask) = pad_mask {
+            if !mask.all_close(&mask.zeros_like()?, 1e-6, 1e-6)? {
+                Some(mask.unsqueeze(1)?.unsqueeze(1)?.expand((
+                    mask.dim(0)?,
+                    self.config.num_attention_heads,
+                    mask.dim(-1)?,
+                    mask.dim(-1)?,
+                ))?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
-    //     // Get appropriate length of freqs_cis
-    //     let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
+        // Get appropriate length of freqs_cis
+        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
 
-    //     // Embedding layer
-    //     let mut x = self.encoder.forward(src)?;
+        // Embedding layer
+        let mut x = self.encoder.forward(src)?;
 
-    //     // Transform through encoder blocks
-    //     for layer in self.transformer_encoder.iter() {
-    //         let (new_x, attn) =
-    //             layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
-    //         x = new_x;
+        // Transform through encoder blocks
+        for layer in self.transformer_encoder.iter() {
+            let (new_x, attn) =
+                layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
+            x = new_x;
 
-    //         if output_hidden_states {
-    //             hidden_states.push(x.clone()?);
-    //         }
-    //         if output_attentions {
-    //             if let Some(attn) = attn {
-    //                 attentions.push(attn);
-    //             }
-    //         }
-    //     }
+            if output_hidden_states {
+                hidden_states.push(x.clone()?);
+            }
+            if output_attentions {
+                if let Some(attn) = attn {
+                    attentions.push(attn);
+                }
+            }
+        }
 
-    //     // Final layer norm and decoder
-    //     let logits = if self.config.layer_norm_before_last_layer {
-    //         self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
-    //     } else {
-    //         self.decoder.forward(&x)?
-    //     };
+        // Final layer norm and decoder
+        let logits = if self.config.layer_norm_before_last_layer {
+            self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
+        } else {
+            self.decoder.forward(&x)?
+        };
 
-    //     Ok(ModelOutput {
-    //         logits,
-    //         hidden_states: if output_hidden_states {
-    //             Some(hidden_states)
-    //         } else {
-    //             None
-    //         },
-    //         attentions: if output_attentions {
-    //             Some(attentions)
-    //         } else {
-    //             None
-    //         },
-    //     })
-    // }
+        Ok(ModelOutput {
+            logits,
+            hidden_states: if output_hidden_states {
+                Some(hidden_states)
+            } else {
+                None
+            },
+            attentions: if output_attentions {
+                Some(attentions)
+            } else {
+                None
+            },
+        })
+    }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
         // process the transformer section
