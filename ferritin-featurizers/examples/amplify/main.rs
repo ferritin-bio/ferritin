@@ -42,9 +42,9 @@ fn main() -> Result<()> {
         VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
     };
 
-    // Pull a specific Tensor out of the variable builder...
-    let Tensor1 = vb.get(&[3424, 640], "transformer_encoder.0.ffn.w12.weight")?;
-    println!("Example Tensor Shape: {:?}", Tensor1.shape());
+    // Pull a specific Tensor out of the variable builder.....
+    let _Tensor1 = vb.get(&[3424, 640], "transformer_encoder.0.ffn.w12.weight")?;
+    println!("Example Tensor Shape: {:?}", _Tensor1.shape());
 
     // Load the Weights into the Model
     let config = AMPLIFYConfig::default().amp_120m();
@@ -61,6 +61,11 @@ fn main() -> Result<()> {
         "V".to_string(),
         "A".to_string(),
         "L".to_string(),
+        "<pad>".to_string(),
+        "<unk>".to_string(),
+        "<mask>".to_string(),
+        "<bos>".to_string(),
+        "<eos>".to_string(),
     ];
 
     let encoded = protein_tokenizer.encode(&tokens, Some(10), true, true)?;
