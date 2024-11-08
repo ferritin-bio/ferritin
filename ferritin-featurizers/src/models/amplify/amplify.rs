@@ -10,6 +10,7 @@
 
 use super::rotary::apply_rotary_emb;
 use candle_core::{DType, Device, Error, Module, Result, Tensor, D};
+use candle_nn::ops::softmax;
 use candle_nn::{
     embedding, linear, linear_no_bias, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm,
     VarBuilder,
@@ -256,7 +257,7 @@ impl EncoderBlock {
             if let Some(mask) = pad_mask {
                 attn_weights = attn_weights.add(mask)?;
             }
-            Some(attn_weights.softmax(D::Minus1)?)
+            Some(softmax(&attn_weights, D::Minus1)?)
         } else {
             None
         };
