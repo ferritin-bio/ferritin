@@ -7,4 +7,4 @@ license.workspace = true
 description.workspace = true
 
 [dependencies]
-tempfile = "3.13.0"
+tempfile = "3.14.0"

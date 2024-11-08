@@ -25,6 +25,6 @@ tokenizers = "0.20.3"
 [dev-dependencies]
 ferritin-test-data = { path = "../ferritin-test-data" }
 assert_cmd = "2.0.16"
-tempfile = "3.13.0"
+tempfile = "3.14.0"
 hf-hub = "0.3.2"
 candle-examples = "0.7.2"
