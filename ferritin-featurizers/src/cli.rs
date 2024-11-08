@@ -67,13 +67,13 @@ enum Commands {
 
         // Amino Acid Biasing
         #[arg(long)]
-        bias_AA: Option<String>,
+        bias_aa: Option<String>,
         #[arg(long)]
-        bias_AA_per_residue: Option<String>,
+        bias_aa_per_residue: Option<String>,
         #[arg(long)]
-        omit_AA: Option<String>,
+        omit_aa: Option<String>,
         #[arg(long)]
-        omit_AA_per_residue: Option<String>,
+        omit_aa_per_residue: Option<String>,
 
         // Multi-PDB Related
         #[arg(long)]
@@ -83,9 +83,9 @@ enum Commands {
         #[arg(long)]
         redesigned_residues_multi: Option<String>,
         #[arg(long)]
-        omit_AA_per_residue_multi: Option<String>,
+        omit_aa_per_residue_multi: Option<String>,
         #[arg(long)]
-        bias_AA_per_residue_multi: Option<String>,
+        bias_aa_per_residue_multi: Option<String>,
 
         // LigandMPNN Specific
         #[arg(long)]
@@ -131,15 +131,15 @@ impl Cli {
                 symmetry_weights,
                 chains_to_design,
                 parse_these_chains_only,
-                bias_AA,
-                bias_AA_per_residue,
-                omit_AA,
-                omit_AA_per_residue,
+                bias_aa,
+                bias_aa_per_residue,
+                omit_aa,
+                omit_aa_per_residue,
                 pdb_path_multi,
                 fixed_residues_multi,
                 redesigned_residues_multi,
-                omit_AA_per_residue_multi,
-                bias_AA_per_residue_multi,
+                omit_aa_per_residue_multi,
+                bias_aa_per_residue_multi,
                 checkpoint_ligand_mpnn,
                 ligand_mpnn_use_atom_context,
                 ligand_mpnn_use_side_chain_context,
@@ -170,10 +170,10 @@ impl Cli {
                 };
 
                 let aa_bias = AABiasConfig {
-                    bias_AA,
-                    bias_AA_per_residue,
-                    omit_AA,
-                    omit_AA_per_residue,
+                    bias_aa,
+                    bias_aa_per_residue,
+                    omit_aa,
+                    omit_aa_per_residue,
                 };
 
                 let lig_mpnn_specific = LigandMPNNConfig {
@@ -193,8 +193,8 @@ impl Cli {
                     pdb_path_multi,
                     fixed_residues_multi,
                     redesigned_residues_multi,
-                    omit_AA_per_residue_multi,
-                    bias_AA_per_residue_multi,
+                    omit_aa_per_residue_multi,
+                    bias_aa_per_residue_multi,
                 };
 
                 commands::run::execute(
