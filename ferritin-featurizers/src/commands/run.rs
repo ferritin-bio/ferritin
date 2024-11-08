@@ -1,12 +1,7 @@
 use crate::models::ligandmpnn::configs::{
-    AABiasConfig, LigandMPNNConfig, MPNNExecConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig,
-    ProteinMPNNConfig, ResidueControl, RunConfig,
+    AABiasConfig, LigandMPNNConfig, MPNNExecConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig, ResidueControl, RunConfig,
 };
-use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
-use crate::models::ligandmpnn::model::{ProteinMPNN, ScoreOutput};
-use candle_core::{DType, Device};
-use candle_nn::{Module, VarBuilder};
-use ferritin_core::AtomCollection;
+use candle_core::Device;
 
 pub fn execute(
     seed: i32,

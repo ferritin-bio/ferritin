@@ -10,7 +10,7 @@
 //! - Evolutionary features from MSA profiles
 
 use super::utilities::{
-    aa1to_int, aa3to1, calculate_cb, cat_neighbors_nodes, create_backbone_mask_37, AAAtom,
+    aa1to_int, aa3to1, calculate_cb, AAAtom,
 };
 use candle_core::{DType, Device, Result, Tensor};
 use ferritin_core::{is_amino_acid, AtomCollection};

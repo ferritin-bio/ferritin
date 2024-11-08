@@ -1,10 +1,6 @@
-use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
 use candle_core::{DType, Device, IndexOp, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
-use ferritin_core::AtomCollection;
-use pdbtbx::Element;
-use std::collections::HashMap;
-use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
+use strum::{Display, EnumIter, EnumString};
 
 #[rustfmt::skip]
 // todo: better utility library
