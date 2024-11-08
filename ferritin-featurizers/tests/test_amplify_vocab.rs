@@ -14,8 +14,6 @@ fn test_amplify_tokens() -> Result<(), Box<dyn std::error::Error>> {
     let tokenizer = repo.get("tokenizer.json").unwrap();
     let protein_tokenizer = ProteinTokenizer::new(tokenizer).unwrap();
 
-    assert_eq!(protein_tokenizer.len(), 27);
-
     let tokens = vec![
         "M".to_string(),
         "E".to_string(),
@@ -30,7 +28,7 @@ fn test_amplify_tokens() -> Result<(), Box<dyn std::error::Error>> {
         "<eos>".to_string(),
     ];
 
-    let encoded = protein_tokenizer.encode(&tokens, Some(10), true, true)?;
+    let encoded = protein_tokenizer.encode(&tokens, Some(20), true, true)?;
     let decoded = protein_tokenizer.decode(
         &encoded
             .to_vec1::<i64>()?
@@ -39,8 +37,11 @@ fn test_amplify_tokens() -> Result<(), Box<dyn std::error::Error>> {
             .collect::<Vec<u32>>(),
         true,
     )?;
-    println!("Encoded: {:?}", encoded);
-    println!("Decoded: {}", decoded);
+
+    // Check vocab size
+    assert_eq!(protein_tokenizer.len(), 27);
+    // Check roundtrip decoding
+    assert_eq!(&decoded, "M E T V A L");
 
     Ok(())
 }
