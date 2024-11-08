@@ -8,14 +8,11 @@
 //! here is an example of paramatereizable netowrk creation:
 //! https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/resnet.rs
 //!
-use super::configs::{ModelTypes, ProteinMPNNConfig};
-use super::featurizer::ProteinFeatures;
+use super::configs::ProteinMPNNConfig;
 use super::proteinfeatures::ProteinFeaturesModel;
-use super::utilities::{cat_neighbors_nodes, gather_nodes};
-use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
-use candle_nn::encoding::one_hot;
-use candle_nn::{layer_norm, linear, ops, Dropout, Linear, VarBuilder};
-use candle_transformers::generation::LogitsProcessor;
+use super::utilities::cat_neighbors_nodes;
+use candle_core::{Device, Module, Result, Tensor, D};
+use candle_nn::{layer_norm, linear, Dropout, Linear, VarBuilder};
 
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]

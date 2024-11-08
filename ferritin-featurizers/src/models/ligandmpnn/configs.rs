@@ -93,10 +93,10 @@ pub enum ModelTypes {
 #[derive(Debug)]
 /// Amino Acid Biasing
 pub struct AABiasConfig {
-    pub bias_AA: Option<String>,
-    pub bias_AA_per_residue: Option<String>,
-    pub omit_AA: Option<String>,
-    pub omit_AA_per_residue: Option<String>,
+    pub bias_aa: Option<String>,
+    pub bias_aa_per_residue: Option<String>,
+    pub omit_aa: Option<String>,
+    pub omit_aa_per_residue: Option<String>,
 }
 
 /// LigandMPNN Specific
@@ -119,8 +119,8 @@ pub struct MultiPDBConfig {
     pub pdb_path_multi: Option<String>,
     pub fixed_residues_multi: Option<String>,
     pub redesigned_residues_multi: Option<String>,
-    pub omit_AA_per_residue_multi: Option<String>,
-    pub bias_AA_per_residue_multi: Option<String>,
+    pub omit_aa_per_residue_multi: Option<String>,
+    pub bias_aa_per_residue_multi: Option<String>,
 }
 #[derive(Clone, Debug)]
 pub struct ProteinMPNNConfig {
