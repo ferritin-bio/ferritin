@@ -246,14 +246,17 @@ impl EncoderBlock {
         } else {
             0.0
         };
+
+        // from xformers.ops import SwiGLU, memory_efficient_attention
         let attn = memory_efficient_attention(&xq, &xk, &xv, pad_mask, dropout_prob)?;
+
         // Optional attention matrix computation for output
         let _attn = if output_attentions {
             let xq_t = xq.permute((0, 2, 1, 3))?;
             let xk_t = xk.permute((0, 2, 3, 1))?;
             let mut attn_weights = xq_t.matmul(&xk_t)?;
             let scale = (xq.dim(D::Minus1)? as f64).sqrt();
-            attn_weights = attn_weights.div_scalar(scale)?;
+            attn_weights = (attn_weights / scale)?;
             if let Some(mask) = pad_mask {
                 attn_weights = attn_weights.add(mask)?;
             }
@@ -269,7 +272,7 @@ impl EncoderBlock {
             self.config.num_attention_heads * self.d_head,
         ))?;
         let output = self.wo.forward(&output)?;
-        let output = self.resid_dropout.forward(&output, false);
+        let output = self.resid_dropout.forward(&output, false)?;
         Ok((output, _attn))
         // unimplemented!()
     }
@@ -321,6 +324,7 @@ pub struct AMPLIFY {
     layer_norm_2: RmsNorm,
     decoder: Linear,
     freqs_cis: Tensor,
+    config: AMPLIFYConfig,
 }
 
 impl AMPLIFY {
@@ -432,6 +436,7 @@ impl AMPLIFY {
             layer_norm_2,
             decoder,
             freqs_cis,
+            config: cfg.clone(),
         })
     }
 }

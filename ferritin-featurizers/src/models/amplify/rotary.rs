@@ -1,31 +1,28 @@
-use candle_core::{DType, Device, Result, Tensor};
+use candle_core::{DType, Device, Result, Tensor, D};
 use std::f64::consts::PI;
 
 // Example1: https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/starcoder2.rs#L22
 // Example 2: phi3: https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/phi3.rs#L32
 //
 pub fn precompute_freqs_cis(dim: usize, end: usize, theta: f64) -> Result<Tensor> {
-    let device = Device::Cpu; // Or pass device as parameter
-
-    // Calculate frequencies
-    let mut freqs: Vec<f64> = (0..dim / 2)
-        .map(|i| 1.0 / (theta.powf((2 * i) as f64 / dim as f64)))
-        .collect();
-    let freqs = Tensor::from_vec(freqs, (dim / 2,), &device)?;
-
+    let device = Device::Cpu;
+    let freqs = (0..dim / 2)
+        .into_iter()
+        .map(|i| 1.0 / (theta.powf((2 * i) as f64 / dim as f64)));
+    let freqs = Tensor::from_iter(freqs, &device)?;
     // Create time steps
-    let t: Vec<f64> = (0..end).map(|x| x as f64).collect();
-    let t = Tensor::from_vec(t, (end,), &device)?;
+    let t = Tensor::from_iter((0..end).map(|x| x as f64), &device)?;
 
     // Compute outer product
-    let freqs = t.outer(&freqs)?;
+    // let freqs = t.outer(&freqs)?;
+    let freqs = t.unsqueeze(1)?.matmul(&freqs.unsqueeze(0)?)?;
 
     // Create complex numbers using cos and sin
     let cos = freqs.cos()?;
     let sin = freqs.sin()?;
 
     // Stack cos and sin to represent complex numbers
-    Tensor::stack(&[cos, sin], -1)
+    Tensor::stack(&[cos, sin], D::Minus1)
 }
 
 pub fn reshape_for_broadcast(freqs_cis: &Tensor, x: &Tensor) -> Result<Tensor> {
