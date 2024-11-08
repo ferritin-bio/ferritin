@@ -67,10 +67,11 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
 
     // Apply rotation
     // For complex multiplication (a + bi)(c + di) = (ac - bd) + (ad + bc)i
-    let xq_real = &xq_reshaped.select(-1, 0)?;
-    let xq_imag = &xq_reshaped.select(-1, 1)?;
-    let xk_real = &xk_reshaped.select(-1, 0)?;
-    let xk_imag = &xk_reshaped.select(-1, 1)?;
+    let last_dim = xq_reshaped.dims().len() - 1;
+    let xq_real = &xq_reshaped.narrow(last_dim, 0, 1)?; // or .get(last_dim, 0)?
+    let xq_imag = &xq_reshaped.narrow(last_dim, 1, 1)?; // or .get(last_dim, 1)?
+    let xk_real = &xk_reshaped.narrow(last_dim, 0, 1)?; // or .get(last_dim, 0)?
+    let xk_imag = &xk_reshaped.narrow(last_dim, 1, 1)?; // or .get(last_dim, 1)?
 
     // Compute rotated values
     let xq_out_real = xq_real.mul(&cos)?.sub(&xq_imag.mul(&sin)?)?;
@@ -79,8 +80,8 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
     let xk_out_imag = xk_real.mul(&sin)?.add(&xk_imag.mul(&cos)?)?;
 
     // Stack real and imaginary parts and reshape back
-    let xq_out = Tensor::stack(&[xq_out_real, xq_out_imag], -1)?.reshape(xq_shape)?;
-    let xk_out = Tensor::stack(&[xk_out_real, xk_out_imag], -1)?.reshape(xk_shape)?;
+    let xq_out = Tensor::stack(&[xq_out_real, xq_out_imag], D::Minus1)?.reshape(xq_shape)?;
+    let xk_out = Tensor::stack(&[xk_out_real, xk_out_imag], D::Minus1)?.reshape(xk.dims())?;
 
     Ok((xq_out, xk_out))
 }
