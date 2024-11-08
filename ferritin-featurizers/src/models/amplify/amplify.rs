@@ -155,7 +155,7 @@ impl EncoderBlock {
         let normed = self.ffn_norm.forward(&x)?;
         // ffn.forward needs to do teh swiglu stesp with w12 and w3
         let ffn_output = self.ffn_forward(&normed)?;
-        let ff = self.ffn_dropout.forward(&ffn_output, false); // Todo: pass in the Inference/Training bit
+        let ff = self.ffn_dropout.forward(&ffn_output, false)?; // Todo: pass in the Inference/Training bit
         let x = x.add(&ff)?;
         Ok((x, contacts))
         // unimplemented!()
@@ -163,7 +163,7 @@ impl EncoderBlock {
 
     // process the FFN BLock using swiglu
     //
-    fn ffn_forward(&self, x: &Tensor) -> Tensor {
+    fn ffn_forward(&self, x: &Tensor) -> Result<Tensor, Error> {
         // Swiglu
         //
         // Todo: see if the apply or add can be done differently in idiomatic Candle
@@ -223,23 +223,25 @@ impl EncoderBlock {
         //     return op(x, w1w2, b1b2, w3, b3).reshape([*batch_shape, -1])
 
         // Store original batch dimensions
-        let batch_shape = x.size()[..x.dim() - 1].to_vec();
+        let dims = x.dims();
+        let batch_shape = &dims[..dims.len() - 1];
         // Reshape input to 2D: (batch_size, input_dim)
-        let x_flat = x.reshape(&[-1, x.size()[x.dim() - 1]]);
+        let x_flat = x.reshape((-1, dims[dims.len() - 1]))?;
         // Apply packed W1W2 linear transformation
-        let w12_out = self.w12.forward(&x_flat);
+        let w12_out = self.w12.forward(&x_flat)?;
         // Split the output into two halves (for SwiGLU activation)
-        let chunks = w12_out.chunk(2, -1);
+        let chunks = w12_out.chunk(2, 1)?;
         let x1 = &chunks[0];
         let x2 = &chunks[1];
+
         // Apply SwiGLU: silu(x1) * x2
-        let hidden = x1.silu() * x2;
+        let hidden = x1.silu()?.mul(x2)?;
         // Final linear transformation
-        let output = self.w3.forward(&hidden);
+        let output = self.w3.forward(&hidden)?;
         // Reshape back to original batch dimensions
-        let mut new_shape = batch_shape;
-        new_shape.push(output.size()[output.dim() - 1]);
-        output.reshape(&new_shape[..])
+        let mut new_shape = batch_shape.to_vec();
+        new_shape.push(output.dim(1)?);
+        output.reshape(new_shape)
     }
 
     fn attention_block(
