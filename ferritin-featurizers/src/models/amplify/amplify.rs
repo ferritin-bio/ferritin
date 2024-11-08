@@ -8,7 +8,7 @@
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
 
-use candle_core::{DType, Device, Result, Tensor, D};
+use candle_core::{DType, Device, Module, Result, Tensor, D};
 use candle_nn::{
     embedding, linear, linear_no_bias, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm,
     VarBuilder,
@@ -89,25 +89,22 @@ impl AMPLIFYConfig {
 
 /// Amplify EncoderBlock implementation
 ///
-// example 01: T5: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331
+/// example 01: T5: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331
 //
-// Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
-// ffn: FeedForward,
-// // Clean Implementation
-// Example: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340
-// SwiGLu Implementation:  https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462
-//
+/// Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
+/// Example: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340
+/// SwiGLu Implementation:  https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462
 pub struct EncoderBlock {
     q: Linear,
     k: Linear,
     v: Linear,
     wo: Linear,
+    resid_dropout: Dropout,
     w12: Linear,
     w3: Linear,
-    attention_norm: RmsNorm, // <----- Check These
     ffn_norm: RmsNorm,
-    // resid_dropout: Dropout,
-    // ffn_dropout: Dropout,
+    attention_norm: RmsNorm,
+    ffn_dropout: Dropout,
 }
 
 impl EncoderBlock {
@@ -132,12 +129,12 @@ impl EncoderBlock {
             k,
             v,
             wo,
+            resid_dropout: Dropout::new(config.dropout_prob as f32),
             w12,
             w3,
             attention_norm,
             ffn_norm,
-            // ffn_dropout: Dropout::new(config.dropout_prob),
-            // resid_dropout: Dropout::new(config.dropout_prob),
+            ffn_dropout: Dropout::new(config.dropout_prob as f32),
         })
     }
 
@@ -159,6 +156,11 @@ impl EncoderBlock {
         unimplemented!()
     }
 
+    fn ffn_block(&self) {
+        // def _ff_block(self, x: torch.Tensor):
+        //     return self.ffn_dropout(self.ffn(x))
+        unimplemented!()
+    }
     fn attention_block(
         &self,
         x: &Tensor,
@@ -166,8 +168,35 @@ impl EncoderBlock {
         freqs_cis: &Tensor,
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
+        // def _att_block(self, x: torch.Tensor, pad_mask: torch.Tensor, freqs_cis: torch.Tensor, output_attentions: bool):
+        //         batch_size, seq_len, _ = x.shape
+        //         xq, xk, xv = self.q(x), self.k(x), self.v(x)
+
+        //         # Reshape for rotary embeddings
+        //         xq = xq.view(batch_size, seq_len, self.config.num_attention_heads, self.d_head)
+        //         xk = xk.view(batch_size, seq_len, self.config.num_attention_heads, self.d_head)
+        //         xv = xv.view(batch_size, seq_len, self.config.num_attention_heads, self.d_head)
+        //         xq, xk = apply_rotary_emb(xq, xk, freqs_cis)
+
+        //         attn = memory_efficient_attention(
+        //             query=xq,
+        //             key=xk,
+        //             value=xv,
+        //             attn_bias=pad_mask,
+        //             p=self.config.dropout_prob if self.training else 0,
+        //         )
+
+        //         _attn = None
+        //         if output_attentions:
+        //             _attn = xq.permute(0, 2, 1, 3) @ xk.permute(0, 2, 3, 1) / (xq.size(-1) ** 0.5)
+        //             if pad_mask is not None:
+        //                 _attn = _attn + pad_mask
+        //             _attn = _attn.softmax(-1)
+        //         return self.resid_dropout(self.wo(attn.view(batch_size, seq_len, self.config.num_attention_heads * self.d_head))), _attn
+
         unimplemented!()
     }
+
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
         // To keep the number of parameters and the amount of computation constant, we reduce the number of
         // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
@@ -190,14 +219,12 @@ impl EncoderBlock {
             k,
             v,
             wo,
+            resid_dropout: Dropout::new(cfg.dropout_prob as f32),
             w12,
             w3,
             attention_norm,
             ffn_norm,
-            // resid_dropout,
-            // ffn_dropout,
-        })
-    }
+            ffn_dropout: Dropout::new(cfg.dropout_prob as f32),
 }
 
 /// The AMPLIFY model
@@ -220,27 +247,23 @@ impl AMPLIFY {
     }
 
     fn process_attention_mask(
+        &self,
         pad_mask: Option<&Tensor>,
         num_attention_heads: i64,
     ) -> Result<Option<Tensor>> {
         let Some(mask) = pad_mask else {
             return Ok(None);
         };
-
-        // If mask is all zeros (within tolerance), return None
-        if mask.all_close(&mask.zeros_like()?, 1e-6, 1e-6)? {
+        if mask.sum_all()?.to_scalar::<f32>()? == 0.0 {
             return Ok(None);
         }
-
-        // Otherwise, prepare the attention mask
-        let batch_size = mask.dim(0)?;
-        let seq_length = mask.dim(D::Minus1)?;
-
+        let batch_size = mask.dim(0)? as usize;
+        let seq_length = mask.dim(D::Minus1)? as usize;
+        let num_heads = num_attention_heads as usize;
         let expanded_mask = mask
             .unsqueeze(1)? // Add head dimension
             .unsqueeze(1)? // Add query dimension
-            .expand((batch_size, num_attention_heads, seq_length, seq_length))?;
-
+            .expand((batch_size, num_heads, seq_length, seq_length))?;
         Ok(Some(expanded_mask))
     }
 
@@ -255,7 +278,8 @@ impl AMPLIFY {
         let mut attentions = vec![];
 
         // Process attention mask if provided
-        let attention_mask = self.process_attention_mask(pad_mask, self.transformer_encoder.len());
+        let attention_mask =
+            self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64);
 
         // Get appropriate length of freqs_cis
         let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
@@ -270,7 +294,7 @@ impl AMPLIFY {
             x = new_x;
 
             if output_hidden_states {
-                hidden_states.push(x.clone()?);
+                hidden_states.push(x.clone());
             }
             if output_attentions {
                 if let Some(attn) = attn {
