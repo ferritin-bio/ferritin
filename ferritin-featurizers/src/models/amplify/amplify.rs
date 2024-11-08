@@ -145,22 +145,27 @@ impl EncoderBlock {
         freqs_cis: &Tensor,
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
-        // let normed = self.attention_norm.forward(x)?;
-        // let (attn, contacts) =
-        //     self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
-        // let x = x.add(&attn)?;
-        // let normed = self.ffn_norm.forward(&x)?;
-        // let ff = self.ff_block(&normed)?;
-        // let x = x.add(&ff)?;
-        // Ok((x, contacts))
-        unimplemented!()
+        let normed = self.attention_norm.forward(x)?;
+
+        // Todo: confirm the attention block
+        let (attn, contacts) =
+            self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
+
+        // add encoded bits and the self-attention...
+        let x = x.add(&attn)?;
+
+        // FFN add ...
+        let normed = self.ffn_norm.forward(&x)?;
+
+        let ffn_output = self.ffn.forward(&normed)?;
+        let ff = self.ffn_dropout.forward(&ffn_output)?;
+
+        // Todo: see if the apply or add can be done differently in idiomatic Candle
+        let x = x.add(&ff)?;
+        Ok((x, contacts))
     }
 
-    fn ffn_block(&self) {
-        // def _ff_block(self, x: torch.Tensor):
-        //     return self.ffn_dropout(self.ffn(x))
-        unimplemented!()
-    }
+
     fn attention_block(
         &self,
         x: &Tensor,
