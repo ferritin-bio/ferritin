@@ -6,8 +6,8 @@
 //!
 use super::info::AtomInfo;
 use crate::info::constants::{is_amino_acid, is_carbohydrate, is_nucleotide};
-use crate::selection::AtomView;
-use crate::{AtomCollection, Selection};
+use crate::selection::{AtomView, Selection};
+use crate::AtomCollection;
 use pdbtbx::Element;
 
 pub struct ResidueAtoms<'a> {

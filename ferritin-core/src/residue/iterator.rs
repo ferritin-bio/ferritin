@@ -6,8 +6,8 @@
 //! ```
 
 use super::atoms::ResidueAtoms;
+use crate::selection::Selection;
 use crate::AtomCollection;
-use crate::Selection;
 use std::iter::FromIterator;
 
 // Rest of the iterator implementation remains the same

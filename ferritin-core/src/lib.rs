@@ -7,5 +7,5 @@ mod selection;
 
 pub use atomcollection::AtomCollection;
 pub use bonds::{Bond, BondOrder};
-pub use pdbtbx::Element;
-pub use selection::Selection;
+// pub use pdbtbx::Element;
+// pub use selection::Selection;

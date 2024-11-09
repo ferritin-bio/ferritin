@@ -1,5 +1,10 @@
+//! An AtomCollection is primarily a group of atoms with some atomic properties like coordinates, element type
+//! and residue information. Additional data like bonds can be added post-instantiation.
+//! The data for residues within this collection can be iterated through. Other useful queries like inter-atomic
+//! distances are supported.
+
 use super::bonds::{Bond, BondOrder};
-use super::info::constants::{get_bonds_canonical20, is_amino_acid};
+use super::info::constants::get_bonds_canonical20;
 use crate::residue::{ResidueAtoms, ResidueIter};
 use crate::selection::{AtomSelector, AtomView, Selection};
 use itertools::{izip, Itertools};
