@@ -1,5 +1,4 @@
-// #![warn(missing_docs)]
-//! # PyMOL PSE Parser
+//! # ferritin-pymol
 //!
 //! A Rust crate for working with PyMOL PSE (PyMOL Session) files.
 //!
@@ -18,18 +17,6 @@
 //! psedata.to_disk_full("my_output_directory");
 //! ```
 //!
-//! ## Modules
-//!
-//! - `molviewspec`: Handles molecular viewing specifications
-//! - `pymolparsing`: Core parsing functionality for PSE files
-//!
 pub mod pymolparsing;
-
 pub use self::pymolparsing::parsing::PyObjectMolecule;
 pub use self::pymolparsing::psedata::PSEData;
-
-/// Prelude module for commonly used items
-pub mod prelude {
-    pub use crate::pymolparsing::parsing::PyObjectMolecule;
-    pub use crate::pymolparsing::psedata::PSEData;
-}

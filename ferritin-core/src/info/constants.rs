@@ -20,7 +20,7 @@
 use lazy_static::lazy_static;
 use std::collections::{HashMap, HashSet};
 #[rustfmt::skip]
-pub fn default_distance_range(a: &str, b: &str) -> (f32, f32) {
+pub(crate) fn default_distance_range(a: &str, b: &str) -> (f32, f32) {
     match (a, b) {
         // https://github.com/biotite-dev/biotite/blob/main/src/biotite/structure/bonds.pyx#L1341C1-L1389C1
         //               # Taken from Allen et al.
@@ -211,7 +211,7 @@ lazy_static! {
 /// This is the bond information for the 10 canonical
 /// AAs.  Data were obtained from the [CCD](https://www.wwpdb.org/data/ccd).
 ///
-pub fn get_bonds_canonical20(
+pub(crate) fn get_bonds_canonical20(
 ) -> &'static HashMap<&'static str, Vec<(&'static str, &'static str, i32)>> {
     &AA_BONDS
 }
@@ -225,15 +225,15 @@ lazy_static! {
         include_str!("ccddata/nucleotides.txt").lines().collect();
 }
 
-pub fn is_amino_acid(symbol: &str) -> bool {
+pub(crate) fn is_amino_acid(symbol: &str) -> bool {
     AMINO_ACIDS.contains(symbol)
 }
 
-pub fn is_carbohydrate(symbol: &str) -> bool {
+pub(crate) fn is_carbohydrate(symbol: &str) -> bool {
     CARBOHYDRATES.contains(symbol)
 }
 
-pub fn is_nucleotide(symbol: &str) -> bool {
+pub(crate) fn is_nucleotide(symbol: &str) -> bool {
     NUCLEOTIDES.contains(symbol)
 }
 

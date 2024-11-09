@@ -14,7 +14,7 @@
 //!
 
 use super::selection::Selection;
-use crate::core::AtomCollection;
+use crate::AtomCollection;
 use pdbtbx::Element;
 
 pub struct AtomView<'a> {

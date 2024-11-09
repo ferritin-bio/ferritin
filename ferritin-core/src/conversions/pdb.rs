@@ -1,4 +1,4 @@
-use crate::core::AtomCollection;
+use crate::AtomCollection;
 use itertools::Itertools;
 use pdbtbx::{Element, PDB};
 
@@ -61,7 +61,7 @@ impl From<&PDB> for AtomCollection {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::AtomCollection;
+    use crate::AtomCollection;
     use ferritin_test_data::TestFile;
     use itertools::Itertools;
     use pdbtbx::{self, Element};

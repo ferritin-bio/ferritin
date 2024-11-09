@@ -1,12 +1,24 @@
+//! AtomCollection
+//!
+//! An AtomCollection is primarily a group of atoms with some atomic properties like coordinates, element type
+//! and residue information. Additional data like bonds can be added post-instantiation.
+//! The data for residues within this collection can be iterated through. Other useful queries like inter-atomic
+//! distances are supported.
+
 use super::bonds::{Bond, BondOrder};
-use super::info::constants::{
-    get_bonds_canonical20, is_amino_acid, is_carbohydrate, is_nucleotide,
-};
-use crate::core::residue::{ResidueAtoms, ResidueIter};
-use crate::core::selection::{AtomSelector, AtomView, Selection};
+use super::info::constants::get_bonds_canonical20;
+use crate::residue::{ResidueAtoms, ResidueIter};
+use crate::selection::{AtomSelector, AtomView, Selection};
 use itertools::{izip, Itertools};
 use pdbtbx::Element;
 
+/// Atom Collection
+///
+/// The core data structure of ferritin-core.
+///
+/// it strives to be simple, high perfomance, and extensible using
+/// traits.
+///
 pub struct AtomCollection {
     size: usize,
     coords: Vec<[f32; 3]>,
@@ -212,7 +224,7 @@ impl AtomCollection {
     }
     pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueAtoms> {
         self.iter_residues_all()
-            .filter(|residue| is_amino_acid(&residue.res_name))
+            .filter(|residue| residue.is_amino_acid())
     }
     pub fn select(&self) -> AtomSelector {
         AtomSelector::new(self)

@@ -1,3 +1,7 @@
+//! Defining CLI interface.
+//!
+//! ** work in progress **
+//!
 use super::commands;
 use crate::models::ligandmpnn::configs::{
     AABiasConfig, LigandMPNNConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig, ResidueControl,
@@ -197,7 +201,7 @@ impl Cli {
                     bias_aa_per_residue_multi,
                 };
 
-                commands::run::execute(
+                let _ = commands::run::execute(
                     seed,
                     pdb_path,
                     out_folder,

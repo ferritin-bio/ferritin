@@ -1,3 +1,5 @@
+//! ferretin-test-data
+//!
 //! A module to provide test files embedded in the crate for use in testing.
 //! Example binary data is included in the crate distribution for reference files.
 //!

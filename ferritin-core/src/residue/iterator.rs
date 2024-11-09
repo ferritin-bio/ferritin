@@ -6,8 +6,8 @@
 //! ```
 
 use super::atoms::ResidueAtoms;
-use crate::core::AtomCollection;
-use crate::core::Selection;
+use crate::selection::Selection;
+use crate::AtomCollection;
 use std::iter::FromIterator;
 
 // Rest of the iterator implementation remains the same
@@ -86,8 +86,8 @@ impl<'a> FromIterator<ResidueAtoms<'a>> for AtomCollection {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::core::info::constants::is_amino_acid;
+    use crate::info::constants::is_amino_acid;
+    use crate::AtomCollection;
     use ferritin_test_data::TestFile;
 
     #[test]

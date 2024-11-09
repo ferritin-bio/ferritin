@@ -1,5 +1,10 @@
-// https://github.com/jordisr/cellscape
+//! ferritin-cellscape
+//!
+//! This is a WIP crate that aims to mimic [Cellscape](https://github.com/jordisr/cellscape),
+//! a python package for making SVGs from PBDs. In this crate
+//! we aim to substitute [ferritin-core] as the backend.
+//!
 
-mod cellscape;
+pub mod cellscape;
 
-pub use cellscape::StructureFlatten;
+// pub use cellscape::StructureFlatten;

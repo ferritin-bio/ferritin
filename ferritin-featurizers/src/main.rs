@@ -1,3 +1,5 @@
+//! Entrypoint for CLI
+
 use clap::Parser;
 mod cli;
 mod commands;

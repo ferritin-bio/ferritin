@@ -9,11 +9,9 @@
 //! - Chemical features like hydrophobicity, charge
 //! - Evolutionary features from MSA profiles
 
-use super::utilities::{
-    aa1to_int, aa3to1, calculate_cb, AAAtom,
-};
+use super::utilities::{aa1to_int, aa3to1, calculate_cb, AAAtom};
 use candle_core::{DType, Device, Result, Tensor};
-use ferritin_core::{is_amino_acid, AtomCollection};
+use ferritin_core::AtomCollection;
 use itertools::MultiUnzip;
 use pdbtbx::Element;
 use std::collections::HashMap;
@@ -94,7 +92,7 @@ impl LMPNNFeatures for AtomCollection {
             // keep only the non-protein, non-water residues
             .filter(|residue| {
                 let res_name = &residue.res_name;
-                !is_amino_acid(res_name) && res_name != "HOH" && res_name != "WAT"
+                !residue.is_amino_acid() && res_name != "HOH" && res_name != "WAT"
             })
             // keep only the heavy atoms
             .flat_map(|residue| {

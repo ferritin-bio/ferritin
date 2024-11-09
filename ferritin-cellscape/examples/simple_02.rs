@@ -1,4 +1,4 @@
-use ferritin_cellscape::StructureFlatten;
+use ferritin_cellscape::cellscape::StructureFlatten;
 use ferritin_core::AtomCollection;
 use pdbtbx;
 use std::error::Error;
