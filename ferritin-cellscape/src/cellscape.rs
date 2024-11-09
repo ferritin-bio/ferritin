@@ -1,11 +1,17 @@
+//! Core Cellscape Namespace
+//!
+//!
+//! ** WORK IN PROGRESS **
+//!
 use ferritin_core::AtomCollection;
 use geo::{BooleanOps, Coord, LineString, MultiPolygon, Point, Polygon};
-
 use std::f64::consts::PI;
 use svg::node::element::Path;
 use svg::Document;
 
 // Traits -------------------------------------------------------------------------------------
+
+/// Flattens 3D atomic structures into a 2D SVG representation.
 pub trait StructureFlatten {
     fn flatten_structure(&self) -> Document;
 }
