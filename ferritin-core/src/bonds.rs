@@ -1,4 +1,7 @@
 /// Bond
+///
+/// Struct for creating Bonds of type [BondOrder]
+///
 #[derive(Debug, PartialEq)]
 pub struct Bond {
     atom1: i32,
@@ -26,8 +29,12 @@ impl Bond {
 #[repr(u8)]
 #[derive(Debug, PartialEq)]
 /// BondOrder:
-/// https://www.biotite-python.org/latest/apidoc/biotite.structure.BondType.html#biotite.structure.BondType
-/// see also: http://cdk.github.io/cdk/latest/docs/api/org/openscience/cdk/Bond.html
+///
+/// Enum for defining Bond orders.
+/// **Note: subject to change.**
+/// Needsmore research on which convention to follow.
+/// - [biotite](https://www.biotite-python.org/latest/apidoc/biotite.structure.BondType.html#biotite.structure.BondType)
+/// - see also [cdk](http://cdk.github.io/cdk/latest/docs/api/org/openscience/cdk/Bond.html)
 pub enum BondOrder {
     /// Used if the actual type is unknown
     Unset,

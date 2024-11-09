@@ -1,3 +1,5 @@
+//! AtomCollection
+//!
 //! An AtomCollection is primarily a group of atoms with some atomic properties like coordinates, element type
 //! and residue information. Additional data like bonds can be added post-instantiation.
 //! The data for residues within this collection can be iterated through. Other useful queries like inter-atomic
@@ -10,6 +12,13 @@ use crate::selection::{AtomSelector, AtomView, Selection};
 use itertools::{izip, Itertools};
 use pdbtbx::Element;
 
+/// Atom Collection
+///
+/// The core data structure of ferritin-core.
+///
+/// it strives to be simple, high perfomance, and extensible using
+/// traits.
+///
 pub struct AtomCollection {
     size: usize,
     coords: Vec<[f32; 3]>,
