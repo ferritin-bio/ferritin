@@ -86,7 +86,6 @@ impl<'a> FromIterator<ResidueAtoms<'a>> for AtomCollection {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::info::constants::is_amino_acid;
     use crate::AtomCollection;
     use ferritin_test_data::TestFile;

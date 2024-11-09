@@ -17,7 +17,7 @@
 //! ```
 use super::selection::Selection;
 use super::view::AtomView;
-use crate::core::AtomCollection;
+use crate::AtomCollection;
 use pdbtbx::Element;
 
 /// A structure for selecting atoms from an `AtomCollection` using various filtering criteria.

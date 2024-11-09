@@ -1,9 +1,7 @@
 use super::bonds::{Bond, BondOrder};
-use super::info::constants::{
-    get_bonds_canonical20, is_amino_acid, is_carbohydrate, is_nucleotide,
-};
-use crate::core::residue::{ResidueAtoms, ResidueIter};
-use crate::core::selection::{AtomSelector, AtomView, Selection};
+use super::info::constants::{get_bonds_canonical20, is_amino_acid};
+use crate::residue::{ResidueAtoms, ResidueIter};
+use crate::selection::{AtomSelector, AtomView, Selection};
 use itertools::{izip, Itertools};
 use pdbtbx::Element;
 

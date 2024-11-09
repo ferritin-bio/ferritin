@@ -1,4 +1,4 @@
-use crate::core::{AtomCollection, Bond, BondOrder};
+use crate::{AtomCollection, Bond, BondOrder};
 use ferritin_pymol::PSEData;
 use itertools::Itertools;
 use pdbtbx::Element;
@@ -67,7 +67,7 @@ impl From<&PSEData> for AtomCollection {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::AtomCollection;
+    use crate::AtomCollection;
     use ferritin_pymol::PSEData;
     use ferritin_test_data::TestFile;
 

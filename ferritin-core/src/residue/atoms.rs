@@ -95,10 +95,7 @@ impl<'a> ResidueAtoms<'a> {
         is_amino_acid(&self.res_name)
     }
     pub fn is_carbohydrate(&self) -> bool {
-        is_amino_acid(&self.res_name)
-    }
-    pub fn is_carbohydrate(&self) -> bool {
-        is_amino_acid(&self.res_name)
+        is_carbohydrate(&self.res_name)
     }
     pub fn is_nucleotide(&self) -> bool {
         is_nucleotide(&self.res_name)
@@ -108,7 +105,7 @@ impl<'a> ResidueAtoms<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::AtomCollection;
+    use crate::AtomCollection;
     use ferritin_test_data::TestFile;
 
     #[test]
