@@ -1,3 +1,6 @@
+//! Defining CLI interface.
+//!
+//! ** work in progress**
 use super::commands;
 use crate::models::ligandmpnn::configs::{
     AABiasConfig, LigandMPNNConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig, ResidueControl,
