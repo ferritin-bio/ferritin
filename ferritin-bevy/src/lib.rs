@@ -12,18 +12,6 @@
 //! - Interactive camera controls
 //! - Support for multiple visualization styles
 //!
-//! ## Example
-//! ```rust,no_run
-//! use bevy::prelude::*;
-//! use ferritin_bevy::{StructurePlugin, Structure};
-//!
-//! fn main() {
-//!     App::new()
-//!         .add_plugins(DefaultPlugins)
-//!         .add_plugin(StructurePlugin::default())
-//!         .run();
-//! }
-//! ```
 pub mod colors;
 pub mod plugin;
 pub mod structure;
