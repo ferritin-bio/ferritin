@@ -210,7 +210,7 @@ impl AtomCollection {
     }
     pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueAtoms> {
         self.iter_residues_all()
-            .filter(|residue| is_amino_acid(&residue.res_name))
+            .filter(|residue| residue.is_amino_acid())
     }
     pub fn select(&self) -> AtomSelector {
         AtomSelector::new(self)
