@@ -5,8 +5,9 @@
 //! a structural unit in a protein or other macromolecule consisting of multiple atoms.
 //!
 use super::info::AtomInfo;
-use crate::core::selection::AtomView;
-use crate::core::{AtomCollection, Selection};
+use crate::info::constants::{is_amino_acid, is_carbohydrate, is_nucleotide};
+use crate::selection::AtomView;
+use crate::{AtomCollection, Selection};
 use pdbtbx::Element;
 
 pub struct ResidueAtoms<'a> {
@@ -89,6 +90,18 @@ impl<'a> ResidueAtoms<'a> {
                 atom_name: &self.parent.get_atom_name(i),
                 is_hetero: self.parent.get_is_hetero(i),
             })
+    }
+    pub fn is_amino_acid(&self) -> bool {
+        is_amino_acid(&self.res_name)
+    }
+    pub fn is_carbohydrate(&self) -> bool {
+        is_amino_acid(&self.res_name)
+    }
+    pub fn is_carbohydrate(&self) -> bool {
+        is_amino_acid(&self.res_name)
+    }
+    pub fn is_nucleotide(&self) -> bool {
+        is_nucleotide(&self.res_name)
     }
 }
 
