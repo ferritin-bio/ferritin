@@ -6,12 +6,14 @@
 
 use super::ColorScheme;
 use bevy::asset::Assets;
+use bevy::log::tracing_subscriber::reload::Error;
 use bevy::math::Vec4;
 use bevy::prelude::{
     default, Color, Component, Cylinder, Mesh, MeshBuilder, Meshable, PbrBundle, Quat, Sphere,
     StandardMaterial, Transform, Vec3,
 };
 use bevy::render::mesh::{Indices, PrimitiveTopology};
+use bevy::render::render_asset::RenderAssetUsages;
 use bon::Builder;
 use ferritin_core::AtomCollection;
 
@@ -49,7 +51,7 @@ impl Structure {
             RenderOptions::Cartoon => self.render_cartoon(),
             RenderOptions::BallAndStick => self.render_ballandstick(),
             RenderOptions::Solid => self.render_spheres(),
-            RenderOptions::Putty => self.render_putty(),
+            RenderOptions::Putty => self.render_putty().unwrap(),
         }
     }
     // this is the onw we probably want
@@ -82,7 +84,6 @@ impl Structure {
                 let center = Vec3::new(coord[0], coord[1], coord[2]);
                 let mut sphere_mesh = Sphere::new(radius).mesh().build();
                 let vertex_count = sphere_mesh.count_vertices();
-                // let element = Element::from_symbol(element_str).expect("Element not recognized");
                 let color = self.color_scheme.get_color(element_str).to_srgba();
                 let color_array =
                     vec![Vec4::new(color.red, color.green, color.blue, color.alpha); vertex_count];
@@ -170,7 +171,7 @@ impl Structure {
             })
             .unwrap()
     }
-    fn render_putty(&self) -> Result<Mesh> {
+    fn render_putty(&self) -> Result<Mesh, Error> {
         fn create_smooth_curve(points: &[Vec3], segments: usize) -> Vec<Vec3> {
             let mut curve_points = Vec::new();
 
@@ -265,12 +266,11 @@ impl Structure {
                 }
             }
 
-            let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+            let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
             mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
             mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
             mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-            mesh.set_indices(Some(Indices::U32(indices)));
-
+            mesh.insert_indices(Indices::U32(indices.iter().map(|&i| i as u32).collect()));
             mesh
         }
 
@@ -284,10 +284,10 @@ impl Structure {
             })
             .collect();
 
-        let curve = create_smooth_curve(&c_alphas, 2);
-        let tube_mesh = generate_tube_mesh(&curve, 0.1, 16);
+        let curve = create_smooth_curve(&c_alphas, 3);
+        let tube_mesh = generate_tube_mesh(&curve, 0.3, 16);
 
-        Some(tube_mesh)
+        Ok(tube_mesh)
     }
 }
 
