@@ -194,7 +194,6 @@ impl Structure {
 
             curve_points
         }
-
         /// Catmull-Rom spline interpolation
         fn catmull_rom(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: f32) -> Vec3 {
             let t2 = t * t;
@@ -208,14 +207,12 @@ impl Structure {
                 + v0 * t
                 + p1
         }
-
         /// Generate a mesh around the curve
         fn generate_tube_mesh(curve: &[Vec3], radius: f32, segments: usize) -> Mesh {
             let mut positions = Vec::new();
             let mut normals = Vec::new();
             let mut uvs = Vec::new();
             let mut indices = Vec::new();
-
             // Generate circles around each point
             for (i, &center) in curve.iter().enumerate() {
                 let forward = if i < curve.len() - 1 {
@@ -223,23 +220,19 @@ impl Structure {
                 } else {
                     (center - curve[i - 1]).normalize()
                 };
-
                 let right = if forward.abs_diff_eq(Vec3::Y, 0.01) {
                     Vec3::X
                 } else {
                     forward.cross(Vec3::Y).normalize()
                 };
                 let up = forward.cross(right);
-
                 // Create vertices around the circle
                 for j in 0..segments {
                     let angle = (j as f32 / segments as f32) * std::f32::consts::TAU;
                     let x = angle.cos();
                     let y = angle.sin();
-
                     let pos = center + (right * x + up * y) * radius;
                     let normal = (pos - center).normalize();
-
                     positions.push([pos.x, pos.y, pos.z]);
                     normals.push([normal.x, normal.y, normal.z]);
                     uvs.push([
@@ -248,18 +241,15 @@ impl Structure {
                     ]);
                 }
             }
-
             // Generate indices for triangles
             for i in 0..curve.len() - 1 {
                 for j in 0..segments {
                     let next_j = (j + 1) % segments;
                     let current_ring = i * segments;
                     let next_ring = (i + 1) * segments;
-
                     indices.push(current_ring + j);
                     indices.push(next_ring + j);
                     indices.push(current_ring + next_j);
-
                     indices.push(current_ring + next_j);
                     indices.push(next_ring + j);
                     indices.push(next_ring + next_j);
@@ -283,10 +273,8 @@ impl Structure {
                 Vec3::from_array(ca.coords.clone())
             })
             .collect();
-
         let curve = create_smooth_curve(&c_alphas, 3);
         let tube_mesh = generate_tube_mesh(&curve, 0.3, 16);
-
         Ok(tube_mesh)
     }
 }
