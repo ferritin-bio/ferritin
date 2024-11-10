@@ -26,6 +26,7 @@ pub enum RenderOptions {
     Cartoon,
     BallAndStick,
     Solid,
+    Putty,
 }
 
 /// Define Everything Needed to render
@@ -47,6 +48,7 @@ impl Structure {
             RenderOptions::Cartoon => self.render_cartoon(),
             RenderOptions::BallAndStick => self.render_ballandstick(),
             RenderOptions::Solid => self.render_spheres(),
+            RenderOptions::Putty => self.render_putty(),
         }
     }
     // this is the onw we probably want
@@ -166,6 +168,9 @@ impl Structure {
                 acc
             })
             .unwrap()
+    }
+    fn render_putty(&self) -> Mesh {
+        unimplemented!()
     }
 }
 
