@@ -54,21 +54,21 @@ impl Structure {
             RenderOptions::Putty => self.render_putty().unwrap(),
         }
     }
-    // this is the onw we probably want
-    pub fn to_pbr(
-        &self,
-        meshes: &mut Assets<Mesh>,
-        materials: &mut Assets<StandardMaterial>,
-    ) -> PbrBundle {
-        let mesh = self.to_mesh();
-        let material = self.material.clone();
-        PbrBundle {
-            mesh: meshes.add(mesh),
-            material: materials.add(material),
-            // transform: Transform::from_xyz(x, y, z),
-            ..default()
-        }
-    }
+    // // this is the onw we probably want
+    // pub fn to_pbr(
+    //     &self,
+    //     meshes: &mut Assets<Mesh>,
+    //     materials: &mut Assets<StandardMaterial>,
+    // ) -> PbrBundle {
+    //     let mesh = self.to_mesh();
+    //     let material = self.material.clone();
+    //     PbrBundle {
+    //         mesh: meshes.add(mesh),
+    //         material: materials.add(material),
+    //         // transform: Transform::from_xyz(x, y, z),
+    //         ..default()
+    //     }
+    // }
     fn render_wireframe(&self) -> Mesh {
         todo!()
     }
@@ -142,7 +142,6 @@ impl Structure {
         } else {
             println!("No-Bonds found!!")
         }
-
         combined_mesh
     }
     /// Internal fn for rendering spheres.

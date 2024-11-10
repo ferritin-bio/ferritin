@@ -90,9 +90,16 @@ fn load_initial_proteins(
                 .material(settings.material.clone())
                 .build();
 
-            let pbr = structure.to_pbr(&mut meshes, &mut materials);
+            // let pbr = structure.to_pbr(&mut meshes, &mut materials);
 
-            commands.spawn((structure, pbr));
+            // Mesh2d(meshes.add(Circle::new(100.0))),
+            // MeshMaterial2d(materials.add(Color::srgb(7.5, 0.0, 7.5))),
+            // Transform::from_translation(Vec3::new(-200., 0., 0.)),
+
+            let mesh = structure.to_mesh();
+
+            // bevy::prelude::Handle::
+            commands.spawn((Mesh2d(meshes.add(mesh))));
         }
     }
 }
