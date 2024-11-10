@@ -6,6 +6,7 @@
 ```sh
 cargo run --example basic_spheres
 cargo run --example basic_ballandstick
+cargo run --example basic_putty
 ```
 
 ![](docs/images/protein_01.png)
