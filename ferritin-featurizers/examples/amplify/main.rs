@@ -41,12 +41,19 @@ fn main() -> Result<()> {
     };
     let config = AMPLIFYConfig::default().amp_120m();
     let model = AMPLIFY::load(vb, &config)?;
+    println!("Successfully created the model!");
     let tokenizer = repo.get("tokenizer.json")?;
     let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
+    println!("Successfully created the tokenizer!");
+
     let pmatrix = protein_tokenizer.encode(&["METVAL".to_string()], Some(20), true, false)?;
+    println!("Successfully encoded the protein!");
 
     // begin encoding the model....
-    let encoded = model.forward(&pmatrix, None, false, false);
+    println!("Commence Encoding:");
+    let encoded = model.forward(&pmatrix, None, false, false)?;
+
+    println!("{:?}", encoded.logits);
 
     Ok(())
 }

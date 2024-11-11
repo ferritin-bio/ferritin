@@ -153,16 +153,23 @@ impl EncoderBlock {
         freqs_cis: &Tensor,
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
+        println!("EncoderBlock.forward(): commence");
+        println!("EncoderBlock.forward(): beginning attention norm");
         let normed = self.attention_norm.forward(x)?;
         // Todo: confirm the attention block
+        println!("EncoderBlock.forward(): getting contacts");
         let (attn, contacts) =
             self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
         // add encoded bits and the self-attention...
         let x = x.add(&attn)?;
         // FFN add ...
+        println!("EncoderBlock.forward(): FeedForward Norm");
         let normed = self.ffn_norm.forward(&x)?;
         // ffn.forward needs to do teh swiglu stesp with w12 and w3
+        println!("EncoderBlock.forward(): FeedForward_forward");
         let ffn_output = self.ffn_forward(&normed)?;
+
+        println!("EncoderBlock.forward(): FeedForward_dropout");
         let ff = self.ffn_dropout.forward(&ffn_output, false)?; // Todo: pass in the Inference/Training bit
         let x = x.add(&ff)?;
         Ok((x, contacts))
@@ -243,6 +250,7 @@ impl EncoderBlock {
         freqs_cis: &Tensor,
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
+        println!("AttentionBlock: commence");
         // Get dimensions
         let batch_size = x.dim(0)?;
         let seq_len = x.dim(1)?;
@@ -250,6 +258,7 @@ impl EncoderBlock {
         let xq = self.q.forward(x)?;
         let xk = self.k.forward(x)?;
         let xv = self.v.forward(x)?;
+        println!("AttentionBlock: xq_shape: {:?}", xq.dims());
         // Reshape for rotary embeddings
         let xq = xq.reshape((
             batch_size,
@@ -257,6 +266,8 @@ impl EncoderBlock {
             self.config.num_attention_heads,
             self.d_head,
         ))?;
+
+        println!("AttentionBlock: xq_shape: {:?}", xq.dims());
         let xk = xk.reshape((
             batch_size,
             seq_len,
@@ -384,17 +395,24 @@ impl AMPLIFY {
         output_hidden_states: bool,
         output_attentions: bool,
     ) -> Result<ModelOutput> {
+        println!("AMPLIFY.forward(): commence");
         let mut hidden_states = vec![];
         let mut attentions = vec![];
 
         // Process attention mask if provided
+        println!("AMPLIFY.forward():  creating attention mask");
         let attention_mask =
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         // Get appropriate length of freqs_cis
-        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
+        println!("AMPLIFY.forward():  creating freqs_cis mask");
+        println!("AMPLIFY.forward():  {:?}", src.dims());
+        println!("AMPLIFY.forward():  {:?}", src.dim(0));
+        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(0)?)?;
         // Embedding layer
+        println!("AMPLIFY.forward():  creating encoder");
         let mut x = self.encoder.forward(src)?;
         // Transform through encoder blocks
+        println!("AMPLIFY.forward():  running through the transformer");
         for layer in self.transformer_encoder.iter() {
             let (new_x, attn) =
                 layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
@@ -410,6 +428,7 @@ impl AMPLIFY {
         }
 
         // Final layer norm and decoder
+        println!("AMPLIFY.forward():  calculating logits");
         let logits = if self.config.layer_norm_before_last_layer {
             self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
         } else {
@@ -434,6 +453,7 @@ impl AMPLIFY {
     }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
+        println!("AMPLIFY: Loading Model...");
         // process the transformer section
         let mut transformer_encoder = Vec::with_capacity(cfg.num_hidden_layers);
         for i in 0..cfg.num_hidden_layers {
@@ -443,9 +463,13 @@ impl AMPLIFY {
                 i as i32,
             )?);
         }
+        println!("AMPLIFY: Transformer Encoded.");
         let encoder = embedding(cfg.vocab_size, cfg.hidden_size, vb.pp("encoder"))?;
+        println!("AMPLIFY: Embedding Calculated.");
         let layer_norm_2 = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("layer_norm_2"))?;
+        println!("AMPLIFY: LayerNorm Calculated.");
         let decoder = linear(cfg.hidden_size, cfg.vocab_size, vb.pp("decoder"))?;
+        println!("AMPLIFY: Decoder Initialized.");
 
         // Todo: Double check this....
         let freqs_cis = Tensor::zeros(
@@ -453,6 +477,8 @@ impl AMPLIFY {
             DType::F32,
             &Device::Cpu,
         )?;
+
+        println!("AMPLIFY: freqs_cis Created .");
 
         Ok(Self {
             encoder,
