@@ -46,11 +46,11 @@ fn main() -> Result<()> {
     let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
     println!("Successfully created the tokenizer!");
     let pmatrix = protein_tokenizer.encode(&["METVAL".to_string()], Some(20), true, false)?;
+    let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
     println!("Successfully encoded the protein!");
     // begin encoding the model....
     println!("Commence Encoding:");
     let encoded = model.forward(&pmatrix, None, false, false)?;
-
     println!("{:?}", encoded.logits);
 
     Ok(())
