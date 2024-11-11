@@ -5,11 +5,10 @@
 //!
 
 use super::ColorScheme;
-use bevy::asset::Assets;
 use bevy::log::tracing_subscriber::reload::Error;
 use bevy::math::Vec4;
 use bevy::prelude::{
-    default, Color, Component, Cylinder, Mesh, MeshBuilder, Meshable, PbrBundle, Quat, Sphere,
+    default, Color, Component, Cylinder, Mesh, MeshBuilder, Meshable, Quat, Sphere,
     StandardMaterial, Transform, Vec3,
 };
 use bevy::render::mesh::{Indices, PrimitiveTopology};
@@ -54,21 +53,9 @@ impl Structure {
             RenderOptions::Putty => self.render_putty().unwrap(),
         }
     }
-    // // this is the onw we probably want
-    // pub fn to_pbr(
-    //     &self,
-    //     meshes: &mut Assets<Mesh>,
-    //     materials: &mut Assets<StandardMaterial>,
-    // ) -> PbrBundle {
-    //     let mesh = self.to_mesh();
-    //     let material = self.material.clone();
-    //     PbrBundle {
-    //         mesh: meshes.add(mesh),
-    //         material: materials.add(material),
-    //         // transform: Transform::from_xyz(x, y, z),
-    //         ..default()
-    //     }
-    // }
+    pub fn get_material(&self) -> StandardMaterial {
+        self.material.clone()
+    }
     fn render_wireframe(&self) -> Mesh {
         todo!()
     }
