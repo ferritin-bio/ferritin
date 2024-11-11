@@ -10,6 +10,7 @@ description.workspace = true
 bevy = "=0.15.0-rc.3"
 bon = "2.3.0"
 ferritin-core = { path = "../ferritin-core" }
+image = "0.25.5"
 pdbtbx.workspace = true
 
 [dev-dependencies]
