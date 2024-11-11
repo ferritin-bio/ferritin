@@ -485,13 +485,10 @@ impl AMPLIFY {
         let decoder = linear(cfg.hidden_size, cfg.vocab_size, vb.pp("decoder"))?;
         println!("AMPLIFY: Decoder Initialized.");
 
-        // Todo: Double check this....
-        // let freqs_cis = Tensor::zeros(
-        //     (cfg.max_length, cfg.num_attention_heads, 2),
-        //     DType::F32,
-        //     &Device::Cpu,
-        // )?;
-        let freqs_cis = precompute_freqs_cis(dim, end, theta);
+        // self.freqs_cis = precompute_freqs_cis(config.hidden_size // config.num_attention_heads, config.max_length)
+        //  theta=1000
+        let freqs_cis =
+            precompute_freqs_cis(cfg.hidden_size / cfg.num_attention_heads, cfg.max_length)?;
 
         println!("AMPLIFY: freqs_cis Created .");
 

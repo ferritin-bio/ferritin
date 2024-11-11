@@ -3,7 +3,8 @@ use candle_core::{Device, Result, Tensor, D};
 // Example1: https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/starcoder2.rs#L22
 // Example 2: phi3: https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/phi3.rs#L32
 //
-pub fn precompute_freqs_cis(dim: usize, end: usize, theta: f64) -> Result<Tensor> {
+pub fn precompute_freqs_cis(dim: usize, end: usize) -> Result<Tensor> {
+    let theta: f64 = 1000.;
     let device = Device::Cpu;
     let freqs = (0..dim / 2)
         .into_iter()
