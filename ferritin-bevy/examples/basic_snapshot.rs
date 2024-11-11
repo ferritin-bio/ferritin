@@ -1,6 +1,11 @@
 //!  Example allowing custom colors and rendering options
-use bevy::app::AppExit;
-use bevy::prelude::*;
+use bevy::{
+    app::AppExit,
+    prelude::*,
+    render::view::screenshot::{save_to_disk, Capturing, Screenshot},
+    window::SystemCursorIcon,
+    winit::cursor::CursorIcon,
+};
 use ferritin_bevy::{ColorScheme, RenderOptions, StructurePlugin, StructureSettings};
 
 fn main() {
@@ -28,16 +33,32 @@ fn main() {
             }),
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, take_screenshot_and_exit)
+        .add_systems(Update, (take_screenshot_and_exit, screenshot_saving))
         .run();
 }
 
-fn take_screenshot_and_exit(
-    mut exit: EventWriter<AppExit>,
-    windows: Query<&Window>,
-    images: Res<Assets<Image>>,
-    camera: Query<(&Camera, &GlobalTransform)>,
+fn screenshot_saving(
+    mut commands: Commands,
+    screenshot_saving: Query<Entity, With<Capturing>>,
+    windows: Query<Entity, With<Window>>,
 ) {
+    let Ok(window) = windows.get_single() else {
+        return;
+    };
+    match screenshot_saving.iter().count() {
+        0 => {
+            commands.entity(window).remove::<CursorIcon>();
+        }
+        x if x > 0 => {
+            commands
+                .entity(window)
+                .insert(CursorIcon::from(SystemCursorIcon::Progress));
+        }
+        _ => {}
+    }
+}
+
+fn take_screenshot_and_exit(mut commands: Commands, mut exit: EventWriter<AppExit>) {
     // Wait a few frames to make sure everything is properly initialized
     static mut FRAME_COUNT: u32 = 0;
     unsafe {
@@ -47,31 +68,13 @@ fn take_screenshot_and_exit(
             return;
         }
     }
-    save_screenshot(windows, images, camera);
-    println!("Screenshot taken!");
+
+    let path = format!("./screenshot-{}.png", "01");
+    commands
+        .spawn(Screenshot::primary_window())
+        .observe(save_to_disk(path));
+
     exit.send(AppExit::Success);
-}
-
-fn save_screenshot(
-    windows: Query<&Window>,
-    images: Res<Assets<Image>>,
-    camera: Query<(&Camera, &GlobalTransform)>,
-) {
-    let window = windows.single();
-    let (camera, camera_transform) = camera.single();
-
-    if let Some(image) = camera.texture.as_ref() {
-        if let Some(image) = images.get(image) {
-            let image_buffer = image::RgbaImage::from_raw(
-                window.width() as u32,
-                window.height() as u32,
-                image.data.clone(),
-            )
-            .unwrap();
-
-            image_buffer.save("screenshot.png").unwrap();
-        }
-    }
 }
 
 #[derive(Component)]
@@ -80,10 +83,8 @@ struct MainCamera;
 fn setup(mut commands: Commands) {
     // Add a camera
     commands.spawn((
-        Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 50.0, 100.0).looking_at(Vec3::ZERO, Vec3::Y),
-            ..default()
-        },
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 50.0, 100.0).looking_at(Vec3::ZERO, Vec3::Y),
         MainCamera,
     ));
 

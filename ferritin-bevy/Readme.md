@@ -7,6 +7,9 @@
 cargo run --example basic_spheres
 cargo run --example basic_ballandstick
 cargo run --example basic_putty
+cargo run --example basic_snapshot
+
+cargo run --example screenshot
 ```
 
 ![](docs/images/protein_01.png)
