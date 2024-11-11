@@ -1,4 +1,4 @@
-//! # ferrritin-core
+//! # ferritin-core
 //!
 //! A library for working with biomolecular structure files and performing common operations.
 //!
@@ -8,7 +8,7 @@
 //! * Computing geometric properties like distances, angles, and dihedrals
 //! * Basic molecular operations like superposition and RMSD calculations
 //!
-//! The main entry point is the `AtomCollection` struct which represents a biomolecular structure
+//! The main entry point is the [`AtomCollection`] struct which represents a biomolecular structure
 //! and provides methods for manipulating and analyzing it.
 //!
 mod atomcollection;
@@ -18,5 +18,7 @@ mod info;
 mod residue;
 mod selection;
 
-pub use atomcollection::AtomCollection;
-pub use bonds::{Bond, BondOrder};
+pub use self::atomcollection::AtomCollection;
+pub use self::bonds::{Bond, BondOrder};
+pub use self::residue::ResidueAtoms;
+pub use self::selection::Selection;

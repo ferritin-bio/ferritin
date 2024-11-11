@@ -6,5 +6,3 @@
 //!
 
 pub mod cellscape;
-
-// pub use cellscape::StructureFlatten;
