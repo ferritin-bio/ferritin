@@ -26,6 +26,11 @@ pub fn precompute_freqs_cis(dim: usize, end: usize, theta: f64) -> Result<Tensor
 
 pub fn reshape_for_broadcast(freqs_cis: &Tensor, x: &Tensor) -> Result<Tensor> {
     let x_dims = x.dims();
+    println!(
+        "Reshape Tensor Shapes. FREQ and X: {:?} and {:?}",
+        freqs_cis.dims(),
+        x.dims()
+    );
     if x_dims.len() < 2 {
         return Err(candle_core::Error::Msg(
             "Input tensor must have at least 2 dimensions".to_string(),
@@ -48,6 +53,7 @@ pub fn reshape_for_broadcast(freqs_cis: &Tensor, x: &Tensor) -> Result<Tensor> {
 }
 
 pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<(Tensor, Tensor)> {
+    println!("Rotary Embeddings....");
     let xq_shape = xq.dims();
     let last_dim = *xq_shape.last().unwrap();
 
@@ -61,7 +67,9 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
     let chunks = freqs_cis.chunk(2, D::Minus1)?;
     let cos = &chunks[0];
     let sin = &chunks[1];
+    println!("About to reshape cos ....");
     let cos = reshape_for_broadcast(&cos, &xq_reshaped)?;
+    println!("About to reshape sin ....");
     let sin = reshape_for_broadcast(&sin, &xq_reshaped)?;
 
     // Apply rotation

@@ -261,13 +261,10 @@ impl EncoderBlock {
         let xk = self.k.forward(x)?;
         let xv = self.v.forward(x)?;
         println!("AttentionBlock: xq_shape: {:?}", xq.dims());
-        println!("Current xq shape: {:?}", xq.dims());
         println!(
             "Attempting reshape to: [{}, {}, {}, {}]",
             batch_size, seq_len, self.config.num_attention_heads, self.d_head
         );
-        println!("hidden_size: {}", self.config.hidden_size);
-        let d_head = &self.config.hidden_size / &self.config.num_attention_heads;
 
         // Reshape for rotary embeddings
         let xq = xq.reshape((
@@ -296,7 +293,7 @@ impl EncoderBlock {
             xv.dims()
         );
         // Apply rotary embeddings
-        println!("Beginning Rotrary Embedding....");
+        println!("Beginning Rotary Embedding....");
         let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
         println!("Rotary Embed Shapes: : {:?}, {:?}", xq.dims(), xk.dims());
 
