@@ -268,18 +268,6 @@ impl EncoderBlock {
         );
         println!("hidden_size: {}", self.config.hidden_size);
         let d_head = &self.config.hidden_size / &self.config.num_attention_heads;
-        println!(
-            "d_head calculation: {} / {} = {}",
-            &self.config.hidden_size, &self.config.num_attention_heads, d_head
-        );
-        assert_eq!(
-            self.config.hidden_size,
-            self.config.num_attention_heads * self.d_head
-        );
-
-        // Reshape Once
-        let xq = xq.reshape((batch_size, seq_len, self.config.hidden_size))?;
-        println!("AttentionBlock: xq_reshape: {:?}", xq.dims());
 
         // Reshape for rotary embeddings
         let xq = xq.reshape((
@@ -289,7 +277,6 @@ impl EncoderBlock {
             self.d_head,
         ))?;
 
-        println!("AttentionBlock: xq_shape: {:?}", xq.dims());
         let xk = xk.reshape((
             batch_size,
             seq_len,
@@ -302,8 +289,17 @@ impl EncoderBlock {
             self.config.num_attention_heads,
             self.d_head,
         ))?;
+        println!(
+            "AttentionBlock: xq_shape, xk_shape, xv_shape: {:?}, {:?}, {:?}",
+            xq.dims(),
+            xk.dims(),
+            xv.dims()
+        );
         // Apply rotary embeddings
+        println!("Beginning Rotrary Embedding....");
         let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
+        println!("Rotary Embed Shapes: : {:?}, {:?}", xq.dims(), xk.dims());
+
         // Attention computation
         let dropout_prob = self.config.dropout_prob; // still need to toggle if in Training....
         let zeros = Tensor::zeros_like(&xq)?;
