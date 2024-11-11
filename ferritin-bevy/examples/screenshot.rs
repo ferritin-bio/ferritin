@@ -1,5 +1,3 @@
-//! An example showing how to save screenshots to disk
-
 use bevy::{
     prelude::*,
     render::view::screenshot::{save_to_disk, Capturing, Screenshot},
@@ -11,46 +9,34 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (screenshot_on_spacebar, screenshot_saving))
+        .add_systems(Update, (handle_screenshot_and_exit))
         .run();
 }
 
-fn screenshot_on_spacebar(
-    mut commands: Commands,
-    input: Res<ButtonInput<KeyCode>>,
-    mut counter: Local<u32>,
-) {
-    if input.just_pressed(KeyCode::Space) {
-        let path = format!("./screenshot-{}.png", *counter);
-        *counter += 1;
-        commands
+fn handle_screenshot_and_exit(world: &mut World) {
+    let frame = world.resource::<Time>().elapsed();
+
+    // Take screenshot on frame 10
+    if frame.as_secs() > 1 {
+        info!("Taking screenshot at frame {}", frame.as_secs());
+        let path = format!("./screenshot-{}.png", frame.as_secs());
+        world
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk(path));
     }
-}
 
-fn screenshot_saving(
-    mut commands: Commands,
-    screenshot_saving: Query<Entity, With<Capturing>>,
-    windows: Query<Entity, With<Window>>,
-) {
-    let Ok(window) = windows.get_single() else {
-        return;
-    };
-    match screenshot_saving.iter().count() {
-        0 => {
-            commands.entity(window).remove::<CursorIcon>();
-        }
-        x if x > 0 => {
-            commands
-                .entity(window)
-                .insert(CursorIcon::from(SystemCursorIcon::Progress));
-        }
-        _ => {}
+    // Check if screenshot is done and exit
+    let screenshot_count = world
+        .query_filtered::<Entity, With<Capturing>>()
+        .iter(world)
+        .count();
+
+    if frame.as_secs() > 1 && screenshot_count == 0 {
+        info!("Screenshot complete, exiting");
+        world.send_event(AppExit::Success);
     }
 }
 
-/// set up a simple 3D scene
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -80,15 +66,4 @@ fn setup(
         Camera3d::default(),
         Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
-
-    commands.spawn((
-        Text::new("Press <spacebar> to save a screenshot to disk"),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(12.0),
-            left: Val::Px(12.0),
-            ..default()
-        },
-    ));
 }
-
