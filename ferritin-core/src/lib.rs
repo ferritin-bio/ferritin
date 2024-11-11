@@ -18,5 +18,6 @@ mod info;
 mod residue;
 mod selection;
 
-pub use atomcollection::AtomCollection;
-pub use bonds::{Bond, BondOrder};
+pub use self::atomcollection::AtomCollection;
+pub use self::bonds::{Bond, BondOrder};
+pub use self::residue::ResidueAtoms;
