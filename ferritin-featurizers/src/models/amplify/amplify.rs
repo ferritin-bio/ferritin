@@ -8,7 +8,7 @@
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
 
-use super::rotary::apply_rotary_emb;
+use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
 use candle_core::{DType, Device, Module, Result, Tensor, D};
 use candle_nn::ops::softmax;
 use candle_nn::{
@@ -115,7 +115,6 @@ pub struct EncoderBlock {
 
 impl EncoderBlock {
     pub fn new(config: &AMPLIFYConfig, vb: VarBuilder, layer: i32) -> Result<Self> {
-        let _d_head = config.hidden_size / config.num_attention_heads;
         let multiple_of = 8;
         let intermediate_size = (config.intermediate_size * 2) / 3;
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
@@ -422,7 +421,7 @@ impl AMPLIFY {
         println!("AMPLIFY.forward():  creating freqs_cis mask");
         println!("AMPLIFY.forward():  {:?}", src.dims());
         println!("AMPLIFY.forward():  {:?}", src.dim(0));
-        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(0)?)?;
+        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
         // Embedding layer
         println!("AMPLIFY.forward():  creating encoder");
         let mut x = self.encoder.forward(src)?;
@@ -487,11 +486,12 @@ impl AMPLIFY {
         println!("AMPLIFY: Decoder Initialized.");
 
         // Todo: Double check this....
-        let freqs_cis = Tensor::zeros(
-            (cfg.max_length, cfg.num_attention_heads, 2),
-            DType::F32,
-            &Device::Cpu,
-        )?;
+        // let freqs_cis = Tensor::zeros(
+        //     (cfg.max_length, cfg.num_attention_heads, 2),
+        //     DType::F32,
+        //     &Device::Cpu,
+        // )?;
+        let freqs_cis = precompute_freqs_cis(dim, end, theta);
 
         println!("AMPLIFY: freqs_cis Created .");
 

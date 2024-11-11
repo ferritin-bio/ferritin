@@ -31,6 +31,7 @@ pub fn reshape_for_broadcast(freqs_cis: &Tensor, x: &Tensor) -> Result<Tensor> {
         freqs_cis.dims(),
         x.dims()
     );
+    // Reshape Tensor Shapes. FREQ and X: [1, 10, 1] and [80, 32, 2]
     if x_dims.len() < 2 {
         return Err(candle_core::Error::Msg(
             "Input tensor must have at least 2 dimensions".to_string(),
