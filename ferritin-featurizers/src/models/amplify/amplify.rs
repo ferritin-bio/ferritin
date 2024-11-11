@@ -251,19 +251,44 @@ impl EncoderBlock {
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
         println!("AttentionBlock: commence");
+        println!("Input x shape: {:?}", x.dims());
+
         // Get dimensions
         let batch_size = x.dim(0)?;
         let seq_len = x.dim(1)?;
         // Query, Key, Value projections
-        let xq = self.q.forward(x)?;
+        let xq = self.q.forward(x)?; // [batch_size, seq_len, hidden_size]
         let xk = self.k.forward(x)?;
         let xv = self.v.forward(x)?;
         println!("AttentionBlock: xq_shape: {:?}", xq.dims());
+
+        println!("Current xq shape: {:?}", xq.dims());
+        println!(
+            "Attempting reshape to: [{}, {}, {}, {}]",
+            batch_size, seq_len, self.config.num_attention_heads, self.d_head
+        );
+        println!("hidden_size: {}", self.config.hidden_size);
+
+        let d_head = &self.config.hidden_size / &self.config.num_attention_heads;
+        println!(
+            "d_head calculation: {} / {} = {}",
+            &self.config.hidden_size, &self.config.num_attention_heads, d_head
+        );
+
+        assert_eq!(
+            self.config.hidden_size,
+            self.config.num_attention_heads * self.d_head
+        );
+
+        // Reshape Once
+        let xq = xq.reshape((batch_size, seq_len, self.config.hidden_size))?;
+        println!("AttentionBlock: xq_reshape: {:?}", xq.dims());
+
         // Reshape for rotary embeddings
         let xq = xq.reshape((
             batch_size,
             seq_len,
-            self.config.num_attention_heads,
+            self.config.num_attention_heads, // this need soro be smae as attent heads * d_head
             self.d_head,
         ))?;
 
