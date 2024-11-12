@@ -1,5 +1,5 @@
 use anyhow::Result;
-use candle_core::{DType, Device};
+use candle_core::{DType, Device, D};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use ferritin_featurizers::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
@@ -45,13 +45,24 @@ fn main() -> Result<()> {
     let tokenizer = repo.get("tokenizer.json")?;
     let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
     println!("Successfully created the tokenizer!");
-    let pmatrix = protein_tokenizer.encode(&["METVAL".to_string()], Some(20), true, false)?;
+    let pmatrix = protein_tokenizer.encode(&["METVALMETVAL".to_string()], Some(20), true, false)?;
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
     println!("Successfully encoded the protein!");
     // begin encoding the model....
     println!("Commence Encoding:");
     let encoded = model.forward(&pmatrix, None, false, false)?;
     println!("{:?}", encoded.logits);
+    println!("{:?}", encoded.attentions);
+    println!("{:?}", encoded.hidden_states);
+
+    let predictions = encoded.logits.argmax(D::Minus1)?;
+
+    // Get the raw data as a vector of indices
+    let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
+    println!("indices: {:?}", indices);
+
+    let decoded = protein_tokenizer.decode(indices.as_slice(), true)?;
+    println!("Decoded Values: {:}", decoded);
 
     Ok(())
 }
