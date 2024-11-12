@@ -4,11 +4,9 @@
 - [amplify hf - 120M](https://huggingface.co/chandar-lab/AMPLIFY_120M)
 
 
-
 ```sh
-cargo run --example amplify
+RUST_BACKTRACE=1 cargo run --example amplify
 ```
-
 
 ## Model Tensors
 

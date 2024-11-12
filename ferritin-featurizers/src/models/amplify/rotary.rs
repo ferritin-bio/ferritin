@@ -1,86 +1,91 @@
-use candle_core::{Device, Result, Tensor, D};
+use candle_core::{DType, Device, Error, Result, Tensor, D};
 
-// Example1: https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/starcoder2.rs#L22
-// Example 2: phi3: https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/phi3.rs#L32
-//
-pub fn precompute_freqs_cis(dim: usize, end: usize, theta: f64) -> Result<Tensor> {
-    let device = Device::Cpu;
-    let freqs = (0..dim / 2)
+pub fn precompute_freqs_cis(head_dim: usize, seq_len: usize) -> Result<Tensor> {
+    println!("in precompute freqs fn!");
+    let theta: f32 = 10000.0;
+
+    // Create frequencies using powf
+    let freqs = (0..head_dim / 2)
         .into_iter()
-        .map(|i| 1.0 / (theta.powf((2 * i) as f64 / dim as f64)));
-    let freqs = Tensor::from_iter(freqs, &device)?;
+        .map(|i| 1.0 / (theta.powf((2 * i) as f32 / (head_dim / 2) as f32)));
+    let freqs = Tensor::from_iter(freqs, &Device::Cpu)?;
+
     // Create time steps
-    let t = Tensor::from_iter((0..end).map(|x| x as f64), &device)?;
+    let t = (0..seq_len).map(|x| x as f32);
+    let t = Tensor::from_iter(t, &Device::Cpu)?;
 
     // Compute outer product
-    // let freqs = t.outer(&freqs)?;
     let freqs = t.unsqueeze(1)?.matmul(&freqs.unsqueeze(0)?)?;
 
-    // Create complex numbers using cos and sin
-    let cos = freqs.cos()?;
-    let sin = freqs.sin()?;
+    // Convert to complex representation
+    let freqs_cos = freqs.cos()?;
+    let freqs_sin = freqs.sin()?;
 
-    // Stack cos and sin to represent complex numbers
-    Tensor::stack(&[cos, sin], D::Minus1)
-}
+    println!(
+        "Precomputed freqs shape - cos: {:?}, sin: {:?}",
+        freqs_cos.dims(),
+        freqs_sin.dims()
+    );
 
-pub fn reshape_for_broadcast(freqs_cis: &Tensor, x: &Tensor) -> Result<Tensor> {
-    let x_dims = x.dims();
-    if x_dims.len() < 2 {
-        return Err(candle_core::Error::Msg(
-            "Input tensor must have at least 2 dimensions".to_string(),
-        ));
-    }
-
-    let freqs_shape = freqs_cis.dims();
-    if freqs_shape != [x_dims[1], x_dims[x_dims.len() - 1]] {
-        return Err(candle_core::Error::Msg(
-            "Frequency tensor shape mismatch".to_string(),
-        ));
-    }
-
-    // Create new shape for broadcasting
-    let mut new_shape: Vec<usize> = vec![1; x_dims.len()];
-    new_shape[1] = x_dims[1];
-    new_shape[x_dims.len() - 1] = x_dims[x_dims.len() - 1];
-
-    freqs_cis.reshape(new_shape)
+    Tensor::stack(&[freqs_cos, freqs_sin], D::Minus1)
 }
 
 pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<(Tensor, Tensor)> {
-    let xq_shape = xq.dims();
-    let last_dim = *xq_shape.last().unwrap();
+    let (b_sz, seq_len, h, headdim) = xq.dims4()?;
+    println!(
+        "Rotary inputs - xq: {:?}, freqs_cis: {:?}",
+        xq.dims(),
+        freqs_cis.dims()
+    );
 
-    // Reshape inputs to separate real and imaginary parts
-    let total_elements = xq.elem_count();
-    let inferred_dim = total_elements / (last_dim / 2) / 2;
-    let xq_reshaped = xq.reshape((inferred_dim, last_dim / 2, 2))?;
-    let xk_reshaped = xk.reshape((inferred_dim, last_dim / 2, 2))?;
+    // Calculate dimensions for reshape
+    let complex_dim = 2;
+    let half_headdim = headdim / complex_dim;
 
-    // Split freqs_cis into cos and sin
-    let chunks = freqs_cis.chunk(2, D::Minus1)?;
-    let cos = &chunks[0];
-    let sin = &chunks[1];
-    let cos = reshape_for_broadcast(&cos, &xq_reshaped)?;
-    let sin = reshape_for_broadcast(&sin, &xq_reshaped)?;
+    // Reshape inputs for complex multiplication
+    let xq = xq.reshape((b_sz, seq_len, h, half_headdim, complex_dim))?;
+    let xk = xk.reshape((b_sz, seq_len, h, half_headdim, complex_dim))?;
 
-    // Apply rotation
-    // For complex multiplication (a + bi)(c + di) = (ac - bd) + (ad + bc)i
-    let last_dim = xq_reshaped.dims().len() - 1;
-    let xq_real = &xq_reshaped.narrow(last_dim, 0, 1)?; // or .get(last_dim, 0)?
-    let xq_imag = &xq_reshaped.narrow(last_dim, 1, 1)?; // or .get(last_dim, 1)?
-    let xk_real = &xk_reshaped.narrow(last_dim, 0, 1)?; // or .get(last_dim, 0)?
-    let xk_imag = &xk_reshaped.narrow(last_dim, 1, 1)?; // or .get(last_dim, 1)?
+    // Reshape freqs_cis to match and broadcast across attention heads
+    let freqs_cis = freqs_cis.narrow(0, 0, seq_len)?;
+    let freqs_cis = freqs_cis
+        .reshape((seq_len, half_headdim, complex_dim))?
+        .unsqueeze(0)? // Add batch dim
+        .unsqueeze(2)? // Add head dim
+        .expand((b_sz, seq_len, h, half_headdim, complex_dim))?; // Expand to match input dimensions
 
-    // Compute rotated values
-    let xq_out_real = xq_real.mul(&cos)?.sub(&xq_imag.mul(&sin)?)?;
-    let xq_out_imag = xq_real.mul(&sin)?.add(&xq_imag.mul(&cos)?)?;
-    let xk_out_real = xk_real.mul(&cos)?.sub(&xk_imag.mul(&sin)?)?;
-    let xk_out_imag = xk_real.mul(&sin)?.add(&xk_imag.mul(&cos)?)?;
+    println!(
+        "Reshaped tensors - xq: {:?}, freqs_cis: {:?}",
+        xq.dims(),
+        freqs_cis.dims()
+    );
 
-    // Stack real and imaginary parts and reshape back
-    let xq_out = Tensor::stack(&[xq_out_real, xq_out_imag], D::Minus1)?.reshape(xq_shape)?;
-    let xk_out = Tensor::stack(&[xk_out_real, xk_out_imag], D::Minus1)?.reshape(xk.dims())?;
+    // Define complex multiplication operation
+    let complex_mul = |x: &Tensor| -> Result<Tensor> {
+        let real = x.narrow(4, 0, 1)?.squeeze(4)?;
+        let imag = x.narrow(4, 1, 1)?.squeeze(4)?;
+        let freqs_cos = freqs_cis.narrow(4, 0, 1)?.squeeze(4)?;
+        let freqs_sin = freqs_cis.narrow(4, 1, 1)?.squeeze(4)?;
+
+        let real = real.mul(&freqs_cos)?.sub(&imag.mul(&freqs_sin)?)?;
+        let imag = real.mul(&freqs_sin)?.add(&imag.mul(&freqs_cos)?)?;
+
+        Tensor::stack(&[real, imag], 4)
+    };
+
+    // Apply rotation to query and key
+    let xq_out = complex_mul(&xq)?;
+    let xk_out = complex_mul(&xk)?;
+
+    // Reshape back to original dimensions
+    let xq_out = xq_out.reshape((b_sz, seq_len, h, headdim))?;
+    let xk_out = xk_out.reshape((b_sz, seq_len, h, headdim))?;
+
+    println!(
+        "Output shapes - xq: {:?}, xk: {:?}",
+        xq_out.dims(),
+        xk_out.dims()
+    );
 
     Ok((xq_out, xk_out))
 }

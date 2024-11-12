@@ -1,5 +1,5 @@
+use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use ferritin_featurizers::ProteinTokenizer;
-use hf_hub::{api::sync::Api, Repo, RepoType};
 
 #[test]
 fn test_amplify_tokens() -> Result<(), Box<dyn std::error::Error>> {

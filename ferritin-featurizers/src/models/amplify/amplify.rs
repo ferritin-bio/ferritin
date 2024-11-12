@@ -8,7 +8,7 @@
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
 
-use super::rotary::apply_rotary_emb;
+use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
 use candle_core::{DType, Device, Module, Result, Tensor, D};
 use candle_nn::ops::softmax;
 use candle_nn::{
@@ -107,15 +107,12 @@ pub struct EncoderBlock {
     ffn_norm: RmsNorm,
     attention_norm: RmsNorm,
     ffn_dropout: Dropout,
-    //
-    //
     d_head: usize,
     config: AMPLIFYConfig,
 }
 
 impl EncoderBlock {
     pub fn new(config: &AMPLIFYConfig, vb: VarBuilder, layer: i32) -> Result<Self> {
-        let _d_head = config.hidden_size / config.num_attention_heads;
         let multiple_of = 8;
         let intermediate_size = (config.intermediate_size * 2) / 3;
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
@@ -154,7 +151,9 @@ impl EncoderBlock {
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
         println!("EncoderBlock.forward(): commence");
+        println!("x dims; freqs_dims: {:?}, {:?}", x.dims(), freqs_cis.dims());
         println!("EncoderBlock.forward(): beginning attention norm");
+
         let normed = self.attention_norm.forward(x)?;
         // Todo: confirm the attention block
         println!("EncoderBlock.forward(): getting contacts");
@@ -222,11 +221,18 @@ impl EncoderBlock {
         dropout_p: f64,
         is_causal: bool,
     ) -> Result<Tensor> {
+        println!(
+            "Scaled Dot Product Attention. Tensor shapes for q, k, v: {:?}, {:?}, {:?},",
+            query.dims(),
+            key.dims(),
+            value.dims()
+        );
         // Calculate attention scores
         let d_k = key.dim(key.dims().len() - 1)? as f64;
         let scaling = 1.0 / d_k.sqrt();
         // (B, H, L, S) = (batch, heads, query_length, key_length)
         let scores = (query.matmul(&key.transpose(D::Minus2, D::Minus1)?)? * scaling)?;
+        println!("scores size: {:?}", scores.dims());
         // Apply mask if provided
         if let Some(mask) = attn_mask {
             let scores = scores.add(mask)?;
@@ -251,38 +257,22 @@ impl EncoderBlock {
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
         println!("AttentionBlock: commence");
-        println!("Input x shape: {:?}", x.dims());
-
+        println!(
+            "Input x shape, freqs_cis shape: {:?},{:?}",
+            x.dims(),
+            freqs_cis.dims()
+        );
         // Get dimensions
-        let batch_size = x.dim(0)?;
-        let seq_len = x.dim(1)?;
+        let (batch_size, seq_len, _) = x.dims3()?;
         // Query, Key, Value projections
         let xq = self.q.forward(x)?; // [batch_size, seq_len, hidden_size]
         let xk = self.k.forward(x)?;
         let xv = self.v.forward(x)?;
         println!("AttentionBlock: xq_shape: {:?}", xq.dims());
-
-        println!("Current xq shape: {:?}", xq.dims());
         println!(
             "Attempting reshape to: [{}, {}, {}, {}]",
             batch_size, seq_len, self.config.num_attention_heads, self.d_head
         );
-        println!("hidden_size: {}", self.config.hidden_size);
-
-        let d_head = &self.config.hidden_size / &self.config.num_attention_heads;
-        println!(
-            "d_head calculation: {} / {} = {}",
-            &self.config.hidden_size, &self.config.num_attention_heads, d_head
-        );
-
-        assert_eq!(
-            self.config.hidden_size,
-            self.config.num_attention_heads * self.d_head
-        );
-
-        // Reshape Once
-        let xq = xq.reshape((batch_size, seq_len, self.config.hidden_size))?;
-        println!("AttentionBlock: xq_reshape: {:?}", xq.dims());
 
         // Reshape for rotary embeddings
         let xq = xq.reshape((
@@ -292,7 +282,6 @@ impl EncoderBlock {
             self.d_head,
         ))?;
 
-        println!("AttentionBlock: xq_shape: {:?}", xq.dims());
         let xk = xk.reshape((
             batch_size,
             seq_len,
@@ -305,26 +294,68 @@ impl EncoderBlock {
             self.config.num_attention_heads,
             self.d_head,
         ))?;
+        println!(
+            "AttentionBlock: xq_shape, xk_shape, xv_shape: {:?}, {:?}, {:?}",
+            xq.dims(),
+            xk.dims(),
+            xv.dims()
+        );
+        println!(
+            "AttentionBlock: xq_shape, xk_shape, xv_shape, freqs_cis: {:?}, {:?}, {:?}, {:?}",
+            xq.dims(),
+            xk.dims(),
+            xv.dims(),
+            freqs_cis.dims(),
+        );
         // Apply rotary embeddings
-        let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
+        println!("Beginning Rotary Embedding....");
+        let (xq, xk) = apply_rotary_emb(&xq, &xk, &freqs_cis)?;
+        println!("Rotary Embed Shapes: : {:?}, {:?}", xq.dims(), xk.dims());
+
         // Attention computation
         let dropout_prob = self.config.dropout_prob; // still need to toggle if in Training....
-        let zeros = Tensor::zeros_like(&xq)?;
-        let pad_mask = pad_mask.unwrap_or_else(|| &zeros);
-        let attn =
-            self.scaled_dot_product_attention(&xq, &xk, &xv, Some(pad_mask), dropout_prob, false)?;
+                                                     // let zeros = Tensor::zeros_like(&xq)?;
+                                                     // println!("pad mask...");
+                                                     // let pad_mask = pad_mask.unwrap_or_else(|| &zeros);
 
-        let _attn = if output_attentions {
-            let xq_t = xq.permute((0, 2, 1, 3))?;
-            let xk_t = xk.permute((0, 2, 3, 1))?;
-            let mut attn_weights = xq_t.matmul(&xk_t)?;
-            let scale = (xq.dim(D::Minus1)? as f64).sqrt();
-            attn_weights = (attn_weights / scale)?;
-            attn_weights = attn_weights.add(&pad_mask)?;
-            Some(softmax(&attn_weights, D::Minus1)?)
+        let pad_mask = if let Some(mask) = pad_mask {
+            let (batch_size, seq_len) = (x.dim(0)?, x.dim(1)?);
+            let num_heads = self.config.num_attention_heads;
+
+            // Following PyTorch's implementation:
+            // 1. unsqueeze twice to add head dimensions
+            // 2. repeat to match attention matrix size
+            let mask = mask
+                .unsqueeze(1)? // Add first head dimension
+                .unsqueeze(1)? // Add second head dimension
+                .expand((batch_size, num_heads, seq_len, seq_len))?; // Expand to full attention size
+            Some(mask)
         } else {
             None
         };
+        println!("calc attention...");
+        let attn = self.scaled_dot_product_attention(
+            &xq,
+            &xk,
+            &xv,
+            pad_mask.as_ref(),
+            dropout_prob,
+            false,
+        )?;
+
+        // println!("post_attention");
+        let _attn = None;
+        // let _attn = if output_attentions {
+        //     let xq_t = xq.permute((0, 2, 1, 3))?;
+        //     let xk_t = xk.permute((0, 2, 3, 1))?;
+        //     let mut attn_weights = xq_t.matmul(&xk_t)?;
+        //     let scale = (xq.dim(D::Minus1)? as f64).sqrt();
+        //     attn_weights = (attn_weights / scale)?;
+        //     attn_weights = attn_weights.add(pad_mask)?;
+        //     Some(softmax(&attn_weights, D::Minus1)?)
+        // } else {
+        //     None
+        // };
 
         // Final projection and dropout
         let output = attn.reshape((
@@ -424,18 +455,27 @@ impl AMPLIFY {
         let mut hidden_states = vec![];
         let mut attentions = vec![];
 
+        println!(
+            "AMPLIFY.forward(): Freq_CIS. Shape: {:?}",
+            &self.freqs_cis.dims()
+        );
         // Process attention mask if provided
         println!("AMPLIFY.forward():  creating attention mask");
         let attention_mask =
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         // Get appropriate length of freqs_cis
         println!("AMPLIFY.forward():  creating freqs_cis mask");
-        println!("AMPLIFY.forward():  {:?}", src.dims());
-        println!("AMPLIFY.forward():  {:?}", src.dim(0));
-        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(0)?)?;
+        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?; // whats this?
+        println!(
+            "AMPLIFY.forward(): freqs_cis. Shape: {:?}",
+            &freqs_cis.dims()
+        );
+
         // Embedding layer
         println!("AMPLIFY.forward():  creating encoder");
         let mut x = self.encoder.forward(src)?;
+        println!("X dims: {:?}", x.dims());
+
         // Transform through encoder blocks
         println!("AMPLIFY.forward():  running through the transformer");
         for layer in self.transformer_encoder.iter() {
@@ -473,8 +513,6 @@ impl AMPLIFY {
                 None
             },
         })
-
-        // unimplemented!()
     }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
@@ -496,13 +534,15 @@ impl AMPLIFY {
         let decoder = linear(cfg.hidden_size, cfg.vocab_size, vb.pp("decoder"))?;
         println!("AMPLIFY: Decoder Initialized.");
 
-        // Todo: Double check this....
-        let freqs_cis = Tensor::zeros(
-            (cfg.max_length, cfg.num_attention_heads, 2),
-            DType::F32,
-            &Device::Cpu,
-        )?;
+        // self.freqs_cis = precompute_freqs_cis(config.hidden_size // config.num_attention_heads, config.max_length)
+        //  theta=10000
+        // AMPLIFY: Freq_CIS Initiated. Shape: [2048, 32, 2]
+        // let freqs_cis =
+        //     precompute_freqs_cis(cfg.hidden_size / cfg.num_attention_heads, cfg.max_length)?;
+        let head_dim = cfg.hidden_size / cfg.num_attention_heads;
+        let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?;
 
+        println!("AMPLIFY: Freq_CIS Initiated. Shape: {:?}", freqs_cis.dims());
         println!("AMPLIFY: freqs_cis Created .");
 
         Ok(Self {

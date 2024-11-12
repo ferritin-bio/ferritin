@@ -1,8 +1,8 @@
 use anyhow::Result;
 use candle_core::{DType, Device};
+use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use ferritin_featurizers::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
-use hf_hub::{api::sync::Api, Repo, RepoType};
 use safetensors::SafeTensors;
 
 fn main() -> Result<()> {
@@ -46,11 +46,11 @@ fn main() -> Result<()> {
     let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
     println!("Successfully created the tokenizer!");
     let pmatrix = protein_tokenizer.encode(&["METVAL".to_string()], Some(20), true, false)?;
+    let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
     println!("Successfully encoded the protein!");
     // begin encoding the model....
     println!("Commence Encoding:");
     let encoded = model.forward(&pmatrix, None, false, false)?;
-
     println!("{:?}", encoded.logits);
 
     Ok(())
