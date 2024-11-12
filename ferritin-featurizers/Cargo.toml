@@ -8,9 +8,9 @@ description.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-candle-core = "0.7.2"
-candle-nn = "0.7.2"
-candle-transformers = "0.7.2"
+candle-core = "0.8"
+candle-nn = "0.8"
+candle-transformers = "0.8"
 clap = "4.5.20"
 ferritin-core = { path = "../ferritin-core" }
 itertools.workspace = true
@@ -26,5 +26,5 @@ tokenizers = "0.20.3"
 ferritin-test-data = { path = "../ferritin-test-data" }
 assert_cmd = "2.0.16"
 tempfile = "3.14.0"
-hf-hub = "0.3.2"
-candle-examples = "0.7.2"
+candle-hf-hub = "0.3.3"
+candle-examples = "0.8"
