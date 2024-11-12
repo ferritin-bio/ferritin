@@ -150,9 +150,8 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
     // let sin = chunks[1].squeeze(D::Minus1)?;
 
     let chunks = freqs_cis.chunk(2, D::Minus1)?;
-    let cos = chunks[0].squeeze(D::Minus1)?.transpose(0, 1)?; // [8, 32] -> [32, 8]
-    let sin = chunks[1].squeeze(D::Minus1)?.transpose(0, 1)?; // [8, 32] -> [32, 8]
-
+    let cos = chunks[0].squeeze(D::Minus1)?; // Keep as [8, 32]
+    let sin = chunks[1].squeeze(D::Minus1)?; // Keep as [8, 32]
     println!(
         "After squeeze - cos shape: {:?}, sin shape: {:?}",
         cos.dims(),
