@@ -68,8 +68,9 @@ pub fn precompute_freqs_cis(head_dim: usize, seq_len: usize) -> Result<Tensor> {
 
     Tensor::stack(&[freqs_cos, freqs_sin], D::Minus1)
 }
+
 pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<(Tensor, Tensor)> {
-    let (b_sz, h, seq_len, headdim) = xq.dims4()?;
+    let (b_sz, seq_len, h, headdim) = xq.dims4()?;
     println!(
         "Rotary inputs - xq: {:?}, freqs_cis: {:?}",
         xq.dims(),
@@ -81,12 +82,16 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
     let half_headdim = headdim / complex_dim;
 
     // Reshape inputs for complex multiplication
-    let xq = xq.reshape((b_sz, h, seq_len, half_headdim, complex_dim))?;
-    let xk = xk.reshape((b_sz, h, seq_len, half_headdim, complex_dim))?;
+    let xq = xq.reshape((b_sz, seq_len, h, half_headdim, complex_dim))?;
+    let xk = xk.reshape((b_sz, seq_len, h, half_headdim, complex_dim))?;
 
-    // Get appropriate length of freqs_cis and reshape
+    // Reshape freqs_cis to match and broadcast across attention heads
     let freqs_cis = freqs_cis.narrow(0, 0, seq_len)?;
-    let freqs_cis = freqs_cis.reshape((1, 1, seq_len, half_headdim, complex_dim))?;
+    let freqs_cis = freqs_cis
+        .reshape((seq_len, half_headdim, complex_dim))?
+        .unsqueeze(0)? // Add batch dim
+        .unsqueeze(2)? // Add head dim
+        .expand((b_sz, seq_len, h, half_headdim, complex_dim))?; // Expand to match input dimensions
 
     println!(
         "Reshaped tensors - xq: {:?}, freqs_cis: {:?}",
@@ -112,8 +117,8 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
     let xk_out = complex_mul(&xk)?;
 
     // Reshape back to original dimensions
-    let xq_out = xq_out.reshape((b_sz, h, seq_len, headdim))?;
-    let xk_out = xk_out.reshape((b_sz, h, seq_len, headdim))?;
+    let xq_out = xq_out.reshape((b_sz, seq_len, h, headdim))?;
+    let xk_out = xk_out.reshape((b_sz, seq_len, h, headdim))?;
 
     println!(
         "Output shapes - xq: {:?}, xk: {:?}",
@@ -123,6 +128,121 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
 
     Ok((xq_out, xk_out))
 }
+
+// pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<(Tensor, Tensor)> {
+//     let (b_sz, seq_len, h, headdim) = xq.dims4()?;
+//     println!(
+//         "Rotary inputs - xq: {:?}, freqs_cis: {:?}",
+//         xq.dims(),
+//         freqs_cis.dims()
+//     );
+
+//     // First, ensure freqs_cis has the right sequence length
+//     let freqs_cis = freqs_cis.narrow(0, 0, seq_len)?;
+
+//     // Calculate dimensions for reshape
+//     let complex_dim = 2;
+//     let half_headdim = headdim / complex_dim;
+
+//     // Reshape inputs for complex multiplication
+//     let xq = xq.reshape((b_sz, seq_len, h, half_headdim, complex_dim))?;
+//     let xk = xk.reshape((b_sz, seq_len, h, half_headdim, complex_dim))?;
+
+//     // Reshape freqs_cis to match the attention heads
+//     let freqs_cis = freqs_cis.reshape((seq_len, half_headdim, complex_dim))?;
+//     // Add broadcasting dimensions
+//     let freqs_cis = freqs_cis.unsqueeze(0)?.unsqueeze(2)?; // [1, seq_len, 1, half_headdim, 2]
+
+//     println!(
+//         "Reshaped tensors - xq: {:?}, freqs_cis: {:?}",
+//         xq.dims(),
+//         freqs_cis.dims()
+//     );
+
+//     // Define complex multiplication operation
+//     let complex_mul = |x: &Tensor| -> Result<Tensor> {
+//         let real = x.narrow(4, 0, 1)?.squeeze(4)?;
+//         let imag = x.narrow(4, 1, 1)?.squeeze(4)?;
+//         let freqs_cos = freqs_cis.narrow(4, 0, 1)?.squeeze(4)?;
+//         let freqs_sin = freqs_cis.narrow(4, 1, 1)?.squeeze(4)?;
+
+//         let real = real.mul(&freqs_cos)?.sub(&imag.mul(&freqs_sin)?)?;
+//         let imag = real.mul(&freqs_sin)?.add(&imag.mul(&freqs_cos)?)?;
+
+//         Tensor::stack(&[real, imag], 4)
+//     };
+
+//     // Apply rotation to query and key
+//     let xq_out = complex_mul(&xq)?;
+//     let xk_out = complex_mul(&xk)?;
+
+//     // Reshape back to original dimensions
+//     let xq_out = xq_out.reshape((b_sz, seq_len, h, headdim))?;
+//     let xk_out = xk_out.reshape((b_sz, seq_len, h, headdim))?;
+
+//     println!(
+//         "Output shapes - xq: {:?}, xk: {:?}",
+//         xq_out.dims(),
+//         xk_out.dims()
+//     );
+
+//     Ok((xq_out, xk_out))
+// }
+// pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<(Tensor, Tensor)> {
+//     let (b_sz, h, seq_len, headdim) = xq.dims4()?;
+//     println!(
+//         "Rotary inputs - xq: {:?}, freqs_cis: {:?}",
+//         xq.dims(),
+//         freqs_cis.dims()
+//     );
+
+//     // Calculate dimensions for reshape
+//     let complex_dim = 2;
+//     let half_headdim = headdim / complex_dim;
+
+//     // Reshape inputs for complex multiplication
+//     let xq = xq.reshape((b_sz, h, seq_len, half_headdim, complex_dim))?;
+//     let xk = xk.reshape((b_sz, h, seq_len, half_headdim, complex_dim))?;
+
+//     // Get appropriate length of freqs_cis and reshape
+//     let freqs_cis = freqs_cis.narrow(0, 0, seq_len)?;
+//     let freqs_cis = freqs_cis.reshape((1, 1, seq_len, half_headdim, complex_dim))?;
+
+//     println!(
+//         "Reshaped tensors - xq: {:?}, freqs_cis: {:?}",
+//         xq.dims(),
+//         freqs_cis.dims()
+//     );
+
+//     // Define complex multiplication operation
+//     let complex_mul = |x: &Tensor| -> Result<Tensor> {
+//         let real = x.narrow(4, 0, 1)?.squeeze(4)?;
+//         let imag = x.narrow(4, 1, 1)?.squeeze(4)?;
+//         let freqs_cos = freqs_cis.narrow(4, 0, 1)?.squeeze(4)?;
+//         let freqs_sin = freqs_cis.narrow(4, 1, 1)?.squeeze(4)?;
+
+//         let real = real.mul(&freqs_cos)?.sub(&imag.mul(&freqs_sin)?)?;
+//         let imag = real.mul(&freqs_sin)?.add(&imag.mul(&freqs_cos)?)?;
+
+//         Tensor::stack(&[real, imag], 4)
+//     };
+
+//     // Apply rotation to query and key
+//     let xq_out = complex_mul(&xq)?;
+//     let xk_out = complex_mul(&xk)?;
+
+//     // Reshape back to original dimensions
+//     let xq_out = xq_out.reshape((b_sz, h, seq_len, headdim))?;
+//     let xk_out = xk_out.reshape((b_sz, h, seq_len, headdim))?;
+
+//     println!(
+//         "Output shapes - xq: {:?}, xk: {:?}",
+//         xq_out.dims(),
+//         xk_out.dims()
+//     );
+
+//     Ok((xq_out, xk_out))
+// }
 
 // copy from phi3
 //
