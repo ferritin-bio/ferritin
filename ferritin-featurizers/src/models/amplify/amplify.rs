@@ -221,11 +221,18 @@ impl EncoderBlock {
         dropout_p: f64,
         is_causal: bool,
     ) -> Result<Tensor> {
+        println!(
+            "Scaled Dot Product Attention. Tensor shapes for q, k, v: {:?}, {:?}, {:?},",
+            query.dims(),
+            key.dims(),
+            value.dims()
+        );
         // Calculate attention scores
         let d_k = key.dim(key.dims().len() - 1)? as f64;
         let scaling = 1.0 / d_k.sqrt();
         // (B, H, L, S) = (batch, heads, query_length, key_length)
         let scores = (query.matmul(&key.transpose(D::Minus2, D::Minus1)?)? * scaling)?;
+        println!("scores size: {:?}", scores.dims());
         // Apply mask if provided
         if let Some(mask) = attn_mask {
             let scores = scores.add(mask)?;
@@ -307,22 +314,48 @@ impl EncoderBlock {
 
         // Attention computation
         let dropout_prob = self.config.dropout_prob; // still need to toggle if in Training....
-        let zeros = Tensor::zeros_like(&xq)?;
-        let pad_mask = pad_mask.unwrap_or_else(|| &zeros);
-        let attn =
-            self.scaled_dot_product_attention(&xq, &xk, &xv, Some(pad_mask), dropout_prob, false)?;
+                                                     // let zeros = Tensor::zeros_like(&xq)?;
+                                                     // println!("pad mask...");
+                                                     // let pad_mask = pad_mask.unwrap_or_else(|| &zeros);
 
-        let _attn = if output_attentions {
-            let xq_t = xq.permute((0, 2, 1, 3))?;
-            let xk_t = xk.permute((0, 2, 3, 1))?;
-            let mut attn_weights = xq_t.matmul(&xk_t)?;
-            let scale = (xq.dim(D::Minus1)? as f64).sqrt();
-            attn_weights = (attn_weights / scale)?;
-            attn_weights = attn_weights.add(&pad_mask)?;
-            Some(softmax(&attn_weights, D::Minus1)?)
+        let pad_mask = if let Some(mask) = pad_mask {
+            let (batch_size, seq_len) = (x.dim(0)?, x.dim(1)?);
+            let num_heads = self.config.num_attention_heads;
+
+            // Following PyTorch's implementation:
+            // 1. unsqueeze twice to add head dimensions
+            // 2. repeat to match attention matrix size
+            let mask = mask
+                .unsqueeze(1)? // Add first head dimension
+                .unsqueeze(1)? // Add second head dimension
+                .expand((batch_size, num_heads, seq_len, seq_len))?; // Expand to full attention size
+            Some(mask)
         } else {
             None
         };
+        println!("calc attention...");
+        let attn = self.scaled_dot_product_attention(
+            &xq,
+            &xk,
+            &xv,
+            pad_mask.as_ref(),
+            dropout_prob,
+            false,
+        )?;
+
+        // println!("post_attention");
+        let _attn = None;
+        // let _attn = if output_attentions {
+        //     let xq_t = xq.permute((0, 2, 1, 3))?;
+        //     let xk_t = xk.permute((0, 2, 3, 1))?;
+        //     let mut attn_weights = xq_t.matmul(&xk_t)?;
+        //     let scale = (xq.dim(D::Minus1)? as f64).sqrt();
+        //     attn_weights = (attn_weights / scale)?;
+        //     attn_weights = attn_weights.add(pad_mask)?;
+        //     Some(softmax(&attn_weights, D::Minus1)?)
+        // } else {
+        //     None
+        // };
 
         // Final projection and dropout
         let output = attn.reshape((
@@ -480,8 +513,6 @@ impl AMPLIFY {
                 None
             },
         })
-
-        // unimplemented!()
     }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
