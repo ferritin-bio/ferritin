@@ -107,8 +107,6 @@ pub struct EncoderBlock {
     ffn_norm: RmsNorm,
     attention_norm: RmsNorm,
     ffn_dropout: Dropout,
-    //
-    //
     d_head: usize,
     config: AMPLIFYConfig,
 }
@@ -434,8 +432,6 @@ impl AMPLIFY {
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         // Get appropriate length of freqs_cis
         println!("AMPLIFY.forward():  creating freqs_cis mask");
-        println!("AMPLIFY.forward():  {:?}", src.dims());
-        println!("AMPLIFY.forward():  {:?}", src.dim(1));
         let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?; // whats this?
         println!(
             "AMPLIFY.forward(): freqs_cis. Shape: {:?}",
@@ -510,8 +506,10 @@ impl AMPLIFY {
         // self.freqs_cis = precompute_freqs_cis(config.hidden_size // config.num_attention_heads, config.max_length)
         //  theta=10000
         // AMPLIFY: Freq_CIS Initiated. Shape: [2048, 32, 2]
-        let freqs_cis =
-            precompute_freqs_cis(cfg.hidden_size / cfg.num_attention_heads, cfg.max_length)?;
+        // let freqs_cis =
+        //     precompute_freqs_cis(cfg.hidden_size / cfg.num_attention_heads, cfg.max_length)?;
+        let head_dim = cfg.hidden_size / cfg.num_attention_heads;
+        let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?;
 
         println!("AMPLIFY: Freq_CIS Initiated. Shape: {:?}", freqs_cis.dims());
         println!("AMPLIFY: freqs_cis Created .");
