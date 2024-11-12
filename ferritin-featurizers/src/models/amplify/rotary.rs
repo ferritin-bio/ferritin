@@ -1,10 +1,9 @@
-use candle_core::{Device, Result, Tensor, D};
+use candle_core::{Device, Error, Result, Tensor, D};
 
 // Example1: https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/starcoder2.rs#L22
 // Example 2: phi3: https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/phi3.rs#L32
-//
 pub fn precompute_freqs_cis(dim: usize, end: usize) -> Result<Tensor> {
-    let theta: f64 = 1000.;
+    let theta: f64 = 10000.;
     let device = Device::Cpu;
     let freqs = (0..dim / 2)
         .into_iter()
@@ -25,32 +24,69 @@ pub fn precompute_freqs_cis(dim: usize, end: usize) -> Result<Tensor> {
     Tensor::stack(&[cos, sin], D::Minus1)
 }
 
-pub fn reshape_for_broadcast(freqs_cis: &Tensor, x: &Tensor) -> Result<Tensor> {
-    let x_dims = x.dims();
-    println!(
-        "Reshape Tensor Shapes. FREQ and X: {:?} and {:?}",
-        freqs_cis.dims(),
-        x.dims()
-    );
-    // Reshape Tensor Shapes. FREQ and X: [1, 10, 1] and [80, 32, 2]
-    if x_dims.len() < 2 {
+// pub fn reshape_for_broadcast(freqs_cis: &Tensor, x: &Tensor) -> Result<Tensor> {
+//     let x_dims = x.dims();
+//     println!(
+//         "Reshape Tensor Shapes. FREQ and X: {:?} and {:?}",
+//         freqs_cis.dims(),
+//         x.dims()
+//     );
+//     // Reshape Tensor Shapes. FREQ and X: [1, 10, 1] and [80, 32, 2]
+//     if x_dims.len() < 2 {
+//         return Err(candle_core::Error::Msg(
+//             "Input tensor must have at least 2 dimensions".to_string(),
+//         ));
+//     }
+
+//     let freqs_shape = freqs_cis.dims();
+//     if freqs_shape != [x_dims[1], x_dims[x_dims.len() - 1]] {
+//         return Err(candle_core::Error::Msg(
+//             "Frequency tensor shape mismatch".to_string(),
+//         ));
+//     }
+
+//     // Create new shape for broadcasting
+//     let mut new_shape: Vec<usize> = vec![1; x_dims.len()];
+//     new_shape[1] = x_dims[1];
+//     new_shape[x_dims.len() - 1] = x_dims[x_dims.len() - 1];
+
+//     freqs_cis.reshape(new_shape)
+// }
+
+fn reshape_for_broadcast(freqs_cis: &Tensor, x: &Tensor) -> Result<Tensor> {
+    // Get number of dimensions
+    let ndim = x.dims().len();
+
+    // Verify dimensions
+    if !(0 <= 1 && 1 < ndim) {
         return Err(candle_core::Error::Msg(
-            "Input tensor must have at least 2 dimensions".to_string(),
+            "Invalid dimension index".to_string(),
         ));
     }
 
+    // Get shapes
+    let x_shape = x.dims();
     let freqs_shape = freqs_cis.dims();
-    if freqs_shape != [x_dims[1], x_dims[x_dims.len() - 1]] {
-        return Err(candle_core::Error::Msg(
-            "Frequency tensor shape mismatch".to_string(),
-        ));
+
+    // Verify shapes match
+    if freqs_shape != &[x_shape[1], x_shape[ndim - 1]] {
+        return Err(candle_core::Error::Msg(format!(
+            "freqs_cis shape doesn't match expected dimensions\n Freqs_Shape1: {:?}\nShape2: {:?},\nxshape1: {:?}, xshape[n-1]: {:?}",
+            freqs_shape,
+            x_shape,
+            x_shape[1],
+            x_shape[ndim - 1]
+        )));
     }
 
-    // Create new shape for broadcasting
-    let mut new_shape: Vec<usize> = vec![1; x_dims.len()];
-    new_shape[1] = x_dims[1];
-    new_shape[x_dims.len() - 1] = x_dims[x_dims.len() - 1];
+    // Create new shape array
+    let mut new_shape: Vec<usize> = x_shape
+        .iter()
+        .enumerate()
+        .map(|(i, &d)| if i == 1 || i == ndim - 1 { d } else { 1 })
+        .collect();
 
+    // Reshape tensor
     freqs_cis.reshape(new_shape)
 }
 
@@ -65,11 +101,27 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
     let xq_reshaped = xq.reshape((inferred_dim, last_dim / 2, 2))?;
     let xk_reshaped = xk.reshape((inferred_dim, last_dim / 2, 2))?;
 
+    println!(
+        "Element sizes of inferred_dim, xq_reshaped, xk_reshaped, freqs: {:?}, {:?}, {:?}, {:?}",
+        inferred_dim,
+        xq_reshaped.dims(),
+        xk_reshaped.dims(),
+        freqs_cis.dims()
+    );
+
     // Split freqs_cis into cos and sin
     let chunks = freqs_cis.chunk(2, D::Minus1)?;
     let cos = &chunks[0];
     let sin = &chunks[1];
+
     println!("About to reshape cos ....");
+    println!(
+        "Element sizes of cos, sin, xq_reshaped: {:?}, {:?}, {:?}",
+        sin.dims(),
+        cos.dims(),
+        xq_reshaped.dims()
+    );
+
     let cos = reshape_for_broadcast(&cos, &xq_reshaped)?;
     println!("About to reshape sin ....");
     let sin = reshape_for_broadcast(&sin, &xq_reshaped)?;
