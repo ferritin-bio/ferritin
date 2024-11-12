@@ -46,23 +46,18 @@ fn main() -> Result<()> {
     let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
     println!("Successfully created the tokenizer!");
     let pmatrix = protein_tokenizer.encode(&["METVALMETVAL".to_string()], Some(20), true, false)?;
+    println!("pmatrix: {:?}", pmatrix);
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
     println!("Successfully encoded the protein!");
     // begin encoding the model....
     println!("Commence Encoding:");
     let encoded = model.forward(&pmatrix, None, false, false)?;
-    println!("{:?}", encoded.logits);
-    println!("{:?}", encoded.attentions);
-    println!("{:?}", encoded.hidden_states);
-
     let predictions = encoded.logits.argmax(D::Minus1)?;
-
     // Get the raw data as a vector of indices
     let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
-    println!("indices: {:?}", indices);
-
     let decoded = protein_tokenizer.decode(indices.as_slice(), true)?;
+    println!("Encoded Logits Dimension: {:?}, ", encoded.logits);
+    println!("indices: {:?}", indices);
     println!("Decoded Values: {:}", decoded);
-
     Ok(())
 }

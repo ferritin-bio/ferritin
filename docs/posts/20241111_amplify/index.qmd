@@ -1,0 +1,100 @@
+---
+title: "Amplify Pytorch->Candle Conversion"
+description: "Conversion of AMPLIFY from Pytorch to Candle"
+author: "Zachary Charlop-Powers"
+date: "2024-11-12"
+categories: [rust, ai, proteins]
+image: "images/cli.png"
+
+---
+
+
+# Intro
+
+In the previous post I left off with the comment that Amplify would be
+a better first candidate to port to Candle. In this post I am happy to report and initial,
+but as-of-yet-untested port of the Amplify model from pytorch to Candle. Here are
+a few of the lessons learned .
+
+
+```sh
+# runnable test you can use/modify to start playing
+# git clone git@github.com:zachcp/ferritin.git
+# cd ferritin
+cargo run --example amplify
+
+# Initial Test METVALMETVAL".to_string()
+AMPLIFY.forward():  calculating logits
+Encoded Logits Dimension: Tensor[dims 1, 14, 27; f32],
+indices: [25, 11, 21, 17, 7, 15, 8, 17, 16, 7, 18, 25, 25, 15]
+Decoded Values: C E Y K A D G K P A Q C C D
+```
+
+
+
+# Parts
+
+- [Amplify][AmplifyGH]
+- [AmplifyHF][AmplifyHF]
+
+
+## Tokenizer
+
+From the perspective of tokenizers, using Amplify was a good choice. The [Amplify Hugging Face][AmplifyHF] repo
+has `tokenizer.json` file and uses the python hugginface [tokenizer library](https://huggingface.co/docs/transformers/en/main_classes/tokenizer).
+There is a comparable rust version, [tokenizers](https://crates.io/crates/tokenizers), that
+uses hthe same underlying code and logic. A bit of `Claude` magic and i had a functional
+Rust tokenizer, `ProteinTokenizer`, and was able to retrieve and encode sequences using the Amplify sequence vocab.
+
+
+```rust
+// examples/amplify/main.rs
+
+
+// The HF Repo
+let model_id = "chandar-lab/AMPLIFY_120M";
+let revision = "main";
+
+// Initialize the Hugging Face API client
+let api = Api::new()?;
+let repo = api.repo(Repo::with_revision(
+    model_id.to_string(),
+    RepoType::Model,
+    revision.to_string(),
+));
+
+
+// The HF Repo
+let tokenizer = repo.get("tokenizer.json")?;
+let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
+println!("Successfully created the tokenizer!");
+let pmatrix = protein_tokenizer.encode(&["METVALMETVAL".to_string()], Some(20), true, false)?;
+// pmatrix: Tensor[dims 14; i64]
+```
+
+
+
+## Weights
+
+## Model
+
+### Rotational Embeddings
+
+### Feed Forward Network.
+
+## Other Tricky Bits
+
+- xformer
+
+
+# Claude Sonnet.
+
+Once again amazing.
+
+
+
+
+
+
+[AmplifyGH]: https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/src/amplify/model/amplify.py
+[AmplifyHF]: https://huggingface.co/chandar-lab/AMPLIFY_120M
