@@ -53,8 +53,44 @@ pub fn precompute_freqs_cis(dim: usize, end: usize) -> Result<Tensor> {
 //     freqs_cis.reshape(new_shape)
 // }
 
+// fn reshape_for_broadcast(freqs_cis: &Tensor, x: &Tensor) -> Result<Tensor> {
+//     // Get number of dimensions
+//     let ndim = x.dims().len();
+
+//     // Verify dimensions
+//     if !(0 <= 1 && 1 < ndim) {
+//         return Err(candle_core::Error::Msg(
+//             "Invalid dimension index".to_string(),
+//         ));
+//     }
+
+//     // Get shapes
+//     let x_shape = x.dims();
+//     let freqs_shape = freqs_cis.dims();
+
+//     // Verify shapes match
+//     if freqs_shape != &[x_shape[1], x_shape[ndim - 1]] {
+//         return Err(candle_core::Error::Msg(format!(
+//             "freqs_cis shape doesn't match expected dimensions\n Freqs_Shape1: {:?}\nShape2: {:?},\nxshape1: {:?}, xshape[n-1]: {:?}",
+//             freqs_shape,
+//             x_shape,
+//             x_shape[1],
+//             x_shape[ndim - 1]
+//         )));
+//     }
+
+//     // Create new shape array
+//     let mut new_shape: Vec<usize> = x_shape
+//         .iter()
+//         .enumerate()
+//         .map(|(i, &d)| if i == 1 || i == ndim - 1 { d } else { 1 })
+//         .collect();
+
+//     // Reshape tensor
+//     freqs_cis.reshape(new_shape)
+// }
+
 fn reshape_for_broadcast(freqs_cis: &Tensor, x: &Tensor) -> Result<Tensor> {
-    // Get number of dimensions
     let ndim = x.dims().len();
 
     // Verify dimensions
@@ -64,29 +100,28 @@ fn reshape_for_broadcast(freqs_cis: &Tensor, x: &Tensor) -> Result<Tensor> {
         ));
     }
 
-    // Get shapes
     let x_shape = x.dims();
     let freqs_shape = freqs_cis.dims();
 
-    // Verify shapes match
-    if freqs_shape != &[x_shape[1], x_shape[ndim - 1]] {
+    // Match PyTorch's assertion exactly:
+    // assert freqs_cis.shape == (x.shape[1], x.shape[-1])
+    if freqs_shape != &[x_shape[1], *x_shape.last().unwrap()] {
         return Err(candle_core::Error::Msg(format!(
-            "freqs_cis shape doesn't match expected dimensions\n Freqs_Shape1: {:?}\nShape2: {:?},\nxshape1: {:?}, xshape[n-1]: {:?}",
-            freqs_shape,
-            x_shape,
+            "freqs_cis shape doesn't match expected dimensions\n Expected: [{}, {}]\n Got: {:?}",
             x_shape[1],
-            x_shape[ndim - 1]
+            x_shape.last().unwrap(),
+            freqs_shape,
         )));
     }
 
-    // Create new shape array
-    let mut new_shape: Vec<usize> = x_shape
+    // Create new shape matching PyTorch's list comprehension:
+    // [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
+    let new_shape: Vec<usize> = x_shape
         .iter()
         .enumerate()
         .map(|(i, &d)| if i == 1 || i == ndim - 1 { d } else { 1 })
         .collect();
 
-    // Reshape tensor
     freqs_cis.reshape(new_shape)
 }
 
@@ -111,8 +146,14 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
 
     // Split freqs_cis into cos and sin
     let chunks = freqs_cis.chunk(2, D::Minus1)?;
-    let cos = &chunks[0];
-    let sin = &chunks[1];
+    let cos = chunks[0].squeeze(D::Minus1)?; // Remove the last dimension of size 1
+    let sin = chunks[1].squeeze(D::Minus1)?;
+
+    println!(
+        "After squeeze - cos shape: {:?}, sin shape: {:?}",
+        cos.dims(),
+        sin.dims()
+    );
 
     println!("About to reshape cos ....");
     println!(

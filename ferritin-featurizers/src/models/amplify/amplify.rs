@@ -153,7 +153,7 @@ impl EncoderBlock {
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
         println!("EncoderBlock.forward(): commence");
-        println!("x dims: {:?}", x.dims());
+        println!("x dims; freqs_dims: {:?}, {:?}", x.dims(), freqs_cis.dims());
         println!("EncoderBlock.forward(): beginning attention norm");
 
         let normed = self.attention_norm.forward(x)?;
@@ -252,7 +252,11 @@ impl EncoderBlock {
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
         println!("AttentionBlock: commence");
-        println!("Input x shape: {:?}", x.dims());
+        println!(
+            "Input x shape, freqs_cis shape: {:?},{:?}",
+            x.dims(),
+            freqs_cis.dims()
+        );
         // Get dimensions
         let (batch_size, seq_len, _) = x.dims3()?;
         // Query, Key, Value projections
@@ -300,7 +304,7 @@ impl EncoderBlock {
         );
         // Apply rotary embeddings
         println!("Beginning Rotary Embedding....");
-        let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
+        let (xq, xk) = apply_rotary_emb(&xq, &xk, &freqs_cis)?;
         println!("Rotary Embed Shapes: : {:?}, {:?}", xq.dims(), xk.dims());
 
         // Attention computation
@@ -441,6 +445,8 @@ impl AMPLIFY {
         // Embedding layer
         println!("AMPLIFY.forward():  creating encoder");
         let mut x = self.encoder.forward(src)?;
+        println!("X dims: {:?}", x.dims());
+
         // Transform through encoder blocks
         println!("AMPLIFY.forward():  running through the transformer");
         for layer in self.transformer_encoder.iter() {
