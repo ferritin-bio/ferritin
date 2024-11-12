@@ -1,8 +1,8 @@
 use anyhow::Result;
 use candle_core::{DType, Device};
+use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use ferritin_featurizers::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
-use hf_hub::{api::sync::Api, Repo, RepoType};
 use safetensors::SafeTensors;
 
 fn main() -> Result<()> {
