@@ -1,4 +1,4 @@
-//! AMPLIFY is a optimized transformer model focused on optimizing the context of sequence models
+//! AMPLIFY is an optimized transformer model focused on optimizing the context of sequence models
 //! while maintaining computational efficiency.
 //!
 //! Key features:
@@ -433,8 +433,8 @@ impl AMPLIFY {
         if mask.sum_all()?.to_scalar::<f32>()? == 0.0 {
             return Ok(None);
         }
-        let batch_size = mask.dim(0)? as usize;
-        let seq_length = mask.dim(D::Minus1)? as usize;
+        let batch_size = mask.dim(0)?;
+        let seq_length = mask.dim(D::Minus1)?;
         let num_heads = num_attention_heads as usize;
         let expanded_mask = mask
             .unsqueeze(1)? // Add head dimension
