@@ -26,12 +26,12 @@ pub struct ScoreOutput {
 
 #[derive(Clone, Debug)]
 struct PositionWiseFeedForward {
-    w1: linear::Linear,
-    w2: linear::Linear,
+    w1: Linear,
+    w2: Linear,
 }
 
 impl PositionWiseFeedForward {
-    fn new(vb: VarBuilder, dim_input: usize, dim_feedforward: usize) -> candle_core::Result<Self> {
+    fn new(vb: VarBuilder, dim_input: usize, dim_feedforward: usize) -> Result<Self> {
         let w1 = linear::linear(dim_input, dim_feedforward, vb.pp("w1"))?;
         let w2 = linear::linear(dim_feedforward, dim_input, vb.pp("w2"))?;
         Ok(Self { w1, w2 })
@@ -39,7 +39,7 @@ impl PositionWiseFeedForward {
 }
 
 impl Module for PositionWiseFeedForward {
-    fn forward(&self, x: &Tensor) -> candle_core::Result<Tensor> {
+    fn forward(&self, x: &Tensor) -> Result<Tensor> {
         let x = self.w1.forward(x)?;
         let x = x.gelu()?;
         self.w2.forward(&x)
@@ -57,12 +57,12 @@ pub struct EncLayer {
     norm1: layer_norm::LayerNorm,
     norm2: layer_norm::LayerNorm,
     norm3: layer_norm::LayerNorm,
-    w1: linear::Linear,
-    w2: linear::Linear,
-    w3: linear::Linear,
-    w11: linear::Linear,
-    w12: linear::Linear,
-    w13: linear::Linear,
+    w1: Linear,
+    w2: Linear,
+    w3: Linear,
+    w11: Linear,
+    w12: Linear,
+    w13: Linear,
     dense: PositionWiseFeedForward,
 }
 
@@ -73,7 +73,7 @@ impl EncLayer {
         num_in: usize,
         dropout: f32,
         scale: f64,
-    ) -> candle_core::Result<Self> {
+    ) -> Result<Self> {
         let norm1 = layer_norm::layer_norm(num_hidden, 1e-5, vb.pp("norm1"))?;
         let norm2 = layer_norm::layer_norm(num_hidden, 1e-5, vb.pp("norm2"))?;
         let norm3 = layer_norm::layer_norm(num_hidden, 1e-5, vb.pp("norm3"))?;
@@ -182,9 +182,9 @@ pub struct DecLayer {
     dropout2: Dropout,
     norm1: layer_norm::LayerNorm,
     norm2: layer_norm::LayerNorm,
-    w1: linear::Linear,
-    w2: linear::Linear,
-    w3: linear::Linear,
+    w1: Linear,
+    w2: Linear,
+    w3: Linear,
     dense: PositionWiseFeedForward,
 }
 

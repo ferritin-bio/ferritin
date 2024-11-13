@@ -474,7 +474,7 @@ impl PyObjectMolecule {
         (unitcell, pdbsym)
     }
     /// Get each residue by chain.
-    pub fn create_residue(&self, chain: String, residue_number: i32) -> pdbtbx::Residue {
+    pub fn create_residue(&self, chain: String, residue_number: i32) -> Residue {
         let atoms: Vec<&AtomInfo> = self
             .atom
             .iter()
@@ -483,7 +483,7 @@ impl PyObjectMolecule {
 
         let resv = residue_number as isize;
         let res_name = atoms[0].resn.clone();
-        let mut residue = pdbtbx::Residue::new(resv, None, None).expect("Couldn't create residue");
+        let mut residue = Residue::new(resv, None, None).expect("Couldn't create residue");
 
         println!("ResidueNames: {}", res_name);
         let mut conformer =
@@ -614,7 +614,7 @@ pub struct SceneView {
 
 impl SceneView {
     pub fn from_json_value(value: Value) -> Result<Self, serde_pickle::Error> {
-        let array: [f64; 25] = serde_pickle::from_value(value)?;
+        let array: [f64; 25] = from_value(value)?;
         Ok(Self::from_array(array))
     }
 
@@ -688,7 +688,7 @@ impl SceneView {
 impl<'de> Deserialize<'de> for SceneView {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         let pickle_value = Value::deserialize(deserializer)?;
 
@@ -1612,7 +1612,7 @@ pub struct Settings {
 
 fn int_to_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
 where
-    D: serde::Deserializer<'de>,
+    D: Deserializer<'de>,
 {
     use serde::de::Error;
     match u8::deserialize(deserializer)? {
