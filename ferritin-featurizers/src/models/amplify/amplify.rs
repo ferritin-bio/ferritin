@@ -454,17 +454,11 @@ impl AMPLIFY {
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         // Get appropriate length of freqs_cis
         // println!("AMPLIFY.forward():  creating freqs_cis mask");
-        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?; // What is this?
-                                                                   // println!(
-                                                                   //     "AMPLIFY.forward(): freqs_cis. Shape: {:?}",
-                                                                   //     &freqs_cis.dims()
-                                                                   // );
-
+        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
         // Embedding layer
         // println!("AMPLIFY.forward():  creating encoder");
         let mut x = self.encoder.forward(src)?;
         // println!("X dims: {:?}", x.dims());
-
         // Transform through encoder blocks
         // println!("AMPLIFY.forward():  running through the transformer");
         for layer in self.transformer_encoder.iter() {
