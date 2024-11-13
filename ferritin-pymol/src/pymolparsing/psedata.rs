@@ -171,9 +171,9 @@ impl PSEData {
     }
     /// Pymol --> PDBTBX --> PDB --> file
     pub fn save_pdbs(&self, file_path: &str) -> std::io::Result<()> {
-        let path = std::path::Path::new(file_path);
+        let path = Path::new(file_path);
         let pdb_folder = path.join("pdb");
-        std::fs::create_dir_all(&pdb_folder)?;
+        fs::create_dir_all(&pdb_folder)?;
         let mut file_list = Vec::new();
         for molecule in self.get_molecule_data().iter() {
             let pdb = molecule.to_pdb();
@@ -187,7 +187,7 @@ impl PSEData {
             file_list.push(filename);
         }
         let contents = file_list.join("\n");
-        std::fs::write(path.join("pdb_contents.txt"), contents)?;
+        fs::write(path.join("pdb_contents.txt"), contents)?;
         Ok(())
     }
     /// Convert to MSVJ Formay.
@@ -266,12 +266,12 @@ impl PSEData {
     }
     ///  Pymol --> MSVJ --? disk
     pub fn to_disk(&self, file_path: &str) -> std::io::Result<()> {
-        let path = std::path::Path::new(file_path);
+        let path = Path::new(file_path);
         let msvj_file = path.join("state.mvsj");
         let state = self.create_molviewspec();
         let pretty_json = serde_json::to_string_pretty(&state)?;
         self.save_pdbs(file_path)?;
-        std::fs::write(msvj_file, pretty_json)?;
+        fs::write(msvj_file, pretty_json)?;
         Ok(())
     }
     /// this one will write  a ready-to-go folder with pdbs, a msvj file, and the
