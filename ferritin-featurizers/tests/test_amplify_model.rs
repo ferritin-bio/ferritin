@@ -3,7 +3,6 @@ use candle_core::{DType, Device, D};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use ferritin_featurizers::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
-use safetensors::SafeTensors;
 
 #[test]
 fn test_amplify_round_trip() -> Result<(), Box<dyn std::error::Error>> {
@@ -22,7 +21,6 @@ fn test_amplify_round_trip() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load and analyze the safetensors file
     let weights_path = repo.get("model.safetensors")?;
-    let weights = std::fs::read(&weights_path)?;
     let vb = unsafe {
         VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
     };
