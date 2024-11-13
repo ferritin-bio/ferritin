@@ -21,7 +21,7 @@ fn main() {
         metallic: 1.0,                          // Fully metallic
         perceptual_roughness: 0.1,              // Very smooth surface
         reflectance: 0.5,                       // Medium reflectance
-        //emissive: Color::BLACK,                // No emission
+        // emissive: Color::BLACK,                // No emission
         alpha_mode: AlphaMode::Opaque, // Fully opaque
         ior: 2.5,                      // Higher index of refraction for metals
         specular_transmission: 0.0,    // No light transmission
@@ -81,7 +81,7 @@ fn setup(mut commands: Commands) {
         ..default()
     });
 
-    // Back Light
+    // Backlight
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
             color: Color::srgb(0.9, 0.9, 1.0),
@@ -109,7 +109,7 @@ fn setup(mut commands: Commands) {
         ..default()
     });
 
-    // Spot light
+    // Spotlight
     commands.spawn(SpotLightBundle {
         spot_light: SpotLight {
             intensity: 10000.0,

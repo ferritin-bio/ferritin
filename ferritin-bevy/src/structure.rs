@@ -20,7 +20,7 @@ use ferritin_core::AtomCollection;
 ///
 /// Each of these enums represents a rendering path that can be used by a `Structure`
 ///
-/// Donw the Line: allow passing an arbitrary function that maps PDB to mesh.
+/// Down the Line: allow passing an arbitrary function that maps PDB to mesh.
 ///
 #[derive(Clone)]
 pub enum RenderOptions {

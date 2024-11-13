@@ -38,7 +38,7 @@ AMPLIFY(
 
 ### Amplify 120M in Candle
 
-Sorting this alphabetically its a bit clearer to see the architecture:
+Sorting this alphabetically makes it a bit clearer to see the architecture:
 
 ```rust
 pub struct AMPLIFY {

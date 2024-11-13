@@ -32,7 +32,7 @@ impl Bond {
 ///
 /// Enum for defining Bond orders.
 /// **Note: subject to change.**
-/// Needsmore research on which convention to follow.
+/// Needs more research on which convention to follow.
 /// - [biotite](https://www.biotite-python.org/latest/apidoc/biotite.structure.BondType.html#biotite.structure.BondType)
 /// - see also [cdk](http://cdk.github.io/cdk/latest/docs/api/org/openscience/cdk/Bond.html)
 pub enum BondOrder {

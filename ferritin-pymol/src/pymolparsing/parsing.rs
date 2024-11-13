@@ -42,7 +42,7 @@
 //! beginCoordSet();
 //! m_last_cs = m_iter.cs;
 //! for bonds
-//! if (!m_tmpids[m_iter.getAtm()]) {
+//! if (!m_tmpids[m_iter.getAtm()])
 //! m_id = m_retain_ids ? m_iter.getAtomInfo()->id : (m_id + 1);
 //!  m_tmpids[m_iter.getAtm()] = m_id;
 use crate::pymolparsing::colors::{Color, COLOR_SET};
@@ -420,7 +420,7 @@ impl PyObjectMolecule {
 
         let atom = pdbtbx::Atom::new(
             atom_info.is_hetatm,     // hetero
-            serial_number,           // serial_number: Note: I am not sure this is correct just yet.
+            serial_number,           // serial_number: Note: I am not sure that this is correct just yet.
             atom_info.name.clone(),  // atom_name
             x_coord.into(),          // x
             y_coord.into(),          // y

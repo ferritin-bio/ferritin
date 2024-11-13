@@ -7,12 +7,12 @@
 //! - MolViewSpec documentation: https://molstar.org/viewer/molviewspec/
 //! - MolStar Viewer (which supports MVS): https://molstar.org/viewer/
 //!
-//! We try to adhere very closely to the python library API. Almost all of the action happens
+//! We try to adhere very closely to the python library API. Almost all the action happens
 //! on the `Nodes`. Because we are building a nested tree of data, we need most of the parts to
-//! be mutable and you can see almost all of the function calls:
+//! be mutable and you can see almost all the function calls:
 //!
 //! 1. check the type and the params and act only on correct parent nodes
-//! 2. beacuse of 1, we return `Option<>`
+//! 2. because of 1, we return `Option<>`
 //! 3. If a node is returned is it `&mut Node`
 //!
 //!
@@ -58,7 +58,7 @@ pub enum KindT {
 
 // NodeParams
 //
-// Enum of params per node type. Each of the variants are typed.
+// Enum of params per node type. Each of the variants is typed.
 //
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
