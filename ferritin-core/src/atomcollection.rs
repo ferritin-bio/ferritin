@@ -4,7 +4,6 @@
 //! and residue information. Additional data like bonds can be added post-instantiation.
 //! The data for residues within this collection can be iterated through. Other useful queries like inter-atomic
 //! distances are supported.
-
 use super::bonds::{Bond, BondOrder};
 use super::info::constants::get_bonds_canonical20;
 use crate::residue::{ResidueAtoms, ResidueIter};
@@ -80,7 +79,7 @@ impl AtomCollection {
         // atoms1, atoms2 : ndarray or Atom or AtomArray or AtomArrayStack
         //     The atoms to measure the distances between.
         //     The dimensions may vary.
-        //     Alternatively, an ndarray containing the coordinates can be
+        //     Alternatively, a ndarray containing the coordinates can be
         //     provided.
         //     Usual *NumPy* broadcasting rules apply.
         // box : ndarray, shape=(3,3) or shape=(m,3,3), optional

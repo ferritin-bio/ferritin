@@ -7,12 +7,11 @@
 //! - SwiGLU activation function
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
-
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
 use candle_core::{Module, Result, Tensor, D};
 use candle_nn::{
-    embedding, linear, linear_no_bias, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm,
-    VarBuilder,
+    embedding, linear, linear_no_bias, ops::softmax, rms_norm, Activation, Dropout, Embedding,
+    Linear, RmsNorm, VarBuilder,
 };
 
 // Config struct
@@ -62,7 +61,7 @@ impl Default for AMPLIFYConfig {
 }
 
 impl AMPLIFYConfig {
-    pub fn amp_120m(&self) -> Self {
+    pub fn amp_120m() -> Self {
         Self {
             hidden_size: 640,
             num_hidden_layers: 24,
@@ -83,7 +82,7 @@ impl AMPLIFYConfig {
             max_length: 2048,
         }
     }
-    pub fn amp_350m(self) -> Self {
+    pub fn amp_350m() -> Self {
         AMPLIFYConfig::default()
     }
 }
@@ -150,28 +149,24 @@ impl EncoderBlock {
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
         println!("EncoderBlock.forward(): commence");
-        println!("x dims; freqs_dims: {:?}, {:?}", x.dims(), freqs_cis.dims());
-        println!("EncoderBlock.forward(): beginning attention norm");
-
+        // println!("x dims; freqs_dims: {:?}, {:?}", x.dims(), freqs_cis.dims());
+        // println!("EncoderBlock.forward(): beginning attention norm");
         let normed = self.attention_norm.forward(x)?;
         // Todo: confirm the attention block
-        println!("EncoderBlock.forward(): getting contacts");
+        // println!("EncoderBlock.forward(): getting contacts");
         let (attn, contacts) =
             self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
         // add encoded bits and the self-attention...
         let x = x.add(&attn)?;
-        // FFN add ...
-        println!("EncoderBlock.forward(): FeedForward Norm");
+        // println!("EncoderBlock.forward(): FeedForward Norm");
         let normed = self.ffn_norm.forward(&x)?;
         // ffn.forward needs to do teh swiglu stesp with w12 and w3
-        println!("EncoderBlock.forward(): FeedForward_forward");
+        // println!("EncoderBlock.forward(): FeedForward_forward");
         let ffn_output = self.ffn_forward(&normed)?;
-
-        println!("EncoderBlock.forward(): FeedForward_dropout");
+        // println!("EncoderBlock.forward(): FeedForward_dropout");
         let ff = self.ffn_dropout.forward(&ffn_output, false)?; // Todo: pass in the Inference/Training bit
         let x = x.add(&ff)?;
         Ok((x, contacts))
-        // unimplemented!()
     }
 
     // process the FFN BLock using swiglu
@@ -236,6 +231,7 @@ impl EncoderBlock {
         if let Some(mask) = attn_mask {
             let scores = scores.add(mask)?;
         }
+
         // Apply softmax
         let attn = candle_nn::ops::softmax(&scores, scores.dims().len() - 1)?;
         // Apply dropout if needed
@@ -293,12 +289,7 @@ impl EncoderBlock {
             self.config.num_attention_heads,
             self.d_head,
         ))?;
-        println!(
-            "AttentionBlock: xq_shape, xk_shape, xv_shape: {:?}, {:?}, {:?}",
-            xq.dims(),
-            xk.dims(),
-            xv.dims()
-        );
+
         println!(
             "AttentionBlock: xq_shape, xk_shape, xv_shape, freqs_cis: {:?}, {:?}, {:?}, {:?}",
             xq.dims(),
@@ -312,11 +303,10 @@ impl EncoderBlock {
         println!("Rotary Embed Shapes: : {:?}, {:?}", xq.dims(), xk.dims());
 
         // Attention computation
-        let dropout_prob = self.config.dropout_prob; // still need to toggle if in Training....
-                                                     // let zeros = Tensor::zeros_like(&xq)?;
-                                                     // println!("pad mask...");
-                                                     // let pad_mask = pad_mask.unwrap_or_else(|| &zeros);
+        let dropout_prob = self.config.dropout_prob;
 
+        // need to handle pad_mask better ....
+        //
         let pad_mask = if let Some(mask) = pad_mask {
             let (batch_size, seq_len) = (x.dim(0)?, x.dim(1)?);
             let num_heads = self.config.num_attention_heads;
@@ -342,19 +332,17 @@ impl EncoderBlock {
             false,
         )?;
 
-        // println!("post_attention");
-        let _attn = None;
-        // let _attn = if output_attentions {
-        //     let xq_t = xq.permute((0, 2, 1, 3))?;
-        //     let xk_t = xk.permute((0, 2, 3, 1))?;
-        //     let mut attn_weights = xq_t.matmul(&xk_t)?;
-        //     let scale = (xq.dim(D::Minus1)? as f64).sqrt();
-        //     attn_weights = (attn_weights / scale)?;
-        //     attn_weights = attn_weights.add(pad_mask)?;
-        //     Some(softmax(&attn_weights, D::Minus1)?)
-        // } else {
-        //     None
-        // };
+        let _attn = if output_attentions {
+            let xq_t = xq.permute((0, 2, 1, 3))?;
+            let xk_t = xk.permute((0, 2, 3, 1))?;
+            let mut attn_weights = xq_t.matmul(&xk_t)?;
+            let scale = (xq.dim(D::Minus1)? as f64).sqrt();
+            attn_weights = (attn_weights / scale)?;
+            // attn_weights = attn_weights.add(pad_mask)?;  <- Todo. Revisit
+            Some(softmax(&attn_weights, D::Minus1)?)
+        } else {
+            None
+        };
 
         // Final projection and dropout
         let output = attn.reshape((
@@ -367,7 +355,7 @@ impl EncoderBlock {
         Ok((output, _attn))
     }
 
-    /// Load Weights from a Model.
+    /// Load Weights from a Model
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
         // To keep the number of parameters and the amount of computation constant, we reduce the number of
         // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
@@ -454,29 +442,25 @@ impl AMPLIFY {
         let mut hidden_states = vec![];
         let mut attentions = vec![];
 
-        println!(
-            "AMPLIFY.forward(): Freq_CIS. Shape: {:?}",
-            &self.freqs_cis.dims()
-        );
+        // println!(
+        //     "AMPLIFY.forward(): Freq_CIS. Shape: {:?}",
+        //     &self.freqs_cis.dims()
+        // );
+
         // Process attention mask if provided
-        println!("AMPLIFY.forward():  creating attention mask");
+        // println!("AMPLIFY.forward():  creating attention mask");
+
         let attention_mask =
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         // Get appropriate length of freqs_cis
-        println!("AMPLIFY.forward():  creating freqs_cis mask");
-        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?; // What is this?
-        println!(
-            "AMPLIFY.forward(): freqs_cis. Shape: {:?}",
-            &freqs_cis.dims()
-        );
-
+        // println!("AMPLIFY.forward():  creating freqs_cis mask");
+        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
         // Embedding layer
-        println!("AMPLIFY.forward():  creating encoder");
+        // println!("AMPLIFY.forward():  creating encoder");
         let mut x = self.encoder.forward(src)?;
-        println!("X dims: {:?}", x.dims());
-
+        // println!("X dims: {:?}", x.dims());
         // Transform through encoder blocks
-        println!("AMPLIFY.forward():  running through the transformer");
+        // println!("AMPLIFY.forward():  running through the transformer");
         for layer in self.transformer_encoder.iter() {
             let (new_x, attn) =
                 layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
@@ -492,7 +476,7 @@ impl AMPLIFY {
         }
 
         // Final layer norm and decoder
-        println!("AMPLIFY.forward():  calculating logits");
+        // println!("AMPLIFY.forward():  calculating logits");
         let logits = if self.config.layer_norm_before_last_layer {
             self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
         } else {
@@ -540,9 +524,8 @@ impl AMPLIFY {
         //     precompute_freqs_cis(cfg.hidden_size / cfg.num_attention_heads, cfg.max_length)?;
         let head_dim = cfg.hidden_size / cfg.num_attention_heads;
         let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?;
-
-        println!("AMPLIFY: Freq_CIS Initiated. Shape: {:?}", freqs_cis.dims());
-        println!("AMPLIFY: freqs_cis Created .");
+        // println!("AMPLIFY: Freq_CIS Initiated. Shape: {:?}", freqs_cis.dims());
+        // println!("AMPLIFY: freqs_cis Created .");
 
         Ok(Self {
             encoder,
