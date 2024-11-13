@@ -516,7 +516,7 @@ impl PyObjectMolecule {
     /// Create a pdbtbx::PDB
     /// Note: Only handles the first Model....
     pub fn to_pdb(&self) -> PDB {
-        // Create a Model. Need to fix this later if theres multiple models
+        // Create a Model. Need to fix this later if there are multiple models
         let mut model = pdbtbx::Model::new(1);
         let chains: Vec<pdbtbx::Chain> = self
             .get_chains()

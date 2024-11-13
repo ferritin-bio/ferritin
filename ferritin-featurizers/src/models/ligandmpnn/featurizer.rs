@@ -133,7 +133,7 @@ impl LMPNNFeatures for AtomCollection {
         let cb = calculate_cb(&x_37);
 
         // chain_labels = np.array(CA_atoms.getChindices(), dtype=np.int32)
-        let chain_labels = self.get_resids(); //  <- need to double check shape. I think this is all-atom
+        let chain_labels = self.get_resids(); //  <-- need to doublecheck shape. I think this is all-atom
 
         // R_idx = np.array(CA_resnums, dtype=np.int32)
         // let _r_idx = self.get_resids(); // todo()!

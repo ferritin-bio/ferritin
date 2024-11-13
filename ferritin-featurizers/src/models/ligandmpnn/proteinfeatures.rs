@@ -33,7 +33,7 @@ impl ProteinFeaturesModel {
         let edge_in = num_positional_embeddings + num_rbf * 25;
         let embeddings = PositionalEncodings::new(
             num_positional_embeddings, // num embeddings.
-            32 as usize,               // max_relative_feature
+            32usize,               // max_relative_feature
             device,                    // device this should be passed in as param,
             vb.clone(),                // VarBuilder,
         )?;

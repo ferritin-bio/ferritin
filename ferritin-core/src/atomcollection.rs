@@ -80,7 +80,7 @@ impl AtomCollection {
         // atoms1, atoms2 : ndarray or Atom or AtomArray or AtomArrayStack
         //     The atoms to measure the distances between.
         //     The dimensions may vary.
-        //     Alternatively an ndarray containing the coordinates can be
+        //     Alternatively, an ndarray containing the coordinates can be
         //     provided.
         //     Usual *NumPy* broadcasting rules apply.
         // box : ndarray, shape=(3,3) or shape=(m,3,3), optional

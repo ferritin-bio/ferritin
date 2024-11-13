@@ -464,7 +464,7 @@ impl AMPLIFY {
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         // Get appropriate length of freqs_cis
         println!("AMPLIFY.forward():  creating freqs_cis mask");
-        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?; // whats this?
+        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?; // what is this?
         println!(
             "AMPLIFY.forward(): freqs_cis. Shape: {:?}",
             &freqs_cis.dims()
