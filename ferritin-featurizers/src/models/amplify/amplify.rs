@@ -10,8 +10,8 @@
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
 use candle_core::{Module, Result, Tensor, D};
 use candle_nn::{
-    embedding, linear, linear_no_bias, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm,
-    VarBuilder,
+    embedding, linear, linear_no_bias, ops::softmax, rms_norm, Activation, Dropout, Embedding,
+    Linear, RmsNorm, VarBuilder,
 };
 
 // Config struct
@@ -289,12 +289,7 @@ impl EncoderBlock {
             self.config.num_attention_heads,
             self.d_head,
         ))?;
-        println!(
-            "AttentionBlock: xq_shape, xk_shape, xv_shape: {:?}, {:?}, {:?}",
-            xq.dims(),
-            xk.dims(),
-            xv.dims()
-        );
+
         println!(
             "AttentionBlock: xq_shape, xk_shape, xv_shape, freqs_cis: {:?}, {:?}, {:?}, {:?}",
             xq.dims(),
@@ -308,11 +303,10 @@ impl EncoderBlock {
         println!("Rotary Embed Shapes: : {:?}, {:?}", xq.dims(), xk.dims());
 
         // Attention computation
-        let dropout_prob = self.config.dropout_prob; // still need to toggle if in Training....
-                                                     // let zeros = Tensor::zeros_like(&xq)?;
-                                                     // println!("pad mask...");
-                                                     // let pad_mask = pad_mask.unwrap_or_else(|| &zeros);
+        let dropout_prob = self.config.dropout_prob;
 
+        // need to handle pad_mask better ....
+        //
         let pad_mask = if let Some(mask) = pad_mask {
             let (batch_size, seq_len) = (x.dim(0)?, x.dim(1)?);
             let num_heads = self.config.num_attention_heads;
@@ -338,19 +332,17 @@ impl EncoderBlock {
             false,
         )?;
 
-        // println!("post_attention");
-        let _attn = None;
-        // let _attn = if output_attentions {
-        //     let xq_t = xq.permute((0, 2, 1, 3))?;
-        //     let xk_t = xk.permute((0, 2, 3, 1))?;
-        //     let mut attn_weights = xq_t.matmul(&xk_t)?;
-        //     let scale = (xq.dim(D::Minus1)? as f64).sqrt();
-        //     attn_weights = (attn_weights / scale)?;
-        //     attn_weights = attn_weights.add(pad_mask)?;
-        //     Some(softmax(&attn_weights, D::Minus1)?)
-        // } else {
-        //     None
-        // };
+        let _attn = if output_attentions {
+            let xq_t = xq.permute((0, 2, 1, 3))?;
+            let xk_t = xk.permute((0, 2, 3, 1))?;
+            let mut attn_weights = xq_t.matmul(&xk_t)?;
+            let scale = (xq.dim(D::Minus1)? as f64).sqrt();
+            attn_weights = (attn_weights / scale)?;
+            // attn_weights = attn_weights.add(pad_mask)?;  <- Todo. Revisit
+            Some(softmax(&attn_weights, D::Minus1)?)
+        } else {
+            None
+        };
 
         // Final projection and dropout
         let output = attn.reshape((
