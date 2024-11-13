@@ -135,3 +135,40 @@ impl ProteinTokenizer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use candle_hf_hub::{api::sync::Api, Repo, RepoType};
+
+    #[test]
+    fn test_encoder_roundtrip() -> Result<()> {
+        // Setup HF API and model info
+        let model_id = "chandar-lab/AMPLIFY_120M";
+        let revision = "main";
+        let api = Api::new()?;
+        let repo = api.repo(Repo::with_revision(
+            model_id.to_string(),
+            RepoType::Model,
+            revision.to_string(),
+        ));
+
+        let tokenizer = repo.get("tokenizer.json")?;
+        let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
+
+        let start = "METVAL";
+        let decoded: String = {
+            let enc_01 = protein_tokenizer.encode(&[start.to_string()], None, false, false)?;
+            let ids: Vec<u32> = enc_01
+                .to_vec1()?
+                .into_iter()
+                .map(|x: i64| x as u32)
+                .collect();
+            protein_tokenizer.decode(&ids, true)?.replace(" ", "")
+        };
+
+        assert_eq!(start, decoded);
+
+        Ok(())
+    }
+}

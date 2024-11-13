@@ -1,3 +1,5 @@
+use std::ops::RangeInclusive;
+
 use anyhow::Result;
 use candle_core::{DType, Device, D};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
@@ -25,15 +27,15 @@ fn main() -> Result<()> {
 
     // Print all tensor names and their metadata
     println!("Model tensors:");
-    tensors.names().iter().for_each(|tensor_name| {
-        if let Ok(tensor_info) = tensors.tensor(tensor_name) {
-            println!(
-                "Tensor: {:<44}  ||  Shape: {:?}",
-                tensor_name,
-                tensor_info.shape(),
-            );
-        }
-    });
+    // tensors.names().iter().for_each(|tensor_name| {
+    //     if let Ok(tensor_info) = tensors.tensor(tensor_name) {
+    //         println!(
+    //             "Tensor: {:<44}  ||  Shape: {:?}",
+    //             tensor_name,
+    //             tensor_info.shape(),
+    //         );
+    //     }
+    // });
 
     // https://github.com/huggingface/candle/blob/main/candle-examples/examples/clip/main.rs#L91C1-L92C101
     let vb = unsafe {
@@ -44,9 +46,19 @@ fn main() -> Result<()> {
     println!("Successfully created the model!");
     let tokenizer = repo.get("tokenizer.json")?;
     let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
+    let start = "METVAL";
+    let enc_01 = protein_tokenizer.encode(&[start.to_string()], None, false, false)?;
+    let ids: Vec<u32> = enc_01
+        .to_vec1()?
+        .into_iter()
+        .map(|x: i64| x as u32)
+        .collect();
+    let dec_01 = protein_tokenizer.decode(&ids, true)?;
+    assert_eq!(start, dec_01);
+
     println!("Successfully created the tokenizer!");
     let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
-    let pmatrix = protein_tokenizer.encode(&[sprot_01.to_string()], Some(200), true, false)?;
+    let pmatrix = protein_tokenizer.encode(&[sprot_01.to_string()], None, false, false)?;
     println!("pmatrix: {:?}", pmatrix);
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
     println!("Successfully encoded the protein!");
@@ -65,4 +77,4 @@ fn main() -> Result<()> {
 
 // As of Nov 13 this is definitely not right....
 // Input:   MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL
-// Output:  CEVWCDWMVITIWATHGNTFSATATYTSLRHQRGTNTPWRISNFEQTSRSAPPERVAVNWTSFGTNWTVYRMSCCYRINPHVYAAGRIYQVRTRTDTSWYWKNYHSNWVTHQVAVGNANPIFNIKPRIFGLQGRYGHHCSCMVGCPNWTHFCSIWFCPMGGYHYCSAAYTLTRDFTSTRWYDTGTISCYCVFRFVGSWEVQGPADLGFIMCKRYFYHGAMFYGVWNMDRVCYSMTTVLCSQFFDEYTVGNEWHVRNSW
+// Output:  MSVQLNIVGQSAAWTHGAAVCATCAQTFWPMSRGRQPPVNMSRFTARCTECIWYEAAFNARFNFVHLYNCGPNMSECLANMSWWYACQFGVHMSKSHYCGNKPLGTDNTKMMHHRECTSTVVWKHWPLCKVTVCYRHGLVSCTMHQRSTWTPRNEASWVPEWETSTPEHTCGDYWACQMPAGHGVCCCMMTEHWKPHTRVVCQTIEMWTYLQTYYYFWGVPEPCHHHIWTEPMPTSTSTSYDVVMYTTSGFGQHHW
