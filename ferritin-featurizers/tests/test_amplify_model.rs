@@ -25,7 +25,7 @@ fn test_amplify_round_trip() -> Result<(), Box<dyn std::error::Error>> {
         VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
     };
 
-    let config = AMPLIFYConfig::default().amp_120m();
+    let config = AMPLIFYConfig::amp_120m();
     let model = AMPLIFY::load(vb, &config)?;
     let tokenizer = repo.get("tokenizer.json")?;
     let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;

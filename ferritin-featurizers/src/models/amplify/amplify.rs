@@ -7,7 +7,6 @@
 //! - SwiGLU activation function
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
-
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
 use candle_core::{Module, Result, Tensor, D};
 use candle_nn::{
@@ -62,7 +61,7 @@ impl Default for AMPLIFYConfig {
 }
 
 impl AMPLIFYConfig {
-    pub fn amp_120m(&self) -> Self {
+    pub fn amp_120m() -> Self {
         Self {
             hidden_size: 640,
             num_hidden_layers: 24,
@@ -83,7 +82,7 @@ impl AMPLIFYConfig {
             max_length: 2048,
         }
     }
-    pub fn amp_350m(self) -> Self {
+    pub fn amp_350m() -> Self {
         AMPLIFYConfig::default()
     }
 }

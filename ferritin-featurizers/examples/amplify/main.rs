@@ -38,7 +38,7 @@ fn main() -> Result<()> {
     let vb = unsafe {
         VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
     };
-    let config = AMPLIFYConfig::default().amp_120m();
+    let config = AMPLIFYConfig::amp_120m();
     let model = AMPLIFY::load(vb, &config)?;
 
     println!("Tokenizing and Modelling a Sequence from Swissprot...");
