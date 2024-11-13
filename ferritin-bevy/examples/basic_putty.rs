@@ -109,7 +109,7 @@ fn setup(mut commands: Commands) {
         ..default()
     });
 
-    // Spot light
+    // Spotlight
     commands.spawn(SpotLightBundle {
         spot_light: SpotLight {
             intensity: 10000.0,

@@ -112,7 +112,7 @@ fn setup(mut commands: Commands) {
         ..default()
     });
 
-    // Back Light
+    // Backlight
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
             color: Color::srgb(0.9, 0.9, 1.0),
@@ -140,7 +140,7 @@ fn setup(mut commands: Commands) {
         ..default()
     });
 
-    // Spot light
+    // Spotlight
     commands.spawn(SpotLightBundle {
         spot_light: SpotLight {
             intensity: 10000.0,

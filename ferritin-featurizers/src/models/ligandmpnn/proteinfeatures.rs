@@ -37,7 +37,7 @@ impl ProteinFeaturesModel {
             device,                    // device this should be passed in as param,
             vb.clone(),                // VarBuilder,
         )?;
-        let edge_embedding = linear::linear(edge_in, edge_features, vb.pp("w_out")).unwrap();
+        let edge_embedding = linear::linear(edge_in, edge_features, vb.pp("w_out"))?;
         let norm_edges = layer_norm(
             edge_features,
             LayerNormConfig::default(),

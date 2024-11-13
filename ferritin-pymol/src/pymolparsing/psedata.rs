@@ -72,7 +72,7 @@ pub struct PSEData {
     #[serde(with = "serde_bytes")]
     pub wizard: Vec<u8>,
     pub moviescenes: Vec<Vec<i32>>,
-    // High level state settings: we need to prpogate these.
+    // High level state settings; we need to prpogate these.
     pub settings: Vec<Settings>,
     pub movie: (
         i32,
@@ -274,7 +274,7 @@ impl PSEData {
         std::fs::write(msvj_file, pretty_json)?;
         Ok(())
     }
-    /// this one will write  a ready-to-go folder with pdbs, an msvj file, and the
+    /// this one will write  a ready-to-go folder with pdbs, a msvj file, and the
     /// html/css/js needed to load them
     pub fn to_disk_full(&self, file_path: &str) -> std::io::Result<()> {
         // Create the directory if it doesn't exist

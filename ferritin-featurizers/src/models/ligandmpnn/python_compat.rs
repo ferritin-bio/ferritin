@@ -64,9 +64,9 @@ pub struct LigandMPNNDataDict {
     xyz_37__m: Tensor,
 
     // put these here temporarily
-    bias_AA: Option<Tensor>,
-    bias_AA_per_residue: Option<Tensor>,
-    omit_AA_per_residue_multi: Option<Tensor>,
+    bias_aa: Option<Tensor>,
+    bias_aa_per_residue: Option<Tensor>,
+    omit_aa_per_residue_multi: Option<Tensor>,
 }
 
 impl LigandMPNNDataDict {

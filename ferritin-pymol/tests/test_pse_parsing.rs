@@ -11,14 +11,11 @@ fn test_load_pse_data_molecule_only() {
     // https://www.gustavwengel.dk/serde-untagged-enum-errors-are-bad
     let deserialized: PSEData = PSEData::load("tests/data/example_molecule_only.pse").unwrap();
     // deserialized.to_json("tests/data/example_molecule_only.json");
-    assert!(deserialized.version == 3000000);
-    assert!(
-        deserialized
-            .get_setting(SettingsEnum::Orthoscopic)
-            .unwrap()
-            .value
-            == CustomValue::Integer(0)
-    );
+    assert_eq!(deserialized.version, 3000000);
+    assert_eq!(deserialized
+                   .get_setting(SettingsEnum::Orthoscopic)
+                   .unwrap()
+                   .value, CustomValue::Integer(0));
     // println!("{:?}", deserialized.settings);
 }
 
@@ -26,7 +23,7 @@ fn test_load_pse_data_molecule_only() {
 fn test_load_pse_data_molecule_selection() {
     let deserialized: PSEData = PSEData::load("tests/data/example.pse").unwrap();
     // let _ = deserialized.to_json("tests/data/example.json");
-    assert!(deserialized.version == 3000000);
+    assert_eq!(deserialized.version, 3000000);
 }
 
 #[test]
@@ -39,7 +36,7 @@ fn test_pdb_00() {
     let mols = psedata.get_molecule_data();
     assert_eq!(mols.len(), 1);
 
-    // check coordinates. theres 1 mon and 1519 atoms
+    // check coordinates. there is 1 mol and 1519 atoms
     let coord_sets: Vec<&CoordSet> = mols.iter().flat_map(|mol| mol.coord_set.iter()).collect();
     assert_eq!(coord_sets.len(), 1);
 
@@ -51,14 +48,14 @@ fn test_pdb_00() {
     assert_equal(coords_01_atom_01[1518], [52.372, 15.397, -15.323]);
 
     let atom01 = mols[0].get_atom(0);
-    assert!(atom01.x() == 50.87300109863281);
-    assert!(atom01.y() == 32.97800064086914);
-    assert!(atom01.z() == 2.38700008392334);
+    assert_eq!(atom01.x(), 50.87300109863281);
+    assert_eq!(atom01.y(), 32.97800064086914);
+    assert_eq!(atom01.z(), 2.38700008392334);
 
     let chains = mols[0].get_chains();
     let residues = mols[0].get_residues_by_chain(chains[0].clone());
     let residue = mols[0].create_residue(chains[0].clone(), residues[0]);
-    assert!(residue.name() == Some("VAL"));
+    assert_eq!(residue.name(), Some("VAL"));
 
     // Original
     // ATOM      1  N   VAL A   1      50.873  32.978   2.387  1.00 27.72      A    N
