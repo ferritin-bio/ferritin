@@ -50,10 +50,8 @@ struct MainCamera;
 fn setup(mut commands: Commands) {
     // Add a camera
     commands.spawn((
-        Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 50.0, 100.0).looking_at(Vec3::ZERO, Vec3::Y),
-            ..default()
-        },
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 50.0, 100.0).looking_at(Vec3::ZERO, Vec3::Y),
         MainCamera,
     ));
 
@@ -70,55 +68,46 @@ fn setup(mut commands: Commands) {
     });
 
     // Fill Light
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight {
+    commands.spawn( (
+        DirectionalLight {
             color: Color::srgb(0.8, 0.8, 1.0),
             illuminance: 5000.0,
             shadows_enabled: false,
             ..default()
         },
-        transform: Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.5, -0.5, 0.0)),
-        ..default()
-    });
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.5, -0.5, 0.0)))
+    );
 
     // Backlight
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight {
+    commands.spawn((
+        DirectionalLight {
             color: Color::srgb(0.9, 0.9, 1.0),
             illuminance: 3000.0,
             shadows_enabled: false,
             ..default()
         },
-        transform: Transform::from_rotation(Quat::from_euler(
+        Transform::from_rotation(Quat::from_euler(
             EulerRot::XYZ,
             0.0,
             std::f32::consts::PI,
-            0.0,
-        )),
-        ..default()
-    });
+            0.0, ))));
 
     // Add a light
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
+    commands.spawn(( PointLight {
             intensity: 1500.0,
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_xyz(4.0, 8.0, 4.0),
-        ..default()
-    });
+        Transform::from_xyz(4.0, 8.0, 4.0),
+    ));
 
     // Spotlight
-    commands.spawn(SpotLightBundle {
-        spot_light: SpotLight {
+    commands.spawn(( SpotLight {
             intensity: 10000.0,
             color: Color::srgb(0.8, 1.0, 0.8),
             shadows_enabled: true,
             outer_angle: 0.6,
             ..default()
         },
-        transform: Transform::from_xyz(-4.0, 5.0, -4.0).looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    });
+        Transform::from_xyz(-4.0, 5.0, -4.0).looking_at(Vec3::ZERO, Vec3::Y)));
 }
