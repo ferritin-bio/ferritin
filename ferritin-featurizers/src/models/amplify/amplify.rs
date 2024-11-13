@@ -149,28 +149,24 @@ impl EncoderBlock {
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
         println!("EncoderBlock.forward(): commence");
-        println!("x dims; freqs_dims: {:?}, {:?}", x.dims(), freqs_cis.dims());
-        println!("EncoderBlock.forward(): beginning attention norm");
-
+        // println!("x dims; freqs_dims: {:?}, {:?}", x.dims(), freqs_cis.dims());
+        // println!("EncoderBlock.forward(): beginning attention norm");
         let normed = self.attention_norm.forward(x)?;
         // Todo: confirm the attention block
-        println!("EncoderBlock.forward(): getting contacts");
+        // println!("EncoderBlock.forward(): getting contacts");
         let (attn, contacts) =
             self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
         // add encoded bits and the self-attention...
         let x = x.add(&attn)?;
-        // FFN add ...
-        println!("EncoderBlock.forward(): FeedForward Norm");
+        // println!("EncoderBlock.forward(): FeedForward Norm");
         let normed = self.ffn_norm.forward(&x)?;
         // ffn.forward needs to do teh swiglu stesp with w12 and w3
-        println!("EncoderBlock.forward(): FeedForward_forward");
+        // println!("EncoderBlock.forward(): FeedForward_forward");
         let ffn_output = self.ffn_forward(&normed)?;
-
-        println!("EncoderBlock.forward(): FeedForward_dropout");
+        // println!("EncoderBlock.forward(): FeedForward_dropout");
         let ff = self.ffn_dropout.forward(&ffn_output, false)?; // Todo: pass in the Inference/Training bit
         let x = x.add(&ff)?;
         Ok((x, contacts))
-        // unimplemented!()
     }
 
     // process the FFN BLock using swiglu
@@ -235,6 +231,7 @@ impl EncoderBlock {
         if let Some(mask) = attn_mask {
             let scores = scores.add(mask)?;
         }
+
         // Apply softmax
         let attn = candle_nn::ops::softmax(&scores, scores.dims().len() - 1)?;
         // Apply dropout if needed
@@ -453,29 +450,31 @@ impl AMPLIFY {
         let mut hidden_states = vec![];
         let mut attentions = vec![];
 
-        println!(
-            "AMPLIFY.forward(): Freq_CIS. Shape: {:?}",
-            &self.freqs_cis.dims()
-        );
+        // println!(
+        //     "AMPLIFY.forward(): Freq_CIS. Shape: {:?}",
+        //     &self.freqs_cis.dims()
+        // );
+
         // Process attention mask if provided
-        println!("AMPLIFY.forward():  creating attention mask");
+        // println!("AMPLIFY.forward():  creating attention mask");
+
         let attention_mask =
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         // Get appropriate length of freqs_cis
-        println!("AMPLIFY.forward():  creating freqs_cis mask");
+        // println!("AMPLIFY.forward():  creating freqs_cis mask");
         let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?; // What is this?
-        println!(
-            "AMPLIFY.forward(): freqs_cis. Shape: {:?}",
-            &freqs_cis.dims()
-        );
+                                                                   // println!(
+                                                                   //     "AMPLIFY.forward(): freqs_cis. Shape: {:?}",
+                                                                   //     &freqs_cis.dims()
+                                                                   // );
 
         // Embedding layer
-        println!("AMPLIFY.forward():  creating encoder");
+        // println!("AMPLIFY.forward():  creating encoder");
         let mut x = self.encoder.forward(src)?;
-        println!("X dims: {:?}", x.dims());
+        // println!("X dims: {:?}", x.dims());
 
         // Transform through encoder blocks
-        println!("AMPLIFY.forward():  running through the transformer");
+        // println!("AMPLIFY.forward():  running through the transformer");
         for layer in self.transformer_encoder.iter() {
             let (new_x, attn) =
                 layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
@@ -491,7 +490,7 @@ impl AMPLIFY {
         }
 
         // Final layer norm and decoder
-        println!("AMPLIFY.forward():  calculating logits");
+        // println!("AMPLIFY.forward():  calculating logits");
         let logits = if self.config.layer_norm_before_last_layer {
             self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
         } else {
@@ -539,9 +538,8 @@ impl AMPLIFY {
         //     precompute_freqs_cis(cfg.hidden_size / cfg.num_attention_heads, cfg.max_length)?;
         let head_dim = cfg.hidden_size / cfg.num_attention_heads;
         let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?;
-
-        println!("AMPLIFY: Freq_CIS Initiated. Shape: {:?}", freqs_cis.dims());
-        println!("AMPLIFY: freqs_cis Created .");
+        // println!("AMPLIFY: Freq_CIS Initiated. Shape: {:?}", freqs_cis.dims());
+        // println!("AMPLIFY: freqs_cis Created .");
 
         Ok(Self {
             encoder,
