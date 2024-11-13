@@ -42,7 +42,7 @@
 //! beginCoordSet();
 //! m_last_cs = m_iter.cs;
 //! for bonds
-//! if (!m_tmpids[m_iter.getAtm()]) {
+//! if (!m_tmpids[m_iter.getAtm()])
 //! m_id = m_retain_ids ? m_iter.getAtomInfo()->id : (m_id + 1);
 //!  m_tmpids[m_iter.getAtm()] = m_id;
 use crate::pymolparsing::colors::{Color, COLOR_SET};
@@ -420,7 +420,7 @@ impl PyObjectMolecule {
 
         let atom = pdbtbx::Atom::new(
             atom_info.is_hetatm,     // hetero
-            serial_number,           // serial_number: Note: I am not sure this is correct just yet.
+            serial_number,           // serial_number: Note: I am not sure that this is correct just yet.
             atom_info.name.clone(),  // atom_name
             x_coord.into(),          // x
             y_coord.into(),          // y
@@ -474,7 +474,7 @@ impl PyObjectMolecule {
         (unitcell, pdbsym)
     }
     /// Get each residue by chain.
-    pub fn create_residue(&self, chain: String, residue_number: i32) -> pdbtbx::Residue {
+    pub fn create_residue(&self, chain: String, residue_number: i32) -> Residue {
         let atoms: Vec<&AtomInfo> = self
             .atom
             .iter()
@@ -483,7 +483,7 @@ impl PyObjectMolecule {
 
         let resv = residue_number as isize;
         let res_name = atoms[0].resn.clone();
-        let mut residue = pdbtbx::Residue::new(resv, None, None).expect("Couldn't create residue");
+        let mut residue = Residue::new(resv, None, None).expect("Couldn't create residue");
 
         println!("ResidueNames: {}", res_name);
         let mut conformer =
@@ -516,7 +516,7 @@ impl PyObjectMolecule {
     /// Create a pdbtbx::PDB
     /// Note: Only handles the first Model....
     pub fn to_pdb(&self) -> PDB {
-        // Create a Model. Need to fix this later if theres multiple models
+        // Create a Model. Need to fix this later if there are multiple models
         let mut model = pdbtbx::Model::new(1);
         let chains: Vec<pdbtbx::Chain> = self
             .get_chains()
@@ -614,7 +614,7 @@ pub struct SceneView {
 
 impl SceneView {
     pub fn from_json_value(value: Value) -> Result<Self, serde_pickle::Error> {
-        let array: [f64; 25] = serde_pickle::from_value(value)?;
+        let array: [f64; 25] = from_value(value)?;
         Ok(Self::from_array(array))
     }
 
@@ -688,7 +688,7 @@ impl SceneView {
 impl<'de> Deserialize<'de> for SceneView {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         let pickle_value = Value::deserialize(deserializer)?;
 
@@ -1612,7 +1612,7 @@ pub struct Settings {
 
 fn int_to_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
 where
-    D: serde::Deserializer<'de>,
+    D: Deserializer<'de>,
 {
     use serde::de::Error;
     match u8::deserialize(deserializer)? {

@@ -12,7 +12,7 @@ fn test_amplify_tokens() -> Result<(), Box<dyn std::error::Error>> {
         revision.to_string(),
     ));
     let tokenizer = repo.get("tokenizer.json").unwrap();
-    let protein_tokenizer = ProteinTokenizer::new(tokenizer).unwrap();
+    let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
 
     let tokens = vec![
         "M".to_string(),

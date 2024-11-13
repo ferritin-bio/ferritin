@@ -1,4 +1,4 @@
-use candle_core::{DType, Device, Error, Result, Tensor, D};
+use candle_core::{Device, Result, Tensor, D};
 
 pub fn precompute_freqs_cis(head_dim: usize, seq_len: usize) -> Result<Tensor> {
     println!("in precompute freqs fn!");

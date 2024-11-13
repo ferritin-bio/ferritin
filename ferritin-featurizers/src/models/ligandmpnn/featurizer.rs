@@ -34,24 +34,53 @@ pub trait LMPNNFeatures {
 /// Methods for Convering an AtomCollection into a LigandMPNN-ready
 /// datasets
 impl LMPNNFeatures for AtomCollection {
-    /// create numeric Tensor of shape [<length>, 37, 3]
-    fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
-        let res_count = self.iter_residues_aminoacid().count();
-        let mut atom37_data = vec![0f32; res_count * 37 * 3];
-        for residue in self.iter_residues_aminoacid() {
-            let resid = residue.res_id as usize;
-            for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
-                if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
-                    let [x, y, z] = atom.coords;
-                    let base_idx = (resid * 37 + atom_type as usize) * 3;
-                    atom37_data[base_idx] = *x;
-                    atom37_data[base_idx + 1] = *y;
-                    atom37_data[base_idx + 2] = *z;
-                }
-            }
-        }
-        // Create tensor with shape [residues, 37, 3]
-        Tensor::from_vec(atom37_data, (res_count, 37, 3), &device)
+    // equivalent to protien MPNN's parse_PDB
+    fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
+        let x_37 = self.to_numeric_atom37(device)?;
+        let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
+        let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
+
+        // get CB locations...
+        // although we have these already for our full set...
+        let cb = calculate_cb(&x_37);
+
+        // chain_labels = np.array(CA_atoms.getChindices(), dtype=np.int32)
+        let chain_labels = self.get_resids(); //  <-- need to double-check shape. I think this is all-atom
+
+        // R_idx = np.array(CA_resnums, dtype=np.int32)
+        // let _r_idx = self.get_resids(); // todo()!
+
+        // amino acid names as int....
+        let s = self
+            .iter_residues_aminoacid()
+            .map(|res| res.res_name)
+            .map(|res| aa3to1(&res))
+            .map(|res| aa1to_int(res));
+
+        let s = Tensor::from_iter(s, device)?;
+
+        // coordinates of the backbone atoms
+        let indices = Tensor::from_slice(
+            &[0i64, 1i64, 2i64, 4i64], // index of N/CA/C/O as integers
+            (4,),
+            &device,
+        )?;
+
+        let x = x_37.index_select(&indices, 1)?;
+
+        Ok(ProteinFeatures {
+            s,
+            x,
+            x_mask: Some(x_37_m),
+            y,
+            y_t,
+            y_m: Some(y_m),
+            r_idx: None,
+            chain_labels: None,
+            chain_letters: None,
+            mask_c: None,
+            chain_list: None,
+        })
     }
     /// create numeric Tensor of shape [<length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
@@ -78,6 +107,26 @@ impl LMPNNFeatures for AtomCollection {
         // Create tensor with shape [residues, 4, 3]
         Tensor::from_vec(backbone_data, (res_count, 4, 3), &device)
     }
+    /// create numeric Tensor of shape [<length>, 37, 3]
+    fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
+        let res_count = self.iter_residues_aminoacid().count();
+        let mut atom37_data = vec![0f32; res_count * 37 * 3];
+        for residue in self.iter_residues_aminoacid() {
+            let resid = residue.res_id as usize;
+            for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
+                if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
+                    let [x, y, z] = atom.coords;
+                    let base_idx = (resid * 37 + atom_type as usize) * 3;
+                    atom37_data[base_idx] = *x;
+                    atom37_data[base_idx + 1] = *y;
+                    atom37_data[base_idx + 2] = *z;
+                }
+            }
+        }
+        // Create tensor with shape [residues, 37, 3]
+        Tensor::from_vec(atom37_data, (res_count, 37, 3), &device)
+    }
+
     // create numeric tensor for ligands.
     //
     // 1. Filter non-protein and water
@@ -120,55 +169,6 @@ impl LMPNNFeatures for AtomCollection {
         let y_m = Tensor::ones_like(&y)?;
 
         Ok((y, y_t, y_m))
-    }
-
-    // equivalent to protien MPNN's parse_PDB
-    fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
-        let x_37 = self.to_numeric_atom37(device)?;
-        let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
-        let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
-
-        // get CB locations...
-        // although we have these already for our full set...
-        let cb = calculate_cb(&x_37);
-
-        // chain_labels = np.array(CA_atoms.getChindices(), dtype=np.int32)
-        let chain_labels = self.get_resids(); //  <- need to double check shape. I think this is all-atom
-
-        // R_idx = np.array(CA_resnums, dtype=np.int32)
-        // let _r_idx = self.get_resids(); // todo()!
-
-        // amino acid names as int....
-        let s = self
-            .iter_residues_aminoacid()
-            .map(|res| res.res_name)
-            .map(|res| aa3to1(&res))
-            .map(|res| aa1to_int(res));
-
-        let s = Tensor::from_iter(s, device)?;
-
-        // coordinates of the backbone atoms
-        let indices = Tensor::from_slice(
-            &[0i64, 1i64, 2i64, 4i64], // index of N/CA/C/O as integers
-            (4,),
-            &device,
-        )?;
-
-        let X = x_37.index_select(&indices, 1)?;
-
-        Ok(ProteinFeatures {
-            s,
-            x: X,
-            x_mask: Some(x_37_m),
-            y,
-            y_t,
-            y_m: Some(y_m),
-            r_idx: None,
-            chain_labels: None,
-            chain_letters: None,
-            mask_c: None,
-            chain_list: None,
-        })
     }
 
     fn to_pdb(&self) {
@@ -282,7 +282,7 @@ pub struct ProteinFeatures {
     /// mask_c:        Tensor dimensions: torch.Size([93])
     mask_c: Option<Tensor>,
     chain_list: Option<Vec<String>>,
-    // CA_icodes:     NumPy array dimensions: (93,)
+    // CA_icodes:     NumPy array dimensions: (93)
     // put these here temporarily
     // bias_AA: Option<Tensor>,
     // bias_AA_per_residue: Option<Tensor>,

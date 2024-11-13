@@ -1,6 +1,6 @@
 //! This module provides a bitmask representation for various types of 3D molecular visualizations.
 //!
-//! Note: this should probably be moved to it's own crate.
+//! Note: this should probably be moved to its own crate.
 //!
 //! It defines a set of flags that can be combined to represent different visual elements
 //! in a molecular structure, such as cylinders, spheres, surfaces, and more.

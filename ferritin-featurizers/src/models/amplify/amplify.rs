@@ -1,4 +1,4 @@
-//! AMPLIFY is a optimized transformer model focused on optimizing the context of sequence models
+//! AMPLIFY is an optimized transformer model focused on optimizing the context of sequence models
 //! while maintaining computational efficiency.
 //!
 //! Key features:
@@ -9,8 +9,7 @@
 //! - Memory efficient inference
 
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
-use candle_core::{DType, Device, Module, Result, Tensor, D};
-use candle_nn::ops::softmax;
+use candle_core::{Module, Result, Tensor, D};
 use candle_nn::{
     embedding, linear, linear_no_bias, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm,
     VarBuilder,
@@ -434,8 +433,8 @@ impl AMPLIFY {
         if mask.sum_all()?.to_scalar::<f32>()? == 0.0 {
             return Ok(None);
         }
-        let batch_size = mask.dim(0)? as usize;
-        let seq_length = mask.dim(D::Minus1)? as usize;
+        let batch_size = mask.dim(0)?;
+        let seq_length = mask.dim(D::Minus1)?;
         let num_heads = num_attention_heads as usize;
         let expanded_mask = mask
             .unsqueeze(1)? // Add head dimension
@@ -465,7 +464,7 @@ impl AMPLIFY {
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         // Get appropriate length of freqs_cis
         println!("AMPLIFY.forward():  creating freqs_cis mask");
-        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?; // whats this?
+        let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?; // What is this?
         println!(
             "AMPLIFY.forward(): freqs_cis. Shape: {:?}",
             &freqs_cis.dims()

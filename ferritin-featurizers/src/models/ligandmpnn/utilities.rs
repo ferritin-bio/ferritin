@@ -340,7 +340,7 @@ fn get_seq_rec(s: &Tensor, s_pred: &Tensor, mask: &Tensor) -> Result<Tensor> {
     //
     // Compute the match tensor
     let match_tensor = s.eq(s_pred)?;
-    let match_f32 = match_tensor.to_dtype(candle_core::DType::F32)?;
+    let match_f32 = match_tensor.to_dtype(DType::F32)?;
     let numerator = (match_f32 * mask)?.sum_keepdim(1)?;
     let denominator = mask.sum_keepdim(1)?;
     let average = numerator.broadcast_div(&denominator)?;

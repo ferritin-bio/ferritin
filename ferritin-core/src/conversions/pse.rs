@@ -52,7 +52,7 @@ impl From<&PSEData> for AtomCollection {
             .multiunzip();
 
         AtomCollection::new(
-            atoms.len() as usize, // size
+            atoms.len(),
             coords,
             res_ids,
             res_names,

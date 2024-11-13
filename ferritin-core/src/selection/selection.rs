@@ -3,7 +3,7 @@ use std::ops::BitAnd;
 /// Selection
 ///
 /// Selection are indices that can be use used to
-/// idenitfy specific sets of atoms within an [`AtomCollection`]
+/// identify specific sets of atoms within an [`AtomCollection`]
 ///
 #[derive(Clone, Debug)]
 pub struct Selection {

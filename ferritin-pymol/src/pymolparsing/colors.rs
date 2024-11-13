@@ -20,7 +20,7 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 
 /// Named colors.
 ///
-/// See also [`crate::pymolparsing::colors::COLOR_SET`].
+/// See also [`pymolparsing::colors::COLOR_SET`].
 ///
 #[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
 #[repr(i32)]

@@ -31,19 +31,19 @@ impl ProteinTokenizer {
         // Get special token IDs
         let pad_token_id = tokenizer
             .token_to_id("<pad>")
-            .ok_or_else(|| anyhow!("Missing pad token"))? as u32;
+            .ok_or_else(|| anyhow!("Missing pad token"))?;
         let mask_token_id = tokenizer
             .token_to_id("<mask>")
-            .ok_or_else(|| anyhow!("Missing mask token"))? as u32;
+            .ok_or_else(|| anyhow!("Missing mask token"))?;
         let bos_token_id = tokenizer
             .token_to_id("<bos>")
-            .ok_or_else(|| anyhow!("Missing bos token"))? as u32;
+            .ok_or_else(|| anyhow!("Missing bos token"))?;
         let eos_token_id = tokenizer
             .token_to_id("<eos>")
-            .ok_or_else(|| anyhow!("Missing eos token"))? as u32;
+            .ok_or_else(|| anyhow!("Missing eos token"))?;
         let unk_token_id = tokenizer
             .token_to_id("<unk>")
-            .ok_or_else(|| anyhow!("Missing unk token"))? as u32;
+            .ok_or_else(|| anyhow!("Missing unk token"))?;
 
         // Create set of special token IDs
         let mut special_token_ids = std::collections::HashSet::new();

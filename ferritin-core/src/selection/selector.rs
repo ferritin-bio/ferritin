@@ -34,7 +34,7 @@ pub struct AtomSelector<'a> {
 
 impl<'a> AtomSelector<'a> {
     pub(crate) fn new(collection: &AtomCollection) -> AtomSelector<'_> {
-        let size = collection.get_size() as usize;
+        let size = collection.get_size();
         AtomSelector {
             collection,
             current_selection: Selection::new((0..size).collect()),

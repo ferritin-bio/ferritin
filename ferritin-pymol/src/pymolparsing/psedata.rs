@@ -2,8 +2,8 @@
 //!
 //! PSEData is a struct for loading and serializing pymol PSE data.
 //!
-//! Currently the parsers are working for small test cases of molecules and selections. Additional parser structs would be required for
-//! other PSE data types which include the folloing:
+//! Currently, the parsers are working for small test cases of molecules and selections. Additional parser structs would be required for
+//! other PSE data types which include the following:
 //!
 
 use crate::pymolparsing::parsing::{
@@ -24,7 +24,7 @@ use std::path::Path;
 /// PSEData represents the structure of a PyMOL Session File (PSE).
 ///
 /// We lean heavily on `serde_pickle` to deserialize the PSE binary
-/// file into named structs, of which `PSEData` is the highlest level object containing
+/// file into named structs, of which `PSEData` is the highest level object containing
 /// most of the required methods for operating on PSE files.
 ///
 ///  This struct contains various components of a PyMOL session, including:
@@ -72,7 +72,7 @@ pub struct PSEData {
     #[serde(with = "serde_bytes")]
     pub wizard: Vec<u8>,
     pub moviescenes: Vec<Vec<i32>>,
-    // High level state settings: we need to prpogate these..
+    // High level state settings; we need to prpogate these.
     pub settings: Vec<Settings>,
     pub movie: (
         i32,
@@ -106,7 +106,7 @@ impl PSEData {
     /// Serialize to JSON
     pub fn to_json(&self, file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
         let json = serde_json::to_string_pretty(self)?;
-        std::fs::write(file_path, json)?;
+        fs::write(file_path, json)?;
         Ok(())
     }
     // adds custom colors to auto colors to get the index of colors
@@ -164,16 +164,16 @@ impl PSEData {
     }
     /// Convert Pymol to pdbtbx::PDB
     pub fn create_pdb(&self) -> PDB {
-        // todo: extend this to more than one molecuelo and/or to modify the global scene
+        // todo: extend this to more than one molecule and/or to modify the global scene
         let moldata = &self.get_molecule_data();
         let first_mol = moldata[0];
         first_mol.to_pdb()
     }
     /// Pymol --> PDBTBX --> PDB --> file
     pub fn save_pdbs(&self, file_path: &str) -> std::io::Result<()> {
-        let path = std::path::Path::new(file_path);
+        let path = Path::new(file_path);
         let pdb_folder = path.join("pdb");
-        std::fs::create_dir_all(&pdb_folder)?;
+        fs::create_dir_all(&pdb_folder)?;
         let mut file_list = Vec::new();
         for molecule in self.get_molecule_data().iter() {
             let pdb = molecule.to_pdb();
@@ -187,7 +187,7 @@ impl PSEData {
             file_list.push(filename);
         }
         let contents = file_list.join("\n");
-        std::fs::write(path.join("pdb_contents.txt"), contents)?;
+        fs::write(path.join("pdb_contents.txt"), contents)?;
         Ok(())
     }
     /// Convert to MSVJ Formay.
@@ -211,7 +211,7 @@ impl PSEData {
         // };
         // state.camera(camparam);
 
-        // It will be easier to set the focus based on all of the components in the PDB then trying to match pymol exactly
+        // It will be easier to set the focus based on all the components in the PDB then trying to match pymol exactly
         // let focus = FocusInlineParams {};
 
         // Add Molecule Data
@@ -266,15 +266,15 @@ impl PSEData {
     }
     ///  Pymol --> MSVJ --? disk
     pub fn to_disk(&self, file_path: &str) -> std::io::Result<()> {
-        let path = std::path::Path::new(file_path);
+        let path = Path::new(file_path);
         let msvj_file = path.join("state.mvsj");
         let state = self.create_molviewspec();
         let pretty_json = serde_json::to_string_pretty(&state)?;
         self.save_pdbs(file_path)?;
-        std::fs::write(msvj_file, pretty_json)?;
+        fs::write(msvj_file, pretty_json)?;
         Ok(())
     }
-    /// this one will write  a ready-to-go folder with pdbs, an msvj file, and the
+    /// this one will write  a ready-to-go folder with pdbs, a msvj file, and the
     /// html/css/js needed to load them
     pub fn to_disk_full(&self, file_path: &str) -> std::io::Result<()> {
         // Create the directory if it doesn't exist
