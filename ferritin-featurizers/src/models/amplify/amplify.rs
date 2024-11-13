@@ -367,7 +367,7 @@ impl EncoderBlock {
         Ok((output, _attn))
     }
 
-    /// Load Weights from a Model.
+    /// Load Weights from a Model
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
         // To keep the number of parameters and the amount of computation constant, we reduce the number of
         // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
