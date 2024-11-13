@@ -9,8 +9,7 @@
 //! - Memory efficient inference
 
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
-use candle_core::{DType, Device, Module, Result, Tensor, D};
-use candle_nn::ops::softmax;
+use candle_core::{Module, Result, Tensor, D};
 use candle_nn::{
     embedding, linear, linear_no_bias, rms_norm, Activation, Dropout, Embedding, Linear, RmsNorm,
     VarBuilder,
