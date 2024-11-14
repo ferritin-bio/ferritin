@@ -23,7 +23,7 @@ Something is wrong and needs to be fixed
 # encode() + model.forward()  + decode()
 input         MSVVGIDLGFQSCYVAVARAGGIETIANEYSDRCTPACISFGPKNR
 output-py    AMSVVGIDLGTTSCRVAVARAGGIETIANEYSDRKTPACISFGPKNRA
-output-rust  CECVACVMGKRGGVNTSPYQSAATRMKTWKRIRNPHFNCVIVPFISPC
+output-rust  CECVACVMGKRGGVNTSPYQSAATRMKTWKRIRNPHFNCVIVPFISPC  <--- very wrong!!
 ```
 
 __The Approach__ Boot up a GPU machine and clone the python and Rust versions of the model so that we are
