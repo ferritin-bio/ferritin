@@ -8,8 +8,7 @@
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
-use candle_core::shape::Dim;
-use candle_core::{Module, Result, Shape, Tensor, D};
+use candle_core::{Module, Result, Tensor, D};
 use candle_nn::{
     embedding, linear, linear_no_bias, ops::softmax, rms_norm, Activation, Dropout, Embedding,
     Linear, RmsNorm, VarBuilder,
@@ -149,32 +148,18 @@ impl EncoderBlock {
         freqs_cis: &Tensor,
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
-        println!("EncoderBlock.forward(): commence");
-        // println!("x dims; freqs_dims: {:?}, {:?}", x.dims(), freqs_cis.dims());
-        // println!("EncoderBlock.forward(): beginning attention norm");
         let normed = self.attention_norm.forward(x)?;
-        // Todo: confirm the attention block
-        // println!("EncoderBlock.forward(): getting contacts");
         let (attn, contacts) =
             self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
-        // add encoded bits and the self-attention...
         let x = x.add(&attn)?;
-        // println!("EncoderBlock.forward(): FeedForward Norm");
         let normed = self.ffn_norm.forward(&x)?;
-        // ffn.forward needs to do teh swiglu stesp with w12 and w3
-        println!("FFN_norm shape {:?}", normed.dims());
-
         let ffn_output = self.ffn_forward(&normed)?;
-        println!("FFN_forward shape {:?}", ffn_output.dims());
-
-        // println!("EncoderBlock.forward(): FeedForward_dropout");
         let ff = self.ffn_dropout.forward(&ffn_output, false)?; // Todo: pass in the Inference/Training bit
-        println!("FFN_dropout shape {:?}", ff.dims());
         let x = x.add(&ff)?;
         Ok((x, contacts))
     }
 
-    // process the FFN BLock using swiglu
+    // process the FFN Block using swiglu
     //
     fn ffn_forward(&self, x: &Tensor) -> Result<Tensor> {
         // Swiglu
@@ -220,18 +205,12 @@ impl EncoderBlock {
         dropout_p: f64,
         is_causal: bool,
     ) -> Result<Tensor> {
-        println!(
-            "Scaled Dot Product Attention. Tensor shapes for q, k, v: {:?}, {:?}, {:?},",
-            query.dims(),
-            key.dims(),
-            value.dims()
-        );
         // Calculate attention scores
         let d_k = key.dim(key.dims().len() - 1)? as f64;
         let scaling = 1.0 / d_k.sqrt();
         // (B, H, L, S) = (batch, heads, query_length, key_length)
         let scores = (query.matmul(&key.transpose(D::Minus2, D::Minus1)?)? * scaling)?;
-        println!("scores size: {:?}", scores.dims());
+
         // Apply mask if provided
         if let Some(mask) = attn_mask {
             let scores = scores.add(mask)?;
@@ -256,32 +235,18 @@ impl EncoderBlock {
         freqs_cis: &Tensor,
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
-        println!("AttentionBlock: commence");
-        println!(
-            "ATT Block: Input x shape, freqs_cis shape: {:?},{:?}",
-            x.dims(),
-            freqs_cis.dims()
-        );
-        // Get dimensions
-        let (batch_size, seq_len, _) = x.dims3()?;
         // Query, Key, Value projections
+        let (batch_size, seq_len, _) = x.dims3()?;
         let xq = self.q.forward(x)?; // [batch_size, seq_len, hidden_size]
         let xk = self.k.forward(x)?;
         let xv = self.v.forward(x)?;
-        println!("AttentionBlock: xq_shape: {:?}", xq.dims());
-        println!(
-            "Attempting reshape to: [{}, {}, {}, {}]",
-            batch_size, seq_len, self.config.num_attention_heads, self.d_head
-        );
-
         // Reshape for rotary embeddings
         let xq = xq.reshape((
             batch_size,
             seq_len,
-            self.config.num_attention_heads, // this need soro be smae as attent heads * d_head
+            self.config.num_attention_heads,
             self.d_head,
         ))?;
-
         let xk = xk.reshape((
             batch_size,
             seq_len,
@@ -295,19 +260,7 @@ impl EncoderBlock {
             self.d_head,
         ))?;
 
-        println!(
-            "AttentionBlock: xq_shape, xk_shape, xv_shape, freqs_cis: {:?}, {:?}, {:?}, {:?}",
-            xq.dims(),
-            xk.dims(),
-            xv.dims(),
-            freqs_cis.dims(),
-        );
-        // Apply rotary embeddings
-        println!("Beginning Rotary Embedding....");
         let (xq, xk) = apply_rotary_emb(&xq, &xk, &freqs_cis)?;
-        println!("Rotary Embed Shapes: : {:?}, {:?}", xq.dims(), xk.dims());
-
-        // Attention computation
         let dropout_prob = self.config.dropout_prob;
 
         // need to handle pad_mask better ....
@@ -327,31 +280,17 @@ impl EncoderBlock {
         } else {
             None
         };
-        println!("calc attention...");
-
-        println!("ATTN CALC IN: xq: {:?}", xq.dims());
-        let xq_permute = xq.permute((0, 2, 1, 3))?;
-        let xk_permute = xk.permute((0, 2, 1, 3))?;
-        let xv_permute = xv.permute((0, 2, 1, 3))?;
-
-        println!("ATTN CALC IN: xq_permute: {:?}", xq_permute.dims());
 
         let attn = self.scaled_dot_product_attention(
-            &xq_permute,
-            &xk_permute,
-            &xv_permute,
+            &xq.permute((0, 2, 1, 3))?,
+            &xk.permute((0, 2, 1, 3))?,
+            &xv.permute((0, 2, 1, 3))?,
             pad_mask.as_ref(),
             dropout_prob,
             false,
         )?;
-
-        println!("ATTENTION_pretranspose: {:?}", attn.dims());
-
-        // Missed this Transpose!
         // `[batch, num_heads, seq_len, head_dim]` → `[batch, seq_len, num_heads, head_dim]`
         let attn = attn.permute((0, 2, 1, 3))?;
-        println!("ATTENTION: {:?}", attn.dims());
-
         let _attn = if output_attentions {
             let xq_t = xq.permute((0, 2, 1, 3))?;
             let xk_t = xk.permute((0, 2, 3, 1))?;
@@ -370,12 +309,8 @@ impl EncoderBlock {
             seq_len,
             self.config.num_attention_heads * self.d_head,
         ))?;
-        println!("ATTENTION_reshaped: {:?}", output.dims());
         let output01 = self.wo.forward(&output)?;
-
-        println!("ATTENTION_output: {:?}", output01.dims());
         let output02 = self.resid_dropout.forward(&output01, false)?;
-        println!("ATTENTION_output_drop: {:?}", output02.dims());
         Ok((output02, _attn))
     }
 
@@ -462,28 +397,14 @@ impl AMPLIFY {
         output_hidden_states: bool,
         output_attentions: bool,
     ) -> Result<ModelOutput> {
-        println!("AMPLIFY.forward(): commence");
         let mut hidden_states = vec![];
         let mut attentions = vec![];
-
-        println!(
-            "AMPLIFY.forward(): Freq_CIS. Shape: {:?}",
-            &self.freqs_cis.dims()
-        );
-
         // Process attention mask if provided
-        println!("AMPLIFY.forward():  creating attention mask");
-
         let attention_mask =
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
-        // Get appropriate length of freqs_cis
-        // println!("AMPLIFY.forward():  creating freqs_cis mask");
         let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
-
         // Embedding layer
-        println!("AMPLIFY.forward():  creating encoder");
         let mut x = self.encoder.forward(src)?;
-        println!("X dims: {:?}", x.dims());
         // Transform through encoder blocks
         // println!("AMPLIFY.forward():  running through the transformer");
         for layer in self.transformer_encoder.iter() {
@@ -524,7 +445,6 @@ impl AMPLIFY {
     }
 
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
-        println!("AMPLIFY: Loading Model...");
         // process the transformer section
         let mut transformer_encoder = Vec::with_capacity(cfg.num_hidden_layers);
         for i in 0..cfg.num_hidden_layers {
@@ -534,24 +454,11 @@ impl AMPLIFY {
                 i as i32,
             )?);
         }
-        println!("AMPLIFY: Transformer Encoded.");
         let encoder = embedding(cfg.vocab_size, cfg.hidden_size, vb.pp("encoder"))?;
-        println!("AMPLIFY: Embedding Calculated.");
         let layer_norm_2 = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("layer_norm_2"))?;
-        println!("AMPLIFY: LayerNorm Calculated.");
         let decoder = linear(cfg.hidden_size, cfg.vocab_size, vb.pp("decoder"))?;
-        println!("AMPLIFY: Decoder Initialized.");
-
-        // self.freqs_cis = precompute_freqs_cis(config.hidden_size // config.num_attention_heads, config.max_length)
-        //  theta=10000
-        // AMPLIFY: Freq_CIS Initiated. Shape: [2048, 32, 2]
-        // let freqs_cis =
-        //     precompute_freqs_cis(cfg.hidden_size / cfg.num_attention_heads, cfg.max_length)?;
         let head_dim = cfg.hidden_size / cfg.num_attention_heads;
-
         let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?;
-        println!("AMPLIFY: Freq_CIS Initiated. Shape: {:?}", freqs_cis.dims());
-        // println!("AMPLIFY: freqs_cis Created .");
 
         Ok(Self {
             encoder,

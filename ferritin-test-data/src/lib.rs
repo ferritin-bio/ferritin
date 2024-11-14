@@ -43,6 +43,14 @@ impl TestFile {
             suffix: "pse",
         }
     }
+    // Safetensors output of the Amplify Model
+    // see `ferritin-test-data/data/safetensors/amplify/Readme.md`
+    pub fn amplify_output_01() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/safetensors/amplify/amplify_output.safetensors"),
+            suffix: "pse",
+        }
+    }
 
     pub fn create_temp(&self) -> std::io::Result<(String, NamedTempFile)> {
         let temp = Builder::new()
