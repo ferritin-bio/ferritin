@@ -332,6 +332,8 @@ impl EncoderBlock {
             false,
         )?;
 
+        println!("ATTENTION: {:?}", attn.dims());
+
         let _attn = if output_attentions {
             let xq_t = xq.permute((0, 2, 1, 3))?;
             let xk_t = xk.permute((0, 2, 3, 1))?;
@@ -350,9 +352,13 @@ impl EncoderBlock {
             seq_len,
             self.config.num_attention_heads * self.d_head,
         ))?;
-        let output = self.wo.forward(&output)?;
-        let output = self.resid_dropout.forward(&output, false)?;
-        Ok((output, _attn))
+        println!("ATTENTION_reshaped: {:?}", output.dims());
+        let output01 = self.wo.forward(&output)?;
+
+        println!("ATTENTION_output: {:?}", output01.dims());
+        let output02 = self.resid_dropout.forward(&output01, false)?;
+        println!("ATTENTION_output_drop: {:?}", output02.dims());
+        Ok((output02, _attn))
     }
 
     /// Load Weights from a Model
