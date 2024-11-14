@@ -328,10 +328,18 @@ impl EncoderBlock {
             None
         };
         println!("calc attention...");
+
+        println!("ATTN CALC IN: xq: {:?}", xq.dims());
+        let xq_permute = xq.permute((0, 2, 1, 3))?;
+        let xk_permute = xk.permute((0, 2, 1, 3))?;
+        let xv_permute = xv.permute((0, 2, 1, 3))?;
+
+        println!("ATTN CALC IN: xq_permute: {:?}", xq_permute.dims());
+
         let attn = self.scaled_dot_product_attention(
-            &xq,
-            &xk,
-            &xv,
+            &xq_permute,
+            &xk_permute,
+            &xv_permute,
             pad_mask.as_ref(),
             dropout_prob,
             false,
