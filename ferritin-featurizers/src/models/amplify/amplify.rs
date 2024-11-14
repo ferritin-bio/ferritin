@@ -205,17 +205,12 @@ impl EncoderBlock {
         dropout_p: f64,
         is_causal: bool,
     ) -> Result<Tensor> {
-        println!(
-            "Scaled Dot Product Attention. Tensor shapes for q, k, v: {:?}, {:?}, {:?},",
-            query.dims(),
-            key.dims(),
-            value.dims()
-        );
         // Calculate attention scores
         let d_k = key.dim(key.dims().len() - 1)? as f64;
         let scaling = 1.0 / d_k.sqrt();
         // (B, H, L, S) = (batch, heads, query_length, key_length)
         let scores = (query.matmul(&key.transpose(D::Minus2, D::Minus1)?)? * scaling)?;
+
         // Apply mask if provided
         if let Some(mask) = attn_mask {
             let scores = scores.add(mask)?;
