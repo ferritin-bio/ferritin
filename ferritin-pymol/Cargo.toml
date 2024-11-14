@@ -8,7 +8,7 @@ description.workspace = true
 
 [dependencies]
 ferritin-molviewspec = { path = "../ferritin-molviewspec" }
-clap = { version = "4.5.20", features = ["derive"] }
+clap = { version = "4.5.21", features = ["derive"] }
 serde-pickle = "1.1"
 serde_bytes = { workspace = true }
 serde = { workspace = true }
