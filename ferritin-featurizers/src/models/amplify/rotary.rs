@@ -27,7 +27,11 @@ pub fn precompute_freqs_cis(head_dim: usize, seq_len: usize) -> Result<Tensor> {
         freqs_sin.dims()
     );
 
-    Tensor::stack(&[freqs_cos, freqs_sin], D::Minus1)
+    let return_tensor = Tensor::stack(&[freqs_cos, freqs_sin], D::Minus1)?;
+
+    println!("Precomputed return Tensor: {:?}", return_tensor.dims());
+
+    Ok(return_tensor)
 }
 
 pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<(Tensor, Tensor)> {

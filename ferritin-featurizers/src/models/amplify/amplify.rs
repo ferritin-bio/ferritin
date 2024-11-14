@@ -253,7 +253,7 @@ impl EncoderBlock {
     ) -> Result<(Tensor, Option<Tensor>)> {
         println!("AttentionBlock: commence");
         println!(
-            "Input x shape, freqs_cis shape: {:?},{:?}",
+            "ATT Block: Input x shape, freqs_cis shape: {:?},{:?}",
             x.dims(),
             freqs_cis.dims()
         );
@@ -442,23 +442,24 @@ impl AMPLIFY {
         let mut hidden_states = vec![];
         let mut attentions = vec![];
 
-        // println!(
-        //     "AMPLIFY.forward(): Freq_CIS. Shape: {:?}",
-        //     &self.freqs_cis.dims()
-        // );
+        println!(
+            "AMPLIFY.forward(): Freq_CIS. Shape: {:?}",
+            &self.freqs_cis.dims()
+        );
 
         // Process attention mask if provided
-        // println!("AMPLIFY.forward():  creating attention mask");
+        println!("AMPLIFY.forward():  creating attention mask");
 
         let attention_mask =
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         // Get appropriate length of freqs_cis
         // println!("AMPLIFY.forward():  creating freqs_cis mask");
         let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
+
         // Embedding layer
-        // println!("AMPLIFY.forward():  creating encoder");
+        println!("AMPLIFY.forward():  creating encoder");
         let mut x = self.encoder.forward(src)?;
-        // println!("X dims: {:?}", x.dims());
+        println!("X dims: {:?}", x.dims());
         // Transform through encoder blocks
         // println!("AMPLIFY.forward():  running through the transformer");
         for layer in self.transformer_encoder.iter() {
@@ -523,8 +524,9 @@ impl AMPLIFY {
         // let freqs_cis =
         //     precompute_freqs_cis(cfg.hidden_size / cfg.num_attention_heads, cfg.max_length)?;
         let head_dim = cfg.hidden_size / cfg.num_attention_heads;
+
         let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?;
-        // println!("AMPLIFY: Freq_CIS Initiated. Shape: {:?}", freqs_cis.dims());
+        println!("AMPLIFY: Freq_CIS Initiated. Shape: {:?}", freqs_cis.dims());
         // println!("AMPLIFY: freqs_cis Created .");
 
         Ok(Self {
