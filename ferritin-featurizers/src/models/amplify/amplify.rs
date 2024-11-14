@@ -8,7 +8,8 @@
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
-use candle_core::{Module, Result, Tensor, D};
+use candle_core::shape::Dim;
+use candle_core::{Module, Result, Shape, Tensor, D};
 use candle_nn::{
     embedding, linear, linear_no_bias, ops::softmax, rms_norm, Activation, Dropout, Embedding,
     Linear, RmsNorm, VarBuilder,
@@ -161,10 +162,14 @@ impl EncoderBlock {
         // println!("EncoderBlock.forward(): FeedForward Norm");
         let normed = self.ffn_norm.forward(&x)?;
         // ffn.forward needs to do teh swiglu stesp with w12 and w3
-        // println!("EncoderBlock.forward(): FeedForward_forward");
+        println!("FFN_norm shape {:?}", normed.dims());
+
         let ffn_output = self.ffn_forward(&normed)?;
+        println!("FFN_forward shape {:?}", ffn_output.dims());
+
         // println!("EncoderBlock.forward(): FeedForward_dropout");
         let ff = self.ffn_dropout.forward(&ffn_output, false)?; // Todo: pass in the Inference/Training bit
+        println!("FFN_dropout shape {:?}", ff.dims());
         let x = x.add(&ff)?;
         Ok((x, contacts))
     }
@@ -253,7 +258,7 @@ impl EncoderBlock {
     ) -> Result<(Tensor, Option<Tensor>)> {
         println!("AttentionBlock: commence");
         println!(
-            "Input x shape, freqs_cis shape: {:?},{:?}",
+            "ATT Block: Input x shape, freqs_cis shape: {:?},{:?}",
             x.dims(),
             freqs_cis.dims()
         );
@@ -323,14 +328,29 @@ impl EncoderBlock {
             None
         };
         println!("calc attention...");
+
+        println!("ATTN CALC IN: xq: {:?}", xq.dims());
+        let xq_permute = xq.permute((0, 2, 1, 3))?;
+        let xk_permute = xk.permute((0, 2, 1, 3))?;
+        let xv_permute = xv.permute((0, 2, 1, 3))?;
+
+        println!("ATTN CALC IN: xq_permute: {:?}", xq_permute.dims());
+
         let attn = self.scaled_dot_product_attention(
-            &xq,
-            &xk,
-            &xv,
+            &xq_permute,
+            &xk_permute,
+            &xv_permute,
             pad_mask.as_ref(),
             dropout_prob,
             false,
         )?;
+
+        println!("ATTENTION_pretranspose: {:?}", attn.dims());
+
+        // Missed this Transpose!
+        // `[batch, num_heads, seq_len, head_dim]` → `[batch, seq_len, num_heads, head_dim]`
+        let attn = attn.permute((0, 2, 1, 3))?;
+        println!("ATTENTION: {:?}", attn.dims());
 
         let _attn = if output_attentions {
             let xq_t = xq.permute((0, 2, 1, 3))?;
@@ -350,9 +370,13 @@ impl EncoderBlock {
             seq_len,
             self.config.num_attention_heads * self.d_head,
         ))?;
-        let output = self.wo.forward(&output)?;
-        let output = self.resid_dropout.forward(&output, false)?;
-        Ok((output, _attn))
+        println!("ATTENTION_reshaped: {:?}", output.dims());
+        let output01 = self.wo.forward(&output)?;
+
+        println!("ATTENTION_output: {:?}", output01.dims());
+        let output02 = self.resid_dropout.forward(&output01, false)?;
+        println!("ATTENTION_output_drop: {:?}", output02.dims());
+        Ok((output02, _attn))
     }
 
     /// Load Weights from a Model
@@ -442,23 +466,24 @@ impl AMPLIFY {
         let mut hidden_states = vec![];
         let mut attentions = vec![];
 
-        // println!(
-        //     "AMPLIFY.forward(): Freq_CIS. Shape: {:?}",
-        //     &self.freqs_cis.dims()
-        // );
+        println!(
+            "AMPLIFY.forward(): Freq_CIS. Shape: {:?}",
+            &self.freqs_cis.dims()
+        );
 
         // Process attention mask if provided
-        // println!("AMPLIFY.forward():  creating attention mask");
+        println!("AMPLIFY.forward():  creating attention mask");
 
         let attention_mask =
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         // Get appropriate length of freqs_cis
         // println!("AMPLIFY.forward():  creating freqs_cis mask");
         let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
+
         // Embedding layer
-        // println!("AMPLIFY.forward():  creating encoder");
+        println!("AMPLIFY.forward():  creating encoder");
         let mut x = self.encoder.forward(src)?;
-        // println!("X dims: {:?}", x.dims());
+        println!("X dims: {:?}", x.dims());
         // Transform through encoder blocks
         // println!("AMPLIFY.forward():  running through the transformer");
         for layer in self.transformer_encoder.iter() {
@@ -523,8 +548,9 @@ impl AMPLIFY {
         // let freqs_cis =
         //     precompute_freqs_cis(cfg.hidden_size / cfg.num_attention_heads, cfg.max_length)?;
         let head_dim = cfg.hidden_size / cfg.num_attention_heads;
+
         let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?;
-        // println!("AMPLIFY: Freq_CIS Initiated. Shape: {:?}", freqs_cis.dims());
+        println!("AMPLIFY: Freq_CIS Initiated. Shape: {:?}", freqs_cis.dims());
         // println!("AMPLIFY: freqs_cis Created .");
 
         Ok(Self {

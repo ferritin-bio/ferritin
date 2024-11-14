@@ -30,8 +30,9 @@ fn test_amplify_round_trip() -> Result<(), Box<dyn std::error::Error>> {
     let tokenizer = repo.get("tokenizer.json")?;
     let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
 
-    let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
-    let pmatrix = protein_tokenizer.encode(&[sprot_01.to_string()], None, false, false)?;
+    // let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
+    let AMPLIFY_TEST_SEQ = "MSVVGIDLGFQSCYVAVARAGGIETIANEYSDRCTPACISFGPKNR";
+    let pmatrix = protein_tokenizer.encode(&[AMPLIFY_TEST_SEQ.to_string()], None, false, false)?;
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
     let encoded = model.forward(&pmatrix, None, false, false)?;
 
@@ -41,7 +42,7 @@ fn test_amplify_round_trip() -> Result<(), Box<dyn std::error::Error>> {
     let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
     let decoded = protein_tokenizer.decode(indices.as_slice(), true)?;
 
-    assert_eq!(sprot_01, decoded.replace(" ", ""));
+    assert_eq!(AMPLIFY_TEST_SEQ, decoded.replace(" ", ""));
 
     Ok(())
 }
