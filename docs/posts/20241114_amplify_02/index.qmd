@@ -16,7 +16,7 @@ I started to use it It was immedietly clear that my model was wrong. This post b
 the troubleshooting process to get the models to reach parity as measured
 by identical outputs in the sequence encoding and attention weight outputs.
 
-The Problem. My base Rust/Candle model looked like crap. Encode + run + decode should return the same sequence.
+__The Problem__ My base Rust/Candle model looked like crap. Encode + run + decode should return the same sequence.
 Something is wrong and needs to be fixed
 
 ```shell
@@ -26,8 +26,23 @@ output-py    AMSVVGIDLGTTSCRVAVARAGGIETIANEYSDRKTPACISFGPKNRA
 output-rust  CECVACVMGKRGGVNTSPYQSAATRMKTWKRIRNPHFNCVIVPFISPC
 ```
 
+__The Approach__ Boot up a GPU machine and clone the python and Rust versions of the model so that we are
+using the same tokenizer, weights, and input sequence. Then, using print statements, wak through the code until I find
+a discrepancy.
 
-# Approach
+
+__The TL'DR__ Within the attention block. the code is transposed, calculated, and then transposed again. Because
+ the model has __TWO__ tranpose options the final shape was correct which is why my first attempt "worked" - the encoded
+ bits travelled through the model but the connections were wrong and thats why it looked random. Once I figured that out I was
+ able to fix the transposes and create a test. I also saved the outputs of the attention layers and saved those so they could
+ also be compared to the Rust/Candle version.
+
+
+Below are some notes that I was taking during the process that might be of interest to others trying to port a model. The links to
+the related PRs are at the bottom. The code in the gist may also be helpful to show how I setup my GPU environment.
+
+
+
 
 ## Setup
 
