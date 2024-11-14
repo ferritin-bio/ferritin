@@ -1,9 +1,7 @@
 use candle_core::{Device, Result, Tensor, D};
 
 pub fn precompute_freqs_cis(head_dim: usize, seq_len: usize) -> Result<Tensor> {
-    println!("in precompute freqs fn!");
     let theta: f32 = 10000.0;
-
     // Create frequencies using powf
     let freqs = (0..head_dim / 2)
         .into_iter()
@@ -21,26 +19,11 @@ pub fn precompute_freqs_cis(head_dim: usize, seq_len: usize) -> Result<Tensor> {
     let freqs_cos = freqs.cos()?;
     let freqs_sin = freqs.sin()?;
 
-    println!(
-        "Precomputed freqs shape - cos: {:?}, sin: {:?}",
-        freqs_cos.dims(),
-        freqs_sin.dims()
-    );
-
-    let return_tensor = Tensor::stack(&[freqs_cos, freqs_sin], D::Minus1)?;
-
-    println!("Precomputed return Tensor: {:?}", return_tensor.dims());
-
-    Ok(return_tensor)
+    Ok(Tensor::stack(&[freqs_cos, freqs_sin], D::Minus1)?)
 }
 
 pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<(Tensor, Tensor)> {
     let (b_sz, seq_len, h, headdim) = xq.dims4()?;
-    println!(
-        "Rotary inputs - xq: {:?}, freqs_cis: {:?}",
-        xq.dims(),
-        freqs_cis.dims()
-    );
 
     // Calculate dimensions for reshape
     let complex_dim = 2;
@@ -57,12 +40,6 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
         .unsqueeze(0)? // Add batch dim
         .unsqueeze(2)? // Add head dim
         .expand((b_sz, seq_len, h, half_headdim, complex_dim))?; // Expand to match input dimensions
-
-    println!(
-        "Reshaped tensors - xq: {:?}, freqs_cis: {:?}",
-        xq.dims(),
-        freqs_cis.dims()
-    );
 
     // Define complex multiplication operation
     let complex_mul = |x: &Tensor| -> Result<Tensor> {
@@ -84,12 +61,6 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
     // Reshape back to original dimensions
     let xq_out = xq_out.reshape((b_sz, seq_len, h, headdim))?;
     let xk_out = xk_out.reshape((b_sz, seq_len, h, headdim))?;
-
-    println!(
-        "Output shapes - xq: {:?}, xk: {:?}",
-        xq_out.dims(),
-        xk_out.dims()
-    );
 
     Ok((xq_out, xk_out))
 }
