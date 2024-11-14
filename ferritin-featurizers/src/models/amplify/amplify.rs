@@ -337,10 +337,11 @@ impl EncoderBlock {
             false,
         )?;
 
-        // Missed this Transpose!
-        let attn = attn.permute((0, 2, 1, 3))?;
+        println!("ATTENTION_pretranspose: {:?}", attn.dims());
 
-        // should transpose here
+        // Missed this Transpose!
+        // `[batch, num_heads, seq_len, head_dim]` → `[batch, seq_len, num_heads, head_dim]`
+        let attn = attn.permute((0, 2, 1, 3))?;
         println!("ATTENTION: {:?}", attn.dims());
 
         let _attn = if output_attentions {
