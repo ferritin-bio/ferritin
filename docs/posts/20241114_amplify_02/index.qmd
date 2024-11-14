@@ -4,7 +4,7 @@ description: "Conversion of AMPLIFY from Pytorch to Candle"
 author: "Zachary Charlop-Powers"
 date: "2024-11-14"
 categories: [rust, ai, proteins]
-image: "images/cli.png"
+image: "images/runpod.png"
 
 ---
 
