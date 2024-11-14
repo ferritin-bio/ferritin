@@ -8,7 +8,8 @@
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
-use candle_core::{Module, Result, Tensor, D};
+use candle_core::shape::Dim;
+use candle_core::{Module, Result, Shape, Tensor, D};
 use candle_nn::{
     embedding, linear, linear_no_bias, ops::softmax, rms_norm, Activation, Dropout, Embedding,
     Linear, RmsNorm, VarBuilder,
@@ -161,10 +162,14 @@ impl EncoderBlock {
         // println!("EncoderBlock.forward(): FeedForward Norm");
         let normed = self.ffn_norm.forward(&x)?;
         // ffn.forward needs to do teh swiglu stesp with w12 and w3
-        // println!("EncoderBlock.forward(): FeedForward_forward");
+        println!("FFN_norm shape {:?}", normed.dims());
+
         let ffn_output = self.ffn_forward(&normed)?;
+        println!("FFN_forward shape {:?}", ffn_output.dims());
+
         // println!("EncoderBlock.forward(): FeedForward_dropout");
         let ff = self.ffn_dropout.forward(&ffn_output, false)?; // Todo: pass in the Inference/Training bit
+        println!("FFN_dropout shape {:?}", ff.dims());
         let x = x.add(&ff)?;
         Ok((x, contacts))
     }
@@ -332,6 +337,10 @@ impl EncoderBlock {
             false,
         )?;
 
+        // Missed this Transpose!
+        let attn = attn.permute((0, 2, 1, 3))?;
+
+        // should transpose here
         println!("ATTENTION: {:?}", attn.dims());
 
         let _attn = if output_attentions {
