@@ -1,5 +1,5 @@
-use anyhow::{Error, Result};
-use candle_core::{DType, Device, IndexOp, Tensor, D};
+use anyhow::Result;
+use candle_core::{DType, Device, Tensor, D};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use ferritin_featurizers::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
@@ -67,8 +67,8 @@ fn test_amplify_round_trip() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// #[ignore]
 #[test]
-#[ignore]
 fn test_amplify_attentions() -> Result<(), Box<dyn std::error::Error>> {
     let model_id = "chandar-lab/AMPLIFY_120M";
     let revision = "main";
@@ -91,7 +91,6 @@ fn test_amplify_attentions() -> Result<(), Box<dyn std::error::Error>> {
     let pmatrix = protein_tokenizer.encode(&[sprot_01.to_string()], None, true, false)?;
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
     let encoded = model.forward(&pmatrix, None, true, true)?;
-
     // Choosing ARGMAX. We expect this to be the most predicted sequence.
     // it should return the identity of an unmasked sequence
     let predictions = &encoded.logits.argmax(D::Minus1)?;
@@ -126,18 +125,57 @@ fn test_amplify_attentions() -> Result<(), Box<dyn std::error::Error>> {
     let first_dim = total_elements / (last_dim * last_dim);
     let attn_map_combined2 = attn_map_combined.reshape((first_dim, last_dim, last_dim))?;
 
-    // // In PyTorch: attn_map = attn_map[:, 1:-1, 1:-1]
-    // let attn_map_combined2 = attn_map_combined2.i([
-    //     (0, attn_map_combined2.dim(0)?),     // all in first dim
-    //     (1, attn_map_combined2.dim(1)? - 1), // from 1 to end-1 in second dim
-    //     (1, attn_map_combined2.dim(2)? - 1), // from 1 to end-1 in third dim
-    // ])?;
+    // In PyTorch: attn_map = attn_map[:, 1:-1, 1:-1]
+    let attn_map_combined2 = attn_map_combined2
+        .narrow(1, 1, attn_map_combined2.dim(1)? - 2)? // second dim
+        .narrow(2, 1, attn_map_combined2.dim(2)? - 2)?; // third dim
 
-    // println!(
-    //     "Attentions Combined Reshaped: {:?}, {:?}",
-    //     attn_map_combined.dims(),
-    //     attn_map_combined2.dims()
-    // );
+    println!(
+        "Attentions Combined Reshaped: {:?}, {:?}",
+        attn_map_combined.dims(),
+        attn_map_combined2.dims()
+    );
+
+    /// "Perform average product correct, used for contact prediction."
+    // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L83
+    fn apc(x: &Tensor) -> Result<Tensor> {
+        // "Perform average product correct, used for contact prediction."
+        // Sum along last dimension (keeping dims)
+        let a1 = x.sum_keepdim(D::Minus1)?;
+        // Sum along second-to-last dimension (keeping dims)
+        let a2 = x.sum_keepdim(D::Minus2)?;
+        // Sum along both last dimensions (keeping dims)
+        let a12 = x.sum_keepdim((D::Minus1, D::Minus2))?;
+        // Multiply a1 and a2
+        let avg = a1.matmul(&a2)?;
+        // Divide by a12 (equivalent to pytorch's div_)
+        // println!("IN the APC: avg, a12 {:?}, {:?}", avg, a12);
+        // let avg = avg.div(&a12)?;
+        let a12_broadcast = a12.broadcast_as(avg.shape())?;
+        // Divide by a12 (with proper broadcasting)
+        let avg = avg.div(&a12_broadcast)?;
+        // Subtract avg from x
+        Ok(x.sub(&avg)?)
+    }
+
+    //From https://github.com/facebookresearch/esm/blob/main/esm/modules.py
+    // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L77
+    fn symmetrize(x: &Tensor) -> Result<Tensor> {
+        // "Make layer symmetric in final two dimensions, used for contact prediction."
+        let x_transpose = x.transpose(D::Minus1, D::Minus2)?;
+        Ok(x.add(&x_transpose)?)
+    }
+
+    // attn_map = apc(symmetrize(attn_map))  # process the attention maps
+    // attn_map = attn_map.permute(1, 2, 0)  # (residues, residues, map)
+    let symmetric = symmetrize(&attn_map_combined2)?;
+    let normalized = apc(&symmetric)?;
+    let proximity_map = normalized.permute((1, 2, 0)); //  # (residues, residues, map)
+
+    println!(
+        "sym, norm, proxmap: {:?}, {:?}, {:?}",
+        symmetric, normalized, proximity_map
+    );
 
     Ok(())
 }

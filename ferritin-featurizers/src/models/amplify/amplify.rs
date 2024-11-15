@@ -478,3 +478,67 @@ pub struct ModelOutput {
     pub hidden_states: Option<Vec<Tensor>>,
     pub attentions: Option<Vec<Tensor>>,
 }
+
+impl ModelOutput {
+    // attn_map = apc(symmetrize(attn_map))  # process the attention maps
+    // attn_map = attn_map.permute(1, 2, 0)  # (residues, residues, map)
+
+    /// "Perform average product correct, used for contact prediction."
+    // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L83
+    fn apc(x: &Tensor) -> Result<Tensor> {
+        // "Perform average product correct, used for contact prediction."
+        // Sum along last dimension (keeping dims)
+        let a1 = x.sum_keepdim(D::Minus1)?;
+        // Sum along second-to-last dimension (keeping dims)
+        let a2 = x.sum_keepdim(D::Minus2)?;
+        // Sum along both last dimensions (keeping dims)
+        let a12 = x.sum_keepdim((D::Minus1, D::Minus2))?;
+        // Multiply a1 and a2
+        let avg = a1.matmul(&a2)?;
+        // Divide by a12 (equivalent to pytorch's div_)
+        // println!("IN the APC: avg, a12 {:?}, {:?}", avg, a12);
+        // let avg = avg.div(&a12)?;
+        let a12_broadcast = a12.broadcast_as(avg.shape())?;
+        // Divide by a12 (with proper broadcasting)
+        let avg = avg.div(&a12_broadcast)?;
+        // Subtract avg from x
+        Ok(x.sub(&avg)?)
+    }
+
+    //From https://github.com/facebookresearch/esm/blob/main/esm/modules.py
+    // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L77
+    fn symmetrize(x: &Tensor) -> Result<Tensor> {
+        // "Make layer symmetric in final two dimensions, used for contact prediction."
+        let x_transpose = x.transpose(D::Minus1, D::Minus2)?;
+        Ok(x.add(&x_transpose)?)
+    }
+
+    ///. Contact maps can be obtained
+    /// from the self-attentions
+    pub fn get_contact_map(&self) -> Result<Option<Tensor>> {
+        let Some(attentions) = &self.attentions else {
+            return Ok(None);
+        };
+
+        let attn_map = attentions.last().unwrap();
+        let attn_map_combined = attn_map.mean_keepdim(1)?;
+        let attn_map_combined2 = attn_map_combined.squeeze(1)?;
+        let attention_map = &encoded.attentions.unwrap();
+        let attn_map_combined = Tensor::stack(&attention_map, 0)?;
+
+        // pmatrix.how do we pass this in?
+        let last_dim = pmatrix.dim(D::Minus1)?;
+        let total_elements = attn_map_combined.dims().iter().product::<usize>();
+        let first_dim = total_elements / (last_dim * last_dim);
+        let attn_map_combined2 = attn_map_combined.reshape((first_dim, last_dim, last_dim))?;
+
+        // In PyTorch: attn_map = attn_map[:, 1:-1, 1:-1]
+        let attn_map_combined2 = attn_map_combined2
+            .narrow(1, 1, attn_map_combined2.dim(1)? - 2)? // second dim
+            .narrow(2, 1, attn_map_combined2.dim(2)? - 2)?; // third dim
+        let symmetric = &self.symmetrize(&attn_map_combined2)?;
+        let normalized = &self.apc(&symmetric)?;
+        let proximity_map = normalized.permute((1, 2, 0)); //  # (residues, residues, map)
+        Ok(Some(proximity_map))
+    }
+}
