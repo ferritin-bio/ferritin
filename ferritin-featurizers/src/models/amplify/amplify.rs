@@ -500,7 +500,7 @@ impl ModelOutput {
         // Divide by a12 (with proper broadcasting)
         let avg = avg.div(&a12_broadcast)?;
         // Subtract avg from x
-        Ok(x.sub(&avg)?)
+        x.sub(&avg)
     }
 
     //From https://github.com/facebookresearch/esm/blob/main/esm/modules.py
@@ -508,7 +508,7 @@ impl ModelOutput {
     // "Make layer symmetric in final two dimensions, used for contact prediction."
     fn symmetrize(&self, x: &Tensor) -> Result<Tensor> {
         let x_transpose = x.transpose(D::Minus1, D::Minus2)?;
-        Ok(x.add(&x_transpose)?)
+        x.add(&x_transpose)
     }
 
     //. Contact maps can be obtained
@@ -520,8 +520,8 @@ impl ModelOutput {
         // we need the dimentions to reshape below.
         // the attention blocks have the following shaep
         let (_1, _n_head, _seq_length, seq_length) = attentions.first().unwrap().dims4()?;
-        let last_dim = seq_length.clone();
-        let attn_stacked = Tensor::stack(&attentions, 0)?;
+        let last_dim = seq_length;
+        let attn_stacked = Tensor::stack(attentions, 0)?;
         let total_elements = attn_stacked.dims().iter().product::<usize>();
         let first_dim = total_elements / (last_dim * last_dim);
         let attn_map_combined2 = attn_stacked.reshape(&[first_dim, last_dim, last_dim])?;
@@ -530,8 +530,8 @@ impl ModelOutput {
         let attn_map_combined2 = attn_map_combined2
             .narrow(1, 1, attn_map_combined2.dim(1)? - 2)? // second dim
             .narrow(2, 1, attn_map_combined2.dim(2)? - 2)?; // third dim
-        let symmetric = &self.symmetrize(&attn_map_combined2)?;
-        let normalized = &self.apc(&symmetric)?;
+        let symmetric = self.symmetrize(&attn_map_combined2)?;
+        let normalized = self.apc(&symmetric)?;
         let proximity_map = normalized.permute((1, 2, 0))?; //  # (residues, residues, map)
 
         Ok(Some(proximity_map))
