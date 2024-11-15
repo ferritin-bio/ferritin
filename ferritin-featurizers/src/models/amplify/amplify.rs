@@ -482,9 +482,9 @@ impl ModelOutput {
     // attn_map = attn_map.permute(1, 2, 0)  # (residues, residues, map)
 
     /// "Perform average product correct, used for contact prediction."
-    // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L83
+    /// https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L83
+    /// "Perform average product correct, used for contact prediction."
     fn apc(&self, x: &Tensor) -> Result<Tensor> {
-        // "Perform average product correct, used for contact prediction."
         // Sum along last dimension (keeping dims)
         let a1 = x.sum_keepdim(D::Minus1)?;
         // Sum along second-to-last dimension (keeping dims)
