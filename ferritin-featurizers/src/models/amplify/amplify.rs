@@ -17,8 +17,14 @@ use candle_nn::{
     embedding, linear, linear_no_bias, ops::softmax, rms_norm, Activation, Dropout, Embedding,
     Linear, RmsNorm, VarBuilder,
 };
-// Config struct
+
+
 #[derive(Debug, Clone)]
+/// Configuration Struct for AMPLIFY
+///
+/// Currently only holds the weight params for
+/// those modeld found on GH: the 120M and 350M models.
+///
 pub struct AMPLIFYConfig {
     pub hidden_size: usize,
     pub num_hidden_layers: usize,
@@ -44,7 +50,6 @@ impl Default for AMPLIFYConfig {
         AMPLIFYConfig::amp_120m()
     }
 }
-
 impl AMPLIFYConfig {
     pub fn amp_120m() -> Self {
         Self {
@@ -92,11 +97,12 @@ impl AMPLIFYConfig {
 
 /// Amplify EncoderBlock implementation
 ///
-/// example 01: T5: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331
-//
-/// Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
-/// Example: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340
-/// SwiGLu Implementation:  https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462
+/// References for coding the block from similar models.
+///
+/// - [T5](https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331)
+/// - [distilbert](https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198)
+/// - [glm4](https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340)
+/// - [SwiGLu Imple](https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462)
 #[derive(Debug)]
 pub struct EncoderBlock {
     q: Linear,
@@ -506,6 +512,12 @@ impl AMPLIFY {
 // Helper structs and enums
 #[derive(Debug)]
 /// Amplify Model Output
+///
+/// logits, hidden states, and attentions.
+///
+///  logits -> distribution of the sequences.
+///  attentions -> contact map
+///
 pub struct ModelOutput {
     pub logits: Tensor,
     pub hidden_states: Option<Vec<Tensor>>,
@@ -513,8 +525,6 @@ pub struct ModelOutput {
 }
 
 impl ModelOutput {
-    // attn_map = apc(symmetrize(attn_map))  # process the attention maps
-    // attn_map = attn_map.permute(1, 2, 0)  # (residues, residues, map)
 
     /// "Perform average product correct, used for contact prediction."
     /// https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L83
@@ -546,8 +556,7 @@ impl ModelOutput {
         x.add(&x_transpose)
     }
 
-    //. Contact maps can be obtained
-    // from the self-attentions
+    /// Contact maps can be obtained from the self-attentions
     pub fn get_contact_map(&self) -> Result<Option<Tensor>> {
         let Some(attentions) = &self.attentions else {
             return Ok(None);
