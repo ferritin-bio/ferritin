@@ -568,6 +568,6 @@ impl ModelOutput {
         let normalized = self.apc(&symmetric)?;
         let proximity_map = normalized.permute((1, 2, 0))?; //  # (residues, residues, map)
 
-        Ok(proximity_map)
+        Ok(Some(proximity_map))
     }
 }
