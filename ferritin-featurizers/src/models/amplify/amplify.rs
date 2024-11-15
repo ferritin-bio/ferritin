@@ -505,8 +505,8 @@ impl ModelOutput {
 
     //From https://github.com/facebookresearch/esm/blob/main/esm/modules.py
     // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L77
+    // "Make layer symmetric in final two dimensions, used for contact prediction."
     fn symmetrize(&self, x: &Tensor) -> Result<Tensor> {
-        // "Make layer symmetric in final two dimensions, used for contact prediction."
         let x_transpose = x.transpose(D::Minus1, D::Minus2)?;
         Ok(x.add(&x_transpose)?)
     }
@@ -519,7 +519,6 @@ impl ModelOutput {
         };
         // we need the dimentions to reshape below.
         // the attention blocks have the following shaep
-
         let (_1, _n_head, _seq_length, seq_length) = attentions.first().unwrap().dims4()?;
         let last_dim = seq_length.clone();
         let attn_stacked = Tensor::stack(&attentions, 0)?;
@@ -534,6 +533,7 @@ impl ModelOutput {
         let symmetric = &self.symmetrize(&attn_map_combined2)?;
         let normalized = &self.apc(&symmetric)?;
         let proximity_map = normalized.permute((1, 2, 0))?; //  # (residues, residues, map)
+
         Ok(Some(proximity_map))
     }
 }
