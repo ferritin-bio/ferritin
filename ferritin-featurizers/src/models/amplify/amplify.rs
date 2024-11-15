@@ -97,6 +97,7 @@ impl AMPLIFYConfig {
 /// Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
 /// Example: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340
 /// SwiGLu Implementation:  https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462
+#[derive(Debug)]
 pub struct EncoderBlock {
     q: Linear,
     k: Linear,
@@ -356,6 +357,7 @@ impl EncoderBlock {
 /// - [paper](https://www.biorxiv.org/content/10.1101/2024.09.23.614603v1)
 /// - [HF](https://huggingface.co/chandar-lab/AMPLIFY_120M)
 ///
+#[derive(Debug)]
 pub struct AMPLIFY {
     encoder: Embedding,
     transformer_encoder: Vec<EncoderBlock>,
