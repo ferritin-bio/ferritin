@@ -86,13 +86,12 @@ fn test_amplify_attentions() -> Result<(), Box<dyn std::error::Error>> {
     let config = AMPLIFYConfig::amp_120m();
     let model = AMPLIFY::load(vb, &config)?;
     let tokenizer = repo.get("tokenizer.json")?;
+
     let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
     let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
     let pmatrix = protein_tokenizer.encode(&[sprot_01.to_string()], None, true, false)?;
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
     let encoded = model.forward(&pmatrix, None, true, true)?;
-    // Choosing ARGMAX. We expect this to be the most predicted sequence.
-    // it should return the identity of an unmasked sequence
     let predictions = &encoded.logits.argmax(D::Minus1)?;
     let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
     let decoded = protein_tokenizer.decode(indices.as_slice(), true)?;

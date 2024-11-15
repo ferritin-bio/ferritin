@@ -160,7 +160,6 @@ impl EncoderBlock {
     }
 
     // process the FFN Block using swiglu
-    //
     fn ffn_forward(&self, x: &Tensor) -> Result<Tensor> {
         // Swiglu
         //
@@ -170,7 +169,6 @@ impl EncoderBlock {
         let batch_shape = &dims[..dims.len() - 1];
         // Reshape input to 2D: (batch_size, input_dim)
         let x_flat = self.flatten_last_dim(&x)?;
-
         // Apply packed W1W2 linear transformation
         let w12_out = self.w12.forward(&x_flat)?;
         // Split the output into two halves (for SwiGLU activation)
@@ -520,14 +518,13 @@ impl ModelOutput {
             return Ok(None);
         };
 
+        let seq_length = 22; // ideally calc this from the attention mp size
         let attn_map = attentions.last().unwrap();
-        let attn_map_combined = attn_map.mean_keepdim(1)?;
-        let attn_map_combined2 = attn_map_combined.squeeze(1)?;
-        let attention_map = &encoded.attentions.unwrap();
-        let attn_map_combined = Tensor::stack(&attention_map, 0)?;
+        let attn_map_combined = Tensor::stack(&attentions, 0)?;
+        // lst dim is the length of the sequence
+        // let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length]
+        // let last_dim = pmatrix.dim(D::Minus1)?;
 
-        // pmatrix.how do we pass this in?
-        let last_dim = pmatrix.dim(D::Minus1)?;
         let total_elements = attn_map_combined.dims().iter().product::<usize>();
         let first_dim = total_elements / (last_dim * last_dim);
         let attn_map_combined2 = attn_map_combined.reshape((first_dim, last_dim, last_dim))?;
