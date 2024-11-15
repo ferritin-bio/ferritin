@@ -5,6 +5,10 @@ on:
     branches:
       - "main"
 
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+
 jobs:
   test:
     name: Run Tests
@@ -12,11 +16,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
       - name: Install ALSA development package
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+
       - name: Configure cache
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: "false"
+
       - name: Run tests
         run: cargo test --verbose
