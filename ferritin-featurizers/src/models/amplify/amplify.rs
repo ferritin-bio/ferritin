@@ -225,7 +225,7 @@ impl EncoderBlock {
         }
 
         // Apply softmax
-        let attn = candle_nn::ops::softmax(&scores, scores.dims().len() - 1)?;
+        let attn = softmax(&scores, scores.dims().len() - 1)?;
         // Apply dropout if needed
         let attn = if dropout_p > 0.0 {
             candle_nn::ops::dropout(&attn, dropout_p as f32)?
@@ -323,36 +323,36 @@ impl EncoderBlock {
     }
 
     /// Load Weights from a Model
-    pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
+    pub fn load(vb: VarBuilder, config: &AMPLIFYConfig, layer: i32) -> Result<Self> {
         // To keep the number of parameters and the amount of computation constant, we reduce the number of
         // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
         // avoid RuntimeError due to misaligned operand
         let multiple_of = 8;
-        let intermediate_size = (cfg.intermediate_size * 2) / 3;
+        let intermediate_size = (config.intermediate_size * 2) / 3;
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
         let vb = vb.pp(layer); // handle the layer nubmer here.
-        let q = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("q"))?;
-        let k = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("k"))?;
-        let v = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("v"))?;
-        let wo = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("wo"))?;
-        let w12 = linear_no_bias(cfg.hidden_size, intermediate_size * 2, vb.pp("ffn.w12"))?;
-        let w3 = linear_no_bias(intermediate_size, cfg.hidden_size, vb.pp("ffn.w3"))?;
-        let ffn_norm = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("ffn_norm"))?;
-        let attention_norm = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("attention_norm"))?;
+        let q = linear_no_bias(config.hidden_size, config.hidden_size, vb.pp("q"))?;
+        let k = linear_no_bias(config.hidden_size, config.hidden_size, vb.pp("k"))?;
+        let v = linear_no_bias(config.hidden_size, config.hidden_size, vb.pp("v"))?;
+        let wo = linear_no_bias(config.hidden_size, config.hidden_size, vb.pp("wo"))?;
+        let w12 = linear_no_bias(config.hidden_size, intermediate_size * 2, vb.pp("ffn.w12"))?;
+        let w3 = linear_no_bias(intermediate_size, config.hidden_size, vb.pp("ffn.w3"))?;
+        let ffn_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("ffn_norm"))?;
+        let attention_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?;
 
         Ok(Self {
             q,
             k,
             v,
             wo,
-            resid_dropout: Dropout::new(cfg.dropout_prob as f32),
+            resid_dropout: Dropout::new(config.dropout_prob as f32),
             w12,
             w3,
             attention_norm,
             ffn_norm,
-            ffn_dropout: Dropout::new(cfg.dropout_prob as f32),
-            d_head: cfg.hidden_size / cfg.num_attention_heads,
-            config: cfg.clone(),
+            ffn_dropout: Dropout::new(config.dropout_prob as f32),
+            d_head: config.hidden_size / config.num_attention_heads,
+            config: config.clone(),
         })
     }
 }
