@@ -12,6 +12,7 @@ use std::path::Path;
 use tokenizers::Encoding;
 use tokenizers::Tokenizer;
 
+#[derive(Debug)]
 pub struct ProteinTokenizer {
     tokenizer: Tokenizer,
     pad_token_id: u32,

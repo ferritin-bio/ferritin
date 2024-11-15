@@ -7,15 +7,24 @@
 //! - SwiGLU activation function
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
+//!
+//!
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
-use candle_core::{Module, Result, Tensor, D};
+use super::tokenizer::ProteinTokenizer;
+use candle_core::{DType, Device, Module, Result, Tensor, D};
+use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::{
     embedding, linear, linear_no_bias, ops::softmax, rms_norm, Activation, Dropout, Embedding,
     Linear, RmsNorm, VarBuilder,
 };
 
-// Config struct
+
 #[derive(Debug, Clone)]
+/// Configuration Struct for AMPLIFY
+///
+/// Currently only holds the weight params for
+/// those modeld found on GH: the 120M and 350M models.
+///
 pub struct AMPLIFYConfig {
     pub hidden_size: usize,
     pub num_hidden_layers: usize,
@@ -41,7 +50,6 @@ impl Default for AMPLIFYConfig {
         AMPLIFYConfig::amp_120m()
     }
 }
-
 impl AMPLIFYConfig {
     pub fn amp_120m() -> Self {
         Self {
@@ -89,11 +97,13 @@ impl AMPLIFYConfig {
 
 /// Amplify EncoderBlock implementation
 ///
-/// example 01: T5: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331
-//
-/// Example 01: FFN: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198
-/// Example: https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340
-/// SwiGLu Implementation:  https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462
+/// References for coding the block from similar models.
+///
+/// - [T5](https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331)
+/// - [distilbert](https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198)
+/// - [glm4](https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340)
+/// - [SwiGLu Imple](https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462)
+#[derive(Debug)]
 pub struct EncoderBlock {
     q: Linear,
     k: Linear,
@@ -160,7 +170,6 @@ impl EncoderBlock {
     }
 
     // process the FFN Block using swiglu
-    //
     fn ffn_forward(&self, x: &Tensor) -> Result<Tensor> {
         // Swiglu
         //
@@ -170,7 +179,6 @@ impl EncoderBlock {
         let batch_shape = &dims[..dims.len() - 1];
         // Reshape input to 2D: (batch_size, input_dim)
         let x_flat = self.flatten_last_dim(&x)?;
-
         // Apply packed W1W2 linear transformation
         let w12_out = self.w12.forward(&x_flat)?;
         // Split the output into two halves (for SwiGLU activation)
@@ -217,7 +225,7 @@ impl EncoderBlock {
         }
 
         // Apply softmax
-        let attn = candle_nn::ops::softmax(&scores, scores.dims().len() - 1)?;
+        let attn = softmax(&scores, scores.dims().len() - 1)?;
         // Apply dropout if needed
         let attn = if dropout_p > 0.0 {
             candle_nn::ops::dropout(&attn, dropout_p as f32)?
@@ -315,36 +323,36 @@ impl EncoderBlock {
     }
 
     /// Load Weights from a Model
-    pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig, layer: i32) -> Result<Self> {
+    pub fn load(vb: VarBuilder, config: &AMPLIFYConfig, layer: i32) -> Result<Self> {
         // To keep the number of parameters and the amount of computation constant, we reduce the number of
         // hidden units by a factor of 2/3 (https://arxiv.org/pdf/2002.05202.pdf) and make it a multiple of 8 to
         // avoid RuntimeError due to misaligned operand
         let multiple_of = 8;
-        let intermediate_size = (cfg.intermediate_size * 2) / 3;
+        let intermediate_size = (config.intermediate_size * 2) / 3;
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
         let vb = vb.pp(layer); // handle the layer nubmer here.
-        let q = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("q"))?;
-        let k = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("k"))?;
-        let v = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("v"))?;
-        let wo = linear_no_bias(cfg.hidden_size, cfg.hidden_size, vb.pp("wo"))?;
-        let w12 = linear_no_bias(cfg.hidden_size, intermediate_size * 2, vb.pp("ffn.w12"))?;
-        let w3 = linear_no_bias(intermediate_size, cfg.hidden_size, vb.pp("ffn.w3"))?;
-        let ffn_norm = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("ffn_norm"))?;
-        let attention_norm = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("attention_norm"))?;
+        let q = linear_no_bias(config.hidden_size, config.hidden_size, vb.pp("q"))?;
+        let k = linear_no_bias(config.hidden_size, config.hidden_size, vb.pp("k"))?;
+        let v = linear_no_bias(config.hidden_size, config.hidden_size, vb.pp("v"))?;
+        let wo = linear_no_bias(config.hidden_size, config.hidden_size, vb.pp("wo"))?;
+        let w12 = linear_no_bias(config.hidden_size, intermediate_size * 2, vb.pp("ffn.w12"))?;
+        let w3 = linear_no_bias(intermediate_size, config.hidden_size, vb.pp("ffn.w3"))?;
+        let ffn_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("ffn_norm"))?;
+        let attention_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?;
 
         Ok(Self {
             q,
             k,
             v,
             wo,
-            resid_dropout: Dropout::new(cfg.dropout_prob as f32),
+            resid_dropout: Dropout::new(config.dropout_prob as f32),
             w12,
             w3,
             attention_norm,
             ffn_norm,
-            ffn_dropout: Dropout::new(cfg.dropout_prob as f32),
-            d_head: cfg.hidden_size / cfg.num_attention_heads,
-            config: cfg.clone(),
+            ffn_dropout: Dropout::new(config.dropout_prob as f32),
+            d_head: config.hidden_size / config.num_attention_heads,
+            config: config.clone(),
         })
     }
 }
@@ -355,6 +363,7 @@ impl EncoderBlock {
 /// - [paper](https://www.biorxiv.org/content/10.1101/2024.09.23.614603v1)
 /// - [HF](https://huggingface.co/chandar-lab/AMPLIFY_120M)
 ///
+#[derive(Debug)]
 pub struct AMPLIFY {
     encoder: Embedding,
     transformer_encoder: Vec<EncoderBlock>,
@@ -469,12 +478,106 @@ impl AMPLIFY {
             config: cfg.clone(),
         })
     }
+    /// Retreive the model and make it available for usage.
+    /// hardcode the 120M for the moment...
+    pub fn load_from_huggingface() -> Result<(ProteinTokenizer, Self)> {
+        let ampconfig = AMPLIFYConfig::amp_120m();
+        let model_id = "chandar-lab/AMPLIFY_120M";
+        let revision = "main";
+        let api = Api::new().map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+        let repo = api.repo(Repo::with_revision(
+            model_id.to_string(),
+            RepoType::Model,
+            revision.to_string(),
+        ));
+        // Load and analyze the safetensors file
+        let weights_path = repo
+            .get("model.safetensors")
+            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+        let vb = unsafe {
+            VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
+        };
+        let config = AMPLIFYConfig::amp_120m();
+        let model = AMPLIFY::load(vb, &config)?;
+        let tokenizer = repo
+            .get("tokenizer.json")
+            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+        let protein_tokenizer =
+            ProteinTokenizer::new(tokenizer).map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+
+        Ok((protein_tokenizer, model))
+    }
 }
 
 // Helper structs and enums
 #[derive(Debug)]
+/// Amplify Model Output
+///
+/// logits, hidden states, and attentions.
+///
+///  logits -> distribution of the sequences.
+///  attentions -> contact map
+///
 pub struct ModelOutput {
     pub logits: Tensor,
     pub hidden_states: Option<Vec<Tensor>>,
     pub attentions: Option<Vec<Tensor>>,
+}
+
+impl ModelOutput {
+
+    /// "Perform average product correct, used for contact prediction."
+    /// https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L83
+    /// "Perform average product correct, used for contact prediction."
+    fn apc(&self, x: &Tensor) -> Result<Tensor> {
+        // Sum along last dimension (keeping dims)
+        let a1 = x.sum_keepdim(D::Minus1)?;
+        // Sum along second-to-last dimension (keeping dims)
+        let a2 = x.sum_keepdim(D::Minus2)?;
+        // Sum along both last dimensions (keeping dims)
+        let a12 = x.sum_keepdim((D::Minus1, D::Minus2))?;
+        // Multiply a1 and a2
+        let avg = a1.matmul(&a2)?;
+        // Divide by a12 (equivalent to pytorch's div_)
+        // println!("IN the APC: avg, a12 {:?}, {:?}", avg, a12);
+        // let avg = avg.div(&a12)?;
+        let a12_broadcast = a12.broadcast_as(avg.shape())?;
+        // Divide by a12 (with proper broadcasting)
+        let avg = avg.div(&a12_broadcast)?;
+        // Subtract avg from x
+        x.sub(&avg)
+    }
+
+    //From https://github.com/facebookresearch/esm/blob/main/esm/modules.py
+    // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L77
+    // "Make layer symmetric in final two dimensions, used for contact prediction."
+    fn symmetrize(&self, x: &Tensor) -> Result<Tensor> {
+        let x_transpose = x.transpose(D::Minus1, D::Minus2)?;
+        x.add(&x_transpose)
+    }
+
+    /// Contact maps can be obtained from the self-attentions
+    pub fn get_contact_map(&self) -> Result<Option<Tensor>> {
+        let Some(attentions) = &self.attentions else {
+            return Ok(None);
+        };
+        // we need the dimentions to reshape below.
+        // the attention blocks have the following shaep
+        let (_1, _n_head, _seq_length, seq_length) = attentions.first().unwrap().dims4()?;
+        let last_dim = seq_length;
+        let attn_stacked = Tensor::stack(attentions, 0)?;
+        let total_elements = attn_stacked.dims().iter().product::<usize>();
+        let first_dim = total_elements / (last_dim * last_dim);
+        let attn_map_combined2 = attn_stacked.reshape(&[first_dim, last_dim, last_dim])?;
+
+        // In PyTorch: attn_map = attn_map[:, 1:-1, 1:-1]
+        let attn_map_combined2 = attn_map_combined2
+            .narrow(1, 1, attn_map_combined2.dim(1)? - 2)? // second dim
+            .narrow(2, 1, attn_map_combined2.dim(2)? - 2)?; // third dim
+        let symmetric = self.symmetrize(&attn_map_combined2)?;
+        let normalized = self.apc(&symmetric)?;
+        let proximity_map = normalized.permute((1, 2, 0))?; //  # (residues, residues, map)
+
+        Ok(Some(proximity_map))
+    }
 }

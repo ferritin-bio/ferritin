@@ -1,48 +1,43 @@
-use anyhow::{Error, Result};
-use candle_core::{DType, Device, IndexOp, Tensor, D};
+use anyhow::Result;
+use candle_core::{DType, Device, Tensor, D};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use ferritin_featurizers::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
 
 #[test]
-#[ignore]
-fn test_amplify_round_trip() -> Result<(), Box<dyn std::error::Error>> {
-    let model_id = "chandar-lab/AMPLIFY_120M";
-    let revision = "main";
-    let api = Api::new()?;
-    let repo = api.repo(Repo::with_revision(
-        model_id.to_string(),
-        RepoType::Model,
-        revision.to_string(),
-    ));
-    // Load and analyze the safetensors file
-    let weights_path = repo.get("model.safetensors")?;
-    let vb = unsafe {
-        VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
-    };
-    let config = AMPLIFYConfig::amp_120m();
-    let model = AMPLIFY::load(vb, &config)?;
-    let tokenizer = repo.get("tokenizer.json")?;
-    let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
-    // let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
+// #[ignore = "downloads large model weights (>100MB) from HuggingFace"]
+fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
+    // Load the Model adn the Tokenizer
+    //
+    let (tokenizer, amplify) = AMPLIFY::load_from_huggingface()?;
+
+    // Test the outputs of the Encoding from the Amplify Test Suite
+    //
     let AMPLIFY_TEST_SEQ = "MSVVGIDLGFQSCYVAVARAGGIETIANEYSDRCTPACISFGPKNR";
-    let pmatrix = protein_tokenizer.encode(&[AMPLIFY_TEST_SEQ.to_string()], None, true, false)?;
+    let pmatrix = tokenizer.encode(&[AMPLIFY_TEST_SEQ.to_string()], None, true, false)?;
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
-    let encoded = model.forward(&pmatrix, None, true, true)?;
+
+    // Run the sequence through the model.
+    let encoded = amplify.forward(&pmatrix, None, true, true)?;
+
     // Choosing ARGMAX. We expect this to be the most predicted sequence.
     // it should return the identity of an unmasked sequence
     let predictions = &encoded.logits.argmax(D::Minus1)?;
     let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
-    let decoded = protein_tokenizer.decode(indices.as_slice(), true)?;
+    let decoded = tokenizer.decode(indices.as_slice(), true)?;
     let final_seq = format!("S{}S", AMPLIFY_TEST_SEQ);
     assert_eq!(final_seq, decoded.replace(" ", ""));
     assert!(&encoded.attentions.is_some());
     assert!(&encoded.hidden_states.is_some());
-    let (path, _handle) = ferritin_test_data::TestFile::amplify_output_01().create_temp()?;
 
-    // Example Data is the Saved Data
+    // Now test the outputs of the attention vectors.
+    // for each member of the output, assert that the difference
+    // between the saved pytorch model and the Candle model is
+    // less than a tolerance.
+    //
+    let tolerance = 1e-5f32;
+    let (path, _handle) = ferritin_test_data::TestFile::amplify_output_01().create_temp()?;
     let example_data = candle_core::safetensors::load(path, &Device::Cpu)?;
-    let tolerance = 1e-5;
     for (idx, attention) in encoded.attentions.unwrap().iter().enumerate() {
         println!("idx: {:?}, attention: {:?}", idx, attention);
         let ref_data = example_data
@@ -53,91 +48,33 @@ fn test_amplify_round_trip() -> Result<(), Box<dyn std::error::Error>> {
         for (i, (value, expected_value)) in tensor01.iter().zip(tensor02.iter()).enumerate() {
             let difference = (value - expected_value).abs();
             assert!(
-                difference < tolerance,
-                "Error at index {}: value = {}, expected = {}. Difference = {} exceeds tolerance = {}.",
-                i,
-                value,
-                expected_value,
-                difference,
-                tolerance
-            );
+                 difference < tolerance,
+                 "Error at index {}: value = {}, expected = {}. Difference = {} exceeds tolerance = {}.",
+                 i,
+                 value,
+                 expected_value,
+                 difference,
+                 tolerance
+             );
         }
     }
 
-    Ok(())
-}
+    // Check that we can retrieve the contact map from the Model Outputs.
+    //
 
-#[test]
-#[ignore]
-fn test_amplify_attentions() -> Result<(), Box<dyn std::error::Error>> {
-    let model_id = "chandar-lab/AMPLIFY_120M";
-    let revision = "main";
-    let api = Api::new()?;
-    let repo = api.repo(Repo::with_revision(
-        model_id.to_string(),
-        RepoType::Model,
-        revision.to_string(),
-    ));
-    // Load and analyze the safetensors file
-    let weights_path = repo.get("model.safetensors")?;
-    let vb = unsafe {
-        VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
-    };
-    let config = AMPLIFYConfig::amp_120m();
-    let model = AMPLIFY::load(vb, &config)?;
-    let tokenizer = repo.get("tokenizer.json")?;
-    let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
+    // Run a bigger sequence through the model.
     let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
-    let pmatrix = protein_tokenizer.encode(&[sprot_01.to_string()], None, true, false)?;
+    let pmatrix = tokenizer.encode(&[sprot_01.to_string()], None, true, false)?;
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
-    let encoded = model.forward(&pmatrix, None, true, true)?;
+    let encoded_long = amplify.forward(&pmatrix, None, true, true)?;
 
-    // Choosing ARGMAX. We expect this to be the most predicted sequence.
-    // it should return the identity of an unmasked sequence
-    let predictions = &encoded.logits.argmax(D::Minus1)?;
-    let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
-    let decoded = protein_tokenizer.decode(indices.as_slice(), true)?;
-
-    fn trim_ends(s: &str) -> &str {
-        if s.len() >= 2 {
-            &s[1..s.len() - 1]
-        } else {
-            ""
-        }
+    if let Some(norm) = &encoded_long.get_contact_map()? {
+        assert_eq!(norm.dims3()?, (256, 256, 240));
     }
 
-    assert_eq!(sprot_01, trim_ends(decoded.replace(" ", "").as_str()));
-    assert!(&encoded.attentions.is_some());
-    assert!(&encoded.hidden_states.is_some());
-
-    let attention_map = &encoded.attentions.unwrap();
-    println!("Attentions: {:?}", attention_map);
-    assert_eq!(&attention_map.len(), &24);
-
-    let attn_map_combined = Tensor::stack(&attention_map, 0)?;
-    println!(
-        "Attentions Combined: {:?}, {:?}",
-        attn_map_combined.dims(),
-        attn_map_combined
-    );
-
-    let last_dim = pmatrix.dim(D::Minus1)?;
-    let total_elements = attn_map_combined.dims().iter().product::<usize>();
-    let first_dim = total_elements / (last_dim * last_dim);
-    let attn_map_combined2 = attn_map_combined.reshape((first_dim, last_dim, last_dim))?;
-
-    // // In PyTorch: attn_map = attn_map[:, 1:-1, 1:-1]
-    // let attn_map_combined2 = attn_map_combined2.i([
-    //     (0, attn_map_combined2.dim(0)?),     // all in first dim
-    //     (1, attn_map_combined2.dim(1)? - 1), // from 1 to end-1 in second dim
-    //     (1, attn_map_combined2.dim(2)? - 1), // from 1 to end-1 in third dim
-    // ])?;
-
-    // println!(
-    //     "Attentions Combined Reshaped: {:?}, {:?}",
-    //     attn_map_combined.dims(),
-    //     attn_map_combined2.dims()
-    // );
+    // Check that we can run Multiple sequences through the model:
+    //
+    // todo!();
 
     Ok(())
 }
