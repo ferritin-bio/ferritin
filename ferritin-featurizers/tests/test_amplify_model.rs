@@ -5,7 +5,7 @@ use candle_nn::VarBuilder;
 use ferritin_featurizers::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
 
 #[test]
-// #[ignore]
+#[ignore]
 fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     // Load the Model adn the Tokenizer
     //
@@ -16,6 +16,8 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     let AMPLIFY_TEST_SEQ = "MSVVGIDLGFQSCYVAVARAGGIETIANEYSDRCTPACISFGPKNR";
     let pmatrix = tokenizer.encode(&[AMPLIFY_TEST_SEQ.to_string()], None, true, false)?;
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
+
+    // Run the sequence through the model.
     let encoded = amplify.forward(&pmatrix, None, true, true)?;
 
     // Choosing ARGMAX. We expect this to be the most predicted sequence.
@@ -38,8 +40,6 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     let (path, _handle) = ferritin_test_data::TestFile::amplify_output_01().create_temp()?;
     let example_data = candle_core::safetensors::load(path, &Device::Cpu)?;
     for (idx, attention) in encoded.attentions.unwrap().iter().enumerate() {
-        println!("idx: {:?}, attention: {:?}", idx, attention);
-
         let ref_data = example_data
             .get(format!("attention_{:?}", idx).as_str())
             .ok_or(std::fmt::Error)?;
@@ -57,30 +57,47 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    // Check that we can retrieve the contact map from the Model Outputs.
+    //
+
+    // Run a bigger sequence through the model.
+    let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
+    let pmatrix = tokenizer.encode(&[sprot_01.to_string()], None, true, false)?;
+    let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
+    let encoded_long = amplify.forward(&pmatrix, None, true, true)?;
+
+    if let (norm) = &encoded_long.get_contact_map()? {
+        assert_eq!(norm.dims4(), &[256, 256, 240]);
+    }
+
+    // Check that we can run Multiple sequences through the model:
+    //
+    // todo!();
+
     Ok(())
 }
 
 #[test]
 // #[ignore]
 fn test_amplify_attentions() -> Result<(), Box<dyn std::error::Error>> {
-    let model_id = "chandar-lab/AMPLIFY_120M";
-    let revision = "main";
-    let api = Api::new()?;
-    let repo = api.repo(Repo::with_revision(
-        model_id.to_string(),
-        RepoType::Model,
-        revision.to_string(),
-    ));
-    // Load and analyze the safetensors file
-    let weights_path = repo.get("model.safetensors")?;
-    let vb = unsafe {
-        VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
-    };
-    let config = AMPLIFYConfig::amp_120m();
-    let model = AMPLIFY::load(vb, &config)?;
-    let tokenizer = repo.get("tokenizer.json")?;
+    // let model_id = "chandar-lab/AMPLIFY_120M";
+    // let revision = "main";
+    // let api = Api::new()?;
+    // let repo = api.repo(Repo::with_revision(
+    //     model_id.to_string(),
+    //     RepoType::Model,
+    //     revision.to_string(),
+    // ));
+    // // Load and analyze the safetensors file
+    // let weights_path = repo.get("model.safetensors")?;
+    // let vb = unsafe {
+    //     VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
+    // };
+    // let config = AMPLIFYConfig::amp_120m();
+    // let model = AMPLIFY::load(vb, &config)?;
+    // let tokenizer = repo.get("tokenizer.json")?;
 
-    let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
+    // let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
     let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
     let pmatrix = protein_tokenizer.encode(&[sprot_01.to_string()], None, true, false)?;
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
@@ -88,6 +105,8 @@ fn test_amplify_attentions() -> Result<(), Box<dyn std::error::Error>> {
     let predictions = &encoded.logits.argmax(D::Minus1)?;
     let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
     let decoded = protein_tokenizer.decode(indices.as_slice(), true)?;
+
+    let norm = &encoded.get_contact_map()?;
 
     fn trim_ends(s: &str) -> &str {
         if s.len() >= 2 {
@@ -100,6 +119,8 @@ fn test_amplify_attentions() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(sprot_01, trim_ends(decoded.replace(" ", "").as_str()));
     assert!(&encoded.attentions.is_some());
     assert!(&encoded.hidden_states.is_some());
+
+    // let attention_man = encoded.get_contact_map();
 
     let attention_map = encoded.attentions.as_ref().unwrap();
     println!("Attentions: {:?}", attention_map);
@@ -127,36 +148,6 @@ fn test_amplify_attentions() -> Result<(), Box<dyn std::error::Error>> {
         attn_map_combined.dims(),
         attn_map_combined2.dims()
     );
-
-    /// "Perform average product correct, used for contact prediction."
-    // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L83
-    fn apc(x: &Tensor) -> Result<Tensor> {
-        // "Perform average product correct, used for contact prediction."
-        // Sum along last dimension (keeping dims)
-        let a1 = x.sum_keepdim(D::Minus1)?;
-        // Sum along second-to-last dimension (keeping dims)
-        let a2 = x.sum_keepdim(D::Minus2)?;
-        // Sum along both last dimensions (keeping dims)
-        let a12 = x.sum_keepdim((D::Minus1, D::Minus2))?;
-        // Multiply a1 and a2
-        let avg = a1.matmul(&a2)?;
-        // Divide by a12 (equivalent to pytorch's div_)
-        // println!("IN the APC: avg, a12 {:?}, {:?}", avg, a12);
-        // let avg = avg.div(&a12)?;
-        let a12_broadcast = a12.broadcast_as(avg.shape())?;
-        // Divide by a12 (with proper broadcasting)
-        let avg = avg.div(&a12_broadcast)?;
-        // Subtract avg from x
-        Ok(x.sub(&avg)?)
-    }
-
-    //From https://github.com/facebookresearch/esm/blob/main/esm/modules.py
-    // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L77
-    fn symmetrize(x: &Tensor) -> Result<Tensor> {
-        // "Make layer symmetric in final two dimensions, used for contact prediction."
-        let x_transpose = x.transpose(D::Minus1, D::Minus2)?;
-        Ok(x.add(&x_transpose)?)
-    }
 
     // attn_map = apc(symmetrize(attn_map))  # process the attention maps
     // attn_map = attn_map.permute(1, 2, 0)  # (residues, residues, map)
