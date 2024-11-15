@@ -35,7 +35,7 @@ pub fn execute(
         Some(multi_pdb_config),
     )?;
 
-    let model = exec.create_model();
+    let _model = exec.create_model();
 
     // Predict
     // model.predict()
