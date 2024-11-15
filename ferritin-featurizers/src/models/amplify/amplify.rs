@@ -8,7 +8,7 @@
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
-use candle_core::{Module, Result, Tensor, D};
+use candle_core::{Error, Module, Result, Tensor, D};
 use candle_nn::{
     embedding, linear, linear_no_bias, ops::softmax, rms_norm, Activation, Dropout, Embedding,
     Linear, RmsNorm, VarBuilder,
@@ -483,7 +483,7 @@ impl ModelOutput {
 
     /// "Perform average product correct, used for contact prediction."
     // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L83
-    fn apc(x: &Tensor) -> Result<Tensor> {
+    fn apc(&self, x: &Tensor) -> Result<Tensor> {
         // "Perform average product correct, used for contact prediction."
         // Sum along last dimension (keeping dims)
         let a1 = x.sum_keepdim(D::Minus1)?;
@@ -505,29 +505,27 @@ impl ModelOutput {
 
     //From https://github.com/facebookresearch/esm/blob/main/esm/modules.py
     // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L77
-    fn symmetrize(x: &Tensor) -> Result<Tensor> {
+    fn symmetrize(&self, x: &Tensor) -> Result<Tensor> {
         // "Make layer symmetric in final two dimensions, used for contact prediction."
         let x_transpose = x.transpose(D::Minus1, D::Minus2)?;
         Ok(x.add(&x_transpose)?)
     }
 
-    ///. Contact maps can be obtained
-    /// from the self-attentions
+    //. Contact maps can be obtained
+    // from the self-attentions
     pub fn get_contact_map(&self) -> Result<Option<Tensor>> {
         let Some(attentions) = &self.attentions else {
             return Ok(None);
         };
+        // we need the dimentions to reshape below.
+        // the attention blocks have the following shaep
 
-        let seq_length = 22; // ideally calc this from the attention mp size
-        let attn_map = attentions.last().unwrap();
-        let attn_map_combined = Tensor::stack(&attentions, 0)?;
-        // lst dim is the length of the sequence
-        // let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length]
-        // let last_dim = pmatrix.dim(D::Minus1)?;
-
-        let total_elements = attn_map_combined.dims().iter().product::<usize>();
+        let (_1, _n_head, _seq_length, seq_length) = attentions.first().unwrap().dims4()?;
+        let last_dim = seq_length.clone();
+        let attn_stacked = Tensor::stack(&attentions, 0)?;
+        let total_elements = attn_stacked.dims().iter().product::<usize>();
         let first_dim = total_elements / (last_dim * last_dim);
-        let attn_map_combined2 = attn_map_combined.reshape((first_dim, last_dim, last_dim))?;
+        let attn_map_combined2 = attn_stacked.reshape(&[first_dim, last_dim, last_dim])?;
 
         // In PyTorch: attn_map = attn_map[:, 1:-1, 1:-1]
         let attn_map_combined2 = attn_map_combined2
@@ -535,7 +533,7 @@ impl ModelOutput {
             .narrow(2, 1, attn_map_combined2.dim(2)? - 2)?; // third dim
         let symmetric = &self.symmetrize(&attn_map_combined2)?;
         let normalized = &self.apc(&symmetric)?;
-        let proximity_map = normalized.permute((1, 2, 0)); //  # (residues, residues, map)
+        let proximity_map = normalized.permute((1, 2, 0))?; //  # (residues, residues, map)
         Ok(Some(proximity_map))
     }
 }
