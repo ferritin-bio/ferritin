@@ -28,5 +28,8 @@ jobs:
         with:
           cache-targets: "false"
 
+      - name: Run Build
+        run: cargo build
+
       - name: Run tests
         run: cargo test --verbose
