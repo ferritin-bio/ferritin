@@ -505,6 +505,7 @@ impl AMPLIFY {
 
 // Helper structs and enums
 #[derive(Debug)]
+/// Amplify Model Output
 pub struct ModelOutput {
     pub logits: Tensor,
     pub hidden_states: Option<Vec<Tensor>>,
