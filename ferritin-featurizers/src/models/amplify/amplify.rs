@@ -38,25 +38,7 @@ pub struct AMPLIFYConfig {
 
 impl Default for AMPLIFYConfig {
     fn default() -> Self {
-        Self {
-            hidden_size: 960,
-            num_hidden_layers: 32,
-            num_attention_heads: 15,
-            intermediate_size: 3840,
-            dropout_prob: 0.0,
-            embedding_init_range: 0.02,
-            decoder_init_range: 0.02,
-            rms_norm: true,
-            norm_eps: 1e-5,
-            hidden_act: Activation::Swiglu,
-            layer_norm_after_embedding: false,
-            layer_norm_before_last_layer: true,
-            vocab_size: 27,
-            ffn_bias: false,
-            att_bias: false,
-            pad_token_id: 0,
-            max_length: 2048,
-        }
+        AMPLIFYConfig::amp_120m()
     }
 }
 
@@ -83,7 +65,25 @@ impl AMPLIFYConfig {
         }
     }
     pub fn amp_350m() -> Self {
-        AMPLIFYConfig::default()
+        Self {
+            hidden_size: 960,
+            num_hidden_layers: 32,
+            num_attention_heads: 15,
+            intermediate_size: 3840,
+            dropout_prob: 0.0,
+            embedding_init_range: 0.02,
+            decoder_init_range: 0.02,
+            rms_norm: true,
+            norm_eps: 1e-5,
+            hidden_act: Activation::Swiglu,
+            layer_norm_after_embedding: false,
+            layer_norm_before_last_layer: true,
+            vocab_size: 27,
+            ffn_bias: false,
+            att_bias: false,
+            pad_token_id: 0,
+            max_length: 2048,
+        }
     }
 }
 

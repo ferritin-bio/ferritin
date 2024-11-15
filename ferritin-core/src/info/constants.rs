@@ -71,8 +71,6 @@ pub(crate) fn default_distance_range(a: &str, b: &str) -> (f32, f32) {
     }
 }
 
-type BondInfo = (String, String, i32);
-
 #[rustfmt::skip]
 lazy_static! {
     // amino acids from ccd
