@@ -26,7 +26,6 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
     let decoded = tokenizer.decode(indices.as_slice(), true)?;
     let final_seq = format!("S{}S", AMPLIFY_TEST_SEQ);
-
     assert_eq!(final_seq, decoded.replace(" ", ""));
     assert!(&encoded.attentions.is_some());
     assert!(&encoded.hidden_states.is_some());
@@ -40,24 +39,24 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     let (path, _handle) = ferritin_test_data::TestFile::amplify_output_01().create_temp()?;
     let example_data = candle_core::safetensors::load(path, &Device::Cpu)?;
     for (idx, attention) in encoded.attentions.unwrap().iter().enumerate() {
+        println!("idx: {:?}, attention: {:?}", idx, attention);
         let ref_data = example_data
             .get(format!("attention_{:?}", idx).as_str())
             .ok_or(std::fmt::Error)?;
-
-        let max_diff = attention
-            .sub(ref_data)?
-            .abs()?
-            .flatten_all()?
-            .max(0)?
-            .to_scalar::<f32>()?;
-
-        assert!(
-            max_diff < tolerance,
-            "Error between pytorch test set and Candle set exceeds tolerance. Tolerance: {}, Actual difference: {}, at attention layer {}",
-                    tolerance,
-                    max_diff,
-                    idx
-        );
+        let tensor01 = ref_data.flatten_all()?.to_vec1::<f32>()?;
+        let tensor02 = ref_data.flatten_all()?.to_vec1::<f32>()?;
+        for (i, (value, expected_value)) in tensor01.iter().zip(tensor02.iter()).enumerate() {
+            let difference = (value - expected_value).abs();
+            assert!(
+                 difference < tolerance,
+                 "Error at index {}: value = {}, expected = {}. Difference = {} exceeds tolerance = {}.",
+                 i,
+                 value,
+                 expected_value,
+                 difference,
+                 tolerance
+             );
+        }
     }
 
     // Check that we can retrieve the contact map from the Model Outputs.
