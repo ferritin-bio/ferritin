@@ -108,7 +108,7 @@ fn test_amplify_attentions() -> Result<(), Box<dyn std::error::Error>> {
     assert!(&encoded.attentions.is_some());
     assert!(&encoded.hidden_states.is_some());
 
-    let attention_map = &encoded.attentions.unwrap();
+    let attention_map = encoded.attentions.as_ref().unwrap();
     println!("Attentions: {:?}", attention_map);
     assert_eq!(&attention_map.len(), &24);
 
@@ -171,9 +171,11 @@ fn test_amplify_attentions() -> Result<(), Box<dyn std::error::Error>> {
     let normalized = apc(&symmetric)?;
     let proximity_map = normalized.permute((1, 2, 0)); //  # (residues, residues, map)
 
+    let norm = &encoded.get_contact_map()?;
+
     println!(
-        "sym, norm, proxmap: {:?}, {:?}, {:?}",
-        symmetric, normalized, proximity_map
+        "sym, normalized, proxmap, norm: {:?}, {:?}, {:?}, {:?}",
+        symmetric, normalized, proximity_map, norm
     );
 
     Ok(())

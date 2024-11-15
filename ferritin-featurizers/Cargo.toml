@@ -9,6 +9,7 @@ description.workspace = true
 [dependencies]
 anyhow.workspace = true
 candle-core = "0.8"
+candle-hf-hub = "0.3.3"
 candle-nn = "0.8"
 candle-transformers = "0.8"
 clap = "4.5.21"

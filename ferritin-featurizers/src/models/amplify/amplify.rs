@@ -7,13 +7,16 @@
 //! - SwiGLU activation function
 //! - Specialized architecture optimizations
 //! - Memory efficient inference
+//!
+//!
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
-use candle_core::{Error, Module, Result, Tensor, D};
+use super::tokenizer::ProteinTokenizer;
+use candle_core::{DType, Device, Module, Result, Tensor, D};
+use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::{
     embedding, linear, linear_no_bias, ops::softmax, rms_norm, Activation, Dropout, Embedding,
     Linear, RmsNorm, VarBuilder,
 };
-
 // Config struct
 #[derive(Debug, Clone)]
 pub struct AMPLIFYConfig {
@@ -466,6 +469,35 @@ impl AMPLIFY {
             freqs_cis,
             config: cfg.clone(),
         })
+    }
+    /// Retreive the model and make it available for usage.
+    /// hardcode the 120M for the moment...
+    pub fn load_from_huggingface() -> Result<(ProteinTokenizer, Self)> {
+        let ampconfig = AMPLIFYConfig::amp_120m();
+        let model_id = "chandar-lab/AMPLIFY_120M";
+        let revision = "main";
+        let api = Api::new().map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+        let repo = api.repo(Repo::with_revision(
+            model_id.to_string(),
+            RepoType::Model,
+            revision.to_string(),
+        ));
+        // Load and analyze the safetensors file
+        let weights_path = repo
+            .get("model.safetensors")
+            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+        let vb = unsafe {
+            VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
+        };
+        let config = AMPLIFYConfig::amp_120m();
+        let model = AMPLIFY::load(vb, &config)?;
+        let tokenizer = repo
+            .get("tokenizer.json")
+            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+        let protein_tokenizer =
+            ProteinTokenizer::new(tokenizer).map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+
+        Ok((protein_tokenizer, model))
     }
 }
 
