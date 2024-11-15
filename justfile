@@ -30,3 +30,10 @@ clean:
 # cargo install cargo-edit
 upgrade:
     cargo upgrade
+
+
+test:
+    cargo test
+
+test-full:
+    cargo test -- --include-ignored
