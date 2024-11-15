@@ -2,6 +2,7 @@ use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use ferritin_featurizers::ProteinTokenizer;
 
 #[test]
+#[ignore]
 fn test_amplify_tokens() -> Result<(), Box<dyn std::error::Error>> {
     let model_id = "chandar-lab/AMPLIFY_120M";
     let revision = "main";

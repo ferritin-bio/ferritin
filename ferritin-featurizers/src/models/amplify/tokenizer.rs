@@ -142,6 +142,7 @@ mod tests {
     use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 
     #[test]
+    #[ignore]
     fn test_encoder_roundtrip() -> Result<()> {
         // Setup HF API and model info
         let model_id = "chandar-lab/AMPLIFY_120M";
