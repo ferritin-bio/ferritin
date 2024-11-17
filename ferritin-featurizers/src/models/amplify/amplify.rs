@@ -14,10 +14,9 @@ use super::tokenizer::ProteinTokenizer;
 use candle_core::{DType, Device, Module, Result, Tensor, D};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::{
-    embedding, linear, linear_no_bias, ops::softmax, rms_norm, Activation, Dropout, Embedding,
-    Linear, RmsNorm, VarBuilder,
+    embedding, linear, linear_no_bias, ops::softmax_last_dim, rms_norm, Activation, Dropout,
+    Embedding, Linear, RmsNorm, VarBuilder,
 };
-
 
 #[derive(Debug, Clone)]
 /// Configuration Struct for AMPLIFY
@@ -225,7 +224,8 @@ impl EncoderBlock {
         }
 
         // Apply softmax
-        let attn = softmax(&scores, scores.dims().len() - 1)?;
+        let attn = softmax_last_dim(&scores)?;
+
         // Apply dropout if needed
         let attn = if dropout_p > 0.0 {
             candle_nn::ops::dropout(&attn, dropout_p as f32)?
@@ -306,7 +306,7 @@ impl EncoderBlock {
             let scale = (xq.dim(D::Minus1)? as f64).sqrt();
             attn_weights = (attn_weights / scale)?;
             // attn_weights = attn_weights.add(pad_mask)?;  <- Todo. Revisit
-            Some(softmax(&attn_weights, D::Minus1)?)
+            Some(softmax_last_dim(&attn_weights)?)
         } else {
             None
         };
@@ -338,7 +338,8 @@ impl EncoderBlock {
         let w12 = linear_no_bias(config.hidden_size, intermediate_size * 2, vb.pp("ffn.w12"))?;
         let w3 = linear_no_bias(intermediate_size, config.hidden_size, vb.pp("ffn.w3"))?;
         let ffn_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("ffn_norm"))?;
-        let attention_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?;
+        let attention_norm =
+            rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?;
 
         Ok(Self {
             q,
@@ -525,7 +526,6 @@ pub struct ModelOutput {
 }
 
 impl ModelOutput {
-
     /// "Perform average product correct, used for contact prediction."
     /// https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L83
     /// "Perform average product correct, used for contact prediction."
