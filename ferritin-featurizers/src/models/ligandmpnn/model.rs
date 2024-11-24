@@ -13,6 +13,8 @@ use super::featurizer::ProteinFeatures;
 use super::proteinfeatures::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes};
 use candle_core::{DType, Device, Module, Result, Tensor, D};
+use candle_nn::encoding::one_hot;
+use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{layer_norm, linear, Dropout, Linear, VarBuilder};
 
 // Primary Return Object from the ProtMPNN Model
@@ -573,11 +575,11 @@ impl ProteinMPNN {
             output_dict.get_chain_mask(vec!['A'.to_string(), 'B'.to_string()], device)?;
 
         // encode...
-        let (h_v, h_e, e_idx) = self.encode(feature_dict)?;
-        let chain_mask = mask.mul(&chain_mask)?; // update chain_M to include missing regions;
+        let (h_v, h_e, e_idx) = self.encode(features)?;
+        let chain_mask = x_mask.unwrap().mul(&chain_mask)?; // update chain_M to include missing regions;
 
         // this might be  a bad rand implementation
-        let rand_tensor = Tensor::randn(0., 0.25, (b_decoder as usize, l as usize), device)?;
+        let rand_tensor = Tensor::randn(0., 0.25, (b as usize, l as usize), device)?;
         let decoding_order = (&chain_mask + 0.0001)?;
         let decoding_order = decoding_order.mul(&rand_tensor.abs()?)?;
         let decoding_order = decoding_order.arg_sort_last_dim(false)?;
@@ -586,7 +588,7 @@ impl ProteinMPNN {
         // I'd like to add the other optional components to the match
         match symmetry_residues {
             None => {
-                let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
+                let e_idx = e_idx.repeat(&[b, 1, 1])?;
                 let permutation_matrix_reverse = one_hot(decoding_order, l, 1., 0.)?;
                 let tril = Tensor::tril2(l, DType::F64, device)?;
                 let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; //tensor of shape (b, i, q)
@@ -595,25 +597,25 @@ impl ProteinMPNN {
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
-                let mask_1d = mask.reshape((b, l, 1, 1))?;
+                let mask_1d = x_mask.unwrap().reshape((b, l, 1, 1))?;
                 let mask_bw = mask_1d.mul(&mask_attend)?;
                 let mask_fw = mask_1d.mul(&(Tensor::ones_like(&mask_attend)? - mask_attend)?)?;
 
                 // repeat for decoding
-                let s_true = s_true.repeat((b_decoder, 1))?;
-                let h_v = h_v.repeat((b_decoder, 1, 1))?;
-                let h_e = h_e.repeat((b_decoder, 1, 1, 1))?;
-                let chain_mask = &chain_mask.repeat((b_decoder, 1))?;
-                let mask = mask.repeat((b_decoder, 1))?;
+                let s_true = s_true.repeat((b, 1))?;
+                let h_v = h_v.repeat((b, 1, 1))?;
+                let h_e = h_e.repeat((b, 1, 1, 1))?;
+                let chain_mask = &chain_mask.repeat((b, 1))?;
+                let mask = x_mask.unwrap().repeat((b, 1))?;
 
                 // Todo add  bias
                 // let bias = bias.repeat((b_decoder, 1, 1))?;
-                let bias = Tensor::zeros((b_decoder, l, 20), DType::F32, device)?;
-                let all_probs = Tensor::zeros((b_decoder, l, 20), DType::F32, device)?;
-                let all_log_probs = Tensor::zeros((b_decoder, l, 21), DType::F32, device)?; // why is this one 21 and the others are 20?
+                let bias = Tensor::zeros((b, l, 20), DType::F32, device)?;
+                let all_probs = Tensor::zeros((b, l, 20), DType::F32, device)?;
+                let all_log_probs = Tensor::zeros((b, l, 21), DType::F32, device)?; // why is this one 21 and the others are 20?
                 let mut h_s = Tensor::zeros_like(&h_v)?;
-                let s = Tensor::ones((b_decoder, l), DType::I64, device)?
-                    .mul(&Tensor::new(20., device)?)?;
+                let s =
+                    Tensor::ones((b, l), DType::I64, device)?.mul(&Tensor::new(20., device)?)?;
 
                 // updated layers are here.
                 let mut h_v_stack = vec![h_v.clone()];
@@ -698,11 +700,11 @@ impl ProteinMPNN {
                         )?
                         .squeeze(1)?;
                     let logits = self.w_out.forward(&h_v_t)?;
-                    let log_probs = ops::log_softmax(&logits, D::Minus1)?;
+                    let log_probs = log_softmax(&logits, D::Minus1)?;
 
                     // Todo: Temperature should be added upstream
                     let temperature = 20f64;
-                    let probs = ops::softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
+                    let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?)?;
