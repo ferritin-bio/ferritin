@@ -1068,144 +1068,144 @@ impl ProteinMPNN {
     //     })
     // }
 
-    // pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
-    //     // let LigandMPNNData {
-    //     //     symmetry_residues,
-    //     //     batch_size,
-    //     //     symmetry_weights,
-    //     //     output_dict,
-    //     //     ..
-    //     // } = feature_dict;
-    //     // let LigandMPNNDataDict { s, mask, .. } = &output_dict;
+    pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
+        // let LigandMPNNData {
+        //     symmetry_residues,
+        //     batch_size,
+        //     symmetry_weights,
+        //     output_dict,
+        //     ..
+        // } = feature_dict;
+        // let LigandMPNNDataDict { s, mask, .. } = &output_dict;
 
-    //     let ProteinFeatures { s, x x_mask,} = &features;
+        let ProteinFeatures { s, x, x_mask, .. } = &features;
 
-    //     let b_decoder = batch_size.unwrap().clone();
-    //     let s_true = &s.clone();
-    //     let mask = &mask.clone();
-    //     let (b, l) = s_true.dims2()?;
-    //     let device = s_true.device();
-    //     let chain_mask = feature_dict
-    //         .output_dict
-    //         .get_chain_mask(vec!['A'.to_string(), 'B'.to_string()], device)?; // Todo: fix get_cahin_mask
+        let s_true = &s.clone();
+        let mask = &x_mask.clone();
+        let (b, l) = s_true.dims2()?;
+        let b_decoder = b;
+        let device = s_true.device();
+        let chain_mask = features
+            .output_dict
+            .get_chain_mask(vec!['A'.to_string(), 'B'.to_string()], device)?; // Todo: fix get_cahin_mask
 
-    //     let randn = Tensor::randn(0., 1., (b, l), device)?;
-    //     let (h_v, h_e, e_idx) = self.encode(feature_dict)?;
+        let randn = Tensor::randn(0., 1., (b, l), device)?;
+        let (h_v, h_e, e_idx) = self.encode(features)?;
 
-    //     // Update chain_mask to include missing regions
-    //     let chain_mask = mask.mul(&chain_mask)?;
-    //     // Compute decoding order
-    //     let decoding_order = (chain_mask + 0.001)?
-    //         .mul(&randn.abs()?)?
-    //         .arg_sort_last_dim(false)?;
+        // Update chain_mask to include missing regions
+        let chain_mask = x_mask.unwrap().mul(&chain_mask)?;
+        // Compute decoding order
+        let decoding_order = (chain_mask + 0.001)?
+            .mul(&randn.abs()?)?
+            .arg_sort_last_dim(false)?;
 
-    //     let (mask_fw, mask_bw, e_idx, decoding_order) = match symmetry_residues {
-    //         // Note: I lifted this code form above. I didn't look to see if they are 100pct identical.
-    //         // If they ARE then I will want to refactor to a score fn that can be used in a few places.
-    //         Some(symmetry_residues) => {
-    //             let symmetry_weights = symmetry_weights.as_ref().unwrap();
-    //             let mut symmetry_weights_vec = vec![1.0_f64; l];
-    //             for (i1, item_list) in symmetry_residues.iter().enumerate() {
-    //                 for (i2, &item) in item_list.iter().enumerate() {
-    //                     let value = symmetry_weights[i1][i2];
-    //                     symmetry_weights_vec[item as usize] = value;
-    //                 }
-    //             }
-    //             let symmetry_weights_tensor = Tensor::from_vec(symmetry_weights_vec, l, device)?;
-    //             let mut new_decoding_order: Vec<Vec<i64>> = Vec::new();
-    //             let decoding_order_vec: Vec<i64> = decoding_order.get(0)?.to_vec1()?;
-    //             for &t_dec in &decoding_order_vec {
-    //                 if !new_decoding_order.iter().flatten().any(|&x| x == t_dec) {
-    //                     let list_a: Vec<&Vec<i64>> = symmetry_residues
-    //                         .iter()
-    //                         .filter(|item| item.contains(&t_dec))
-    //                         .collect();
-    //                     if !list_a.is_empty() {
-    //                         new_decoding_order.push(list_a[0].clone());
-    //                     } else {
-    //                         new_decoding_order.push(vec![t_dec]);
-    //                     }
-    //                 }
-    //             }
-    //             let flattened_order: Vec<i64> = new_decoding_order.into_iter().flatten().collect();
-    //             let decoding_order = Tensor::from_vec(flattened_order, l, device)?
-    //                 .unsqueeze(0)?
-    //                 .repeat((b, 1))?;
+        let (mask_fw, mask_bw, e_idx, decoding_order) = match symmetry_residues {
+            // Note: I lifted this code form above. I didn't look to see if they are 100pct identical.
+            // If they ARE then I will want to refactor to a score fn that can be used in a few places.
+            Some(symmetry_residues) => {
+                let symmetry_weights = symmetry_weights.as_ref().unwrap();
+                let mut symmetry_weights_vec = vec![1.0_f64; l];
+                for (i1, item_list) in symmetry_residues.iter().enumerate() {
+                    for (i2, &item) in item_list.iter().enumerate() {
+                        let value = symmetry_weights[i1][i2];
+                        symmetry_weights_vec[item as usize] = value;
+                    }
+                }
+                let symmetry_weights_tensor = Tensor::from_vec(symmetry_weights_vec, l, device)?;
+                let mut new_decoding_order: Vec<Vec<i64>> = Vec::new();
+                let decoding_order_vec: Vec<i64> = decoding_order.get(0)?.to_vec1()?;
+                for &t_dec in &decoding_order_vec {
+                    if !new_decoding_order.iter().flatten().any(|&x| x == t_dec) {
+                        let list_a: Vec<&Vec<i64>> = symmetry_residues
+                            .iter()
+                            .filter(|item| item.contains(&t_dec))
+                            .collect();
+                        if !list_a.is_empty() {
+                            new_decoding_order.push(list_a[0].clone());
+                        } else {
+                            new_decoding_order.push(vec![t_dec]);
+                        }
+                    }
+                }
+                let flattened_order: Vec<i64> = new_decoding_order.into_iter().flatten().collect();
+                let decoding_order = Tensor::from_vec(flattened_order, l, device)?
+                    .unsqueeze(0)?
+                    .repeat((b, 1))?;
 
-    //             let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?; // need to double check here
-    //             let tril = Tensor::tril2(l, DType::F64, device)?;
+                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?; // need to double check here
+                let tril = Tensor::tril2(l, DType::F64, device)?;
 
-    //             // First, perform the matrix multiplication between the lower triangle and the first permutation matrix
-    //             // This will give us a tensor of shape (b, i, q)
-    //             let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?;
-    //             // Now perform the matrix multiplication between the result and the second permutation matrix
-    //             let order_mask_backward =
-    //                 temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // This will give us a tensor of shape (b, q, p)
-    //             let e_idx = Tensor::arange(0, l as i64, device)?
-    //                 .unsqueeze(0)?
-    //                 .unsqueeze(0)?
-    //                 .repeat((b, l, 1))?;
+                // First, perform the matrix multiplication between the lower triangle and the first permutation matrix
+                // This will give us a tensor of shape (b, i, q)
+                let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?;
+                // Now perform the matrix multiplication between the result and the second permutation matrix
+                let order_mask_backward =
+                    temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // This will give us a tensor of shape (b, q, p)
+                let e_idx = Tensor::arange(0, l as i64, device)?
+                    .unsqueeze(0)?
+                    .unsqueeze(0)?
+                    .repeat((b, l, 1))?;
 
-    //             let mask_attend = order_mask_backward
-    //                 .gather(&e_idx, 2)?
-    //                 .unsqueeze(D::Minus1)?;
-    //             let mask = Tensor::ones((b, l), DType::F64, device)?;
-    //             let mask_1d = mask.reshape((b, l, 1, 1))?;
-    //             let mask_bw = mask_1d.broadcast_mul(&mask_attend)?;
-    //             let mask_fw =
-    //                 mask_1d.broadcast_mul(&(Tensor::ones_like(&mask_attend)? - mask_attend)?)?;
+                let mask_attend = order_mask_backward
+                    .gather(&e_idx, 2)?
+                    .unsqueeze(D::Minus1)?;
+                let mask = Tensor::ones((b, l), DType::F64, device)?;
+                let mask_1d = mask.reshape((b, l, 1, 1))?;
+                let mask_bw = mask_1d.broadcast_mul(&mask_attend)?;
+                let mask_fw =
+                    mask_1d.broadcast_mul(&(Tensor::ones_like(&mask_attend)? - mask_attend)?)?;
 
-    //             (mask_fw, mask_bw, e_idx, decoding_order)
-    //         }
-    //         None => {
-    //             let b_decoder = b_decoder as usize;
-    //             let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
-    //             let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
-    //             let tril = Tensor::tril2(l, DType::F64, device)?;
-    //             let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, i, q)
-    //             let order_mask_backward =
-    //                 temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, q, p)
-    //             let mask_attend = order_mask_backward
-    //                 .gather(&e_idx, 2)?
-    //                 .unsqueeze(D::Minus1)?;
-    //             let mask_1d = mask.reshape((b, l, 1, 1))?;
-    //             let mask_bw = mask_1d.mul(&mask_attend)?;
-    //             let mask_fw = mask_1d.mul(&(mask_attend - 1.0)?.neg()?)?;
-    //             (mask_fw, mask_bw, e_idx, decoding_order)
-    //         }
-    //     };
-    //     let b_decoder = b_decoder as usize;
-    //     let s_true = s_true.repeat(&[b_decoder, 1])?;
-    //     let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
-    //     let h_e = h_e.repeat(&[b_decoder, 1, 1, 1])?;
-    //     let mask = mask.repeat(&[b_decoder, 1])?;
-    //     let h_s = self.w_s.forward(&s_true)?;
-    //     let h_es = cat_neighbors_nodes(&h_s, &h_e, &e_idx)?;
+                (mask_fw, mask_bw, e_idx, decoding_order)
+            }
+            None => {
+                let b_decoder = b_decoder as usize;
+                let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
+                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
+                let tril = Tensor::tril2(l, DType::F64, device)?;
+                let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, i, q)
+                let order_mask_backward =
+                    temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, q, p)
+                let mask_attend = order_mask_backward
+                    .gather(&e_idx, 2)?
+                    .unsqueeze(D::Minus1)?;
+                let mask_1d = x_mask.unwrap().reshape((b, l, 1, 1))?;
+                let mask_bw = mask_1d.mul(&mask_attend)?;
+                let mask_fw = mask_1d.mul(&(mask_attend - 1.0)?.neg()?)?;
+                (mask_fw, mask_bw, e_idx, decoding_order)
+            }
+        };
+        let b_decoder = b_decoder as usize;
+        let s_true = s_true.repeat(&[b_decoder, 1])?;
+        let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
+        let h_e = h_e.repeat(&[b_decoder, 1, 1, 1])?;
+        let mask = x_mask.unwrap().repeat(&[b_decoder, 1])?;
+        let h_s = self.w_s.forward(&s_true)?;
+        let h_es = cat_neighbors_nodes(&h_s, &h_e, &e_idx)?;
 
-    //     // Build encoder embeddings
-    //     let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
-    //     let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
-    //     let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
-    //     let mut h_v = h_v;
-    //     if !use_sequence {
-    //         for layer in &self.decoder_layers {
-    //             h_v = layer.forward(&h_v, &h_exv_encoder_fw, Some(&mask), None, None)?;
-    //         }
-    //     } else {
-    //         for layer in &self.decoder_layers {
-    //             let h_esv = cat_neighbors_nodes(&h_v, &h_es, &e_idx)?;
-    //             let h_esv = mask_bw.mul(&h_esv)?.add(&h_exv_encoder_fw)?;
-    //             h_v = layer.forward(&h_v, &h_esv, Some(&mask), None, None)?;
-    //         }
-    //     }
-    //     let logits = self.w_out.forward(&h_v)?;
-    //     let log_probs = ops::log_softmax(&logits, D::Minus1)?;
+        // Build encoder embeddings
+        let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
+        let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
+        let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
+        let mut h_v = h_v;
+        if !use_sequence {
+            for layer in &self.decoder_layers {
+                h_v = layer.forward(&h_v, &h_exv_encoder_fw, Some(&mask), None, None)?;
+            }
+        } else {
+            for layer in &self.decoder_layers {
+                let h_esv = cat_neighbors_nodes(&h_v, &h_es, &e_idx)?;
+                let h_esv = mask_bw.mul(&h_esv)?.add(&h_exv_encoder_fw)?;
+                h_v = layer.forward(&h_v, &h_esv, Some(&mask), None, None)?;
+            }
+        }
+        let logits = self.w_out.forward(&h_v)?;
+        let log_probs = log_softmax(&logits, D::Minus1)?;
 
-    //     Ok(ScoreOutput {
-    //         s: s_true,
-    //         log_probs,
-    //         logits,
-    //         decoding_order,
-    //     })
-    // }
+        Ok(ScoreOutput {
+            s: s_true,
+            log_probs,
+            logits,
+            decoding_order,
+        })
+    }
 }
