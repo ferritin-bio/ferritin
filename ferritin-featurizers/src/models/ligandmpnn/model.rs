@@ -279,6 +279,25 @@ pub struct ProteinMPNN {
 }
 
 impl ProteinMPNN {
+    pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig) -> Result<Self> {
+        let decoder_layers = None;
+        let encoder_layers = None;
+        let w_e = None;
+        let w_o = None;
+        let w_s = None;
+        let features = None; // ProteinFeaturesModel::new()
+
+        Ok(Self {
+            config,
+            decoder_layers,
+            device: &Device::Cpu,
+            encoder_layers,
+            features,
+            w_e,
+            w_out,
+            w_s,
+        })
+    }
     pub fn new(config: ProteinMPNNConfig, vb: VarBuilder) -> Self {
         let decoder_layers: Vec<DecLayer> = (0..config.num_decoder_layers)
             .map(|_| {
