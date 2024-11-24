@@ -271,26 +271,26 @@ impl LMPNNFeatures for AtomCollection {
 
 pub struct ProteinFeatures {
     /// protein amino acids sequences as 1D Tensor of u32
-    s: Tensor,
+    pub(crate) s: Tensor,
     /// protein co-oords by residue [1, 37, 4]
-    x: Tensor,
+    pub(crate) x: Tensor,
     /// protein mask by residue
-    x_mask: Option<Tensor>,
+    pub(crate) x_mask: Option<Tensor>,
     /// ligand coords
-    y: Tensor,
+    pub(crate) y: Tensor,
     /// encoded ligand atom names
-    y_t: Tensor,
+    pub(crate) y_t: Tensor,
     /// ligand mask
-    y_m: Option<Tensor>,
+    pub(crate) y_m: Option<Tensor>,
     /// R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
-    r_idx: Option<Tensor>,
+    pub(crate) r_idx: Option<Tensor>,
     /// chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
-    chain_labels: Option<Vec<f64>>,
+    pub(crate) chain_labels: Option<Vec<f64>>,
     /// chain_letters: NumPy array dimensions: (93,)
-    chain_letters: Option<Vec<String>>,
+    pub(crate) chain_letters: Option<Vec<String>>,
     /// mask_c:        Tensor dimensions: torch.Size([93])
-    mask_c: Option<Tensor>,
-    chain_list: Option<Vec<String>>,
+    pub(crate) mask_c: Option<Tensor>,
+    pub(crate) chain_list: Option<Vec<String>>,
     // CA_icodes:     NumPy array dimensions: (93)
     // put these here temporarily
     // bias_AA: Option<Tensor>,
@@ -307,7 +307,6 @@ pub struct ProteinFeatures {
     // homo_oligomer: Option<bool>,
     // pub batch_size: Option<i64>,
 }
-
 impl ProteinFeatures {
     pub fn get_coords(&self) -> &Tensor {
         &self.x

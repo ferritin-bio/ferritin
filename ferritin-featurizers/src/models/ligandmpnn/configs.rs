@@ -50,7 +50,6 @@ impl MPNNExecConfig {
         membrane_mpnn_specific: Option<MembraneMPNNConfig>,
         multi_pdb_specific: Option<MultiPDBConfig>,
     ) -> Result<Self, Error> {
-
         // Core Protein Features
         let (pdb, _) = pdbtbx::open(pdb_path).expect("A PDB  or CIF file");
         let ac = AtomCollection::from(&pdb);
@@ -86,8 +85,8 @@ impl MPNNExecConfig {
         // ProteinMPNN::load(self.protein_mpnn_model_config.clone(), vb)
         Ok(ProteinMPNN::load(vb, &pconf).expect("Unable to load the PMPNN Model"))
     }
-    pub fn load_protein(mut &self) {
-        if let ()
+    pub fn load_protein(&mut self) {
+        todo!();
     }
 }
 
