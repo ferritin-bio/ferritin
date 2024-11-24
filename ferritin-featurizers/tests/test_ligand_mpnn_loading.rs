@@ -9,12 +9,6 @@ mod tests {
     #[test]
     fn test_load_ligandmpnn_01() -> Result<(), Error> {
         let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
-        // Read the tensor info from a .pth file.
-        //
-        // # Arguments
-        // * `file` - The path to the .pth file.
-        // * `verbose` - Whether to print debug information.
-        // * `key` - Optional key to retrieve `state_dict` from the pth file.
         let mut tensors = read_pth_tensor_info(mpnn_file, false, Some("model_state_dict"))?;
         tensors.sort_by(|a, b| a.name.cmp(&b.name));
         for tensor_info in tensors.iter() {
@@ -33,10 +27,10 @@ mod tests {
     fn test_load_ligandmpnn_02() -> Result<(), Error> {
         let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
         let vb = VarBuilder::from_pth(mpnn_file, DType::F32, &Device::Cpu)?;
-        println!("{:?}", &vb.device());
-        println!("{:?}", &vb.dtype);
+        // println!("{:?}", &vb.device());
+        // println!("{:?}", &vb.dtype);
         let pconf = ProteinMPNNConfig::proteinmpnn();
-        println!("{:?}", &pconf);
+        // println!("{:?}", &pconf);
         let pmpnn = ProteinMPNN::load(vb, &pconf);
         Ok(())
     }
