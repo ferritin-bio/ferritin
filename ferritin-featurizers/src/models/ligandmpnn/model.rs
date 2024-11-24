@@ -356,13 +356,13 @@ pub struct ProteinMPNN {
 impl ProteinMPNN {
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig) -> Result<Self> {
         // Encoder
-        let encoder_layers = Vec::with_capacity(config.num_encoder_layers as usize);
+        let mut encoder_layers = Vec::with_capacity(config.num_encoder_layers as usize);
         for i in 0..config.num_encoder_layers {
             encoder_layers.push(EncLayer::load(vb.pp("encoder_layers"), config, i as i32)?);
         }
 
         // Decoder
-        let decoder_layers = Vec::with_capacity(config.num_decoder_layers as usize);
+        let mut decoder_layers = Vec::with_capacity(config.num_decoder_layers as usize);
         for i in 0..config.num_decoder_layers {
             decoder_layers.push(DecLayer::load(vb.pp("decoder_layers"), config, i as i32)?);
         }
@@ -387,7 +387,7 @@ impl ProteinMPNN {
         )?;
 
         // Features
-        let features = ProteinFeaturesModel::load();
+        let features = ProteinFeaturesModel::load(vb, config.clone())?;
 
         Ok(Self {
             config: config.clone(), // check the clone later...
