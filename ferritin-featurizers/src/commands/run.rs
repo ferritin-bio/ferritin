@@ -28,7 +28,7 @@ pub fn execute(
     let exec = MPNNExecConfig::new(
         seed,
         device,
-        pdb_path,
+        pdb_path, // will need to omdify this for multiple
         model_type,
         run_config,
         Some(residue_control_config),
@@ -40,14 +40,36 @@ pub fn execute(
 
     let model = exec.load_model()?;
 
-    // Predict
-    // model.predict()
+    let prot_features = exec.protein_data;
 
-    // Train
-    // model.train()
+    // Make the Ooutput Directories
+    // if not os.path.exists(base_folder + "seqs"):
+    //       os.makedirs(base_folder + "seqs", exist_ok=True)
+    //   if not os.path.exists(base_folder + "backbones"):
+    //       os.makedirs(base_folder + "backbones", exist_ok=True)
+    //   if not os.path.exists(base_folder + "packed"):
+    //       os.makedirs(base_folder + "packed", exist_ok=True)
 
-    // Encode
-    // model.encode() ->  Ok((h_v, h_e, e_idx)) // ??
+    //
+    // Run the Model!
+    //
+
+    // Encode the inputs:
+    // for pdb in pdb_paths:
+    //     if args.verbose:
+    //         print("Designing protein from this path:", pdb)
+    //     fixed_residues = fixed_residues_multi[pdb]
+    //     redesigned_residues = redesigned_residues_multi[pdb]
+    //     parse_all_atoms_flag = args.ligand_mpnn_use_side_chain_context or (
+    //         args.pack_side_chains and not args.repack_everything
+    //     )
+    //     protein_dict, backbone, other_atoms, icodes, _ = parse_PDB(
+    //         pdb,
+    //         device=device,
+    //         chains=parse_these_chains_only_list,
+    //         parse_all_atoms=parse_all_atoms_flag,
+    //         parse_atoms_with_zero_occupancy=args.parse_atoms_with_zero_occupancy,
+    //     )
 
     // Score
     // model.score() -> Result<ScoreOutput>

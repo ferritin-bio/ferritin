@@ -50,12 +50,12 @@ impl MPNNExecConfig {
         membrane_mpnn_specific: Option<MembraneMPNNConfig>,
         multi_pdb_specific: Option<MultiPDBConfig>,
     ) -> Result<Self, Error> {
-        // seed?
 
         // Core Protein Features
-        // // Residues found in ATOM definitions
         let (pdb, _) = pdbtbx::open(pdb_path).expect("A PDB  or CIF file");
         let ac = AtomCollection::from(&pdb);
+
+        // Note: featurize should matchon model type
         let features = ac.featurize(device)?;
 
         // Model parameters
@@ -80,12 +80,14 @@ impl MPNNExecConfig {
     // Todo: refactor this to use loader.
     pub fn load_model(&self) -> Result<ProteinMPNN, Error> {
         // this is a hidden dep....
-
         let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
         let vb = VarBuilder::from_pth(mpnn_file, DType::F32, &Device::Cpu)?;
         let pconf = ProteinMPNNConfig::proteinmpnn();
         // ProteinMPNN::load(self.protein_mpnn_model_config.clone(), vb)
         Ok(ProteinMPNN::load(vb, &pconf).expect("Unable to load the PMPNN Model"))
+    }
+    pub fn load_protein(mut &self) {
+        if let ()
     }
 }
 
