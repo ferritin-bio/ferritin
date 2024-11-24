@@ -19,6 +19,7 @@ rand = "0.8.5"
 safetensors = "0.4.5"
 strum = { version = "0.26", features = ["derive"] }
 tokenizers = "0.20.3"
+ferritin-test-data = { path = "../ferritin-test-data" }
 
 
 [dev-dependencies]
