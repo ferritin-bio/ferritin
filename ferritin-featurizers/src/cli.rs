@@ -205,7 +205,7 @@ impl Cli {
                     seed,
                     pdb_path,
                     out_folder,
-                    model_type,
+                    Some(model_type),
                     run_config,
                     residue_control,
                     aa_bias,

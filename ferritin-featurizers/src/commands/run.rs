@@ -1,5 +1,6 @@
 use crate::models::ligandmpnn::configs::{
-    AABiasConfig, LigandMPNNConfig, MPNNExecConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig, ResidueControl, RunConfig,
+    AABiasConfig, LigandMPNNConfig, MPNNExecConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig,
+    ResidueControl, RunConfig,
 };
 use candle_core::Device;
 
@@ -7,7 +8,7 @@ pub fn execute(
     seed: i32,
     pdb_path: String,
     out_folder: String,
-    model_type: ModelTypes,
+    model_type: Option<ModelTypes>,
     run_config: RunConfig,
     residue_control_config: ResidueControl,
     aa_bias_config: AABiasConfig,
@@ -21,6 +22,8 @@ pub fn execute(
 
     // todo - whats the best way to handle device?
     let device = &Device::Cpu;
+
+    let model_type = model_type.unwrap_or(ModelTypes::ProteinMPNN);
 
     let exec = MPNNExecConfig::new(
         seed,
