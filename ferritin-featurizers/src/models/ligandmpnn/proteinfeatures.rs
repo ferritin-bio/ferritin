@@ -1,3 +1,4 @@
+use super::configs::ProteinMPNNConfig;
 use super::featurizer::ProteinFeatures;
 use super::utilities::{compute_nearest_neighbors, cross_product, linspace};
 use candle_core::{Device, Module, Result, Tensor, D};
@@ -20,6 +21,41 @@ pub struct ProteinFeaturesModel {
 }
 
 impl ProteinFeaturesModel {
+    pub fn load(vb: VarBuilder, config: ProteinMPNNConfig) -> Result<Self> {
+        let augment_eps = config.augment_eps;
+        let top_k = config.k_neighbors as usize; // Todo: check that this is 48
+        let num_rbf = config.num_rbf as usize; // Todo: check that this is 16
+        let num_positional_embeddings = 16 as usize; // todo: hardcoding : check where this number
+        let edge_in = num_positional_embeddings + num_rbf * 25;
+        let edge_features = config.edge_features as usize;
+        let node_features = config.node_features as usize;
+        let embeddings = PositionalEncodings::new(
+            num_positional_embeddings, // num embeddings.
+            32usize,                   // max_relative_feature
+            vb.device(),               // device this should be passed in as param,
+            vb.clone(),                // VarBuilder,
+        )?;
+        let edge_embedding = linear::linear(edge_in, edge_features, vb.pp("w_out"))?;
+        let norm_edges = layer_norm(
+            edge_features,
+            LayerNormConfig::default(),
+            vb.pp("norm_edges"),
+        )?;
+
+        Ok(Self {
+            edge_in: edge_in as i64,
+            edge_features,
+            node_features,
+            num_positional_embeddings,
+            num_rbf,
+            top_k,
+            augment_eps,
+            embeddings,
+            edge_embedding,
+            norm_edges,
+        })
+    }
+
     pub fn new(
         edge_features: usize,
         node_features: usize,
@@ -33,7 +69,7 @@ impl ProteinFeaturesModel {
         let edge_in = num_positional_embeddings + num_rbf * 25;
         let embeddings = PositionalEncodings::new(
             num_positional_embeddings, // num embeddings.
-            32usize,               // max_relative_feature
+            32usize,                   // max_relative_feature
             device,                    // device this should be passed in as param,
             vb.clone(),                // VarBuilder,
         )?;
