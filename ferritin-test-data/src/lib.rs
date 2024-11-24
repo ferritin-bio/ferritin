@@ -12,10 +12,14 @@ use tempfile::{Builder, NamedTempFile};
 /// Test File
 ///
 /// Example usage:
-/// ```
+///
+/// ```ignore
+/// // returns (filepath, _tempfile_handle).
+/// // _handle ensures the tempfile remains in scpre
 /// use ferritin_test_data::TestFile;
 /// let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
 /// let (pymol_file, _temp) = TestFile::pymol_01().create_temp().unwrap();
+///
 /// ```
 pub struct TestFile {
     filebinary: &'static [u8],
@@ -48,7 +52,45 @@ impl TestFile {
     pub fn amplify_output_01() -> Self {
         Self {
             filebinary: include_bytes!("../data/safetensors/amplify/amplify_output.safetensors"),
-            suffix: "pse",
+            suffix: "pt",
+        }
+    }
+
+    /// Pytorch Model Weights for Ligand MPNN
+    /// the `proteinmpnn_v_48_020.pt` file.
+    pub fn ligmpnn_pmpnn_01() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/ligandmpnn/proteinmpnn_v_48_020.pt"),
+            suffix: "pt",
+        }
+    }
+    /// Pytorch Model Weights for Ligand MPNN
+    /// the `ligandmpnn_v_32_020_25.pt` file.
+    pub fn ligmpnn_lmpnn_01() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/ligandmpnn/ligandmpnn_v_32_020_25.pt"),
+            suffix: "pt",
+        }
+    }
+    /// Pytorch Model Weights for Ligand MPNN
+    /// the `solublempnn_v_48_020.pt` file.
+    pub fn ligmpnn_smpnn_01() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/ligandmpnn/solublempnn_v_48_020.pt"),
+            suffix: "pt",
+        }
+    }
+    /// Pytorch Model Weights for Ligand MPNN
+    /// the `solublempnn_v_48_020.pt` file.
+    /// ```ignore
+    /// use ferritin_test_data::TestFile;
+    /// let (mpnn_file, _handle) = TestFile::ligmpnn_gmpnn_01().create_temp()?;
+    /// ```
+
+    pub fn ligmpnn_gmpnn_01() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/ligandmpnn/global_label_membrane_mpnn_v_48_020.pt"),
+            suffix: "pt",
         }
     }
 
