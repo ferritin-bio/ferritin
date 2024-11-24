@@ -56,11 +56,11 @@ impl TestFile {
         }
     }
 
-    /// Pytorch Model Weigths for Ligand MPNN
+    /// Pytorch Model Weights for Ligand MPNN
     /// the `proteinmpnn_v_48_020.pt` file.
     pub fn ligmpnn_pmpnn_01() -> Self {
         Self {
-            filebinary: include_bytes!("../data/liganmdmpnn/proteinmpnn_v_48_020.pt"),
+            filebinary: include_bytes!("../data/ligandmpnn/proteinmpnn_v_48_020.pt"),
             suffix: "pt",
         }
     }
@@ -68,7 +68,7 @@ impl TestFile {
     /// the `ligandmpnn_v_32_020_25.pt` file.
     pub fn ligmpnn_lmpnn_01() -> Self {
         Self {
-            filebinary: include_bytes!("../data/liganmdmpnn/ligandmpnn_v_32_020_25.pt"),
+            filebinary: include_bytes!("../data/ligandmpnn/ligandmpnn_v_32_020_25.pt"),
             suffix: "pt",
         }
     }
@@ -76,7 +76,7 @@ impl TestFile {
     /// the `solublempnn_v_48_020.pt` file.
     pub fn ligmpnn_smpnn_01() -> Self {
         Self {
-            filebinary: include_bytes!("../data/liganmdmpnn/solublempnn_v_48_020.pt"),
+            filebinary: include_bytes!("../data/ligandmpnn/solublempnn_v_48_020.pt"),
             suffix: "pt",
         }
     }
@@ -84,9 +84,7 @@ impl TestFile {
     /// the `solublempnn_v_48_020.pt` file.
     pub fn ligmpnn_gmpnn_01() -> Self {
         Self {
-            filebinary: include_bytes!(
-                "../data/liganmdmpnn/global_label_membrane_mpnn_v_48_020.pt"
-            ),
+            filebinary: include_bytes!("../data/ligandmpnn/global_label_membrane_mpnn_v_48_020.pt"),
             suffix: "pt",
         }
     }
