@@ -7,10 +7,8 @@ mod tests {
     use ferritin_test_data::TestFile;
 
     #[test]
-    fn test_load_ligandmpnn() -> Result<(), Error> {
+    fn test_load_ligandmpnn_01() -> Result<(), Error> {
         let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
-        let device = Device::Cpu;
-
         // Read the tensor info from a .pth file.
         //
         // # Arguments
@@ -32,9 +30,9 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn test_load_ligandmpnn2() -> Result<(), Error> {
+    fn test_load_ligandmpnn_02() -> Result<(), Error> {
         let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
-        let vb = candle_nn::VarBuilder::from_pth(mpnn_file, DType::F32, &Device::Cpu)?;
+        let vb = VarBuilder::from_pth(mpnn_file, DType::F32, &Device::Cpu)?;
         println!("{:?}", &vb.device());
         println!("{:?}", &vb.dtype);
         let pconf = ProteinMPNNConfig::proteinmpnn();
