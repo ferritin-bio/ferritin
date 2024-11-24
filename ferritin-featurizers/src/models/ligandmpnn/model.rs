@@ -14,6 +14,7 @@ use super::proteinfeatures::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes};
 use candle_core::{DType, Device, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
+
 use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{layer_norm, linear, Dropout, Linear, VarBuilder};
 
@@ -832,28 +833,26 @@ impl ProteinMPNN {
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
 
-                let mask_1d = mask.reshape((b, l, 1, 1))?;
+                let mask_1d = x_mask.reshape((b, l, 1, 1))?;
                 let mask_bw = mask_1d.mul(&mask_attend)?;
                 let mask_fw = mask_1d.mul(&(Tensor::ones_like(&mask_attend)? - mask_attend)?)?;
 
                 // Repeat for decoding
-                let s_true = s_true.repeat((b_decoder, 1))?;
-                let h_v = h_v.repeat((b_decoder, 1, 1))?;
-                let h_e = h_e.repeat((b_decoder, 1, 1, 1))?;
-                let e_idx = e_idx.repeat((b_decoder, 1, 1))?;
-                let mask_fw = mask_fw.repeat((b_decoder, 1, 1, 1))?;
-                let mask_bw = mask_bw.repeat((b_decoder, 1, 1, 1))?;
-                let chain_mask = chain_mask.repeat((b_decoder, 1))?;
-                let mask = mask.repeat((b_decoder, 1))?;
+                let s_true = s_true.repeat((b, 1))?;
+                let h_v = h_v.repeat((b, 1, 1))?;
+                let h_e = h_e.repeat((b, 1, 1, 1))?;
+                let e_idx = e_idx.repeat((b, 1, 1))?;
+                let mask_fw = mask_fw.repeat((b, 1, 1, 1))?;
+                let mask_bw = mask_bw.repeat((b, 1, 1, 1))?;
+                let chain_mask = chain_mask.repeat((b, 1))?;
+                let mask = x_mask.repeat((b, 1))?;
                 // Todo: fix bias
-                let bias = Tensor::zeros((b_decoder, l, 20), DType::F32, device)?;
-                let bias = bias.repeat((b_decoder, 1, 1))?;
-
-                let all_probs = Tensor::zeros((b_decoder, l, 20), candle_core::DType::F32, device)?;
-                let all_log_probs =
-                    Tensor::zeros((b_decoder, l, 21), candle_core::DType::F32, device)?;
+                let bias = Tensor::zeros((b, l, 20), DType::F32, device)?;
+                let bias = bias.repeat((b, 1, 1))?;
+                let all_probs = Tensor::zeros((b, l, 20), candle_core::DType::F32, device)?;
+                let all_log_probs = Tensor::zeros((b, l, 21), candle_core::DType::F32, device)?;
                 let h_s = Tensor::zeros_like(&h_v)?;
-                let s = (Tensor::ones((b_decoder, l), candle_core::DType::I64, device)? * 20.)?;
+                let s = (Tensor::ones((b, l), candle_core::DType::I64, device)? * 20.)?;
 
                 let mut h_v_stack = vec![h_v.clone()];
                 h_v_stack.extend(
@@ -897,7 +896,7 @@ impl ProteinMPNN {
 
                         let h_v_t = h_v_stack.last().unwrap().i((.., t as usize))?;
                         let logits = self.w_out.forward(&h_v_t)?;
-                        let log_probs = ops::log_softmax(&logits, D::Minus1)?;
+                        let log_probs = log_softmax(&logits, D::Minus1)?;
                         let updated_probs = chain_mask_t.unsqueeze(1)?.mul(&log_probs)?;
                         all_log_probs.slice_set(&updated_probs, 1, t as usize)?;
                         let symvec = &symmetry_weights[t as usize];
@@ -908,8 +907,7 @@ impl ProteinMPNN {
                     // todo: bias t not defined here!
                     let bias_t = Tensor::zeros_like(&total_logits)?;
                     let temperature = 20.;
-                    let probs =
-                        ops::softmax(&(total_logits.add(&bias_t)? / temperature)?, D::Minus1)?;
+                    let probs = softmax(&(total_logits.add(&bias_t)? / temperature)?, D::Minus1)?;
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?)?;
