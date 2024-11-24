@@ -12,11 +12,11 @@ use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::featurizer::ProteinFeatures;
 use super::proteinfeatures::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes};
-use candle_core::{DType, Device, Module, Result, Tensor, D};
+use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{layer_norm, linear, Dropout, Linear, VarBuilder};
-use candle_transformers::generation::{LogitsProcessor, Sampling};
+use candle_transformers::generation::LogitsProcessor;
 
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
@@ -561,8 +561,8 @@ impl ProteinMPNN {
             x,
             s,
             x_mask,
-            // symmetry_residues,
-            // symmetry_weights,
+            symmetry_residues,
+            symmetry_weights,
             ..
         } = features;
 
@@ -781,7 +781,6 @@ impl ProteinMPNN {
                 // possible unintentional overwritign of value - e.g. if there are multiple identical
                 // values in the index. (I guess you might expect that if they are symetrical. Howver the
                 // weigths do no have to be thesame)
-
                 let symmetry_weights = symmetry_weights.as_ref().unwrap();
                 // let symmetry_weights_tensor = Tensro::ones(l, candle_core::DType::F32, device)?;
                 let mut symmetry_weights_vec = vec![1.0_f64; l];
@@ -833,7 +832,7 @@ impl ProteinMPNN {
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
 
-                let mask_1d = x_mask.reshape((b, l, 1, 1))?;
+                let mask_1d = x_mask.unwrap().reshape((b, l, 1, 1))?;
                 let mask_bw = mask_1d.mul(&mask_attend)?;
                 let mask_fw = mask_1d.mul(&(Tensor::ones_like(&mask_attend)? - mask_attend)?)?;
 
