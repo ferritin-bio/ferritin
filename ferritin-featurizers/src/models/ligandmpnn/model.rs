@@ -67,6 +67,50 @@ pub struct EncLayer {
 }
 
 impl EncLayer {
+    pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig, layer: i32) -> Result<Self> {
+        let vb = vb.pp(layer); // handle the layer number here.
+        let num_hidden = config.hidden_dim as usize;
+        let augment_eps = config.augment_eps as f64;
+        let num_in = (config.hidden_dim * 2) as usize;
+        let dropout_ratio = config.dropout_ratio;
+        let norm1 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm1"))?;
+        let norm2 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm2"))?;
+        let norm3 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm3"))?;
+
+        let w1 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("W1"))?;
+        let w2 = linear::linear(num_hidden, num_hidden, vb.pp("W2"))?;
+        let w3 = linear::linear(num_hidden, num_hidden, vb.pp("W3"))?;
+        let w11 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("W11"))?;
+        let w12 = linear::linear(num_hidden, num_hidden, vb.pp("W12"))?;
+        let w13 = linear::linear(num_hidden, num_hidden, vb.pp("W13"))?;
+
+        let dropout1 = Dropout::new(dropout_ratio);
+        let dropout2 = Dropout::new(dropout_ratio);
+        let dropout3 = Dropout::new(dropout_ratio);
+
+        // note in the pytorch code they add the GELU activation here.
+
+        let dense = PositionWiseFeedForward::new(vb.pp("dense"), num_hidden, num_hidden * 4)?;
+
+        Ok(Self {
+            num_hidden,
+            num_in,
+            scale: config.scale_factor,
+            dropout1,
+            dropout2,
+            dropout3,
+            norm1,
+            norm2,
+            norm3,
+            w1,
+            w2,
+            w3,
+            w11,
+            w12,
+            w13,
+            dense,
+        })
+    }
     pub fn new(
         vb: VarBuilder,
         num_hidden: usize,
@@ -77,12 +121,12 @@ impl EncLayer {
         let norm1 = layer_norm::layer_norm(num_hidden, 1e-5, vb.pp("norm1"))?;
         let norm2 = layer_norm::layer_norm(num_hidden, 1e-5, vb.pp("norm2"))?;
         let norm3 = layer_norm::layer_norm(num_hidden, 1e-5, vb.pp("norm3"))?;
-        let w1 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("w1"))?;
-        let w2 = linear::linear(num_hidden, num_hidden, vb.pp("w2"))?;
-        let w3 = linear::linear(num_hidden, num_hidden, vb.pp("w3"))?;
-        let w11 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("w11"))?;
-        let w12 = linear::linear(num_hidden, num_hidden, vb.pp("w12"))?;
-        let w13 = linear::linear(num_hidden, num_hidden, vb.pp("w13"))?;
+        let w1 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("W1"))?;
+        let w2 = linear::linear(num_hidden, num_hidden, vb.pp("W2"))?;
+        let w3 = linear::linear(num_hidden, num_hidden, vb.pp("W3"))?;
+        let w11 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("W11"))?;
+        let w12 = linear::linear(num_hidden, num_hidden, vb.pp("W12"))?;
+        let w13 = linear::linear(num_hidden, num_hidden, vb.pp("W13"))?;
         let dropout1 = Dropout::new(dropout);
         let dropout2 = Dropout::new(dropout);
         let dropout3 = Dropout::new(dropout);
@@ -280,15 +324,22 @@ pub struct ProteinMPNN {
 
 impl ProteinMPNN {
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig) -> Result<Self> {
-        let decoder_layers = None;
-        let encoder_layers = None;
+        // let encoder_layers = None; // Make Encoder Layers
+        let encoder_layers = Vec::with_capacity(config.num_encoder_layers as usize);
+
+        for i in 0..config.num_encoder_layers {
+            encoder_layers.push(EncLayer::load(vb.pp("encoder_layers"), config, i as i32)?);
+        }
+
+        // let decoder_layers = None; // Make Decoder Layers
+        let decoder_layers = Vec::with_capacity(config.num_decoder_layers as usize);
         let w_e = None;
         let w_o = None;
         let w_s = None;
         let features = None; // ProteinFeaturesModel::new()
 
         Ok(Self {
-            config,
+            config: config.clone(), // check the clone later...
             decoder_layers,
             device: &Device::Cpu,
             encoder_layers,
