@@ -25,7 +25,7 @@ impl ProteinFeaturesModel {
         let augment_eps = config.augment_eps;
         let top_k = config.k_neighbors as usize; // Todo: check that this is 48
         let num_rbf = config.num_rbf as usize; // Todo: check that this is 16
-        let num_positional_embeddings = 16 as usize; // todo: hardcoding : check where this number
+        let num_positional_embeddings = 16usize; // todo: hardcoding : check where this number
         let edge_in = num_positional_embeddings + num_rbf * 25;
         let edge_features = config.edge_features as usize;
         let node_features = config.node_features as usize;

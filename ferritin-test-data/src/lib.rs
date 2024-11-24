@@ -82,7 +82,8 @@ impl TestFile {
     }
     /// Pytorch Model Weights for Ligand MPNN
     /// the `solublempnn_v_48_020.pt` file.
-    /// ```
+    /// ```ignore
+    /// use ferritin_test_data::TestFile;
     /// let (mpnn_file, _handle) = TestFile::ligmpnn_gmpnn_01().create_temp()?;
     /// ```
 
