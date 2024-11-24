@@ -355,27 +355,44 @@ pub struct ProteinMPNN {
 
 impl ProteinMPNN {
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig) -> Result<Self> {
-        // let encoder_layers = None; // Make Encoder Layers
+        // Encoder
         let encoder_layers = Vec::with_capacity(config.num_encoder_layers as usize);
         for i in 0..config.num_encoder_layers {
             encoder_layers.push(EncLayer::load(vb.pp("encoder_layers"), config, i as i32)?);
         }
 
-        // let decoder_layers = None; // Make Decoder Layers
+        // Decoder
         let decoder_layers = Vec::with_capacity(config.num_decoder_layers as usize);
         for i in 0..config.num_decoder_layers {
-            encoder_layers.push(DecLayer::load(vb.pp("decoder_layers"), config, i as i32)?);
+            decoder_layers.push(DecLayer::load(vb.pp("decoder_layers"), config, i as i32)?);
         }
 
-        let w_e = None;
-        let w_o = None;
-        let w_s = None;
+        // Weights
+        let w_e = linear::linear(
+            config.edge_features as usize,
+            config.hidden_dim as usize,
+            vb.pp("w_e"),
+        )?;
+
+        let w_out = linear::linear(
+            config.hidden_dim as usize,
+            config.num_letters as usize,
+            vb.pp("w_out"),
+        )?;
+
+        let w_s = linear::linear(
+            config.vocab as usize,
+            config.hidden_dim as usize,
+            vb.pp("w_s"),
+        )?;
+
+        // Features
         let features = None; // ProteinFeaturesModel::new()
 
         Ok(Self {
             config: config.clone(), // check the clone later...
             decoder_layers,
-            device: &Device::Cpu,
+            device: Device::Cpu,
             encoder_layers,
             features,
             w_e,
