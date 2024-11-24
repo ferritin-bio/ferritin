@@ -4,6 +4,7 @@ mod tests {
     use candle_core::{DType, Device, Error};
     use candle_nn::VarBuilder;
     use ferritin_test_data::TestFile;
+    use ferritin_featurizers::{ProteinMPNN, ProteinMPNNConfig};
 
     #[test]
 
@@ -19,7 +20,6 @@ mod tests {
         // * `key` - Optional key to retrieve `state_dict` from the pth file.
 
         let mut tensors = read_pth_tensor_info(mpnn_file, false, Some("model_state_dict"))?;
-        // println!("tensors {:?}", tensors);
         tensors.sort_by(|a, b| a.name.cmp(&b.name));
         for tensor_info in tensors.iter() {
             println!(
@@ -32,6 +32,9 @@ mod tests {
             println!("    {:?}", tensor_info);
         }
 
+        let vb = VarBuilder();
+        let config =
+        let pmpnn_model = ProteinMPNN::load(vb, config);
         Ok(())
     }
 }
