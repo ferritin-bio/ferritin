@@ -14,9 +14,9 @@ use super::proteinfeatures::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes};
 use candle_core::{DType, Device, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
-
 use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{layer_norm, linear, Dropout, Linear, VarBuilder};
+use candle_transformers::generation::{LogitsProcessor, Sampling};
 
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
@@ -845,7 +845,7 @@ impl ProteinMPNN {
                 let mask_fw = mask_fw.repeat((b, 1, 1, 1))?;
                 let mask_bw = mask_bw.repeat((b, 1, 1, 1))?;
                 let chain_mask = chain_mask.repeat((b, 1))?;
-                let mask = x_mask.repeat((b, 1))?;
+                let mask = x_mask.unwrap().repeat((b, 1))?;
                 // Todo: fix bias
                 let bias = Tensor::zeros((b, l, 20), DType::F32, device)?;
                 let bias = bias.repeat((b, 1, 1))?;
