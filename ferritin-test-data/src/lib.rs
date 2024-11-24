@@ -82,6 +82,10 @@ impl TestFile {
     }
     /// Pytorch Model Weights for Ligand MPNN
     /// the `solublempnn_v_48_020.pt` file.
+    /// ```
+    /// let (mpnn_file, _handle) = TestFile::ligmpnn_gmpnn_01().create_temp()?;
+    /// ```
+
     pub fn ligmpnn_gmpnn_01() -> Self {
         Self {
             filebinary: include_bytes!("../data/ligandmpnn/global_label_membrane_mpnn_v_48_020.pt"),
