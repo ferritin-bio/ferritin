@@ -28,13 +28,12 @@ fn test_cli_command_featurize() {
 }
 
 #[test]
-fn test_cli_command_run_exmaple_01() {
+fn test_cli_command_run_example_01() {
     // see: https://github.com/dauparas/LigandMPNN/blob/main/run_examples.sh
-    let (pdbfile, _tmp) = TestFile::protein_02().create_temp().unwrap();
-    let tempfile = tempfile::NamedTempFile::new().unwrap();
-
+    let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
     let out_folder = tempfile::tempdir().unwrap().into_path();
 
+    println!("Here!");
     let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
 
     cmd.arg("run")
