@@ -61,44 +61,6 @@ impl ProteinFeaturesModel {
         })
     }
 
-    // pub fn new(
-    //     edge_features: usize,
-    //     node_features: usize,
-    //     vb: VarBuilder,
-    //     device: &Device,
-    // ) -> Result<Self> {
-    //     let augment_eps = 0.0; // hardcoding: Todo: refactor
-    //     let top_k = 48; // hardcoding
-    //     let num_rbf = 16; // hardcoding
-    //     let num_positional_embeddings = 16; // hardcoding
-    //     let edge_in = num_positional_embeddings + num_rbf * 25;
-    //     let embeddings = PositionalEncodings::new(
-    //         num_positional_embeddings, // num embeddings.
-    //         32usize,                   // max_relative_feature
-    //         device,                    // device this should be passed in as param,
-    //         vb.clone(),                // VarBuilder,
-    //     )?;
-    //     let edge_embedding = linear::linear(edge_in, edge_features, vb.pp("w_out"))?;
-    //     let norm_edges = layer_norm(
-    //         edge_features,
-    //         LayerNormConfig::default(),
-    //         vb.pp("norm_edges"),
-    //     )?;
-
-    //     Ok(Self {
-    //         edge_in: edge_in as i64,
-    //         edge_features,
-    //         node_features,
-    //         num_positional_embeddings,
-    //         num_rbf,
-    //         top_k,
-    //         augment_eps,
-    //         embeddings,
-    //         edge_embedding,
-    //         norm_edges,
-    //     })
-    // }
-
     /// This function calculates the nearest Ca coordinates and retunrs the ditances and indices.
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
         compute_nearest_neighbors(x, mask, self.top_k, eps as f32)
