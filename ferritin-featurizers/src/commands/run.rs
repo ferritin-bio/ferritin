@@ -41,9 +41,10 @@ pub fn execute(
     println!("About to Load the model!");
 
     let model = exec.load_model()?;
-
     println!("Model Loaded!");
-    // let prot_features = exec.protein_data;
+
+    let prot_features = exec.generate_protein_features()?;
+    println!("Protein Features Loaded!");
 
     // Make the Ooutput Directories
     // if not os.path.exists(base_folder + "seqs"):
