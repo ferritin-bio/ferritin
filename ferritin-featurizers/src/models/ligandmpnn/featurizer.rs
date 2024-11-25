@@ -24,7 +24,8 @@ fn is_heavy_atom(element: &Element) -> bool {
 
 /// Convert the AtomCollection into a struct that can be passed to a model.
 pub trait LMPNNFeatures {
-    fn featurize(&self, device: &Device) -> Result<ProteinFeatures>;
+    fn encode_amino_acids(&self, device: &Device) -> Result<(Tensor)>; // ( residue types )
+    fn featurize(&self, device: &Device) -> Result<ProteinFeatures>; // need more control over this featurization process
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
@@ -34,6 +35,14 @@ pub trait LMPNNFeatures {
 /// Methods for Convering an AtomCollection into a LigandMPNN-ready
 /// datasets
 impl LMPNNFeatures for AtomCollection {
+    fn encode_amino_acids(&self, device: &Device) -> Result<(Tensor)> {
+        let s = self
+            .iter_residues_aminoacid()
+            .map(|res| res.res_name)
+            .map(|res| aa3to1(&res))
+            .map(|res| aa1to_int(res));
+        Ok(Tensor::from_iter(s, device)?)
+    }
     // equivalent to protien MPNN's parse_PDB
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
         let x_37 = self.to_numeric_atom37(device)?;
@@ -51,13 +60,7 @@ impl LMPNNFeatures for AtomCollection {
         // let _r_idx = self.get_resids(); // todo()!
 
         // amino acid names as int....
-        let s = self
-            .iter_residues_aminoacid()
-            .map(|res| res.res_name)
-            .map(|res| aa3to1(&res))
-            .map(|res| aa1to_int(res));
-
-        let s = Tensor::from_iter(s, device)?;
+        let s = self.encode_amino_acids(device)?;
 
         // coordinates of the backbone atoms
         let indices = Tensor::from_slice(

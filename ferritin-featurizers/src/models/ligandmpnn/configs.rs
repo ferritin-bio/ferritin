@@ -25,7 +25,7 @@ use ferritin_test_data::TestFile;
 
 // All Data Needed for running a model
 pub struct MPNNExecConfig {
-    pub protein_data: ProteinFeatures,
+    pub protein_inputs: String, // Todo: make this optionally plural
     pub run_config: RunConfig,
     pub protein_mpnn_model_config: ProteinMPNNConfig,
     pub aabias_config: Option<AABiasConfig>,
@@ -50,21 +50,8 @@ impl MPNNExecConfig {
         membrane_mpnn_specific: Option<MembraneMPNNConfig>,
         multi_pdb_specific: Option<MultiPDBConfig>,
     ) -> Result<Self, Error> {
-        // Core Protein Features
-        let (pdb, _) = pdbtbx::open(pdb_path).expect("A PDB  or CIF file");
-        let ac = AtomCollection::from(&pdb);
-
-        // Note: featurize should matchon model type
-        let features = ac.featurize(device)?;
-
-        // Model parameters
-        let model_config = match model_type {
-            ModelTypes::ProteinMPNN => ProteinMPNNConfig::proteinmpnn(),
-            _ => todo!(),
-        };
-
         Ok(MPNNExecConfig {
-            protein_data: features,
+            protein_inputs: pdb_path,
             protein_mpnn_model_config: model_config,
             run_config,
             aabias_config: aa_bias,
@@ -77,7 +64,7 @@ impl MPNNExecConfig {
         })
     }
     // Todo: refactor this to use loader.
-    pub fn load_model(&self) -> Result<ProteinMPNN, Error> {
+    fn load_model(&self) -> Result<ProteinMPNN, Error> {
         // this is a hidden dep....
         let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
         let vb = VarBuilder::from_pth(mpnn_file, DType::F32, &Device::Cpu)?;
@@ -85,8 +72,82 @@ impl MPNNExecConfig {
         // ProteinMPNN::load(self.protein_mpnn_model_config.clone(), vb)
         Ok(ProteinMPNN::load(vb, &pconf).expect("Unable to load the PMPNN Model"))
     }
-    pub fn load_protein(&mut self) {
-        todo!();
+    pub fn generate_model(self) {
+        todo!()
+    }
+    pub fn generate_protein_features(&self) -> Result<ProteinFeatures, Error> {
+        // init the Protein Features
+        let (pdb, _) = pdbtbx::open(self.protein_inputs).expect("A PDB  or CIF file");
+        let ac = AtomCollection::from(&pdb);
+        let device = Device::Cpu;
+
+        let features = ac.featurize(&device)?;
+
+        // update residue info
+        // residue_config: Option<ResidueControl>,
+        // handle these:
+        // pub fixed_residues: Option<String>,
+        // pub redesigned_residues: Option<String>,
+        // pub symmetry_residues: Option<String>,
+        // pub symmetry_weights: Option<String>,
+        // pub chains_to_design: Option<String>,
+        // pub parse_these_chains_only: Option<String>,
+
+        // update AA bias
+        // handle these:
+        // aa_bias: Option<AABiasConfig>,
+        // pub bias_aa: Option<String>,
+        // pub bias_aa_per_residue: Option<String>,
+        // pub omit_aa: Option<String>,
+        // pub omit_aa_per_residue: Option<String>,
+
+        // update LigmpnnConfif
+        // lig_mpnn_specific: Option<LigandMPNNConfig>,
+        // handle these:
+        // pub checkpoint_ligand_mpnn: Option<String>,
+        // pub ligand_mpnn_use_atom_context: Option<i32>,
+        // pub ligand_mpnn_use_side_chain_context: Option<i32>,
+        // pub ligand_mpnn_cutoff_for_score: Option<String>,
+
+        // update Membrane MPNN Config
+        // membrane_mpnn_specific: Option<MembraneMPNNConfig>,
+        // handle these:
+        // pub global_transmembrane_label: Option<i32>,
+        // pub transmembrane_buried: Option<String>,
+        // pub transmembrane_interface: Option<String>,
+
+        // update multipdb
+        // multi_pdb_specific: Option<MultiPDBConfig>,
+        // pub pdb_path_multi: Option<String>,
+        // pub fixed_residues_multi: Option<String>,
+        // pub redesigned_residues_multi: Option<String>,
+        // pub omit_aa_per_residue_multi: Option<String>,
+        // pub bias_aa_per_residue_multi: Option<String>,
+
+        /// protein amino acids sequences as 1D Tensor of u32
+        pub(crate) s: Tensor,
+        /// protein co-oords by residue [1, 37, 4]
+        pub(crate) x: Tensor,
+        /// protein mask by residue
+        pub(crate) x_mask: Option<Tensor>,
+        /// ligand coords
+        pub(crate) y: Tensor,
+        /// encoded ligand atom names
+        pub(crate) y_t: Tensor,
+        /// ligand mask
+        pub(crate) y_m: Option<Tensor>,
+        /// R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
+        pub(crate) r_idx: Option<Tensor>,
+        /// chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
+        pub(crate) chain_labels: Option<Vec<f64>>,
+        /// chain_letters: NumPy array dimensions: (93,)
+        pub(crate) chain_letters: Option<Vec<String>>,
+        /// mask_c:        Tensor dimensions: torch.Size([93])
+        pub(crate) mask_c: Option<Tensor>,
+        pub(crate) chain_list: Option<Vec<String>>,
+
+        // return ligand MPNN.
+        Ok(ProteinFeatures { s, x_mask })
     }
 }
 
