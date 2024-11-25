@@ -40,7 +40,6 @@ impl PositionWiseFeedForward {
         let w2 = linear::linear(dim_feedforward, dim_input, vb.pp("W_out"))?;
         Ok(Self { w1, w2 })
     }
-    }
 }
 
 impl Module for PositionWiseFeedForward {
@@ -245,11 +244,12 @@ impl DecLayer {
         let vb = vb.pp(layer); // handle the layer number here.
         let num_hidden = config.hidden_dim as usize;
         let augment_eps = config.augment_eps as f64;
-        let num_in = (config.hidden_dim * 2) as usize;
+        let num_in = (config.hidden_dim * 3) as usize;
         let dropout_ratio = config.dropout_ratio;
 
         let norm1 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm1"))?;
         let norm2 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm2"))?;
+
         let w1 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("W1"))?;
         let w2 = linear::linear(num_hidden, num_hidden, vb.pp("W2"))?;
         let w3 = linear::linear(num_hidden, num_hidden, vb.pp("W3"))?;
