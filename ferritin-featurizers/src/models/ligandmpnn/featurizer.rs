@@ -114,7 +114,7 @@ impl LMPNNFeatures for AtomCollection {
     /// create numeric Tensor of shape [<sequence-length>, 37, 3]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
-        println!("Residue Count is: {}", res_count);
+        // println!("Residue Count is: {}", res_count);
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
         for residue in self.iter_residues_aminoacid() {
             let resid = residue.res_id as usize;
@@ -129,7 +129,7 @@ impl LMPNNFeatures for AtomCollection {
                 if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
                     let [x, y, z] = atom.coords;
                     let base_idx = (resid * 37 + atom_type as usize) * 3;
-                    println!("here in the 37 conversion code");
+                    // println!("here in the 37 conversion code");
                     atom37_data[base_idx] = *x;
                     atom37_data[base_idx + 1] = *y;
                     atom37_data[base_idx + 2] = *z;
