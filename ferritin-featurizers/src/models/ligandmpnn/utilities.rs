@@ -279,9 +279,9 @@ pub fn gather_edges(edges: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
             .unsqueeze(D::Minus1)?
             .expand((d1, d2, d3, edges.dim(D::Minus1)?))?;
 
-    println!("Neighbors idx: {:?}", neighbors.dims());
+    // println!("Neighbors idx: {:?}", neighbors.dims());
     let edge_gather = edges.gather(&neighbors, 2)?;
-    println!("edge_gather idx: {:?}", edge_gather.dims());
+    // println!("edge_gather idx: {:?}", edge_gather.dims());
     Ok(edge_gather)
 }
 

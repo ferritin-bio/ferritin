@@ -117,38 +117,16 @@ impl ProteinFeaturesModel {
         // Get original dimensions
         let dims = a.dims();
         let target_shape = (dims[0], dims[1], dims[1], dims[2]); // [1, 93, 93, 3]
-
-        // Expand dimensions and broadcast
         let a_expanded = a.unsqueeze(2)?.broadcast_as(target_shape)?;
         let b_expanded = b.unsqueeze(1)?.broadcast_as(target_shape)?;
         // Now both tensors should be [1, 93, 93, 3]
         let diff = (a_expanded - b_expanded)?;
 
-        println!("After substraction: diff: {:?}", diff.dims());
-
         let squared_diff = diff.powf(2.0)?;
         let sum_squared_diff = squared_diff.sum(3)?;
         let d_a_b = (sum_squared_diff + 1e-6)?.sqrt()?;
-
         let d_a_b_neighbors = gather_edges(&d_a_b.unsqueeze(D::Minus1)?, &e_idx)?;
-        println!("d_a_b_neighbors: {:?}", d_a_b_neighbors.dims());
         let d_a_b_neighbors = d_a_b_neighbors.squeeze(D::Minus1)?;
-        println!("d_a_b_neighbors: {:?}", d_a_b_neighbors.dims());
-
-        // Gather edges
-        // let d_a_b_expanded = d_a_b.unsqueeze(D::Minus1)?;
-
-        // println!("d_a_b_expanded: {:?}", d_a_b_expanded.dims());
-
-        // println!("e_idx: {:?}", e_idx.dims());
-
-        // println!(
-        //     "Types - d_a_b: {:?}, e_idx: {:?}",
-        //     d_a_b_expanded.dtype(),
-        //     e_idx.dtype()
-        // );
-        // let d_a_b_neighbors = d_a_b_expanded.gather(e_idx, 2)?;
-        // let d_a_b_neighbors = d_a_b_neighbors.squeeze(D::Minus1)?;
 
         // Apply RBF
         let rbf_a_b = self._rbf(&d_a_b_neighbors, device)?;
@@ -183,21 +161,14 @@ impl ProteinFeaturesModel {
         device: &Device,
     ) -> Result<(Tensor, Tensor)> {
         println!("In the Features Forward!");
-
         let x = input_features.get_coords();
-        println!("X Dims: {:?}", x.dims());
-
         let mask = input_features.x_mask.as_ref().unwrap();
-        println!("X_MASK Dims: {:?}", mask.dims());
-
         let r_idx = input_features.get_residue_index().unwrap();
         // let chain_labels = input_features.chain_labels.as_ref();
 
         // todo: fix
         // let chain_labels = input_features.get_chain_labels();
         let chain_labels = Tensor::zeros_like(r_idx)?;
-
-        println!("In the Features Forward: 02");
         let x = if self.augment_eps > 0.0 {
             let noise = x.randn_like(0.0, self.augment_eps as f64)?;
             (x + noise)?
@@ -205,25 +176,13 @@ impl ProteinFeaturesModel {
             x.clone()
         };
 
-        println!("In the Features Forward: 03");
         let b = (&x.narrow(2, 1, 1)? - &x.narrow(2, 0, 1)?)?
             .squeeze(2)?
             .contiguous()?;
         let c = (&x.narrow(2, 2, 1)? - &x.narrow(2, 1, 1)?)?
             .squeeze(2)?
             .contiguous()?;
-        println!("In the Features Forward: 03 01");
-        let a = cross_product(&b, &c)?; // <- dimensions here seem off.
-        println!("In the Features Forward: 03 02");
-
-        println!(
-            "Dims of a, b, c, x: {:?}, {:?}, {:?}, {:?}",
-            a.dims(),
-            b.dims(),
-            c.dims(),
-            x.dims()
-        );
-
+        let a = cross_product(&b, &c)?;
         let cb = {
             let a_term = &a * -0.58273431;
             let b_term = &b * 0.56802827;
@@ -233,37 +192,17 @@ impl ProteinFeaturesModel {
         }
         .contiguous()?;
 
-        println!("In the Features Forward: 04");
-
         // N/CA/C/O
         let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
         let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
         let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
         let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
 
-        println!(
-            "Tensor dims for n,ca,c,o: {:?}, {:?},{:?} ,{:?}",
-            n.dims(),
-            ca.dims(),
-            c.dims(),
-            o.dims(),
-        );
-
-        println!("In the Features before  _dist!");
-        println!(
-            "Tensor dims for ca, mask: {:?}, {:?}",
-            ca.dims(),
-            mask.dims()
-        );
         let (d_neighbors, e_idx) = self._dist(&ca, &mask, self.augment_eps as f64)?;
-        println!("In the Features after  _dist!");
 
         let mut rbf_all = Vec::new();
-        println!("In the Features before  _rbf");
         rbf_all.push(self._rbf(&d_neighbors, device)?);
-        println!("In the Features after  _rbf");
         rbf_all.push(self._get_rbf(&n, &n, &e_idx, device)?);
-        println!("In the Features after  _get_rbf");
         rbf_all.push(self._get_rbf(&c, &c, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&o, &o, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&cb, &cb, &e_idx, device)?);
@@ -288,14 +227,10 @@ impl ProteinFeaturesModel {
         rbf_all.push(self._get_rbf(&o, &cb, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&c, &o, &e_idx, device)?);
 
-        println!("In the Features before  Tensor_cat!");
-
         let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
-        println!("In the Features after  Tensor_cat!");
+
         let dims = r_idx.dims();
         let target_shape = (dims[0], dims[1], dims[1]);
-        println!("Target shape: {:?}", target_shape);
-
         let r_idx_expanded1 = r_idx
             .unsqueeze(2)?
             .broadcast_as(target_shape)?
@@ -304,27 +239,20 @@ impl ProteinFeaturesModel {
             .unsqueeze(1)?
             .broadcast_as(target_shape)?
             .to_dtype(DType::F32)?; // [1, 93, 93]
-        println!(
-            "Shapes of expanded1 and expanded2: {:?}, {:?}",
-            r_idx_expanded1.dims(),
-            r_idx_expanded2.dims()
-        );
 
         let offset = (r_idx_expanded1 - r_idx_expanded2)?;
-        println!("Offset: {:?}", offset.dims());
         let offset = gather_edges(&offset.unsqueeze(D::Minus1)?, &e_idx)?;
-        println!("Offset: {:?}", offset.dims());
         let offset = offset.squeeze(D::Minus1)?;
-        println!("Offset: {:?}", offset.dims());
 
-        let d_chains = (&chain_labels.unsqueeze(2)? - &chain_labels.unsqueeze(1)?)?
+        let dims = chain_labels.dims();
+        let target_shape = (dims[0], dims[1], dims[1]);
+        let d_chains = (&chain_labels.unsqueeze(2)?.broadcast_as(target_shape)?
+            - &chain_labels.unsqueeze(1)?.broadcast_as(target_shape)?)?
             .eq(0.0)?
             .to_dtype(candle_core::DType::I64)?;
 
-        let e_chains = d_chains
-            .unsqueeze(D::Minus1)?
-            .gather(&e_idx, 2)?
-            .squeeze(D::Minus1)?;
+        // E_chains = gather_edges(d_chains[:, :, :, None], E_idx)[:, :, :, 0]
+        let e_chains = gather_edges(&d_chains.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
 
         let e_positional = self
             .embeddings
@@ -333,7 +261,6 @@ impl ProteinFeaturesModel {
         let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
         let e = self.edge_embedding.forward(&e)?;
         let e = self.norm_edges.forward(&e)?;
-
         Ok((e, e_idx))
     }
 }
