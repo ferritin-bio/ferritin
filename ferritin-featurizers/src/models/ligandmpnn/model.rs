@@ -345,6 +345,7 @@ impl ProteinMPNN {
     }
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
         // todo: get device more elegantly
+        println!("Encoding!");
         let device = &candle_core::Device::Cpu;
         let s_true = &features.get_sequence();
         let (b, l) = s_true.dims2()?;
@@ -355,7 +356,9 @@ impl ProteinMPNN {
 
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
+                println!("Encoding: About to `forward`");
                 let (e, e_idx) = self.features.forward(features, device)?;
+                println!("Encoding: Finished `forward`");
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     DType::F64,

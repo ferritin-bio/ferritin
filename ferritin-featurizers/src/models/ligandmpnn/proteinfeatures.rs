@@ -148,8 +148,10 @@ impl ProteinFeaturesModel {
         input_features: &ProteinFeatures,
         device: &Device,
     ) -> Result<(Tensor, Tensor)> {
-        let x = input_features.get_coords();
+        println!("In the Features Forward!");
 
+        let x = input_features.get_coords();
+        println!("X Dims: {:?}", x.dims());
         // let mask = input_features.output_dict.mask.as_ref();
         let mask = Tensor::zeros_like(x)?; // todo: fix mask
 
@@ -160,6 +162,7 @@ impl ProteinFeaturesModel {
         // let chain_labels = input_features.get_chain_labels();
         let chain_labels = Tensor::zeros_like(r_idx)?;
 
+        println!("In the Features Forward: 02");
         let x = if self.augment_eps > 0.0 {
             let noise = x.randn_like(0.0, self.augment_eps as f64)?;
             (x + noise)?
@@ -167,13 +170,25 @@ impl ProteinFeaturesModel {
             x.clone()
         };
 
+        println!("In the Features Forward: 03");
         let b = (&x.narrow(2, 1, 1)? - &x.narrow(2, 0, 1)?)?
             .squeeze(2)?
             .contiguous()?;
         let c = (&x.narrow(2, 2, 1)? - &x.narrow(2, 1, 1)?)?
             .squeeze(2)?
             .contiguous()?;
-        let a = cross_product(&b, &c)?;
+        println!("In the Features Forward: 03 01");
+        let a = cross_product(&b, &c)?; // <- dimensions here seem off.
+        println!("In the Features Forward: 03 02");
+
+        println!(
+            "Dims of a, b, c, x: {:?}, {:?}, {:?}, {:?}",
+            a.dims(),
+            b.dims(),
+            c.dims(),
+            x.dims()
+        );
+
         let cb = {
             let a_term = &a * -0.58273431;
             let b_term = &b * 0.56802827;
@@ -183,11 +198,15 @@ impl ProteinFeaturesModel {
         }
         .contiguous()?;
 
+        println!("In the Features Forward: 04");
+
         // N/CA/C/O
         let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
         let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
         let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
         let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
+
+        println!("In the Features before  _dist!");
 
         let (d_neighbors, e_idx) = self._dist(&ca, &mask, self.augment_eps as f64)?;
 
@@ -217,6 +236,8 @@ impl ProteinFeaturesModel {
         rbf_all.push(self._get_rbf(&c, &cb, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&o, &cb, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&c, &o, &e_idx, device)?);
+
+        println!("In the Features before  Tensor_cat!");
 
         let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
 
