@@ -231,10 +231,11 @@ impl ProteinMPNNConfig {
             node_features: 128,
             num_decoder_layers: 3,
             num_encoder_layers: 3,
-            num_letters: 48,
+            num_letters: 21, // whats the difference between the num_letters and the vocab?
             num_rbf: 16,
             scale_factor: 30.0,
-            vocab: 48,
+            // vocab: 48,
+            vocab: 21,
         }
     }
     fn ligandmpnn() {

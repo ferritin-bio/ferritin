@@ -390,9 +390,9 @@ impl ProteinMPNN {
             vb.pp("W_out"),
         )?;
 
-        let w_s = linear::linear(
-            config.vocab as usize,
+        let w_s = linear::linear_no_bias(
             config.hidden_dim as usize,
+            config.vocab as usize,
             vb.pp("W_s"),
         )?;
 
