@@ -72,17 +72,14 @@ pub struct EncLayer {
 
 impl EncLayer {
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig, layer: i32) -> Result<Self> {
-        println!("In the EncLayer load fn...");
         let vb = vb.pp(layer); // handle the layer number here.
         let num_hidden = config.hidden_dim as usize;
         let augment_eps = config.augment_eps as f64;
         let num_in = (config.hidden_dim * 2) as usize;
         let dropout_ratio = config.dropout_ratio;
-        println!("So far so good 1");
         let norm1 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm1"))?;
         let norm2 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm2"))?;
         let norm3 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm3"))?;
-        println!("So far so good 2");
 
         let w1 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("W1"))?;
         let w2 = linear::linear(num_hidden, num_hidden, vb.pp("W2"))?;
@@ -201,7 +198,6 @@ pub struct DecLayer {
 
 impl DecLayer {
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig, layer: i32) -> Result<Self> {
-        println!("DecLayer: {}", layer);
         let vb = vb.pp(layer); // handle the layer number here.
         let num_hidden = config.hidden_dim as usize;
         let augment_eps = config.augment_eps as f64;
@@ -294,14 +290,12 @@ pub struct ProteinMPNN {
 impl ProteinMPNN {
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig) -> Result<Self> {
         // Encoder
-        println!("Enter the Encoder Layer");
         let mut encoder_layers = Vec::with_capacity(config.num_encoder_layers as usize);
         for i in 0..config.num_encoder_layers {
             encoder_layers.push(EncLayer::load(vb.pp("encoder_layers"), config, i as i32)?);
         }
 
         // Decoder
-        println!("Enter the Decoder Layer");
         let mut decoder_layers = Vec::with_capacity(config.num_decoder_layers as usize);
         for i in 0..config.num_decoder_layers {
             decoder_layers.push(DecLayer::load(vb.pp("decoder_layers"), config, i as i32)?);
@@ -351,6 +345,7 @@ impl ProteinMPNN {
     }
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
         // todo: get device more elegantly
+        println!("Encoding!");
         let device = &candle_core::Device::Cpu;
         let s_true = &features.get_sequence();
         let (b, l) = s_true.dims2()?;
@@ -361,7 +356,9 @@ impl ProteinMPNN {
 
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
+                println!("Encoding: About to `forward`");
                 let (e, e_idx) = self.features.forward(features, device)?;
+                println!("Encoding: Finished `forward`");
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     DType::F64,
@@ -968,6 +965,7 @@ impl ProteinMPNN {
         let device = s_true.device();
         let randn = Tensor::randn(0., 1., (b, l), device)?;
 
+        println!("scoring 01");
         let (h_v, h_e, e_idx) = self.encode(features)?;
 
         // Todo! This is a massive hack
@@ -977,6 +975,7 @@ impl ProteinMPNN {
         let chain_mask = Tensor::from_vec(vec![0i64, 0], (2, 1), &device)?;
 
         // Update chain_mask to include missing regions
+        println!("scoring 02");
         let chain_mask = mask.unwrap().mul(&chain_mask)?;
         // Compute decoding order
         let decoding_order = (chain_mask + 0.001)?
