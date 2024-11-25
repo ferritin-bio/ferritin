@@ -24,7 +24,9 @@ fn is_heavy_atom(element: &Element) -> bool {
 
 /// Convert the AtomCollection into a struct that can be passed to a model.
 pub trait LMPNNFeatures {
-    fn featurize(&self, device: &Device) -> Result<ProteinFeatures>;
+    fn encode_amino_acids(&self, device: &Device) -> Result<(Tensor)>; // ( residue types )
+    fn featurize(&self, device: &Device) -> Result<ProteinFeatures>; // need more control over this featurization process
+    fn get_res_index(&self) -> Vec<u32>;
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
@@ -34,6 +36,14 @@ pub trait LMPNNFeatures {
 /// Methods for Convering an AtomCollection into a LigandMPNN-ready
 /// datasets
 impl LMPNNFeatures for AtomCollection {
+    fn encode_amino_acids(&self, device: &Device) -> Result<(Tensor)> {
+        let s = self
+            .iter_residues_aminoacid()
+            .map(|res| res.res_name)
+            .map(|res| aa3to1(&res))
+            .map(|res| aa1to_int(res));
+        Ok(Tensor::from_iter(s, device)?)
+    }
     // equivalent to protien MPNN's parse_PDB
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
         let x_37 = self.to_numeric_atom37(device)?;
@@ -51,13 +61,7 @@ impl LMPNNFeatures for AtomCollection {
         // let _r_idx = self.get_resids(); // todo()!
 
         // amino acid names as int....
-        let s = self
-            .iter_residues_aminoacid()
-            .map(|res| res.res_name)
-            .map(|res| aa3to1(&res))
-            .map(|res| aa1to_int(res));
-
-        let s = Tensor::from_iter(s, device)?;
+        let s = self.encode_amino_acids(device)?;
 
         // coordinates of the backbone atoms
         let indices = Tensor::from_slice(
@@ -82,7 +86,7 @@ impl LMPNNFeatures for AtomCollection {
             chain_list: None,
         })
     }
-    /// create numeric Tensor of shape [<length>, 4, 3] where the 4 is N/CA/C/O
+    /// create numeric Tensor of shape [<sequence-length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
@@ -107,16 +111,25 @@ impl LMPNNFeatures for AtomCollection {
         // Create tensor with shape [residues, 4, 3]
         Tensor::from_vec(backbone_data, (res_count, 4, 3), &device)
     }
-    /// create numeric Tensor of shape [<length>, 37, 3]
+    /// create numeric Tensor of shape [<sequence-length>, 37, 3]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
+        println!("Residue Count is: {}", res_count);
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
         for residue in self.iter_residues_aminoacid() {
             let resid = residue.res_id as usize;
+
+            if resid >= res_count {
+                return Err(candle_core::Error::Msg(format!(
+                    "Residue ID {} exceeds residue count {}",
+                    resid, res_count
+                )));
+            }
             for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
                 if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
                     let [x, y, z] = atom.coords;
                     let base_idx = (resid * 37 + atom_type as usize) * 3;
+                    println!("here in the 37 conversion code");
                     atom37_data[base_idx] = *x;
                     atom37_data[base_idx + 1] = *y;
                     atom37_data[base_idx + 2] = *z;
@@ -258,30 +271,36 @@ impl LMPNNFeatures for AtomCollection {
         // }
         unimplemented!()
     }
+
+    fn get_res_index(&self) -> Vec<u32> {
+        self.iter_residues_aminoacid()
+            .map(|res| res.res_id as u32)
+            .collect()
+    }
 }
 
 pub struct ProteinFeatures {
     /// protein amino acids sequences as 1D Tensor of u32
-    s: Tensor,
+    pub(crate) s: Tensor,
     /// protein co-oords by residue [1, 37, 4]
-    x: Tensor,
+    pub(crate) x: Tensor,
     /// protein mask by residue
-    x_mask: Option<Tensor>,
+    pub(crate) x_mask: Option<Tensor>,
     /// ligand coords
-    y: Tensor,
+    pub(crate) y: Tensor,
     /// encoded ligand atom names
-    y_t: Tensor,
+    pub(crate) y_t: Tensor,
     /// ligand mask
-    y_m: Option<Tensor>,
+    pub(crate) y_m: Option<Tensor>,
     /// R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
-    r_idx: Option<Tensor>,
+    pub(crate) r_idx: Option<Tensor>,
     /// chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
-    chain_labels: Option<Vec<f64>>,
+    pub(crate) chain_labels: Option<Vec<f64>>,
     /// chain_letters: NumPy array dimensions: (93,)
-    chain_letters: Option<Vec<String>>,
+    pub(crate) chain_letters: Option<Vec<String>>,
     /// mask_c:        Tensor dimensions: torch.Size([93])
-    mask_c: Option<Tensor>,
-    chain_list: Option<Vec<String>>,
+    pub(crate) mask_c: Option<Tensor>,
+    pub(crate) chain_list: Option<Vec<String>>,
     // CA_icodes:     NumPy array dimensions: (93)
     // put these here temporarily
     // bias_AA: Option<Tensor>,
@@ -298,7 +317,6 @@ pub struct ProteinFeatures {
     // homo_oligomer: Option<bool>,
     // pub batch_size: Option<i64>,
 }
-
 impl ProteinFeatures {
     pub fn get_coords(&self) -> &Tensor {
         &self.x

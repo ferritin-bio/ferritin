@@ -1,5 +1,6 @@
 use crate::models::ligandmpnn::configs::{
-    AABiasConfig, LigandMPNNConfig, MPNNExecConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig, ResidueControl, RunConfig,
+    AABiasConfig, LigandMPNNConfig, MPNNExecConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig,
+    ResidueControl, RunConfig,
 };
 use candle_core::Device;
 
@@ -7,7 +8,7 @@ pub fn execute(
     seed: i32,
     pdb_path: String,
     out_folder: String,
-    model_type: ModelTypes,
+    model_type: Option<ModelTypes>,
     run_config: RunConfig,
     residue_control_config: ResidueControl,
     aa_bias_config: AABiasConfig,
@@ -22,10 +23,12 @@ pub fn execute(
     // todo - whats the best way to handle device?
     let device = &Device::Cpu;
 
+    let model_type = model_type.unwrap_or(ModelTypes::ProteinMPNN);
+
     let exec = MPNNExecConfig::new(
         seed,
         device,
-        pdb_path,
+        pdb_path, // will need to omdify this for multiple
         model_type,
         run_config,
         Some(residue_control_config),
@@ -35,16 +38,41 @@ pub fn execute(
         Some(multi_pdb_config),
     )?;
 
-    let _model = exec.create_model();
+    println!("About to Load the model!");
 
-    // Predict
-    // model.predict()
+    let model = exec.load_model()?;
 
-    // Train
-    // model.train()
+    println!("Model Loaded!");
+    // let prot_features = exec.protein_data;
 
-    // Encode
-    // model.encode() ->  Ok((h_v, h_e, e_idx)) // ??
+    // Make the Ooutput Directories
+    // if not os.path.exists(base_folder + "seqs"):
+    //       os.makedirs(base_folder + "seqs", exist_ok=True)
+    //   if not os.path.exists(base_folder + "backbones"):
+    //       os.makedirs(base_folder + "backbones", exist_ok=True)
+    //   if not os.path.exists(base_folder + "packed"):
+    //       os.makedirs(base_folder + "packed", exist_ok=True)
+
+    //
+    // Run the Model!
+    //
+
+    // Encode the inputs:
+    // for pdb in pdb_paths:
+    //     if args.verbose:
+    //         print("Designing protein from this path:", pdb)
+    //     fixed_residues = fixed_residues_multi[pdb]
+    //     redesigned_residues = redesigned_residues_multi[pdb]
+    //     parse_all_atoms_flag = args.ligand_mpnn_use_side_chain_context or (
+    //         args.pack_side_chains and not args.repack_everything
+    //     )
+    //     protein_dict, backbone, other_atoms, icodes, _ = parse_PDB(
+    //         pdb,
+    //         device=device,
+    //         chains=parse_these_chains_only_list,
+    //         parse_all_atoms=parse_all_atoms_flag,
+    //         parse_atoms_with_zero_occupancy=args.parse_atoms_with_zero_occupancy,
+    //     )
 
     // Score
     // model.score() -> Result<ScoreOutput>
