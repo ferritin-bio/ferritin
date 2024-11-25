@@ -76,19 +76,30 @@ impl ProteinFeaturesModel {
         const D_MIN: f64 = 2.0;
         const D_MAX: f64 = 22.0;
 
+        println!("in _RBF fn!");
+
         // Create centers (μ)
         let d_mu =
             linspace(D_MIN, D_MAX, self.num_rbf, device)?.reshape((1, 1, 1, self.num_rbf))?;
+        println!("in _RBF. after d_mu");
 
         // Calculate width (σ)
         let d_sigma = (D_MAX - D_MIN) / self.num_rbf as f64;
+        println!("in _RBF. after d_sigma");
 
         // Expand input tensor
         let d_expanded = d.unsqueeze(D::Minus1)?;
+        println!("in _RBF. after d_expanded");
 
         // Calculate RBF values
+        println!(
+            "Dimentions of d_expande, d_mu, d_sigma: {:?}, {:?}, {:?}",
+            d_expanded, d_mu, d_sigma
+        );
         let diff = ((d_expanded - &d_mu)? / d_sigma)?;
+        println!("in _RBF. after diff");
         let rbf = diff.powf(2.0)?.neg()?.exp()?;
+        println!("in _RBF. rbf");
 
         Ok(rbf)
     }
@@ -227,8 +238,11 @@ impl ProteinFeaturesModel {
         println!("In the Features after  _dist!");
 
         let mut rbf_all = Vec::new();
+        println!("In the Features before  _rbf");
         rbf_all.push(self._rbf(&d_neighbors, device)?);
+        println!("In the Features after  _rbf");
         rbf_all.push(self._get_rbf(&n, &n, &e_idx, device)?);
+        println!("In the Features after  _get_rbf");
         rbf_all.push(self._get_rbf(&c, &c, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&o, &o, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&cb, &cb, &e_idx, device)?);
