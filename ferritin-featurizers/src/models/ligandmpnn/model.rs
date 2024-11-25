@@ -40,7 +40,6 @@ impl PositionWiseFeedForward {
         let w2 = linear::linear(dim_feedforward, dim_input, vb.pp("W_out"))?;
         Ok(Self { w1, w2 })
     }
-    }
 }
 
 impl Module for PositionWiseFeedForward {
@@ -104,46 +103,6 @@ impl EncLayer {
             num_hidden,
             num_in,
             scale: config.scale_factor,
-            dropout1,
-            dropout2,
-            dropout3,
-            norm1,
-            norm2,
-            norm3,
-            w1,
-            w2,
-            w3,
-            w11,
-            w12,
-            w13,
-            dense,
-        })
-    }
-    pub fn new(
-        vb: VarBuilder,
-        num_hidden: usize,
-        num_in: usize,
-        dropout: f32,
-        scale: f64,
-    ) -> Result<Self> {
-        let norm1 = layer_norm::layer_norm(num_hidden, 1e-5, vb.pp("norm1"))?;
-        let norm2 = layer_norm::layer_norm(num_hidden, 1e-5, vb.pp("norm2"))?;
-        let norm3 = layer_norm::layer_norm(num_hidden, 1e-5, vb.pp("norm3"))?;
-        let w1 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("W1"))?;
-        let w2 = linear::linear(num_hidden, num_hidden, vb.pp("W2"))?;
-        let w3 = linear::linear(num_hidden, num_hidden, vb.pp("W3"))?;
-        let w11 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("W11"))?;
-        let w12 = linear::linear(num_hidden, num_hidden, vb.pp("W12"))?;
-        let w13 = linear::linear(num_hidden, num_hidden, vb.pp("W13"))?;
-        let dropout1 = Dropout::new(dropout);
-        let dropout2 = Dropout::new(dropout);
-        let dropout3 = Dropout::new(dropout);
-        let dense = PositionWiseFeedForward::new(vb.pp("dense"), num_hidden, num_hidden * 4)?;
-
-        Ok(Self {
-            num_hidden,
-            num_in,
-            scale,
             dropout1,
             dropout2,
             dropout3,
@@ -242,14 +201,16 @@ pub struct DecLayer {
 
 impl DecLayer {
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig, layer: i32) -> Result<Self> {
+        println!("DecLayer: {}", layer);
         let vb = vb.pp(layer); // handle the layer number here.
         let num_hidden = config.hidden_dim as usize;
         let augment_eps = config.augment_eps as f64;
-        let num_in = (config.hidden_dim * 2) as usize;
+        let num_in = (config.hidden_dim * 3) as usize;
         let dropout_ratio = config.dropout_ratio;
 
         let norm1 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm1"))?;
         let norm2 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm2"))?;
+
         let w1 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("W1"))?;
         let w2 = linear::linear(num_hidden, num_hidden, vb.pp("W2"))?;
         let w3 = linear::linear(num_hidden, num_hidden, vb.pp("W3"))?;
@@ -272,37 +233,6 @@ impl DecLayer {
             dense,
         })
     }
-    pub fn new(
-        vb: VarBuilder,
-        num_hidden: usize,
-        num_in: usize,
-        dropout: f32,
-        scale: f64,
-    ) -> Result<Self> {
-        let norm1 = layer_norm::layer_norm(num_hidden, 1e-5, vb.pp("norm1"))?;
-        let norm2 = layer_norm::layer_norm(num_hidden, 1e-5, vb.pp("norm2"))?;
-        let w1 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("w1"))?;
-        let w2 = linear::linear(num_hidden, num_hidden, vb.pp("w2"))?;
-        let w3 = linear::linear(num_hidden, num_hidden, vb.pp("w3"))?;
-        let dropout1 = Dropout::new(dropout);
-        let dropout2 = Dropout::new(dropout);
-        let dense = PositionWiseFeedForward::new(vb.pp("dense"), num_hidden, num_hidden * 4)?;
-
-        Ok(Self {
-            num_hidden,
-            num_in,
-            scale,
-            dropout1,
-            dropout2,
-            norm1,
-            norm2,
-            w1,
-            w2,
-            w3,
-            dense,
-        })
-    }
-
     pub fn forward(
         &self,
         h_v: &Tensor,
@@ -390,14 +320,14 @@ impl ProteinMPNN {
             vb.pp("W_out"),
         )?;
 
-        let w_s = linear::linear(
-            config.vocab as usize,
+        let w_s = linear::linear_no_bias(
             config.hidden_dim as usize,
+            config.vocab as usize,
             vb.pp("W_s"),
         )?;
 
         // Features
-        let features = ProteinFeaturesModel::load(vb, config.clone())?;
+        let features = ProteinFeaturesModel::load(vb.pp("features"), config.clone())?;
 
         Ok(Self {
             config: config.clone(), // check the clone later...
@@ -409,73 +339,6 @@ impl ProteinMPNN {
             w_out,
             w_s,
         })
-    }
-    pub fn new(config: ProteinMPNNConfig, vb: VarBuilder) -> Self {
-        let decoder_layers: Vec<DecLayer> = (0..config.num_decoder_layers)
-            .map(|_| {
-                DecLayer::new(
-                    vb.pp("dec_layer"),
-                    config.hidden_dim as usize,
-                    (config.hidden_dim * 2) as usize,
-                    config.dropout_ratio,
-                    config.scale_factor,
-                )
-                .unwrap()
-            })
-            .collect();
-
-        let encoder_layers: Vec<EncLayer> = (0..config.num_encoder_layers)
-            .map(|_| {
-                EncLayer::new(
-                    vb.pp("enc_layer"),
-                    config.hidden_dim as usize,
-                    (config.hidden_dim * 2) as usize,
-                    config.dropout_ratio,
-                    config.scale_factor,
-                )
-                .unwrap()
-            })
-            .collect();
-
-        let w_e = linear::linear(
-            config.edge_features as usize,
-            config.hidden_dim as usize,
-            vb.pp("w_e"),
-        )
-        .unwrap();
-
-        let w_out = linear::linear(
-            config.hidden_dim as usize,
-            config.num_letters as usize,
-            vb.pp("w_out"),
-        )
-        .unwrap();
-
-        let w_s = linear::linear(
-            config.vocab as usize,
-            config.hidden_dim as usize,
-            vb.pp("w_s"),
-        )
-        .unwrap();
-
-        let features = ProteinFeaturesModel::new(
-            config.edge_features as usize,
-            config.node_features as usize,
-            vb.clone(),
-            &Device::Cpu, // Todo: move out
-        )
-        .unwrap();
-
-        Self {
-            config,
-            decoder_layers,
-            device: Device::Cpu,
-            encoder_layers,
-            features,
-            w_e,
-            w_out,
-            w_s,
-        }
     }
     fn predict(&self) {
         // Implement prediction logic
