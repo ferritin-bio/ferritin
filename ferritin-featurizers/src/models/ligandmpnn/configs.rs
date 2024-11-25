@@ -17,24 +17,25 @@ use super::featurizer::ProteinFeatures;
 use super::model::ProteinMPNN;
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
 use anyhow::Error;
-use candle_core::{DType, Device};
+use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use clap::ValueEnum;
 use ferritin_core::AtomCollection;
 use ferritin_test_data::TestFile;
 
-// All Data Needed for running a model
+/// Responsibel for taking CLI args and returning the Features and Model
+///
 pub struct MPNNExecConfig {
-    pub protein_inputs: String, // Todo: make this optionally plural
-    pub run_config: RunConfig,
-    pub protein_mpnn_model_config: ProteinMPNNConfig,
-    pub aabias_config: Option<AABiasConfig>,
-    pub ligand_mpnn_config: Option<LigandMPNNConfig>,
-    pub membrane_mpnn_config: Option<MembraneMPNNConfig>,
-    pub multi_pdb_config: Option<MultiPDBConfig>,
-    pub residue_control_config: Option<ResidueControl>,
+    pub(crate) protein_inputs: String, // Todo: make this optionally plural
+    pub(crate) run_config: RunConfig,
+    pub(crate) model_type: ModelTypes,
+    pub(crate) aabias_config: Option<AABiasConfig>,
+    pub(crate) ligand_mpnn_config: Option<LigandMPNNConfig>,
+    pub(crate) membrane_mpnn_config: Option<MembraneMPNNConfig>,
+    pub(crate) multi_pdb_config: Option<MultiPDBConfig>,
+    pub(crate) residue_control_config: Option<ResidueControl>,
     // device: &candle_core::Device,
-    seed: i32,
+    pub(crate) seed: i32,
 }
 
 impl MPNNExecConfig {
@@ -52,7 +53,7 @@ impl MPNNExecConfig {
     ) -> Result<Self, Error> {
         Ok(MPNNExecConfig {
             protein_inputs: pdb_path,
-            protein_mpnn_model_config: model_config,
+            model_type: model_type,
             run_config,
             aabias_config: aa_bias,
             ligand_mpnn_config: lig_mpnn_specific,
@@ -76,12 +77,22 @@ impl MPNNExecConfig {
         todo!()
     }
     pub fn generate_protein_features(&self) -> Result<ProteinFeatures, Error> {
+        let device = Device::Cpu;
+        let base_dtype = DType::F32;
+
         // init the Protein Features
         let (pdb, _) = pdbtbx::open(self.protein_inputs).expect("A PDB  or CIF file");
         let ac = AtomCollection::from(&pdb);
-        let device = Device::Cpu;
+        //let features = ac.featurize(&device)?;
 
-        let features = ac.featurize(&device)?;
+        // aa -> int
+        let s = ac.encode_amino_acids(&device)?;
+
+        // protein -> coords. Note update
+        // todo: choose based on model type
+        let x_37 = ac.to_numeric_atom37(&device)?;
+        let x_37_mask = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), base_dtype, &device)?;
+        let (y, y_t, y_m) = ac.to_numeric_ligand_atoms(&device)?;
 
         // update residue info
         // residue_config: Option<ResidueControl>,
@@ -124,30 +135,20 @@ impl MPNNExecConfig {
         // pub omit_aa_per_residue_multi: Option<String>,
         // pub bias_aa_per_residue_multi: Option<String>,
 
-        /// protein amino acids sequences as 1D Tensor of u32
-        pub(crate) s: Tensor,
-        /// protein co-oords by residue [1, 37, 4]
-        pub(crate) x: Tensor,
-        /// protein mask by residue
-        pub(crate) x_mask: Option<Tensor>,
-        /// ligand coords
-        pub(crate) y: Tensor,
-        /// encoded ligand atom names
-        pub(crate) y_t: Tensor,
-        /// ligand mask
-        pub(crate) y_m: Option<Tensor>,
-        /// R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
-        pub(crate) r_idx: Option<Tensor>,
-        /// chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
-        pub(crate) chain_labels: Option<Vec<f64>>,
-        /// chain_letters: NumPy array dimensions: (93,)
-        pub(crate) chain_letters: Option<Vec<String>>,
-        /// mask_c:        Tensor dimensions: torch.Size([93])
-        pub(crate) mask_c: Option<Tensor>,
-        pub(crate) chain_list: Option<Vec<String>>,
-
         // return ligand MPNN.
-        Ok(ProteinFeatures { s, x_mask })
+        Ok(ProteinFeatures {
+            s,                 // protein amino acids sequences as 1D Tensor of u32
+            x: x_37,           // protein co-oords by residue [1, 37, 4]
+            x_mask: x_37_mask, // protein mask by residue
+            y,                 // ligand coords
+            y_t,               // encoded ligand atom names
+            y_m,               // ligand mask
+            r_idx,             // protein residue indices shape=[length]
+            chain_labels,      //  # protein chain letters shape=[length]
+            chain_letters,     // chain_letters: shape=[length]
+            mask_c,            // mask_c:  shape=[length]
+            chain_list,
+        })
     }
 }
 

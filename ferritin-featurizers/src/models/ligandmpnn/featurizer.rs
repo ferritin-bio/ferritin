@@ -85,7 +85,7 @@ impl LMPNNFeatures for AtomCollection {
             chain_list: None,
         })
     }
-    /// create numeric Tensor of shape [<length>, 4, 3] where the 4 is N/CA/C/O
+    /// create numeric Tensor of shape [<sequence-length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
@@ -110,7 +110,7 @@ impl LMPNNFeatures for AtomCollection {
         // Create tensor with shape [residues, 4, 3]
         Tensor::from_vec(backbone_data, (res_count, 4, 3), &device)
     }
-    /// create numeric Tensor of shape [<length>, 37, 3]
+    /// create numeric Tensor of shape [<sequence-length>, 37, 3]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         println!("Residue Count is: {}", res_count);
