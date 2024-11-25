@@ -94,6 +94,10 @@ impl MPNNExecConfig {
         let x_37_mask = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), base_dtype, &device)?;
         let (y, y_t, y_m) = ac.to_numeric_ligand_atoms(&device)?;
 
+        // R_idx = np.array(CA_resnums, dtype=np.int32)
+        let res_idx = ac.get_res_index();
+        let res_idx_tensor = Tensor::from_vec(res_idx, (res_idx.len(), 1), &device)?;
+
         // update residue info
         // residue_config: Option<ResidueControl>,
         // handle these:
@@ -137,16 +141,16 @@ impl MPNNExecConfig {
 
         // return ligand MPNN.
         Ok(ProteinFeatures {
-            s,                 // protein amino acids sequences as 1D Tensor of u32
-            x: x_37,           // protein co-oords by residue [1, 37, 4]
-            x_mask: x_37_mask, // protein mask by residue
-            y,                 // ligand coords
-            y_t,               // encoded ligand atom names
-            y_m,               // ligand mask
-            r_idx,             // protein residue indices shape=[length]
-            chain_labels,      //  # protein chain letters shape=[length]
-            chain_letters,     // chain_letters: shape=[length]
-            mask_c,            // mask_c:  shape=[length]
+            s,                       // protein amino acids sequences as 1D Tensor of u32
+            x: x_37,                 // protein co-oords by residue [1, 37, 4]
+            x_mask: Some(x_37_mask), // protein mask by residue
+            y,                       // ligand coords
+            y_t,                     // encoded ligand atom names
+            y_m: Some(y_m),          // ligand mask
+            r_idx: res_idx_tensor,   // protein residue indices shape=[length]
+            chain_labels,            //  # protein chain letters shape=[length]
+            chain_letters,           // chain_letters: shape=[length]
+            mask_c,                  // mask_c:  shape=[length]
             chain_list,
         })
     }

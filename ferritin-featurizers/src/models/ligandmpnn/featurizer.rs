@@ -26,6 +26,7 @@ fn is_heavy_atom(element: &Element) -> bool {
 pub trait LMPNNFeatures {
     fn encode_amino_acids(&self, device: &Device) -> Result<(Tensor)>; // ( residue types )
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures>; // need more control over this featurization process
+    fn get_res_index(&self) -> Vec<u32>;
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
@@ -269,6 +270,12 @@ impl LMPNNFeatures for AtomCollection {
         //     }
         // }
         unimplemented!()
+    }
+
+    fn get_res_index(&self) -> Vec<u32> {
+        self.iter_residues_aminoacid()
+            .map(|res| res.res_id as u32)
+            .collect()
     }
 }
 
