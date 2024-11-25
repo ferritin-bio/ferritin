@@ -398,7 +398,7 @@ impl ProteinMPNN {
         )?;
 
         // Features
-        let features = ProteinFeaturesModel::load(vb, config.clone())?;
+        let features = ProteinFeaturesModel::load(vb.pp("features"), config.clone())?;
 
         Ok(Self {
             config: config.clone(), // check the clone later...

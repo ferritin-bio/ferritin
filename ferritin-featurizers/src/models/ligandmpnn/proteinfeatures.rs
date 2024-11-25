@@ -23,6 +23,7 @@ pub struct ProteinFeaturesModel {
 impl ProteinFeaturesModel {
     pub fn load(vb: VarBuilder, config: ProteinMPNNConfig) -> Result<Self> {
         println!("In the ProteinFeatures Model!");
+
         let augment_eps = config.augment_eps;
         let top_k = config.k_neighbors as usize; // Todo: check that this is 48
         let num_rbf = config.num_rbf as usize; // Todo: check that this is 16
@@ -30,14 +31,16 @@ impl ProteinFeaturesModel {
         let edge_in = num_positional_embeddings + num_rbf * 25;
         let edge_features = config.edge_features as usize;
         let node_features = config.node_features as usize;
-        println!("Start on the Positionsal Encodings...");
+        println!("Start on the Positional Encodings...");
         let embeddings = PositionalEncodings::new(
             num_positional_embeddings, // num embeddings.
             32usize,                   // max_relative_feature
             vb.device(),               // device this should be passed in as param,
-            vb.clone(),                // VarBuilder,
+            vb.pp("embeddings"),       // VarBuilder,
         )?;
-        let edge_embedding = linear::linear(edge_in, edge_features, vb.pp("w_out"))?;
+
+        let edge_embedding =
+            linear::linear_no_bias(edge_in, edge_features, vb.pp("edge_embedding"))?;
         let norm_edges = layer_norm(
             edge_features,
             LayerNormConfig::default(),
@@ -293,7 +296,6 @@ pub struct PositionalEncodings {
 }
 
 impl PositionalEncodings {
-    pub fn load() {}
     pub fn new(
         num_embeddings: usize,
         max_relative_feature: usize,
@@ -303,9 +305,8 @@ impl PositionalEncodings {
         let linear = linear(
             2 * max_relative_feature + 2,
             num_embeddings,
-            vb.pp("positional"),
+            vb.pp("linear"),
         )?;
-
         Ok(Self {
             num_embeddings,
             max_relative_feature,
