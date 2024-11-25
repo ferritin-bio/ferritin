@@ -17,7 +17,7 @@ use super::featurizer::ProteinFeatures;
 use super::model::ProteinMPNN;
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
 use anyhow::Error;
-use candle_core::pickle::read_pth_tensor_info;
+use candle_core::pickle::{read_pth_tensor_info, PthTensors};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use clap::ValueEnum;
