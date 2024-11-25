@@ -65,7 +65,7 @@ impl MPNNExecConfig {
         })
     }
     // Todo: refactor this to use loader.
-    fn load_model(&self) -> Result<ProteinMPNN, Error> {
+    pub fn load_model(&self) -> Result<ProteinMPNN, Error> {
         // this is a hidden dep....
         let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
         let vb = VarBuilder::from_pth(mpnn_file, DType::F32, &Device::Cpu)?;
@@ -81,7 +81,7 @@ impl MPNNExecConfig {
         let base_dtype = DType::F32;
 
         // init the Protein Features
-        let (pdb, _) = pdbtbx::open(self.protein_inputs).expect("A PDB  or CIF file");
+        let (pdb, _) = pdbtbx::open(self.protein_inputs.clone()).expect("A PDB  or CIF file");
         let ac = AtomCollection::from(&pdb);
         //let features = ac.featurize(&device)?;
 
@@ -96,7 +96,8 @@ impl MPNNExecConfig {
 
         // R_idx = np.array(CA_resnums, dtype=np.int32)
         let res_idx = ac.get_res_index();
-        let res_idx_tensor = Tensor::from_vec(res_idx, (res_idx.len(), 1), &device)?;
+        let res_idx_len = res_idx.len() as usize;
+        let res_idx_tensor = Tensor::from_vec(res_idx, (res_idx_len, 1), &device)?;
 
         // update residue info
         // residue_config: Option<ResidueControl>,
@@ -141,17 +142,17 @@ impl MPNNExecConfig {
 
         // return ligand MPNN.
         Ok(ProteinFeatures {
-            s,                       // protein amino acids sequences as 1D Tensor of u32
-            x: x_37,                 // protein co-oords by residue [1, 37, 4]
-            x_mask: Some(x_37_mask), // protein mask by residue
-            y,                       // ligand coords
-            y_t,                     // encoded ligand atom names
-            y_m: Some(y_m),          // ligand mask
-            r_idx: res_idx_tensor,   // protein residue indices shape=[length]
-            chain_labels,            //  # protein chain letters shape=[length]
-            chain_letters,           // chain_letters: shape=[length]
-            mask_c,                  // mask_c:  shape=[length]
-            chain_list,
+            s,                           // protein amino acids sequences as 1D Tensor of u32
+            x: x_37,                     // protein co-oords by residue [1, 37, 4]
+            x_mask: Some(x_37_mask),     // protein mask by residue
+            y,                           // ligand coords
+            y_t,                         // encoded ligand atom names
+            y_m: Some(y_m),              // ligand mask
+            r_idx: Some(res_idx_tensor), // protein residue indices shape=[length]
+            chain_labels: None,          //  # protein chain letters shape=[length]
+            chain_letters: None,         // chain_letters: shape=[length]
+            mask_c: None,                // mask_c:  shape=[length]
+            chain_list: None,
         })
     }
 }

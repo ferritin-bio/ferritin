@@ -553,7 +553,6 @@ impl ProteinMPNN {
                 //     h_v = &h_v + &self.v_c_norm.forward(&self.dropout.forward(&h_v_c)?)?;
                 //     Ok((h_v, h_e, e_idx))
             }
-            _ => panic!("Only Protein MPNN is implemented!"), //
         }
     }
     fn sample(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
@@ -561,8 +560,8 @@ impl ProteinMPNN {
             x,
             s,
             x_mask,
-            symmetry_residues,
-            symmetry_weights,
+            // symmetry_residues,
+            // symmetry_weights,
             ..
         } = features;
 
@@ -571,9 +570,18 @@ impl ProteinMPNN {
         let (b, l) = s.shape().dims2()?;
         let device = s.device();
         let s_true = s.clone();
+
         // Todo: fix chain_mask
-        let chain_mask =
-            output_dict.get_chain_mask(vec!['A'.to_string(), 'B'.to_string()], device)?;
+        // output_dict.get_chain_mask(vec!['A'.to_string(), 'B'.to_string()], device)?;
+        // let chains_to_design = vec!["A".to_string(), "B".to_string()];
+        // let chains = self
+        //     .chain_letters
+        //     .iter()
+        //     .map(|item| chains_to_design.contains(item) as u32);
+        // let chain_mask = Tensor::from_iter(chains, &device);
+
+        // true and utter hack!
+        let chain_mask = Tensor::from_vec(vec![0i64, 0], (2, 1), &device)?;
 
         // encode...
         let (h_v, h_e, e_idx) = self.encode(features)?;
@@ -587,6 +595,9 @@ impl ProteinMPNN {
 
         // add match statement here
         // I'd like to add the other optional components to the match
+
+        // Todo! Fix this hack.
+        let symmetry_residues = None;
         match symmetry_residues {
             None => {
                 let e_idx = e_idx.repeat(&[b, 1, 1])?;

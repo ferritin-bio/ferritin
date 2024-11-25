@@ -40,7 +40,7 @@ pub fn execute(
 
     let model = exec.load_model()?;
 
-    let prot_features = exec.protein_data;
+    // let prot_features = exec.protein_data;
 
     // Make the Ooutput Directories
     // if not os.path.exists(base_folder + "seqs"):
