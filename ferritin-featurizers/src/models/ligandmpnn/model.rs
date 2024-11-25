@@ -36,9 +36,10 @@ struct PositionWiseFeedForward {
 
 impl PositionWiseFeedForward {
     fn new(vb: VarBuilder, dim_input: usize, dim_feedforward: usize) -> Result<Self> {
-        let w1 = linear::linear(dim_input, dim_feedforward, vb.pp("w1"))?;
-        let w2 = linear::linear(dim_feedforward, dim_input, vb.pp("w2"))?;
+        let w1 = linear::linear(dim_input, dim_feedforward, vb.pp("W_in"))?;
+        let w2 = linear::linear(dim_feedforward, dim_input, vb.pp("W_out"))?;
         Ok(Self { w1, w2 })
+    }
     }
 }
 
