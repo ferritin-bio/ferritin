@@ -84,15 +84,23 @@ impl MPNNExecConfig {
         // init the Protein Features
         let (pdb, _) = pdbtbx::open(self.protein_inputs.clone()).expect("A PDB  or CIF file");
         let ac = AtomCollection::from(&pdb);
-        //let features = ac.featurize(&device)?;
 
         // aa -> int
-        let s = ac.encode_amino_acids(&device)?;
+        // let s = ac.encode_amino_acids(&device)?;
+        let s = ac
+            .encode_amino_acids(&device)
+            .expect("A complete convertion to locations");
+        println!("This is the encoded sequences S: {:?}", s);
 
         // protein -> coords. Note update
         // todo: choose based on model type
+        println!("Getting the 37 atom coords...");
         let x_37 = ac.to_numeric_atom37(&device)?;
+        println!("This is the encoded 37 atom coords: {:?}", x_37.dims());
+
         let x_37_mask = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), base_dtype, &device)?;
+        println!("This is the atom map: {:?}", x_37_mask.dims());
+
         let (y, y_t, y_m) = ac.to_numeric_ligand_atoms(&device)?;
 
         // R_idx = np.array(CA_resnums, dtype=np.int32)
@@ -141,6 +149,7 @@ impl MPNNExecConfig {
         // pub omit_aa_per_residue_multi: Option<String>,
         // pub bias_aa_per_residue_multi: Option<String>,
 
+        println!("Returning Protien Features....");
         // return ligand MPNN.
         Ok(ProteinFeatures {
             s,                           // protein amino acids sequences as 1D Tensor of u32

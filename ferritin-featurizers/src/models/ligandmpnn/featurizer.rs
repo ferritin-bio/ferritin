@@ -113,29 +113,23 @@ impl LMPNNFeatures for AtomCollection {
     }
     /// create numeric Tensor of shape [<sequence-length>, 37, 3]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
+        println!("In the Tensor core.");
         let res_count = self.iter_residues_aminoacid().count();
-        // println!("Residue Count is: {}", res_count);
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
-        for residue in self.iter_residues_aminoacid() {
-            let resid = residue.res_id as usize;
 
-            if resid >= res_count {
-                return Err(candle_core::Error::Msg(format!(
-                    "Residue ID {} exceeds residue count {}",
-                    resid, res_count
-                )));
-            }
+        for (idx, residue) in self.iter_residues_aminoacid().enumerate() {
+            let resid = residue.res_id as usize;
             for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
                 if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
                     let [x, y, z] = atom.coords;
-                    let base_idx = (resid * 37 + atom_type as usize) * 3;
-                    // println!("here in the 37 conversion code");
+                    let base_idx = (idx * 37 + atom_type as usize) * 3;
                     atom37_data[base_idx] = *x;
                     atom37_data[base_idx + 1] = *y;
                     atom37_data[base_idx + 2] = *z;
                 }
             }
         }
+        println!("About to create the atom 47 tensor...");
         // Create tensor with shape [residues, 37, 3]
         Tensor::from_vec(atom37_data, (res_count, 37, 3), &device)
     }

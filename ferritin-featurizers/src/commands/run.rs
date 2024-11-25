@@ -39,41 +39,24 @@ pub fn execute(
     )?;
 
     println!("About to Load the model!");
-
     let model = exec.load_model()?;
     println!("Model Loaded!");
 
+    println!("Generating Protein Features");
     let prot_features = exec.generate_protein_features()?;
     println!("Protein Features Loaded!");
 
-    // Make the Ooutput Directories
-    // if not os.path.exists(base_folder + "seqs"):
-    //       os.makedirs(base_folder + "seqs", exist_ok=True)
-    //   if not os.path.exists(base_folder + "backbones"):
-    //       os.makedirs(base_folder + "backbones", exist_ok=True)
-    //   if not os.path.exists(base_folder + "packed"):
-    //       os.makedirs(base_folder + "packed", exist_ok=True)
+    // Create the output folders
+    println!("Creating the Outputs");
+    std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
+    std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
+    std::fs::create_dir_all(format!("{}/packed", out_folder))?;
 
     //
     // Run the Model!
-    //
-
-    // Encode the inputs:
-    // for pdb in pdb_paths:
-    //     if args.verbose:
-    //         print("Designing protein from this path:", pdb)
-    //     fixed_residues = fixed_residues_multi[pdb]
-    //     redesigned_residues = redesigned_residues_multi[pdb]
-    //     parse_all_atoms_flag = args.ligand_mpnn_use_side_chain_context or (
-    //         args.pack_side_chains and not args.repack_everything
-    //     )
-    //     protein_dict, backbone, other_atoms, icodes, _ = parse_PDB(
-    //         pdb,
-    //         device=device,
-    //         chains=parse_these_chains_only_list,
-    //         parse_all_atoms=parse_all_atoms_flag,
-    //         parse_atoms_with_zero_occupancy=args.parse_atoms_with_zero_occupancy,
-    //     )
+    println!("Scoring the Protein...");
+    let model_score = model.score(&prot_features, false);
+    println!("{:?}", model_score);
 
     // Score
     // model.score() -> Result<ScoreOutput>
