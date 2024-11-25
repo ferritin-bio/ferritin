@@ -22,6 +22,7 @@ pub struct ProteinFeaturesModel {
 
 impl ProteinFeaturesModel {
     pub fn load(vb: VarBuilder, config: ProteinMPNNConfig) -> Result<Self> {
+        println!("In the ProteinFeatures Model!");
         let augment_eps = config.augment_eps;
         let top_k = config.k_neighbors as usize; // Todo: check that this is 48
         let num_rbf = config.num_rbf as usize; // Todo: check that this is 16
@@ -29,6 +30,7 @@ impl ProteinFeaturesModel {
         let edge_in = num_positional_embeddings + num_rbf * 25;
         let edge_features = config.edge_features as usize;
         let node_features = config.node_features as usize;
+        println!("Start on the Positionsal Encodings...");
         let embeddings = PositionalEncodings::new(
             num_positional_embeddings, // num embeddings.
             32usize,                   // max_relative_feature
@@ -56,43 +58,43 @@ impl ProteinFeaturesModel {
         })
     }
 
-    pub fn new(
-        edge_features: usize,
-        node_features: usize,
-        vb: VarBuilder,
-        device: &Device,
-    ) -> Result<Self> {
-        let augment_eps = 0.0; // hardcoding: Todo: refactor
-        let top_k = 48; // hardcoding
-        let num_rbf = 16; // hardcoding
-        let num_positional_embeddings = 16; // hardcoding
-        let edge_in = num_positional_embeddings + num_rbf * 25;
-        let embeddings = PositionalEncodings::new(
-            num_positional_embeddings, // num embeddings.
-            32usize,                   // max_relative_feature
-            device,                    // device this should be passed in as param,
-            vb.clone(),                // VarBuilder,
-        )?;
-        let edge_embedding = linear::linear(edge_in, edge_features, vb.pp("w_out"))?;
-        let norm_edges = layer_norm(
-            edge_features,
-            LayerNormConfig::default(),
-            vb.pp("norm_edges"),
-        )?;
+    // pub fn new(
+    //     edge_features: usize,
+    //     node_features: usize,
+    //     vb: VarBuilder,
+    //     device: &Device,
+    // ) -> Result<Self> {
+    //     let augment_eps = 0.0; // hardcoding: Todo: refactor
+    //     let top_k = 48; // hardcoding
+    //     let num_rbf = 16; // hardcoding
+    //     let num_positional_embeddings = 16; // hardcoding
+    //     let edge_in = num_positional_embeddings + num_rbf * 25;
+    //     let embeddings = PositionalEncodings::new(
+    //         num_positional_embeddings, // num embeddings.
+    //         32usize,                   // max_relative_feature
+    //         device,                    // device this should be passed in as param,
+    //         vb.clone(),                // VarBuilder,
+    //     )?;
+    //     let edge_embedding = linear::linear(edge_in, edge_features, vb.pp("w_out"))?;
+    //     let norm_edges = layer_norm(
+    //         edge_features,
+    //         LayerNormConfig::default(),
+    //         vb.pp("norm_edges"),
+    //     )?;
 
-        Ok(Self {
-            edge_in: edge_in as i64,
-            edge_features,
-            node_features,
-            num_positional_embeddings,
-            num_rbf,
-            top_k,
-            augment_eps,
-            embeddings,
-            edge_embedding,
-            norm_edges,
-        })
-    }
+    //     Ok(Self {
+    //         edge_in: edge_in as i64,
+    //         edge_features,
+    //         node_features,
+    //         num_positional_embeddings,
+    //         num_rbf,
+    //         top_k,
+    //         augment_eps,
+    //         embeddings,
+    //         edge_embedding,
+    //         norm_edges,
+    //     })
+    // }
 
     /// This function calculates the nearest Ca coordinates and retunrs the ditances and indices.
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
@@ -291,6 +293,7 @@ pub struct PositionalEncodings {
 }
 
 impl PositionalEncodings {
+    pub fn load() {}
     pub fn new(
         num_embeddings: usize,
         max_relative_feature: usize,
