@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use candle_core::pickle::read_pth_tensor_info;
+    use candle_core::pickle::PthTensors;
     use candle_core::{DType, Device, Error};
     use candle_nn::VarBuilder;
     use ferritin_featurizers::{ProteinMPNN, ProteinMPNNConfig};
@@ -27,10 +28,21 @@ mod tests {
     fn test_load_ligandmpnn_02() -> Result<(), Error> {
         let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
         let vb = VarBuilder::from_pth(mpnn_file, DType::F32, &Device::Cpu)?;
-        // println!("{:?}", &vb.device());
-        // println!("{:?}", &vb.dtype);
+        println!(
+            "Check Tensor Membership for Norm1 {:?}",
+            vb.contains_tensor("encoder_layers.0.norm1.bias")
+        );
         let pconf = ProteinMPNNConfig::proteinmpnn();
-        // println!("{:?}", &pconf);
+        let pmpnn = ProteinMPNN::load(vb, &pconf);
+
+        Ok(())
+    }
+    #[test]
+    fn test_load_ligandmpnn_03() -> Result<(), Error> {
+        let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
+        let pth = PthTensors::new(mpnn_file, Some("model_state_dict"))?;
+        let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, Device::Cpu);
+        let pconf = ProteinMPNNConfig::proteinmpnn();
         let pmpnn = ProteinMPNN::load(vb, &pconf);
         Ok(())
     }

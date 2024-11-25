@@ -17,6 +17,7 @@ use super::featurizer::ProteinFeatures;
 use super::model::ProteinMPNN;
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
 use anyhow::Error;
+use candle_core::pickle::read_pth_tensor_info;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use clap::ValueEnum;
@@ -68,9 +69,9 @@ impl MPNNExecConfig {
     pub fn load_model(&self) -> Result<ProteinMPNN, Error> {
         // this is a hidden dep....
         let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
-        let vb = VarBuilder::from_pth(mpnn_file, DType::F32, &Device::Cpu)?;
+        let pth = PthTensors::new(mpnn_file, Some("model_state_dict"))?;
+        let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, Device::Cpu);
         let pconf = ProteinMPNNConfig::proteinmpnn();
-        // ProteinMPNN::load(self.protein_mpnn_model_config.clone(), vb)
         Ok(ProteinMPNN::load(vb, &pconf).expect("Unable to load the PMPNN Model"))
     }
     pub fn generate_model(self) {

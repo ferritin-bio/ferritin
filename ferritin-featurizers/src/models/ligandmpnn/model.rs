@@ -72,14 +72,17 @@ pub struct EncLayer {
 
 impl EncLayer {
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig, layer: i32) -> Result<Self> {
+        println!("In the EncLayer load fn...");
         let vb = vb.pp(layer); // handle the layer number here.
         let num_hidden = config.hidden_dim as usize;
         let augment_eps = config.augment_eps as f64;
         let num_in = (config.hidden_dim * 2) as usize;
         let dropout_ratio = config.dropout_ratio;
+        println!("So far so good 1");
         let norm1 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm1"))?;
         let norm2 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm2"))?;
         let norm3 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm3"))?;
+        println!("So far so good 2");
 
         let w1 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("W1"))?;
         let w2 = linear::linear(num_hidden, num_hidden, vb.pp("W2"))?;
@@ -360,12 +363,14 @@ pub struct ProteinMPNN {
 impl ProteinMPNN {
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig) -> Result<Self> {
         // Encoder
+        println!("Enter the Encoder Layer");
         let mut encoder_layers = Vec::with_capacity(config.num_encoder_layers as usize);
         for i in 0..config.num_encoder_layers {
             encoder_layers.push(EncLayer::load(vb.pp("encoder_layers"), config, i as i32)?);
         }
 
         // Decoder
+        println!("Enter the Decoder Layer");
         let mut decoder_layers = Vec::with_capacity(config.num_decoder_layers as usize);
         for i in 0..config.num_decoder_layers {
             decoder_layers.push(DecLayer::load(vb.pp("decoder_layers"), config, i as i32)?);
@@ -375,19 +380,19 @@ impl ProteinMPNN {
         let w_e = linear::linear(
             config.edge_features as usize,
             config.hidden_dim as usize,
-            vb.pp("w_e"),
+            vb.pp("W_e"),
         )?;
 
         let w_out = linear::linear(
             config.hidden_dim as usize,
             config.num_letters as usize,
-            vb.pp("w_out"),
+            vb.pp("W_out"),
         )?;
 
         let w_s = linear::linear(
             config.vocab as usize,
             config.hidden_dim as usize,
-            vb.pp("w_s"),
+            vb.pp("W_s"),
         )?;
 
         // Features

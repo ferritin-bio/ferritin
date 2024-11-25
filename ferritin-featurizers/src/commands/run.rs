@@ -38,8 +38,11 @@ pub fn execute(
         Some(multi_pdb_config),
     )?;
 
+    println!("About to Load the model!");
+
     let model = exec.load_model()?;
 
+    println!("Model Loaded!");
     // let prot_features = exec.protein_data;
 
     // Make the Ooutput Directories
