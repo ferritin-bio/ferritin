@@ -278,7 +278,11 @@ pub fn gather_edges(edges: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
         neighbor_idx
             .unsqueeze(D::Minus1)?
             .expand((d1, d2, d3, edges.dim(D::Minus1)?))?;
-    edges.gather(&neighbors, 2)
+
+    println!("Neighbors idx: {:?}", neighbors.dims());
+    let edge_gather = edges.gather(&neighbors, 2)?;
+    println!("edge_gather idx: {:?}", edge_gather.dims());
+    Ok(edge_gather)
 }
 
 pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {

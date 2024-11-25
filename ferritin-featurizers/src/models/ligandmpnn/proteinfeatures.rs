@@ -1,7 +1,7 @@
 use super::configs::ProteinMPNNConfig;
 use super::featurizer::ProteinFeatures;
-use super::utilities::{compute_nearest_neighbors, cross_product, linspace};
-use candle_core::{Device, Module, Result, Tensor, D};
+use super::utilities::{compute_nearest_neighbors, cross_product, gather_edges, linspace};
+use candle_core::{DType, Device, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::{layer_norm, linear, LayerNorm, LayerNormConfig, Linear, VarBuilder};
 
@@ -76,30 +76,21 @@ impl ProteinFeaturesModel {
         const D_MIN: f64 = 2.0;
         const D_MAX: f64 = 22.0;
 
-        println!("in _RBF fn!");
-
         // Create centers (μ)
-        let d_mu =
-            linspace(D_MIN, D_MAX, self.num_rbf, device)?.reshape((1, 1, 1, self.num_rbf))?;
-        println!("in _RBF. after d_mu");
+        let d_mu = linspace(D_MIN, D_MAX, self.num_rbf, device)?
+            .reshape((1, 1, 1, self.num_rbf))?
+            .to_dtype(candle_core::DType::F32)?;
 
         // Calculate width (σ)
         let d_sigma = (D_MAX - D_MIN) / self.num_rbf as f64;
-        println!("in _RBF. after d_sigma");
+        let dims = d.dims();
+        let d_expanded = d.unsqueeze(D::Minus1)?; // [N, N, C, 1]
+        let d_mu_broadcast = d_mu.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
+        let d_expanded_broadcast =
+            d_expanded.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
 
-        // Expand input tensor
-        let d_expanded = d.unsqueeze(D::Minus1)?;
-        println!("in _RBF. after d_expanded");
-
-        // Calculate RBF values
-        println!(
-            "Dimentions of d_expande, d_mu, d_sigma: {:?}, {:?}, {:?}",
-            d_expanded, d_mu, d_sigma
-        );
-        let diff = ((d_expanded - &d_mu)? / d_sigma)?;
-        println!("in _RBF. after diff");
+        let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma)?;
         let rbf = diff.powf(2.0)?.neg()?.exp()?;
-        println!("in _RBF. rbf");
 
         Ok(rbf)
     }
@@ -113,21 +104,51 @@ impl ProteinFeaturesModel {
     ///
     /// # Returns
     /// * RBF features for the specified pairs
+    //     def _get_rbf(self, A, B, E_idx):
+    // D_A_B = torch.sqrt(
+    //     torch.sum((A[:, :, None, :] - B[:, None, :, :]) ** 2, -1) + 1e-6
+    // )  # [B, L, L]
+    // D_A_B_neighbors = gather_edges(D_A_B[:, :, :, None], E_idx)[
+    //     :, :, :, 0
+    // ]  # [B,L,K]
+    // RBF_A_B = self._rbf(D_A_B_neighbors)
+    // return RBF_A_B
     fn _get_rbf(&self, a: &Tensor, b: &Tensor, e_idx: &Tensor, device: &Device) -> Result<Tensor> {
-        // Expand dimensions for broadcasting
-        let a_expanded = a.unsqueeze(2)?;
-        let b_expanded = b.unsqueeze(1)?;
+        // Get original dimensions
+        let dims = a.dims();
+        let target_shape = (dims[0], dims[1], dims[1], dims[2]); // [1, 93, 93, 3]
 
-        // Calculate pairwise distances
+        // Expand dimensions and broadcast
+        let a_expanded = a.unsqueeze(2)?.broadcast_as(target_shape)?;
+        let b_expanded = b.unsqueeze(1)?.broadcast_as(target_shape)?;
+        // Now both tensors should be [1, 93, 93, 3]
         let diff = (a_expanded - b_expanded)?;
+
+        println!("After substraction: diff: {:?}", diff.dims());
+
         let squared_diff = diff.powf(2.0)?;
         let sum_squared_diff = squared_diff.sum(3)?;
         let d_a_b = (sum_squared_diff + 1e-6)?.sqrt()?;
 
-        // Gather edges
-        let d_a_b_expanded = d_a_b.unsqueeze(D::Minus1)?;
-        let d_a_b_neighbors = d_a_b_expanded.gather(e_idx, 2)?;
+        let d_a_b_neighbors = gather_edges(&d_a_b.unsqueeze(D::Minus1)?, &e_idx)?;
+        println!("d_a_b_neighbors: {:?}", d_a_b_neighbors.dims());
         let d_a_b_neighbors = d_a_b_neighbors.squeeze(D::Minus1)?;
+        println!("d_a_b_neighbors: {:?}", d_a_b_neighbors.dims());
+
+        // Gather edges
+        // let d_a_b_expanded = d_a_b.unsqueeze(D::Minus1)?;
+
+        // println!("d_a_b_expanded: {:?}", d_a_b_expanded.dims());
+
+        // println!("e_idx: {:?}", e_idx.dims());
+
+        // println!(
+        //     "Types - d_a_b: {:?}, e_idx: {:?}",
+        //     d_a_b_expanded.dtype(),
+        //     e_idx.dtype()
+        // );
+        // let d_a_b_neighbors = d_a_b_expanded.gather(e_idx, 2)?;
+        // let d_a_b_neighbors = d_a_b_neighbors.squeeze(D::Minus1)?;
 
         // Apply RBF
         let rbf_a_b = self._rbf(&d_a_b_neighbors, device)?;
@@ -270,12 +291,31 @@ impl ProteinFeaturesModel {
         println!("In the Features before  Tensor_cat!");
 
         let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
+        println!("In the Features after  Tensor_cat!");
+        let dims = r_idx.dims();
+        let target_shape = (dims[0], dims[1], dims[1]);
+        println!("Target shape: {:?}", target_shape);
 
-        let offset = (&r_idx.unsqueeze(2)? - &r_idx.unsqueeze(1)?)?;
-        let offset = offset
-            .unsqueeze(D::Minus1)?
-            .gather(&e_idx, 2)?
-            .squeeze(D::Minus1)?;
+        let r_idx_expanded1 = r_idx
+            .unsqueeze(2)?
+            .broadcast_as(target_shape)?
+            .to_dtype(DType::F32)?; // [1, 93, 93]
+        let r_idx_expanded2 = r_idx
+            .unsqueeze(1)?
+            .broadcast_as(target_shape)?
+            .to_dtype(DType::F32)?; // [1, 93, 93]
+        println!(
+            "Shapes of expanded1 and expanded2: {:?}, {:?}",
+            r_idx_expanded1.dims(),
+            r_idx_expanded2.dims()
+        );
+
+        let offset = (r_idx_expanded1 - r_idx_expanded2)?;
+        println!("Offset: {:?}", offset.dims());
+        let offset = gather_edges(&offset.unsqueeze(D::Minus1)?, &e_idx)?;
+        println!("Offset: {:?}", offset.dims());
+        let offset = offset.squeeze(D::Minus1)?;
+        println!("Offset: {:?}", offset.dims());
 
         let d_chains = (&chain_labels.unsqueeze(2)? - &chain_labels.unsqueeze(1)?)?
             .eq(0.0)?

@@ -106,7 +106,7 @@ impl MPNNExecConfig {
         // R_idx = np.array(CA_resnums, dtype=np.int32)
         let res_idx = ac.get_res_index();
         let res_idx_len = res_idx.len() as usize;
-        let res_idx_tensor = Tensor::from_vec(res_idx, (res_idx_len, 1), &device)?;
+        let res_idx_tensor = Tensor::from_vec(res_idx, (1, res_idx_len), &device)?;
 
         // update residue info
         // residue_config: Option<ResidueControl>,
