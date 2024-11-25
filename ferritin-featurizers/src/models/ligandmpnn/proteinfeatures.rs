@@ -60,6 +60,8 @@ impl ProteinFeaturesModel {
 
     /// This function calculates the nearest Ca coordinates and retunrs the ditances and indices.
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
+        println!("in _dist: ");
+        println!("Tensor dims: x, mask: {:?}, {:?}", x.dims(), mask.dims());
         compute_nearest_neighbors(x, mask, self.top_k, eps as f32)
     }
     fn _rbf(&self, d: &Tensor, device: &Device) -> Result<Tensor> {
@@ -152,8 +154,9 @@ impl ProteinFeaturesModel {
 
         let x = input_features.get_coords();
         println!("X Dims: {:?}", x.dims());
-        // let mask = input_features.output_dict.mask.as_ref();
-        let mask = Tensor::zeros_like(x)?; // todo: fix mask
+
+        let mask = input_features.x_mask.as_ref().unwrap();
+        println!("X_MASK Dims: {:?}", mask.dims());
 
         let r_idx = input_features.get_residue_index().unwrap();
         // let chain_labels = input_features.chain_labels.as_ref();
@@ -206,9 +209,22 @@ impl ProteinFeaturesModel {
         let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
         let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
 
-        println!("In the Features before  _dist!");
+        println!(
+            "Tensor dims for n,ca,c,o: {:?}, {:?},{:?} ,{:?}",
+            n.dims(),
+            ca.dims(),
+            c.dims(),
+            o.dims(),
+        );
 
+        println!("In the Features before  _dist!");
+        println!(
+            "Tensor dims for ca, mask: {:?}, {:?}",
+            ca.dims(),
+            mask.dims()
+        );
         let (d_neighbors, e_idx) = self._dist(&ca, &mask, self.augment_eps as f64)?;
+        println!("In the Features after  _dist!");
 
         let mut rbf_all = Vec::new();
         rbf_all.push(self._rbf(&d_neighbors, device)?);

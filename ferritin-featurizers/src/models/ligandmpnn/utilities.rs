@@ -47,8 +47,16 @@ pub fn compute_nearest_neighbors(
     k: usize,
     eps: f32,
 ) -> Result<(Tensor, Tensor)> {
+    println!("In Compute Nearest Neighbors");
+
     let batch_size = coords.dim(0)?;
     let seq_len = coords.dim(1)?;
+
+    println!(
+        "Dims of coords, mask: {:?}, {:?}",
+        coords.dims(),
+        mask.dims()
+    );
 
     // broadcast_matmul handles broadcasting automatically
     // [2, 3, 1] × [2, 1, 3] -> [2, 3, 3]
@@ -56,6 +64,8 @@ pub fn compute_nearest_neighbors(
         .unsqueeze(2)?
         .broadcast_matmul(&mask.unsqueeze(1)?)?
         .to_dtype(DType::F64)?; // Convert to f64 once, at the start
+
+    println!("after mask2d");
 
     // Compute pairwise distances with broadcasting
     let distances = (coords
@@ -66,11 +76,14 @@ pub fn compute_nearest_neighbors(
         + eps as f64)?
         .sqrt()?;
 
+    println!("after distances");
+
     // Apply mask
     // Get max values for adjustment
-    let masked_distances = (&distances * &mask_2d.to_dtype(DType::F64)?)?;
+    let masked_distances = (&distances * &mask_2d.to_dtype(DType::F32)?)?;
+    println!("after masked_distances");
     let d_max = masked_distances.max_keepdim(D::Minus1)?;
-    let mask_term = ((&mask_2d.to_dtype(DType::F64)? * -1.0)? + 1.0)?;
+    let mask_term = ((&mask_2d.to_dtype(DType::F32)? * -1.0)? + 1.0)?;
     let d_adjust = (&masked_distances + mask_term.broadcast_mul(&d_max)?)?;
     let d_adjust = d_adjust.to_dtype(DType::F32)?;
 
