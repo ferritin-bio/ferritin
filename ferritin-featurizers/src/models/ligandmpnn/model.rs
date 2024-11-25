@@ -962,6 +962,7 @@ impl ProteinMPNN {
         let device = s_true.device();
         let randn = Tensor::randn(0., 1., (b, l), device)?;
 
+        println!("scoring 01");
         let (h_v, h_e, e_idx) = self.encode(features)?;
 
         // Todo! This is a massive hack
@@ -971,6 +972,7 @@ impl ProteinMPNN {
         let chain_mask = Tensor::from_vec(vec![0i64, 0], (2, 1), &device)?;
 
         // Update chain_mask to include missing regions
+        println!("scoring 02");
         let chain_mask = mask.unwrap().mul(&chain_mask)?;
         // Compute decoding order
         let decoding_order = (chain_mask + 0.001)?

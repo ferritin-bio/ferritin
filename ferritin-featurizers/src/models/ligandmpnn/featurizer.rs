@@ -37,12 +37,14 @@ pub trait LMPNNFeatures {
 /// datasets
 impl LMPNNFeatures for AtomCollection {
     fn encode_amino_acids(&self, device: &Device) -> Result<(Tensor)> {
+        let n = self.iter_residues_aminoacid().count();
         let s = self
             .iter_residues_aminoacid()
             .map(|res| res.res_name)
             .map(|res| aa3to1(&res))
             .map(|res| aa1to_int(res));
-        Ok(Tensor::from_iter(s, device)?)
+
+        Ok(Tensor::from_iter(s, device)?.reshape((1, n))?)
     }
     // equivalent to protien MPNN's parse_PDB
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
@@ -118,7 +120,6 @@ impl LMPNNFeatures for AtomCollection {
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
 
         for (idx, residue) in self.iter_residues_aminoacid().enumerate() {
-            let resid = residue.res_id as usize;
             for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
                 if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
                     let [x, y, z] = atom.coords;
@@ -129,7 +130,6 @@ impl LMPNNFeatures for AtomCollection {
                 }
             }
         }
-        println!("About to create the atom 47 tensor...");
         // Create tensor with shape [residues, 37, 3]
         Tensor::from_vec(atom37_data, (res_count, 37, 3), &device)
     }
