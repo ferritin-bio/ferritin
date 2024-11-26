@@ -459,7 +459,7 @@ impl ProteinMPNN {
             }
         }
     }
-    fn sample(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
+    pub fn sample(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
         let ProteinFeatures {
             x,
             s,

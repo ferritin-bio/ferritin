@@ -52,13 +52,16 @@ pub fn execute(
     std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
     std::fs::create_dir_all(format!("{}/packed", out_folder))?;
 
-    //
-    // Run the Model!
-    println!("Scoring the Protein...");
-    let model_score = model.score(&prot_features, false);
-    println!("{:?}", model_score);
+    // Score a Protein!
+    // println!("Scoring the Protein...");
+    // let model_score = model.score(&prot_features, false);
+    // println!("{:?}", model_score);
 
-    // Score
+    // Sample from the Model!
+    println!("Sampling from the Model...");
+    let model_sample = model.sample(&prot_features);
+    println!("{:?}", model_sample);
+
     // model.score() -> Result<ScoreOutput>
 
     // Sample
