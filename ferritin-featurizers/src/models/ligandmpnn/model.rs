@@ -175,9 +175,8 @@ impl EncLayer {
             h_v
         };
         let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
-        println!("EncLayer: 09");
-        // let h_v_expand = h_v.unsqueeze(D::Minus2)?.expand(h_ev.shape().dims())?;
         let h_v_expand = h_v.unsqueeze(D::Minus2)?;
+
         // Explicitly specify the expansion dimensions
         let expand_shape = [
             h_ev.dims()[0],       // batch size
@@ -187,10 +186,7 @@ impl EncLayer {
         ];
         let h_v_expand = h_v_expand.expand(&expand_shape)?;
         let h_v_expand = h_v_expand.to_dtype(h_ev.dtype())?;
-
-        println!("EncLayer: 10");
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
-        println!("EncLayer: 11");
         let h_message = self
             .w11
             .forward(&h_ev)?
@@ -204,7 +200,6 @@ impl EncLayer {
                 .forward(&h_message, training.expect("Training Must be specified"))?;
             self.norm3.forward(&(h_e + h_message_dropout)?)?
         };
-
         Ok((h_v, h_e))
     }
 }
@@ -470,31 +465,26 @@ impl ProteinMPNN {
         } = features;
 
         // let b_decoder = batch_size.unwrap() as usize;
-
         let (b, l) = s.shape().dims2()?;
         let device = s.device();
         let s_true = s.clone();
 
-        // Todo: fix chain_mask
-        // output_dict.get_chain_mask(vec!['A'.to_string(), 'B'.to_string()], device)?;
-        // let chains_to_design = vec!["A".to_string(), "B".to_string()];
-        // let chains = self
-        //     .chain_letters
-        //     .iter()
-        //     .map(|item| chains_to_design.contains(item) as u32);
-        // let chain_mask = Tensor::from_iter(chains, &device);
-
-        // true and utter hack!
-        let chain_mask = Tensor::from_vec(vec![0i64, 0], (2, 1), &device)?;
+        // Todo: This is a hack. we should be passing in encoded chains.
+        let chain_mask = Tensor::zeros_like(&x_mask.as_ref().unwrap())?.to_dtype(DType::F32)?;
 
         // encode...
+        println!("Sample Encoding....");
         let (h_v, h_e, e_idx) = self.encode(features)?;
+        println!("Sample Encoding Done");
         let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?; // update chain_M to include missing regions;
 
+        println!("Sample Encoding 01");
         // this might be  a bad rand implementation
         let rand_tensor = Tensor::randn(0., 0.25, (b as usize, l as usize), device)?;
         let decoding_order = (&chain_mask + 0.0001)?;
+        println!("Sample Encoding 02");
         let decoding_order = decoding_order.mul(&rand_tensor.abs()?)?;
+        println!("Sample Encoding 03");
         let decoding_order = decoding_order.arg_sort_last_dim(false)?;
 
         // add match statement here
@@ -506,10 +496,14 @@ impl ProteinMPNN {
             None => {
                 let e_idx = e_idx.repeat(&[b, 1, 1])?;
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
+                println!("Sample: 01");
                 let tril = Tensor::tril2(l, DType::F64, device)?;
+                println!("Sample: 02");
                 let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; //tensor of shape (b, i, q)
+                println!("Sample: 03");
                 let order_mask_backward =
                     temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // This will give us a tensor of shape (b, q, p)
+                println!("Sample: 04");
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
@@ -584,6 +578,7 @@ impl ProteinMPNN {
                         1,
                     )?;
 
+                    println!("Sample: Entering Decoder! ");
                     // Todo: Consider factorign this out..
                     for (l, layer) in self.decoder_layers.iter().enumerate() {
                         let h_esv_decoder_t =
@@ -994,7 +989,7 @@ impl ProteinMPNN {
         let randn = Tensor::randn(0., 1., (b, l), device)?.to_dtype(DType::F32)?;
         let (h_v, h_e, e_idx) = self.encode(features)?;
 
-        // Todo! This is a hack. we shou ldbe passing in encoded chains.
+        // Todo: This is a hack. we shouldbe passing in encoded chains.
         let chain_mask = Tensor::zeros_like(mask.unwrap())?.to_dtype(DType::F32)?;
 
         // Update chain_mask to include missing regions
