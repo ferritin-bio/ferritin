@@ -373,7 +373,6 @@ impl ProteinMPNN {
     }
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
         // todo: get device more elegantly
-        println!("Encoding!");
         let device = &candle_core::Device::Cpu;
         let s_true = &features.get_sequence();
         let (b, l) = s_true.dims2()?;
@@ -402,7 +401,6 @@ impl ProteinMPNN {
                 ))?;
                 let mask_attend = (&mask_expanded * &mask_attend)?;
 
-                println!("Encode: Through the encoder layers...");
                 for layer in &self.encoder_layers {
                     let (new_h_v, new_h_e) = layer.forward(
                         &h_v,
@@ -415,7 +413,6 @@ impl ProteinMPNN {
                     h_v = new_h_v;
                     h_e = new_h_e;
                 }
-                println!("Encoding Complete!!");
                 Ok((h_v, h_e, e_idx))
             }
             ModelTypes::LigandMPNN => {
