@@ -35,6 +35,7 @@ pub fn cat_neighbors_nodes(
     h_neighbors: &Tensor,
     e_idx: &Tensor,
 ) -> Result<Tensor> {
+    println!("In Cat Neighbor Nodes...");
     let h_nodes_gathered = gather_nodes(h_nodes, e_idx)?;
     // todo: fix this hacky Dtype
     Tensor::cat(
@@ -282,19 +283,48 @@ pub fn gather_edges(edges: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
 /// Features [B,N,C] at Neighbor indices [B,N,K] => [B,N,K,C]
 /// Flatten and expand indices per batch [B,N,K] => [B,NK] => [B,NK,C]
 pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
+    println!("gather_nodes input dimensions:");
+    println!("nodes dims: {:?}", nodes.dims());
+    println!("neighbor_idx dims: {:?}", neighbor_idx.dims());
+
     let (batch_size, n_nodes, n_features) = nodes.dims3()?;
     let (_, _, k_neighbors) = neighbor_idx.dims3()?;
+
+    println!("Extracted dimensions:");
+    println!(
+        "batch_size: {}, n_nodes: {}, n_features: {}",
+        batch_size, n_nodes, n_features
+    );
+    println!("k_neighbors: {}", k_neighbors);
+
     // Reshape neighbor_idx to [B, N*K]
     let neighbors_flat = neighbor_idx.reshape((batch_size, n_nodes * k_neighbors))?;
+
+    println!(
+        "neighbors_flat dims after first reshape: {:?}",
+        neighbors_flat.dims()
+    );
+
     // Add feature dimension and expand
     let neighbors_flat = neighbors_flat
         .unsqueeze(2)? // Add feature dimension [B, N*K, 1]
         .expand((batch_size, n_nodes * k_neighbors, n_features))?; // Expand to [B, N*K, C]
 
+    println!(
+        "neighbors_flat dims after expand: {:?}",
+        neighbors_flat.dims()
+    );
+
     // make contiguous for the gather.
     let neighbors_flat = neighbors_flat.contiguous()?;
     // Gather features
     let neighbor_features = nodes.gather(&neighbors_flat, 1)?;
+
+    println!(
+        "neighbor_features dims before final reshape: {:?}",
+        neighbor_features.dims()
+    );
+
     // Reshape back to [B, N, K, C]
     neighbor_features.reshape((batch_size, n_nodes, k_neighbors, n_features))
 }
