@@ -465,27 +465,22 @@ impl ProteinMPNN {
         } = features;
 
         // let b_decoder = batch_size.unwrap() as usize;
-        let (b, l) = s.shape().dims2()?;
-        let device = s.device();
         let s_true = s.clone();
+        let device = s.device();
+        let (b, l) = s.dims2()?;
 
         // Todo: This is a hack. we should be passing in encoded chains.
         let chain_mask = Tensor::zeros_like(&x_mask.as_ref().unwrap())?.to_dtype(DType::F32)?;
-
-        // encode...
-        println!("Sample Encoding....");
-        let (h_v, h_e, e_idx) = self.encode(features)?;
-        println!("Sample Encoding Done");
         let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?; // update chain_M to include missing regions;
 
-        println!("Sample Encoding 01");
+        // encode...
+        let (h_v, h_e, e_idx) = self.encode(features)?;
+
         // this might be  a bad rand implementation
-        let rand_tensor = Tensor::randn(0., 0.25, (b as usize, l as usize), device)?;
-        let decoding_order = (&chain_mask + 0.0001)?;
-        println!("Sample Encoding 02");
-        let decoding_order = decoding_order.mul(&rand_tensor.abs()?)?;
-        println!("Sample Encoding 03");
-        let decoding_order = decoding_order.arg_sort_last_dim(false)?;
+        let rand_tensor = Tensor::randn(0., 0.25, (b, l), device)?.to_dtype(DType::F32)?;
+        let decoding_order = (&chain_mask + 0.0001)?
+            .mul(&rand_tensor.abs()?)?
+            .arg_sort_last_dim(false)?;
 
         // add match statement here
         // I'd like to add the other optional components to the match
@@ -496,14 +491,10 @@ impl ProteinMPNN {
             None => {
                 let e_idx = e_idx.repeat(&[b, 1, 1])?;
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
-                println!("Sample: 01");
                 let tril = Tensor::tril2(l, DType::F64, device)?;
-                println!("Sample: 02");
                 let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; //tensor of shape (b, i, q)
-                println!("Sample: 03");
                 let order_mask_backward =
                     temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // This will give us a tensor of shape (b, q, p)
-                println!("Sample: 04");
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
@@ -981,23 +972,27 @@ impl ProteinMPNN {
 
     pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
         let ProteinFeatures { s, x, x_mask, .. } = &features;
+
         let s_true = &s.clone();
-        let mask = &x_mask.as_ref().clone();
-        let (b, l) = s_true.dims2()?;
-        let b_decoder = b;
         let device = s_true.device();
-        let randn = Tensor::randn(0., 1., (b, l), device)?.to_dtype(DType::F32)?;
-        let (h_v, h_e, e_idx) = self.encode(features)?;
+        let (b, l) = s_true.dims2()?;
+
+        let mask = &x_mask.as_ref().clone();
+        let b_decoder: usize = b;
 
         // Todo: This is a hack. we shouldbe passing in encoded chains.
-        let chain_mask = Tensor::zeros_like(mask.unwrap())?.to_dtype(DType::F32)?;
-
         // Update chain_mask to include missing regions
+        let chain_mask = Tensor::zeros_like(mask.unwrap())?.to_dtype(DType::F32)?;
         let chain_mask = mask.unwrap().mul(&chain_mask)?;
+
+        // encode ...
+        let (h_v, h_e, e_idx) = self.encode(features)?;
+
+        let rand_tensor = Tensor::randn(0., 1., (b, l), device)?.to_dtype(DType::F32)?;
 
         // Compute decoding order
         let decoding_order = (chain_mask + 0.001)?
-            .mul(&randn.abs()?)?
+            .mul(&rand_tensor.abs()?)?
             .arg_sort_last_dim(false)?;
 
         let symmetry_residues: Option<Vec<i32>> = None;
@@ -1062,7 +1057,6 @@ impl ProteinMPNN {
                 // (mask_fw, mask_bw, e_idx, decoding_order)
             }
             None => {
-                let b_decoder = b_decoder as usize;
                 let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
                 let tril = Tensor::tril2(l, DType::F64, device)?;
