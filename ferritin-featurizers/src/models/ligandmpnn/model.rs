@@ -392,7 +392,7 @@ impl ProteinMPNN {
                     h_v = new_h_v;
                     h_e = new_h_e;
                 }
-
+                println!("Encoding Complete!!");
                 Ok((h_v, h_e, e_idx))
             }
             ModelTypes::LigandMPNN => {
