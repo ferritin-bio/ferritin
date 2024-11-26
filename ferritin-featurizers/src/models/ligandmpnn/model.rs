@@ -531,13 +531,14 @@ impl ProteinMPNN {
                 for _ in 0..self.decoder_layers.len() {
                     h_v_stack.push(Tensor::zeros_like(&h_v)?);
                 }
-                println!("Gravy! 05");
                 let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
-                println!("Gravy! 06");
                 let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
-                println!("Gravy! 07");
+                let mask_fw = mask_fw
+                    .broadcast_as(h_exv_encoder.shape())?
+                    .to_dtype(h_exv_encoder.dtype())?;
                 let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
 
+                println!("Gravy! 08");
                 for t_ in 0..l {
                     let t = decoding_order.i((.., t_ as usize))?;
                     let chain_mask_t = chain_mask.gather(&t.unsqueeze(1)?, 1)?.squeeze(1)?;
