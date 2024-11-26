@@ -35,9 +35,12 @@ pub fn cat_neighbors_nodes(
     h_neighbors: &Tensor,
     e_idx: &Tensor,
 ) -> Result<Tensor> {
-    println!("In Cas_neighbors");
     let h_nodes_gathered = gather_nodes(h_nodes, e_idx)?;
-    Tensor::cat(&[h_neighbors, &h_nodes_gathered], D::Minus1)
+    // todo: fix this hacky Dtype
+    Tensor::cat(
+        &[h_neighbors, &h_nodes_gathered.to_dtype(DType::F32)?],
+        D::Minus1,
+    )
 }
 
 /// Retrieve the nearest Neighbor of a set of coordinates.
@@ -293,7 +296,7 @@ pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     // Gather features
     let neighbor_features = nodes.gather(&neighbors_flat, 1)?;
     // Reshape back to [B, N, K, C]
-    neighbor_features.reshape((batch_size, n_nodes, k_neighbors, n_features));
+    neighbor_features.reshape((batch_size, n_nodes, k_neighbors, n_features))
 }
 
 pub fn gather_nodes_t(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
