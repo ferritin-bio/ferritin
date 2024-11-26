@@ -124,9 +124,13 @@ impl EncLayer {
         mask_attend: Option<&Tensor>,
         training: Option<bool>,
     ) -> Result<(Tensor, Tensor)> {
+        println!("EncLayer: Forward method.");
         let h_ev = cat_neighbors_nodes(h_v, h_e, e_idx)?;
+        println!("EncLayer: 01");
         let h_v_expand = h_v.unsqueeze(D::Minus1)?.expand(h_ev.shape().dims())?;
+        println!("EncLayer: 02");
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
+        println!("EncLayer: 03");
         let h_message = self
             .w1
             .forward(&h_ev)?
@@ -134,12 +138,13 @@ impl EncLayer {
             .apply(&self.w2)?
             .gelu()?
             .apply(&self.w3)?;
+        println!("EncLayer: 04");
         let h_message = if let Some(mask) = mask_attend {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
         } else {
             h_message
         };
-
+        println!("EncLayer: 05");
         let dh = h_message.sum(D::Minus2)? / self.scale;
         let h_v = {
             let dh_dropout = self
