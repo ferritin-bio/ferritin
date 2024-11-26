@@ -126,16 +126,7 @@ impl EncLayer {
     ) -> Result<(Tensor, Tensor)> {
         println!("EncLayer: Forward method.");
         let h_ev = cat_neighbors_nodes(h_v, h_e, e_idx)?;
-        println!("EncLayer: 01");
-
-        println!("h_v shape: {:?}", h_v.dims());
-        println!("h_v dtype: {:?}", h_v.dtype());
-        println!("h_ev shape: {:?}", h_ev.dims());
-        println!("h_ev dtype: {:?}", h_ev.dtype());
-
         let h_v_expand = h_v.unsqueeze(D::Minus2)?;
-        println!("h_v_expand shape after unsqueeze: {:?}", h_v_expand.dims());
-
         // Explicitly specify the expansion dimensions
         let expand_shape = [
             h_ev.dims()[0],       // batch size
@@ -146,13 +137,8 @@ impl EncLayer {
         let h_v_expand = h_v_expand.expand(&expand_shape)?;
         let h_v_expand = h_v_expand.to_dtype(h_ev.dtype())?;
 
-        println!("EncLayer: 02");
         // Now concatenate along the last dimension
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
-
-        // println!("EncLayer: 02");
-        // let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
-        println!("EncLayer: 03");
         let h_message = self
             .w1
             .forward(&h_ev)?
@@ -160,18 +146,19 @@ impl EncLayer {
             .apply(&self.w2)?
             .gelu()?
             .apply(&self.w3)?;
-        println!("EncLayer: 04");
+
         let h_message = if let Some(mask) = mask_attend {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
         } else {
             h_message
         };
-        println!("EncLayer: 05");
         let dh = h_message.sum(D::Minus2)? / self.scale;
         let h_v = {
             let dh_dropout = self
                 .dropout1
                 .forward(&dh?, training.expect("Training must be specified"))?;
+            let dh_dropout = dh_dropout.to_dtype(DType::F32)?;
+            let h_v = h_v.to_dtype(DType::F32)?;
             self.norm1.forward(&(h_v + dh_dropout)?)?
         };
 
@@ -188,8 +175,22 @@ impl EncLayer {
             h_v
         };
         let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
-        let h_v_expand = h_v.unsqueeze(D::Minus2)?.expand(h_ev.shape().dims())?;
+        println!("EncLayer: 09");
+        // let h_v_expand = h_v.unsqueeze(D::Minus2)?.expand(h_ev.shape().dims())?;
+        let h_v_expand = h_v.unsqueeze(D::Minus2)?;
+        // Explicitly specify the expansion dimensions
+        let expand_shape = [
+            h_ev.dims()[0],       // batch size
+            h_ev.dims()[1],       // sequence length
+            h_ev.dims()[2],       // number of neighbors
+            h_v_expand.dims()[3], // hidden dimension
+        ];
+        let h_v_expand = h_v_expand.expand(&expand_shape)?;
+        let h_v_expand = h_v_expand.to_dtype(h_ev.dtype())?;
+
+        println!("EncLayer: 10");
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
+        println!("EncLayer: 11");
         let h_message = self
             .w11
             .forward(&h_ev)?
