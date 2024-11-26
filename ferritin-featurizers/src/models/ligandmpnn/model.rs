@@ -124,9 +124,13 @@ impl EncLayer {
         mask_attend: Option<&Tensor>,
         training: Option<bool>,
     ) -> Result<(Tensor, Tensor)> {
+        println!("EncLayer: Forward method.");
         let h_ev = cat_neighbors_nodes(h_v, h_e, e_idx)?;
+        println!("EncLayer: 01");
         let h_v_expand = h_v.unsqueeze(D::Minus1)?.expand(h_ev.shape().dims())?;
+        println!("EncLayer: 02");
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
+        println!("EncLayer: 03");
         let h_message = self
             .w1
             .forward(&h_ev)?
@@ -134,12 +138,13 @@ impl EncLayer {
             .apply(&self.w2)?
             .gelu()?
             .apply(&self.w3)?;
+        println!("EncLayer: 04");
         let h_message = if let Some(mask) = mask_attend {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
         } else {
             h_message
         };
-
+        println!("EncLayer: 05");
         let dh = h_message.sum(D::Minus2)? / self.scale;
         let h_v = {
             let dh_dropout = self
@@ -349,6 +354,7 @@ impl ProteinMPNN {
         let device = &candle_core::Device::Cpu;
         let s_true = &features.get_sequence();
         let (b, l) = s_true.dims2()?;
+
         let mask = match features.get_sequence_mask() {
             Some(m) => m,
             None => &Tensor::zeros_like(&s_true)?,
@@ -356,20 +362,24 @@ impl ProteinMPNN {
 
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
-                println!("Encoding: About to `forward`");
                 let (e, e_idx) = self.features.forward(features, device)?;
-                println!("Encoding: Finished `forward`");
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     DType::F64,
                     device,
                 )?;
                 let mut h_e = self.w_e.forward(&e)?;
-
                 let mask_attend =
                     gather_nodes(&mask.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
-                let mask_attend = (&mask.unsqueeze(D::Minus1)? * &mask_attend)?;
 
+                let mask_expanded = mask.unsqueeze(D::Minus1)?.expand((
+                    mask.dim(0)?,
+                    mask.dim(1)?,
+                    mask_attend.dim(2)?,
+                ))?;
+                let mask_attend = (&mask_expanded * &mask_attend)?;
+
+                println!("Encode: Through the encoder layers...");
                 for layer in &self.encoder_layers {
                     let (new_h_v, new_h_e) = layer.forward(
                         &h_v,
@@ -965,7 +975,7 @@ impl ProteinMPNN {
         let device = s_true.device();
         let randn = Tensor::randn(0., 1., (b, l), device)?;
 
-        println!("scoring 01");
+        println!("Scoring 01");
         let (h_v, h_e, e_idx) = self.encode(features)?;
 
         // Todo! This is a massive hack
@@ -1046,6 +1056,7 @@ impl ProteinMPNN {
             None => {
                 let b_decoder = b_decoder as usize;
                 let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
+                // println!("Are we here?");
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
                 let tril = Tensor::tril2(l, DType::F64, device)?;
                 let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, i, q)

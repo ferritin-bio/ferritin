@@ -35,6 +35,7 @@ pub fn cat_neighbors_nodes(
     h_neighbors: &Tensor,
     e_idx: &Tensor,
 ) -> Result<Tensor> {
+    println!("In Cas_neighbors");
     let h_nodes_gathered = gather_nodes(h_nodes, e_idx)?;
     Tensor::cat(&[h_neighbors, &h_nodes_gathered], D::Minus1)
 }
@@ -47,16 +48,8 @@ pub fn compute_nearest_neighbors(
     k: usize,
     eps: f32,
 ) -> Result<(Tensor, Tensor)> {
-    println!("In Compute Nearest Neighbors");
-
     let batch_size = coords.dim(0)?;
     let seq_len = coords.dim(1)?;
-
-    println!(
-        "Dims of coords, mask: {:?}, {:?}",
-        coords.dims(),
-        mask.dims()
-    );
 
     // broadcast_matmul handles broadcasting automatically
     // [2, 3, 1] × [2, 1, 3] -> [2, 3, 3]
@@ -64,8 +57,6 @@ pub fn compute_nearest_neighbors(
         .unsqueeze(2)?
         .broadcast_matmul(&mask.unsqueeze(1)?)?
         .to_dtype(DType::F64)?; // Convert to f64 once, at the start
-
-    println!("after mask2d");
 
     // Compute pairwise distances with broadcasting
     let distances = (coords
@@ -76,12 +67,10 @@ pub fn compute_nearest_neighbors(
         + eps as f64)?
         .sqrt()?;
 
-    println!("after distances");
-
     // Apply mask
     // Get max values for adjustment
     let masked_distances = (&distances * &mask_2d.to_dtype(DType::F32)?)?;
-    println!("after masked_distances");
+    // println!("after masked_distances");
     let d_max = masked_distances.max_keepdim(D::Minus1)?;
     let mask_term = ((&mask_2d.to_dtype(DType::F32)? * -1.0)? + 1.0)?;
     let d_adjust = (&masked_distances + mask_term.broadcast_mul(&d_max)?)?;
@@ -285,17 +274,27 @@ pub fn gather_edges(edges: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     Ok(edge_gather)
 }
 
+/// Gather Nodes
+///
+/// Features [B,N,C] at Neighbor indices [B,N,K] => [B,N,K,C]
+/// Flatten and expand indices per batch [B,N,K] => [B,NK] => [B,NK,C]
 pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
-    // Features [B,N,C] at Neighbor indices [B,N,K] => [B,N,K,C]
-    // Flatten and expand indices per batch [B,N,K] => [B,NK] => [B,NK,C]
-    let neighbors_flat =
-        neighbor_idx.reshape((neighbor_idx.dim(0)?, neighbor_idx.dim(D::Minus1)?))?;
-    let (d1, d2, d3) = neighbor_idx.dims3()?;
+    println!("In gather_nodes");
+    let (batch_size, n_nodes, n_features) = nodes.dims3()?;
+    let (_, _, k_neighbors) = neighbor_idx.dims3()?;
+    // Reshape neighbor_idx to [B, N*K]
+    let neighbors_flat = neighbor_idx.reshape((batch_size, n_nodes * k_neighbors))?;
+    // Add feature dimension and expand
     let neighbors_flat = neighbors_flat
-        .unsqueeze(D::Minus1)?
-        .expand((d1, d2, nodes.dim(2)?))?;
-    let neighbor_features = nodes.gather(nodes, 1)?;
-    neighbor_features.reshape((d1, d2, d3, neighbor_features.dim(D::Minus1)?))
+        .unsqueeze(2)? // Add feature dimension [B, N*K, 1]
+        .expand((batch_size, n_nodes * k_neighbors, n_features))?; // Expand to [B, N*K, C]
+
+    println!("Entering the Gather pass...");
+    println!("neighbors_flat: {:?}", &neighbors_flat.dims());
+    // Gather features
+    let neighbor_features = nodes.gather(&neighbors_flat, 1)?;
+    // Reshape back to [B, N, K, C]
+    neighbor_features.reshape((batch_size, n_nodes, k_neighbors, n_features))
 }
 
 pub fn gather_nodes_t(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
