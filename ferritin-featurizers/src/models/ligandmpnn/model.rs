@@ -482,8 +482,11 @@ impl ProteinMPNN {
             .mul(&rand_tensor.abs()?)?
             .arg_sort_last_dim(false)?;
 
-        // add match statement here
-        // I'd like to add the other optional components to the match
+        // Todo add  bias
+        // # [B,L,21] - amino acid bias per position
+        //  bias = feature_dict["bias"]
+        let bias = Tensor::zeros((b, l, 21), DType::F32, device)?;
+        println!("We need to add the bias!");
 
         // Todo! Fix this hack.
         let symmetry_residues: Option<Vec<i32>> = None;
@@ -492,6 +495,7 @@ impl ProteinMPNN {
                 let e_idx = e_idx.repeat(&[b, 1, 1])?;
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
                 let tril = Tensor::tril2(l, DType::F64, device)?;
+                let tril = tril.unsqueeze(0)?;
                 let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; //tensor of shape (b, i, q)
                 let order_mask_backward =
                     temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // This will give us a tensor of shape (b, q, p)
@@ -499,32 +503,39 @@ impl ProteinMPNN {
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
                 let mask_1d = x_mask.as_ref().unwrap().reshape((b, l, 1, 1))?;
+
+                // Broadcast mask_1d to match mask_attend's shape
+                let mask_1d = mask_1d
+                    .broadcast_as(mask_attend.shape())?
+                    .to_dtype(DType::F64)?;
+
                 let mask_bw = mask_1d.mul(&mask_attend)?;
                 let mask_fw = mask_1d.mul(&(Tensor::ones_like(&mask_attend)? - mask_attend)?)?;
 
+                // Note: `sample` begins to diverge from the `score` here.
                 // repeat for decoding
                 let s_true = s_true.repeat((b, 1))?;
                 let h_v = h_v.repeat((b, 1, 1))?;
                 let h_e = h_e.repeat((b, 1, 1, 1))?;
                 let chain_mask = &chain_mask.repeat((b, 1))?;
                 let mask = x_mask.as_ref().unwrap().repeat((b, 1))?;
+                let bias = bias.repeat((b, 1, 1))?;
 
-                // Todo add  bias
-                // let bias = bias.repeat((b_decoder, 1, 1))?;
-                let bias = Tensor::zeros((b, l, 20), DType::F32, device)?;
                 let all_probs = Tensor::zeros((b, l, 20), DType::F32, device)?;
                 let all_log_probs = Tensor::zeros((b, l, 21), DType::F32, device)?; // why is this one 21 and the others are 20?
                 let mut h_s = Tensor::zeros_like(&h_v)?;
-                let s =
-                    Tensor::ones((b, l), DType::I64, device)?.mul(&Tensor::new(20., device)?)?;
+                let s = (Tensor::ones((b, l), DType::I64, device)? * 20.)?;
 
                 // updated layers are here.
                 let mut h_v_stack = vec![h_v.clone()];
-                h_v_stack.extend(
-                    (0..self.decoder_layers.len()).map(|_| Tensor::zeros_like(&h_v).unwrap()),
-                );
+                for _ in 0..self.decoder_layers.len() {
+                    h_v_stack.push(Tensor::zeros_like(&h_v)?);
+                }
+                println!("Gravy! 05");
                 let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
+                println!("Gravy! 06");
                 let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
+                println!("Gravy! 07");
                 let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
 
                 for t_ in 0..l {
@@ -1072,6 +1083,7 @@ impl ProteinMPNN {
                 let mask_1d = mask_1d
                     .broadcast_as(mask_attend.shape())?
                     .to_dtype(DType::F64)?;
+
                 let mask_bw = mask_1d.mul(&mask_attend)?;
                 let mask_fw = mask_1d.mul(&(mask_attend - 1.0)?.neg()?)?;
                 (mask_fw, mask_bw, e_idx, decoding_order)
