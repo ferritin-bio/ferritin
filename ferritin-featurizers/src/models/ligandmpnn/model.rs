@@ -977,32 +977,16 @@ impl ProteinMPNN {
     // }
 
     pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
-        // let LigandMPNNData {
-        //     symmetry_residues,
-        //     batch_size,
-        //     symmetry_weights,
-        //     output_dict,
-        //     ..
-        // } = feature_dict;
-        // let LigandMPNNDataDict { s, mask, .. } = &output_dict;
-
         let ProteinFeatures { s, x, x_mask, .. } = &features;
-
         let s_true = &s.clone();
         let mask = &x_mask.as_ref().clone();
         let (b, l) = s_true.dims2()?;
         let b_decoder = b;
         let device = s_true.device();
         let randn = Tensor::randn(0., 1., (b, l), device)?.to_dtype(DType::F32)?;
-
-        println!("Scoring 01");
         let (h_v, h_e, e_idx) = self.encode(features)?;
 
-        // Todo! This is a massive hack
-        // let chain_mask = features
-        // .output_dict
-        // .get_chain_mask(vec!['A'.to_string(), 'B'.to_string()], device)?; // Todo: fix get_cahin_mask
-        // let chain_mask = Tensor::from_vec(vec![0i64, 0], (2, 1), &device)?;
+        // Todo! This is a hack. we shou ldbe passing in encoded chains.
         let chain_mask = Tensor::zeros_like(mask.unwrap())?.to_dtype(DType::F32)?;
 
         // Update chain_mask to include missing regions
@@ -1087,15 +1071,16 @@ impl ProteinMPNN {
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
                 let mask_1d = mask.unwrap().reshape((b, l, 1, 1))?;
-                println!("scoring 12");
-                println!("mask_1d dims: {:?}", mask_1d.dims());
-                println!("mask_attend dims: {:?}", mask_attend.dims());
+                // Broadcast mask_1d to match mask_attend's shape
+                let mask_1d = mask_1d
+                    .broadcast_as(mask_attend.shape())?
+                    .to_dtype(DType::F64)?;
                 let mask_bw = mask_1d.mul(&mask_attend)?;
-                println!("scoring 13");
                 let mask_fw = mask_1d.mul(&(mask_attend - 1.0)?.neg()?)?;
                 (mask_fw, mask_bw, e_idx, decoding_order)
             }
         };
+        println!("scoring 14");
         let b_decoder = b_decoder as usize;
         let s_true = s_true.repeat(&[b_decoder, 1])?;
         let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
