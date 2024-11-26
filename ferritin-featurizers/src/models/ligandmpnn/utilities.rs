@@ -285,17 +285,23 @@ pub fn gather_edges(edges: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     Ok(edge_gather)
 }
 
+/// Gather Nodes
+///
+/// Features [B,N,C] at Neighbor indices [B,N,K] => [B,N,K,C]
+/// Flatten and expand indices per batch [B,N,K] => [B,NK] => [B,NK,C]
 pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
-    // Features [B,N,C] at Neighbor indices [B,N,K] => [B,N,K,C]
-    // Flatten and expand indices per batch [B,N,K] => [B,NK] => [B,NK,C]
-    let neighbors_flat =
-        neighbor_idx.reshape((neighbor_idx.dim(0)?, neighbor_idx.dim(D::Minus1)?))?;
-    let (d1, d2, d3) = neighbor_idx.dims3()?;
+    let (batch_size, n_nodes, n_features) = nodes.dims3()?;
+    let (_, _, k_neighbors) = neighbor_idx.dims3()?;
+    // Reshape neighbor_idx to [B, N*K]
+    let neighbors_flat = neighbor_idx.reshape((batch_size, n_nodes * k_neighbors))?;
+    // Add feature dimension and expand
     let neighbors_flat = neighbors_flat
-        .unsqueeze(D::Minus1)?
-        .expand((d1, d2, nodes.dim(2)?))?;
-    let neighbor_features = nodes.gather(nodes, 1)?;
-    neighbor_features.reshape((d1, d2, d3, neighbor_features.dim(D::Minus1)?))
+        .unsqueeze(2)? // Add feature dimension [B, N*K, 1]
+        .expand((batch_size, n_nodes * k_neighbors, n_features))?; // Expand to [B, N*K, C]
+                                                                   // Gather features
+    let neighbor_features = nodes.gather(&neighbors_flat, 1)?;
+    // Reshape back to [B, N, K, C]
+    neighbor_features.reshape((batch_size, n_nodes, k_neighbors, n_features))
 }
 
 pub fn gather_nodes_t(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {

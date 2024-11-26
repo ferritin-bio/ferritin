@@ -357,22 +357,22 @@ impl ProteinMPNN {
 
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
-                println!("Encoding: About to `forward`");
                 let (e, e_idx) = self.features.forward(features, device)?;
-                println!("Encoding: Finished `forward`");
-
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     DType::F64,
                     device,
                 )?;
-                println!("Encode: get the W_E.");
                 let mut h_e = self.w_e.forward(&e)?;
-
-                println!("Encode: mask_attention.");
                 let mask_attend =
                     gather_nodes(&mask.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
-                let mask_attend = (&mask.unsqueeze(D::Minus1)? * &mask_attend)?;
+
+                let mask_expanded = mask.unsqueeze(D::Minus1)?.expand((
+                    mask.dim(0)?,
+                    mask.dim(1)?,
+                    mask_attend.dim(2)?,
+                ))?;
+                let mask_attend = (&mask_expanded * &mask_attend)?;
 
                 println!("Encode: Through the encoder layers...");
                 for layer in &self.encoder_layers {
