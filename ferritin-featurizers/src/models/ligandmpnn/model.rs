@@ -15,7 +15,7 @@ use super::utilities::{cat_neighbors_nodes, gather_nodes};
 use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
-use candle_nn::{layer_norm, linear, Dropout, Linear, VarBuilder};
+use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, Linear, VarBuilder};
 use candle_transformers::generation::LogitsProcessor;
 
 // Primary Return Object from the ProtMPNN Model
@@ -312,7 +312,8 @@ pub struct ProteinMPNN {
     features: ProteinFeaturesModel, // this needs to be a model with weights etc
     w_e: Linear,
     w_out: Linear,
-    w_s: Linear,
+    // self.W_s = torch.nn.Embedding(vocab, hidden_dim)
+    w_s: Embedding, // This should be an embedding layer....
 }
 
 impl ProteinMPNN {
@@ -342,9 +343,9 @@ impl ProteinMPNN {
             vb.pp("W_out"),
         )?;
 
-        let w_s = linear::linear_no_bias(
-            config.hidden_dim as usize,
+        let w_s = embedding(
             config.vocab as usize,
+            config.hidden_dim as usize,
             vb.pp("W_s"),
         )?;
 
@@ -1080,18 +1081,26 @@ impl ProteinMPNN {
                 (mask_fw, mask_bw, e_idx, decoding_order)
             }
         };
-        println!("scoring 14");
         let b_decoder = b_decoder as usize;
         let s_true = s_true.repeat(&[b_decoder, 1])?;
         let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
         let h_e = h_e.repeat(&[b_decoder, 1, 1, 1])?;
         let mask = x_mask.as_ref().unwrap().repeat(&[b_decoder, 1])?;
+        println!("scoring 14");
         let h_s = self.w_s.forward(&s_true)?;
+
+        // self.W_s = torch.nn.Embedding(vocab, hidden_dim)
+        // h_S = self.W_s(S_true)
+
+        println!("scoring 15");
         let h_es = cat_neighbors_nodes(&h_s, &h_e, &e_idx)?;
 
+        println!("scoring 16");
         // Build encoder embeddings
         let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
+        println!("scoring 17");
         let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
+        println!("scoring 18");
         let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
         let mut h_v = h_v;
         if !use_sequence {
