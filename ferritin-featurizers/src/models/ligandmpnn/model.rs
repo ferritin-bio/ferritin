@@ -993,7 +993,7 @@ impl ProteinMPNN {
         let (b, l) = s_true.dims2()?;
         let b_decoder = b;
         let device = s_true.device();
-        let randn = Tensor::randn(0., 1., (b, l), device)?;
+        let randn = Tensor::randn(0., 1., (b, l), device)?.to_dtype(DType::F32)?;
 
         println!("Scoring 01");
         let (h_v, h_e, e_idx) = self.encode(features)?;
@@ -1002,11 +1002,12 @@ impl ProteinMPNN {
         // let chain_mask = features
         // .output_dict
         // .get_chain_mask(vec!['A'.to_string(), 'B'.to_string()], device)?; // Todo: fix get_cahin_mask
-        let chain_mask = Tensor::from_vec(vec![0i64, 0], (2, 1), &device)?;
+        // let chain_mask = Tensor::from_vec(vec![0i64, 0], (2, 1), &device)?;
+        let chain_mask = Tensor::zeros_like(mask.unwrap())?.to_dtype(DType::F32)?;
 
         // Update chain_mask to include missing regions
-        println!("scoring 02");
         let chain_mask = mask.unwrap().mul(&chain_mask)?;
+
         // Compute decoding order
         let decoding_order = (chain_mask + 0.001)?
             .mul(&randn.abs()?)?
@@ -1074,14 +1075,18 @@ impl ProteinMPNN {
                 // (mask_fw, mask_bw, e_idx, decoding_order)
             }
             None => {
+                println!("scoring 06");
                 let b_decoder = b_decoder as usize;
                 let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
-                // println!("Are we here?");
+                println!("scoring 07");
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
                 let tril = Tensor::tril2(l, DType::F64, device)?;
+                println!("scoring 08");
                 let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, i, q)
+                println!("scoring 09");
                 let order_mask_backward =
                     temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, q, p)
+                println!("scoring 10");
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
