@@ -15,7 +15,7 @@ use super::utilities::{cat_neighbors_nodes, gather_nodes};
 use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
-use candle_nn::{layer_norm, linear, Dropout, Linear, VarBuilder};
+use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, Linear, VarBuilder};
 use candle_transformers::generation::LogitsProcessor;
 
 // Primary Return Object from the ProtMPNN Model
@@ -126,11 +126,19 @@ impl EncLayer {
     ) -> Result<(Tensor, Tensor)> {
         println!("EncLayer: Forward method.");
         let h_ev = cat_neighbors_nodes(h_v, h_e, e_idx)?;
-        println!("EncLayer: 01");
-        let h_v_expand = h_v.unsqueeze(D::Minus1)?.expand(h_ev.shape().dims())?;
-        println!("EncLayer: 02");
+        let h_v_expand = h_v.unsqueeze(D::Minus2)?;
+        // Explicitly specify the expansion dimensions
+        let expand_shape = [
+            h_ev.dims()[0],       // batch size
+            h_ev.dims()[1],       // sequence length
+            h_ev.dims()[2],       // number of neighbors
+            h_v_expand.dims()[3], // hidden dimension
+        ];
+        let h_v_expand = h_v_expand.expand(&expand_shape)?;
+        let h_v_expand = h_v_expand.to_dtype(h_ev.dtype())?;
+
+        // Now concatenate along the last dimension
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
-        println!("EncLayer: 03");
         let h_message = self
             .w1
             .forward(&h_ev)?
@@ -138,18 +146,19 @@ impl EncLayer {
             .apply(&self.w2)?
             .gelu()?
             .apply(&self.w3)?;
-        println!("EncLayer: 04");
+
         let h_message = if let Some(mask) = mask_attend {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
         } else {
             h_message
         };
-        println!("EncLayer: 05");
         let dh = h_message.sum(D::Minus2)? / self.scale;
         let h_v = {
             let dh_dropout = self
                 .dropout1
                 .forward(&dh?, training.expect("Training must be specified"))?;
+            let dh_dropout = dh_dropout.to_dtype(DType::F32)?;
+            let h_v = h_v.to_dtype(DType::F32)?;
             self.norm1.forward(&(h_v + dh_dropout)?)?
         };
 
@@ -166,8 +175,22 @@ impl EncLayer {
             h_v
         };
         let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
-        let h_v_expand = h_v.unsqueeze(D::Minus2)?.expand(h_ev.shape().dims())?;
+        println!("EncLayer: 09");
+        // let h_v_expand = h_v.unsqueeze(D::Minus2)?.expand(h_ev.shape().dims())?;
+        let h_v_expand = h_v.unsqueeze(D::Minus2)?;
+        // Explicitly specify the expansion dimensions
+        let expand_shape = [
+            h_ev.dims()[0],       // batch size
+            h_ev.dims()[1],       // sequence length
+            h_ev.dims()[2],       // number of neighbors
+            h_v_expand.dims()[3], // hidden dimension
+        ];
+        let h_v_expand = h_v_expand.expand(&expand_shape)?;
+        let h_v_expand = h_v_expand.to_dtype(h_ev.dtype())?;
+
+        println!("EncLayer: 10");
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
+        println!("EncLayer: 11");
         let h_message = self
             .w11
             .forward(&h_ev)?
@@ -242,7 +265,19 @@ impl DecLayer {
         mask_attend: Option<&Tensor>,
         training: Option<bool>,
     ) -> Result<Tensor> {
-        let h_v_expand = h_v.unsqueeze(D::Minus2)?.expand(h_e.shape().dims())?;
+        // todo: fix this. hardcoding Training is false
+        let training_bool = match training {
+            None => false,
+            Some(v) => v,
+        };
+
+        let expand_shape = [
+            h_e.dims()[0], // batch (1)
+            h_e.dims()[1], // sequence length (93)
+            h_e.dims()[2], // number of neighbors (24)
+            h_v.dims()[2], // keep original hidden dim (128)
+        ];
+        let h_v_expand = h_v.unsqueeze(D::Minus2)?.expand(&expand_shape)?;
         let h_ev = Tensor::cat(&[&h_v_expand, h_e], D::Minus1)?;
         let h_message = self
             .w1
@@ -258,16 +293,12 @@ impl DecLayer {
         };
         let dh = (h_message.sum(D::Minus2)? / self.scale)?;
         let h_v = {
-            let dh_dropout = self
-                .dropout1
-                .forward(&dh, training.expect("Need Training"))?;
+            let dh_dropout = self.dropout1.forward(&dh, training_bool)?;
             self.norm1.forward(&(h_v + dh_dropout)?)?
         };
         let dh = self.dense.forward(&h_v)?;
         let h_v = {
-            let dh_dropout = self
-                .dropout2
-                .forward(&dh, training.expect("Need Training"))?;
+            let dh_dropout = self.dropout2.forward(&dh, training_bool)?;
             self.norm2.forward(&(h_v + dh_dropout)?)?
         };
         let h_v = if let Some(mask) = mask_v {
@@ -275,7 +306,6 @@ impl DecLayer {
         } else {
             h_v
         };
-
         Ok(h_v)
     }
 }
@@ -289,7 +319,8 @@ pub struct ProteinMPNN {
     features: ProteinFeaturesModel, // this needs to be a model with weights etc
     w_e: Linear,
     w_out: Linear,
-    w_s: Linear,
+    // self.W_s = torch.nn.Embedding(vocab, hidden_dim)
+    w_s: Embedding, // This should be an embedding layer....
 }
 
 impl ProteinMPNN {
@@ -319,9 +350,9 @@ impl ProteinMPNN {
             vb.pp("W_out"),
         )?;
 
-        let w_s = linear::linear_no_bias(
-            config.hidden_dim as usize,
+        let w_s = embedding(
             config.vocab as usize,
+            config.hidden_dim as usize,
             vb.pp("W_s"),
         )?;
 
@@ -350,7 +381,6 @@ impl ProteinMPNN {
     }
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
         // todo: get device more elegantly
-        println!("Encoding!");
         let device = &candle_core::Device::Cpu;
         let s_true = &features.get_sequence();
         let (b, l) = s_true.dims2()?;
@@ -379,7 +409,6 @@ impl ProteinMPNN {
                 ))?;
                 let mask_attend = (&mask_expanded * &mask_attend)?;
 
-                println!("Encode: Through the encoder layers...");
                 for layer in &self.encoder_layers {
                     let (new_h_v, new_h_e) = layer.forward(
                         &h_v,
@@ -392,7 +421,6 @@ impl ProteinMPNN {
                     h_v = new_h_v;
                     h_e = new_h_e;
                 }
-
                 Ok((h_v, h_e, e_idx))
             }
             ModelTypes::LigandMPNN => {
@@ -957,36 +985,21 @@ impl ProteinMPNN {
     // }
 
     pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
-        // let LigandMPNNData {
-        //     symmetry_residues,
-        //     batch_size,
-        //     symmetry_weights,
-        //     output_dict,
-        //     ..
-        // } = feature_dict;
-        // let LigandMPNNDataDict { s, mask, .. } = &output_dict;
-
         let ProteinFeatures { s, x, x_mask, .. } = &features;
-
         let s_true = &s.clone();
         let mask = &x_mask.as_ref().clone();
         let (b, l) = s_true.dims2()?;
         let b_decoder = b;
         let device = s_true.device();
-        let randn = Tensor::randn(0., 1., (b, l), device)?;
-
-        println!("Scoring 01");
+        let randn = Tensor::randn(0., 1., (b, l), device)?.to_dtype(DType::F32)?;
         let (h_v, h_e, e_idx) = self.encode(features)?;
 
-        // Todo! This is a massive hack
-        // let chain_mask = features
-        // .output_dict
-        // .get_chain_mask(vec!['A'.to_string(), 'B'.to_string()], device)?; // Todo: fix get_cahin_mask
-        let chain_mask = Tensor::from_vec(vec![0i64, 0], (2, 1), &device)?;
+        // Todo! This is a hack. we shou ldbe passing in encoded chains.
+        let chain_mask = Tensor::zeros_like(mask.unwrap())?.to_dtype(DType::F32)?;
 
         // Update chain_mask to include missing regions
-        println!("scoring 02");
         let chain_mask = mask.unwrap().mul(&chain_mask)?;
+
         // Compute decoding order
         let decoding_order = (chain_mask + 0.001)?
             .mul(&randn.abs()?)?
@@ -1056,9 +1069,9 @@ impl ProteinMPNN {
             None => {
                 let b_decoder = b_decoder as usize;
                 let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
-                // println!("Are we here?");
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
                 let tril = Tensor::tril2(l, DType::F64, device)?;
+                let tril = tril.unsqueeze(0)?;
                 let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, i, q)
                 let order_mask_backward =
                     temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, q, p)
@@ -1066,6 +1079,10 @@ impl ProteinMPNN {
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
                 let mask_1d = mask.unwrap().reshape((b, l, 1, 1))?;
+                // Broadcast mask_1d to match mask_attend's shape
+                let mask_1d = mask_1d
+                    .broadcast_as(mask_attend.shape())?
+                    .to_dtype(DType::F64)?;
                 let mask_bw = mask_1d.mul(&mask_attend)?;
                 let mask_fw = mask_1d.mul(&(mask_attend - 1.0)?.neg()?)?;
                 (mask_fw, mask_bw, e_idx, decoding_order)
@@ -1076,12 +1093,14 @@ impl ProteinMPNN {
         let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
         let h_e = h_e.repeat(&[b_decoder, 1, 1, 1])?;
         let mask = x_mask.as_ref().unwrap().repeat(&[b_decoder, 1])?;
-        let h_s = self.w_s.forward(&s_true)?;
+        let h_s = self.w_s.forward(&s_true)?; // embedding layer
         let h_es = cat_neighbors_nodes(&h_s, &h_e, &e_idx)?;
-
         // Build encoder embeddings
         let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
         let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
+        let mask_fw = mask_fw
+            .broadcast_as(h_exv_encoder.shape())?
+            .to_dtype(h_exv_encoder.dtype())?;
         let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
         let mut h_v = h_v;
         if !use_sequence {
