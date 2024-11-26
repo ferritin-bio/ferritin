@@ -265,8 +265,25 @@ impl DecLayer {
         mask_attend: Option<&Tensor>,
         training: Option<bool>,
     ) -> Result<Tensor> {
-        let h_v_expand = h_v.unsqueeze(D::Minus2)?.expand(h_e.shape().dims())?;
+        // todo: fix this. hardcoding Training is false
+        let training_bool = match training {
+            None => false,
+            Some(v) => v,
+        };
+
+        println!("In the DecLayer");
+        let expand_shape = [
+            h_e.dims()[0], // batch (1)
+            h_e.dims()[1], // sequence length (93)
+            h_e.dims()[2], // number of neighbors (24)
+            h_v.dims()[2], // keep original hidden dim (128)
+        ];
+
+        let h_v_expand = h_v.unsqueeze(D::Minus2)?.expand(&expand_shape)?;
+        println!("DecLayer: h_v_expand dims: {:?}", h_v_expand.dims());
+        println!("DecLayer 01");
         let h_ev = Tensor::cat(&[&h_v_expand, h_e], D::Minus1)?;
+        println!("DecLayer 02");
         let h_message = self
             .w1
             .forward(&h_ev)?
@@ -274,31 +291,34 @@ impl DecLayer {
             .apply(&self.w2)?
             .gelu()?
             .apply(&self.w3)?;
+        println!("DecLayer 03");
         let h_message = if let Some(mask) = mask_attend {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
         } else {
             h_message
         };
+        println!("DecLayer 04");
         let dh = (h_message.sum(D::Minus2)? / self.scale)?;
+        println!("DecLayer 05");
         let h_v = {
-            let dh_dropout = self
-                .dropout1
-                .forward(&dh, training.expect("Need Training"))?;
+            let dh_dropout = self.dropout1.forward(&dh, training_bool)?;
             self.norm1.forward(&(h_v + dh_dropout)?)?
         };
+        println!("DecLayer 06");
         let dh = self.dense.forward(&h_v)?;
+        println!("DecLayer 07");
+
         let h_v = {
-            let dh_dropout = self
-                .dropout2
-                .forward(&dh, training.expect("Need Training"))?;
+            let dh_dropout = self.dropout2.forward(&dh, training_bool)?;
             self.norm2.forward(&(h_v + dh_dropout)?)?
         };
+        println!("DecLayer 08");
         let h_v = if let Some(mask) = mask_v {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_v)?
         } else {
             h_v
         };
-
+        println!("DecLayer 09");
         Ok(h_v)
     }
 }
@@ -1086,22 +1106,18 @@ impl ProteinMPNN {
         let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
         let h_e = h_e.repeat(&[b_decoder, 1, 1, 1])?;
         let mask = x_mask.as_ref().unwrap().repeat(&[b_decoder, 1])?;
-        println!("scoring 14");
-        let h_s = self.w_s.forward(&s_true)?;
-
-        // self.W_s = torch.nn.Embedding(vocab, hidden_dim)
-        // h_S = self.W_s(S_true)
-
-        println!("scoring 15");
+        let h_s = self.w_s.forward(&s_true)?; // embedding layer
         let h_es = cat_neighbors_nodes(&h_s, &h_e, &e_idx)?;
-
-        println!("scoring 16");
         // Build encoder embeddings
         let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
-        println!("scoring 17");
         let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
-        println!("scoring 18");
+        let mask_fw = mask_fw
+            .broadcast_as(h_exv_encoder.shape())?
+            .to_dtype(h_exv_encoder.dtype())?;
         let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
+
+        println!("scoring 19");
+        println!("use_sequence? {:}", use_sequence);
         let mut h_v = h_v;
         if !use_sequence {
             for layer in &self.decoder_layers {
@@ -1114,6 +1130,7 @@ impl ProteinMPNN {
                 h_v = layer.forward(&h_v, &h_esv, Some(&mask), None, None)?;
             }
         }
+        println!("scoring 21");
         let logits = self.w_out.forward(&h_v)?;
         let log_probs = log_softmax(&logits, D::Minus1)?;
 
