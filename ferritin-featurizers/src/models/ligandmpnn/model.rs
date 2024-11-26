@@ -127,9 +127,31 @@ impl EncLayer {
         println!("EncLayer: Forward method.");
         let h_ev = cat_neighbors_nodes(h_v, h_e, e_idx)?;
         println!("EncLayer: 01");
-        let h_v_expand = h_v.unsqueeze(D::Minus1)?.expand(h_ev.shape().dims())?;
+
+        println!("h_v shape: {:?}", h_v.dims());
+        println!("h_v dtype: {:?}", h_v.dtype());
+        println!("h_ev shape: {:?}", h_ev.dims());
+        println!("h_ev dtype: {:?}", h_ev.dtype());
+
+        let h_v_expand = h_v.unsqueeze(D::Minus2)?;
+        println!("h_v_expand shape after unsqueeze: {:?}", h_v_expand.dims());
+
+        // Explicitly specify the expansion dimensions
+        let expand_shape = [
+            h_ev.dims()[0],       // batch size
+            h_ev.dims()[1],       // sequence length
+            h_ev.dims()[2],       // number of neighbors
+            h_v_expand.dims()[3], // hidden dimension
+        ];
+        let h_v_expand = h_v_expand.expand(&expand_shape)?;
+        let h_v_expand = h_v_expand.to_dtype(h_ev.dtype())?;
+
         println!("EncLayer: 02");
+        // Now concatenate along the last dimension
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
+
+        // println!("EncLayer: 02");
+        // let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
         println!("EncLayer: 03");
         let h_message = self
             .w1
