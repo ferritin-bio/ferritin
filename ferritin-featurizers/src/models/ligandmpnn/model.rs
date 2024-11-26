@@ -1075,23 +1075,23 @@ impl ProteinMPNN {
                 // (mask_fw, mask_bw, e_idx, decoding_order)
             }
             None => {
-                println!("scoring 06");
                 let b_decoder = b_decoder as usize;
                 let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
-                println!("scoring 07");
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
                 let tril = Tensor::tril2(l, DType::F64, device)?;
-                println!("scoring 08");
+                let tril = tril.unsqueeze(0)?;
                 let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, i, q)
-                println!("scoring 09");
                 let order_mask_backward =
                     temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, q, p)
-                println!("scoring 10");
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
                 let mask_1d = mask.unwrap().reshape((b, l, 1, 1))?;
+                println!("scoring 12");
+                println!("mask_1d dims: {:?}", mask_1d.dims());
+                println!("mask_attend dims: {:?}", mask_attend.dims());
                 let mask_bw = mask_1d.mul(&mask_attend)?;
+                println!("scoring 13");
                 let mask_fw = mask_1d.mul(&(mask_attend - 1.0)?.neg()?)?;
                 (mask_fw, mask_bw, e_idx, decoding_order)
             }
