@@ -326,7 +326,9 @@ pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     );
 
     // Reshape back to [B, N, K, C]
-    neighbor_features.reshape((batch_size, n_nodes, k_neighbors, n_features))
+    neighbor_features
+        .reshape((batch_size, n_nodes, k_neighbors, n_features))?
+        .contiguous()
 }
 
 pub fn gather_nodes_t(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {

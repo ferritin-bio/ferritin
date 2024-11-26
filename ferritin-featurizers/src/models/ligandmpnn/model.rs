@@ -471,11 +471,10 @@ impl ProteinMPNN {
 
         // Todo: This is a hack. we should be passing in encoded chains.
         let chain_mask = Tensor::zeros_like(&x_mask.as_ref().unwrap())?.to_dtype(DType::F32)?;
-        let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?; // update chain_M to include missing regions;
+        let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?.contiguous()?; // update chain_M to include missing regions;
 
         // encode...
         let (h_v, h_e, e_idx) = self.encode(features)?;
-        let e_idx = e_idx.contiguous()?;
 
         // this might be  a bad rand implementation
         let rand_tensor = Tensor::randn(0., 0.25, (b, l), device)?.to_dtype(DType::F32)?;
@@ -493,7 +492,7 @@ impl ProteinMPNN {
         let symmetry_residues: Option<Vec<i32>> = None;
         match symmetry_residues {
             None => {
-                let e_idx = e_idx.repeat(&[b, 1, 1])?;
+                let e_idx = e_idx.repeat(&[b, 1, 1])?.contiguous()?;
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
                 let tril = Tensor::tril2(l, DType::F64, device)?;
                 let tril = tril.unsqueeze(0)?;
@@ -524,7 +523,7 @@ impl ProteinMPNN {
 
                 let all_probs = Tensor::zeros((b, l, 20), DType::F32, device)?;
                 let all_log_probs = Tensor::zeros((b, l, 21), DType::F32, device)?; // why is this one 21 and the others are 20?
-                let mut h_s = Tensor::zeros_like(&h_v)?;
+                let mut h_s = Tensor::zeros_like(&h_v)?.contiguous()?;
                 let s = (Tensor::ones((b, l), DType::I64, device)? * 20.)?;
 
                 // updated layers are here.
@@ -579,15 +578,34 @@ impl ProteinMPNN {
 
                     println!("chain_mask_t dims: {:?}", chain_mask_t.dims());
                     println!("e_idx_t dims: {:?}", e_idx_t.dims());
-                    let h_e_t = h_e.gather(
-                        &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
-                            1,
-                            1,
-                            h_e.dim(2)?,
-                            h_e.dim(3)?,
-                        ))?,
-                        1,
-                    )?;
+                    let t_he = t_gather
+                        .unsqueeze(2)?
+                        .unsqueeze(3)?
+                        .expand((
+                            1,           // batch
+                            1,           // single index
+                            h_e.dim(2)?, // number of neighbors
+                            h_e.dim(3)?, // feature dimension
+                        ))?
+                        .contiguous()?;
+
+                    // Ensure h_e is contiguous before gathering
+                    let h_e = h_e.contiguous()?;
+                    let h_e_t = h_e.gather(&t_he, 1)?;
+
+                    println!("h_e_t dims: {:?}", h_e_t.dims());
+                    println!("h_s dims: {:?}", h_s.dims());
+                    println!("e_idx_t dims: {:?}", e_idx_t.dims());
+
+                    // let h_e_t = h_e.gather(
+                    //     &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
+                    //         1,
+                    //         1,
+                    //         h_e.dim(2)?,
+                    //         h_e.dim(3)?,
+                    //     ))?,
+                    //     1,
+                    // )?;
 
                     println!("Gravy! 06");
                     println!("h_s dims: {:?}", h_s.dims());
