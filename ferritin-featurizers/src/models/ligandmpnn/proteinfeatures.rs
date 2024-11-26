@@ -254,12 +254,16 @@ impl ProteinFeaturesModel {
         // E_chains = gather_edges(d_chains[:, :, :, None], E_idx)[:, :, :, 0]
         let e_chains = gather_edges(&d_chains.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
 
+        println!("About to start the embeddings calculation...");
         let e_positional = self
             .embeddings
             .forward(&offset.to_dtype(candle_core::DType::I64)?, &e_chains)?;
 
+        println!("About to cat the pos embeddigns...");
+
         let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
         let e = self.edge_embedding.forward(&e)?;
+        println!("About to start the normalization...");
         let e = self.norm_edges.forward(&e)?;
         Ok((e, e_idx))
     }
@@ -290,17 +294,36 @@ impl PositionalEncodings {
             linear,
         })
     }
+    // def forward(self, offset, mask):
+    //     d = torch.clip(
+    //         offset + self.max_relative_feature, 0, 2 * self.max_relative_feature
+    //     ) * mask + (1 - mask) * (2 * self.max_relative_feature + 1)
+    //     d_onehot = torch.nn.functional.one_hot(d, 2 * self.max_relative_feature + 1 + 1)
+    //     E = self.linear(d_onehot.float())
+    //     return E
     fn forward(&self, offset: &Tensor, mask: &Tensor) -> Result<Tensor> {
-        let ones = Tensor::ones_like(&mask)?;
-        let mask_minus_one = mask.sub(&ones)?;
-        let max_rel = self.max_relative_feature as i64;
-        let d = (offset + max_rel as f64)?;
-        let d = Tensor::clamp(&d, 0.0, 2 * max_rel)?;
-        let d = d.mul(mask)?;
-        let d = (d + mask_minus_one)?;
-        let d = (d * (2 * max_rel + 1) as f64)?;
-        let d_onehot = one_hot(d.clone(), 2 * self.max_relative_feature + 2, 1f32, 0f32)?;
-        let d_onehot_float = d_onehot.to_dtype(candle_core::DType::F32)?;
+        println!("In positional Embedding: forward");
+
+        let max_rel = self.max_relative_feature as f64;
+
+        // First part: clip(offset + max_rel, 0, 2*max_rel)
+        let d = (offset + max_rel)?;
+        let d = d.clamp(0f64, 2.0 * max_rel)?;
+
+        // Second part: d * mask + (1-mask)*(2*max_rel + 1)
+        let masked_d = d.mul(mask)?;
+        let inverse_mask = (mask * -1.0)? + 1.0; // (1-mask)
+        let extra_term = inverse_mask? * ((2.0 * max_rel) + 1.0);
+        let d = (masked_d + extra_term?)?;
+
+        // Convert to integers for one_hot
+        let d = d.to_dtype(DType::I64)?;
+
+        // one_hot with correct depth using candle_nn::encoding::one_hot
+        let depth = (2 * self.max_relative_feature + 2) as i64;
+        let d_onehot = one_hot(d, depth as usize, 1f32, 0f32)?;
+        let d_onehot_float = d_onehot.to_dtype(DType::F32)?;
+
         self.linear.forward(&d_onehot_float)
     }
 }
