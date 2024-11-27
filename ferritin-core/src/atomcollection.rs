@@ -143,8 +143,6 @@ impl AtomCollection {
                 }
             }
         }
-        // Update self.bonds
-        println!("Updating bonds....");
         self.bonds = Some(bonds);
     }
 
@@ -304,7 +302,7 @@ mod tests {
         //
 
         for res in ac.iter_residues_all() {
-            println!("{:?}", res.res_name)
+            // println!("{:?}", res.res_name)
         }
     }
 }

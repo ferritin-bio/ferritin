@@ -57,8 +57,7 @@ impl BondOrder {
             3 => BondOrder::Triple,
             4 | 5 | 6 => BondOrder::Quadruple,
             _ => {
-                println!("Bond Order not found: {}", bond_int);
-                panic!()
+                panic!(format!("Bond Order not found: {}", bond_int))
             }
         }
     }

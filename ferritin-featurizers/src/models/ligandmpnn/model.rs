@@ -481,6 +481,7 @@ impl ProteinMPNN {
         let decoding_order = (&chain_mask + 0.0001)?
             .mul(&rand_tensor.abs()?)?
             .arg_sort_last_dim(false)?;
+        println!("Decoding Order: {:?}", decoding_order.dims());
 
         // Todo add  bias
         // # [B,L,21] - amino acid bias per position
