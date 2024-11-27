@@ -655,38 +655,118 @@ impl ProteinMPNN {
 
                         let new_h_v = layer.forward(&h_v_t, &h_esv_t, Some(&mask_t), None, None)?;
 
+                        println!("Before scatter_add:");
+                        println!("h_v_stack[l + 1] dims: {:?}", h_v_stack[l + 1].dims());
+                        println!("t dims: {:?}", t.dims());
+                        println!("new_h_v dims: {:?}", new_h_v.dims());
+
+                        let scatter_indices = t
+                            .unsqueeze(1)?
+                            .unsqueeze(2)?
+                            .repeat((1, new_h_v.dim(1)?, h_v.dim(2)?))?
+                            .to_dtype(DType::I64)?; // Make sure indices are i64
+
+                        println!("scatter_indices dims: {:?}", scatter_indices.dims());
+                        println!(
+                            "scatter_indices values: {:?}",
+                            scatter_indices.to_vec3::<i64>()?
+                        );
+
+                        // Perform scatter_add
+                        h_v_stack[l + 1] =
+                            h_v_stack[l + 1].scatter_add(&scatter_indices, &new_h_v, 1)?;
+
                         // note: scatter_add is different between pytorch and candle
-                        h_v_stack[l + 1] = h_v_stack[l + 1].scatter_add(
-                            &t.unsqueeze(1)?.unsqueeze(2)?.repeat((
-                                1,
-                                new_h_v.dim(1)?,
-                                h_v.dim(2)?,
-                            ))?,
-                            &new_h_v,
-                            1,
-                        )?;
+                        // h_v_stack[l + 1] = h_v_stack[l + 1].scatter_add(
+                        //     &t.unsqueeze(1)?.unsqueeze(2)?.repeat((
+                        //         1,
+                        //         new_h_v.dim(1)?,
+                        //         h_v.dim(2)?,
+                        //     ))?,
+                        //     &new_h_v,
+                        //     1,
+                        // )?;
                     }
 
+                    println!(
+                        "h_v_stack last dims: {:?}",
+                        h_v_stack.last().unwrap().dims()
+                    );
+                    // println!(
+                    //     "h_v_stack last values: {:?}",
+                    //     h_v_stack.last().unwrap().to_vec3::<f32>()?
+                    // );
+
+                    println!(
+                        "h_v_stack last dims: {:?}",
+                        h_v_stack.last().unwrap().dims()
+                    );
+                    // println!(
+                    //     "h_v_stack last values: {:?}",
+                    //     h_v_stack.last().unwrap().to_vec3::<f32>()?
+                    // );
+
+                    // let gather_indices = t.unsqueeze(1)?.unsqueeze(2)?.repeat((
+                    //     1,
+                    //     1,
+                    //     h_v_stack.last().unwrap().dim(2)?.to_dtype(DType::I64)?,
+                    // ))?;
+                    //
+                    let gather_indices = t
+                        .unsqueeze(1)?
+                        .unsqueeze(2)?
+                        .repeat((1, 1, h_v_stack.last().unwrap().dim(2)?))?
+                        .to_dtype(DType::I64)?;
+
+                    println!("gather_indices dims: {:?}", gather_indices.dims());
+                    println!(
+                        "gather_indices values: {:?}",
+                        gather_indices.to_vec3::<i64>()?
+                    );
+
+                    println!("t dims: {:?}", t.dims());
+                    // println!("t values: {:?}", t.to_vec1::<i64>()?);
+
+                    // Then perform the gather
                     let h_v_t = h_v_stack
                         .last()
                         .unwrap()
-                        .gather(
-                            &t.unsqueeze(1)?.unsqueeze(2)?.repeat((
-                                1,
-                                1,
-                                h_v_stack.last().unwrap().dim(2)?,
-                            ))?,
-                            1,
-                        )?
+                        .gather(&gather_indices, 1)?
                         .squeeze(1)?;
 
+                    println!("h_v_t after gather dims: {:?}", h_v_t.dims());
+                    // println!("h_v_t after gather values: {:?}", h_v_t.to_vec3::<f32>()?);
+
+                    // let h_v_t = h_v_stack
+                    //     .last()
+                    //     .unwrap()
+                    //     .gather(
+                    //         &t.unsqueeze(1)?.unsqueeze(2)?.repeat((
+                    //             1,
+                    //             1,
+                    //             h_v_stack.last().unwrap().dim(2)?,
+                    //         ))?,
+                    //         1,
+                    //     )?
+                    //     .squeeze(1)?;
+
+                    println!("Input tensors:");
+                    println!("h_v_t dims: {:?}", h_v_t.dims());
+                    println!("h_v_t values: {:?}", h_v_t.to_vec2::<f32>()?);
+                    println!("bias_t dims: {:?}", bias_t.dims());
+                    println!("bias_t values: {:?}", bias_t.to_vec2::<f32>()?);
                     //  Generate logits from hidden state
                     let logits = self.w_out.forward(&h_v_t)?;
+                    println!("Raw logits dims: {:?}", logits.dims());
+                    println!("Raw logits values: {:?}", logits.to_vec2::<f32>()?);
+
                     println!(
                         "1. Initial logits - min: {:?}, max: {:?}",
                         logits.min(D::Minus1)?,
                         logits.max(D::Minus1)?
                     );
+
+                    let logits = logits.clamp(-100f32, 100f32)?;
 
                     // Create log probabilities (used for loss calculation)
                     let log_probs = log_softmax(&logits, D::Minus1)?;
@@ -699,7 +779,8 @@ impl ProteinMPNN {
                     // Todo: Temperature should be added upstream
                     let temperature = 1.0f64;
 
-                    let scaled_logits = (logits.add(&bias_t)? / temperature)?;
+                    let scaled_logits =
+                        (logits.add(&bias_t)? / temperature)?.clamp(-100f32, 100f32)?;
 
                     println!(
                         "3. Scaled logits - min: {:?}, max: {:?}",
@@ -737,9 +818,15 @@ impl ProteinMPNN {
                     //     .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((1, 20))?)?;
 
                     // let probs_sample_1d = probs_sample.reshape((20,))?;
-                    println!("Probability sum: {:?}", probs_sample_1d.sum(D::Minus1)?);
-                    println!("Min probability: {:?}", probs_sample_1d.min(D::Minus1)?);
-                    println!("Max probability: {:?}", probs_sample_1d.max(D::Minus1)?);
+                    // println!("Probability sum: {:?}", probs_sample_1d.sum(D::Minus1)?);
+                    // println!("Min probability: {:?}", probs_sample_1d.min(D::Minus1)?);
+                    // println!("Max probability: {:?}", probs_sample_1d.max(D::Minus1)?);
+
+                    let probs_sample_1d = {
+                        let sum = probs_sample_1d.sum(D::Minus1)?;
+                        println!("7. Final sum before sampling: {:?}", sum);
+                        probs_sample_1d.div(&sum)?
+                    };
 
                     // pytorch direct translation
                     // let s_t = probs_sample.multinomial(1, true)?.squeeze(1)?;
@@ -748,7 +835,7 @@ impl ProteinMPNN {
                     // https://github.com/huggingface/candle/blob/dcd83336b68049763973709733bf2721a687507d/candle-transformers/src/generation/mod.rs#L47
                     // this sample should probably be brought up higher for reuse
                     // Todo: this may ormay not be the same as pytorch multinomial
-                    let seed = 111;
+                    let seed = 299792458;
                     // let mut logproc = LogitsProcessor::new(seed, Some(temperature), Some(0.25));
                     // let logits: Vec<u32> = vec![(); l]
                     //     .iter()
