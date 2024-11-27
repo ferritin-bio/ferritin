@@ -533,13 +533,18 @@ impl ProteinMPNN {
                     .to_dtype(h_exv_encoder.dtype())?;
                 let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
 
+                println!("Prepare the decoding Tensors....");
                 for t_ in 0..l {
                     let t = decoding_order.i((.., t_))?;
                     let t_gather = t.unsqueeze(1)?; // Shape [B, 1]
 
+                    // println!("t_gather: {:?}", t_gather.dims());
+
                     // Gather and squeeze for each tensor
                     let chain_mask_t = chain_mask.gather(&t_gather, 1)?.squeeze(1)?;
+                    // println!("chain_mask_t: {:?}", chain_mask_t.dims());
                     let mask_t = mask.gather(&t_gather, 1)?.squeeze(1)?;
+                    // println!("mask_t: {:?}", mask_t.dims());
 
                     // For bias, we need to expand for all classes
                     let t_bias = t_gather
@@ -548,16 +553,24 @@ impl ProteinMPNN {
                         .contiguous()?; // Shape [B, 1, 21]
 
                     let bias_t = bias.gather(&t_bias, 1)?.squeeze(1)?.contiguous()?;
+                    // println!("bias_t: {:?}", bias_t.dims());
 
                     // For e_idx, expand to match number of neighbors
                     let t_idx = t_gather
                         .unsqueeze(2)? // Shape [B, 1, 1]
                         .expand((b, 1, e_idx.dim(2)?))?
                         .contiguous()?; // Shape [B, 1, K]
-                    println!("t_idx dims: {:?}", t_idx.dims());
+                                        // println!("t_idx dims: {:?}", t_idx.dims());
 
                     let e_idx_t = e_idx.gather(&t_idx, 1)?;
-                    println!("e_idx_t dims: {:?}", e_idx_t.dims());
+                    // println!("e_idx_t dims: {:?}", e_idx_t.dims()); // Result shape: [B, 1, E]
+
+                    let e_idx_t = e_idx_t.expand((
+                        e_idx_t.dim(0)?, // batch size (1)
+                        e_idx.dim(1)?,   // original middle dim (93)
+                        e_idx_t.dim(2)?, // neighbor dim (24)
+                    ))?;
+                    // println!("e_idx_t dims: {:?}", e_idx_t.dims()); // Result shape: [B, 1, E]
 
                     let t_he = t_gather
                         .unsqueeze(2)?
@@ -573,18 +586,12 @@ impl ProteinMPNN {
                     // Ensure h_e is contiguous before gathering
                     let h_e = h_e.contiguous()?;
                     let h_e_t = h_e.gather(&t_he, 1)?;
-
-                    println!("h_s dims: {:?}", h_s.dims());
-                    println!("h_e_t dims: {:?}", h_e_t.dims());
-                    println!("e_idx_t dims: {:?}", e_idx_t.dims());
-
-                    println!("Concat!");
                     let (_b, seqlen1, _feats) = &h_s.dims3()?;
                     let (_b1, seqlen2, _k) = &e_idx_t.dims3()?;
-                    assert_eq!(seqlen1, seqlen2);
+
+                    // assert_eq!(seqlen1, seqlen2);
                     let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
 
-                    println!("Gravy! 07");
                     let h_exv_encoder_t = h_exv_encoder_fw.gather(
                         &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
                             1,
@@ -594,7 +601,7 @@ impl ProteinMPNN {
                         ))?,
                         1,
                     )?;
-                    println!("Gravy! 08");
+
                     let mask_bw_t = mask_bw.gather(
                         &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
                             1,
@@ -608,6 +615,10 @@ impl ProteinMPNN {
                     println!("Sample: Entering Decoder! ");
                     // Todo: Consider factorign this out..
                     for (l, layer) in self.decoder_layers.iter().enumerate() {
+                        println!("h_v_stack[l] dims: {:?}", h_v_stack[l].dims());
+                        println!("h_es_t dims: {:?}", h_es_t.dims());
+                        println!("e_idx_t dims: {:?}", e_idx_t.dims());
+
                         let h_esv_decoder_t =
                             cat_neighbors_nodes(&h_v_stack[l], &h_es_t, &e_idx_t)?;
                         let h_v_t = h_v_stack[l].gather(
