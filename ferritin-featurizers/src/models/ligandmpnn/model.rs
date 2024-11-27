@@ -16,8 +16,22 @@ use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, Linear, VarBuilder};
-use candle_transformers::generation::LogitsProcessor;
-use candle_transformers::models::whisper::DTYPE;
+use candle_transformers::generation::{LogitsProcessor, Sampling};
+
+pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result<Tensor> {
+    // Create the logits processor with its required arguments
+    let mut logits_processor = LogitsProcessor::new(
+        seed,              // seed for reproducibility
+        Some(temperature), // temperature scaling
+        None,              // top_p (nucleus sampling), we don't need this
+    );
+
+    // Sample from the probabilities
+    let idx = logits_processor.sample(&probs)?;
+
+    // Convert to tensor
+    Tensor::new(&[idx], probs.device())
+}
 
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
@@ -666,16 +680,66 @@ impl ProteinMPNN {
                         )?
                         .squeeze(1)?;
 
+                    //  Generate logits from hidden state
                     let logits = self.w_out.forward(&h_v_t)?;
+                    println!(
+                        "1. Initial logits - min: {:?}, max: {:?}",
+                        logits.min(D::Minus1)?,
+                        logits.max(D::Minus1)?
+                    );
+
+                    // Create log probabilities (used for loss calculation)
                     let log_probs = log_softmax(&logits, D::Minus1)?;
+                    println!(
+                        "2. Log probs - min: {:?}, max: {:?}",
+                        log_probs.min(D::Minus1)?,
+                        log_probs.max(D::Minus1)?
+                    );
 
                     // Todo: Temperature should be added upstream
-                    let temperature = 20f64;
+                    let temperature = 1.0f64;
 
-                    let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
-                    let probs_sample = probs
-                        .narrow(1, 0, 20)?
-                        .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((1, 20))?)?;
+                    let scaled_logits = (logits.add(&bias_t)? / temperature)?;
+
+                    println!(
+                        "3. Scaled logits - min: {:?}, max: {:?}",
+                        scaled_logits.min(D::Minus1)?,
+                        scaled_logits.max(D::Minus1)?
+                    );
+
+                    let probs = softmax(&scaled_logits, D::Minus1)?;
+                    println!(
+                        "4. Probs - min: {:?}, max: {:?}",
+                        probs.min(D::Minus1)?,
+                        probs.max(D::Minus1)?
+                    );
+
+                    // Normalize probabilities for the first 20 classes (excluding 'X')
+                    let probs_first_20 = probs.narrow(1, 0, 20)?;
+                    let sum_first_20 = probs_first_20.sum_keepdim(1)?;
+                    println!("5. Sum of first 20 probs: {:?}", sum_first_20);
+
+                    let probs_sample = probs_first_20.div(&sum_first_20.expand((1, 20))?)?;
+                    println!(
+                        "6. Normalized probs - min: {:?}, max: {:?}",
+                        probs_sample.min(D::Minus1)?,
+                        probs_sample.max(D::Minus1)?
+                    );
+
+                    // Reshape to 1D before sampling
+                    let probs_sample_1d = probs_sample.reshape((20,))?;
+
+                    // // Create sampling probabilities with temperature scaling and bias
+                    // // let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
+                    // // Normalize probabilities for the first 20 classes (excluding 'X')
+                    // let probs_sample = probs
+                    //     .narrow(1, 0, 20)?
+                    //     .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((1, 20))?)?;
+
+                    // let probs_sample_1d = probs_sample.reshape((20,))?;
+                    println!("Probability sum: {:?}", probs_sample_1d.sum(D::Minus1)?);
+                    println!("Min probability: {:?}", probs_sample_1d.min(D::Minus1)?);
+                    println!("Max probability: {:?}", probs_sample_1d.max(D::Minus1)?);
 
                     // pytorch direct translation
                     // let s_t = probs_sample.multinomial(1, true)?.squeeze(1)?;
@@ -684,17 +748,21 @@ impl ProteinMPNN {
                     // https://github.com/huggingface/candle/blob/dcd83336b68049763973709733bf2721a687507d/candle-transformers/src/generation/mod.rs#L47
                     // this sample should probably be brought up higher for reuse
                     // Todo: this may ormay not be the same as pytorch multinomial
-                    let seed = 2;
-                    let mut logproc = LogitsProcessor::new(seed, Some(temperature), Some(0.25));
-                    let logits: Vec<u32> = vec![(); l]
-                        .iter()
-                        .map(|_| logproc.sample(&probs_sample))
-                        .filter_map(Result::ok)
-                        .collect();
+                    let seed = 111;
+                    // let mut logproc = LogitsProcessor::new(seed, Some(temperature), Some(0.25));
+                    // let logits: Vec<u32> = vec![(); l]
+                    //     .iter()
+                    //     .map(|_| logproc.sample(&probs_sample))
+                    //     .filter_map(Result::ok)
+                    //     .collect();
 
-                    println!("Freshness 05 !!");
-                    // Todo: this definitely needs to be checked for Dimensions
-                    let s_t = Tensor::from_vec(logits, l, device)?;
+                    // println!("Freshness 05 !!");
+                    // // Todo: this definitely needs to be checked for Dimensions
+                    // let s_t = Tensor::from_vec(logits, l, device)?;
+
+                    println!("Pre-sampling!");
+                    // let s_t = multinomial_sample(&probs_sample, temperature, seed)?;
+                    let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
 
                     println!("Freshness 06 !!");
                     // note: need to double-check pytorch vs candle
