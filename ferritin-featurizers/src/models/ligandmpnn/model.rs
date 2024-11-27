@@ -538,7 +538,6 @@ impl ProteinMPNN {
                 for t_ in 0..l {
                     let t = decoding_order.i((.., t_))?;
                     let t_gather = t.unsqueeze(1)?; // Shape [B, 1]
-                                                    // Gather and squeeze for each tensor
                     let chain_mask_t = chain_mask.gather(&t_gather, 1)?.squeeze(1)?;
                     let mask_t = mask.gather(&t_gather, 1)?.squeeze(1)?;
 
@@ -547,7 +546,6 @@ impl ProteinMPNN {
                         .unsqueeze(2)? // Shape [B, 1, 1]
                         .expand((b, 1, 21))?
                         .contiguous()?; // Shape [B, 1, 21]
-
                     let bias_t = bias.gather(&t_bias, 1)?.squeeze(1)?.contiguous()?;
 
                     // For e_idx, expand to match number of neighbors
@@ -557,7 +555,6 @@ impl ProteinMPNN {
                         .contiguous()?; // Shape [B, 1, K]
 
                     let e_idx_t = e_idx.gather(&t_idx, 1)?;
-
                     let e_idx_t = e_idx_t.expand((
                         e_idx_t.dim(0)?, // batch size (1)
                         e_idx.dim(1)?,   // original middle dim (93)
@@ -581,7 +578,6 @@ impl ProteinMPNN {
                     let (_b, _seqlen1, _feats) = &h_s.dims3()?;
                     let (_b1, _seqlen2, _k) = &e_idx_t.dims3()?;
                     let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
-
                     let h_exv_encoder_t = h_exv_encoder_fw.gather(
                         &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
                             1,
@@ -657,8 +653,6 @@ impl ProteinMPNN {
                         )?;
                     }
 
-                    println!("Freshness !!");
-
                     let h_v_t = h_v_stack
                         .last()
                         .unwrap()
@@ -672,18 +666,16 @@ impl ProteinMPNN {
                         )?
                         .squeeze(1)?;
 
-                    println!("Freshness 01 !!");
                     let logits = self.w_out.forward(&h_v_t)?;
                     let log_probs = log_softmax(&logits, D::Minus1)?;
 
-                    println!("Freshness 02 !!");
-
                     // Todo: Temperature should be added upstream
                     let temperature = 20f64;
+
                     let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
-                        .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?)?;
+                        .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((1, 20))?)?;
 
                     // pytorch direct translation
                     // let s_t = probs_sample.multinomial(1, true)?.squeeze(1)?;
@@ -693,17 +685,18 @@ impl ProteinMPNN {
                     // this sample should probably be brought up higher for reuse
                     // Todo: this may ormay not be the same as pytorch multinomial
                     let seed = 2;
-
-                    println!("Freshness 02 !!");
                     let mut logproc = LogitsProcessor::new(seed, Some(temperature), Some(0.25));
                     let logits: Vec<u32> = vec![(); l]
                         .iter()
                         .map(|_| logproc.sample(&probs_sample))
                         .filter_map(Result::ok)
                         .collect();
+
+                    println!("Freshness 05 !!");
                     // Todo: this definitely needs to be checked for Dimensions
                     let s_t = Tensor::from_vec(logits, l, device)?;
 
+                    println!("Freshness 06 !!");
                     // note: need to double-check pytorch vs candle
                     let all_probs = all_probs.scatter_add(
                         &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, 20))?,
