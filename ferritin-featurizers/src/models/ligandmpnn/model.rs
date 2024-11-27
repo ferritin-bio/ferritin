@@ -554,8 +554,10 @@ impl ProteinMPNN {
                         .unsqueeze(2)? // Shape [B, 1, 1]
                         .expand((b, 1, e_idx.dim(2)?))?
                         .contiguous()?; // Shape [B, 1, K]
+                    println!("t_idx dims: {:?}", t_idx.dims());
 
                     let e_idx_t = e_idx.gather(&t_idx, 1)?;
+                    println!("e_idx_t dims: {:?}", e_idx_t.dims());
 
                     let t_he = t_gather
                         .unsqueeze(2)?
@@ -572,25 +574,14 @@ impl ProteinMPNN {
                     let h_e = h_e.contiguous()?;
                     let h_e_t = h_e.gather(&t_he, 1)?;
 
-                    // println!("h_e_t dims: {:?}", h_e_t.dims());
-                    // println!("h_s dims: {:?}", h_s.dims());
-                    // println!("e_idx_t dims: {:?}", e_idx_t.dims());
-
-                    // let h_e_t = h_e.gather(
-                    //     &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
-                    //         1,
-                    //         1,
-                    //         h_e.dim(2)?,
-                    //         h_e.dim(3)?,
-                    //     ))?,
-                    //     1,
-                    // )?;
-
                     println!("h_s dims: {:?}", h_s.dims());
                     println!("h_e_t dims: {:?}", h_e_t.dims());
                     println!("e_idx_t dims: {:?}", e_idx_t.dims());
 
                     println!("Concat!");
+                    let (_b, seqlen1, _feats) = &h_s.dims3()?;
+                    let (_b1, seqlen2, _k) = &e_idx_t.dims3()?;
+                    assert_eq!(seqlen1, seqlen2);
                     let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
 
                     println!("Gravy! 07");

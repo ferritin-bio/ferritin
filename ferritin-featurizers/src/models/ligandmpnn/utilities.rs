@@ -282,6 +282,11 @@ pub fn gather_edges(edges: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
 /// Features [B,N,C] at Neighbor indices [B,N,K] => [B,N,K,C]
 /// Flatten and expand indices per batch [B,N,K] => [B,NK] => [B,NK,C]
 pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
+    print!(
+        "IN GATHER NODES. Nodes, neighbor_idx: {:?}, {:?}",
+        nodes.dims(),
+        neighbor_idx.dims()
+    );
     let (batch_size, n_nodes, n_features) = nodes.dims3()?;
     let (_, _, k_neighbors) = neighbor_idx.dims3()?;
 
