@@ -36,6 +36,7 @@ pub fn cat_neighbors_nodes(
     e_idx: &Tensor,
 ) -> Result<Tensor> {
     let h_nodes_gathered = gather_nodes(h_nodes, e_idx)?;
+    println!("h_nodes_gathered dims: {:?}", h_nodes_gathered.dims());
     // todo: fix this hacky Dtype
     Tensor::cat(
         &[h_neighbors, &h_nodes_gathered.to_dtype(DType::F32)?],
@@ -51,7 +52,7 @@ pub fn compute_nearest_neighbors(
     k: usize,
     eps: f32,
 ) -> Result<(Tensor, Tensor)> {
-    let (batch_size, seq_len,_) = coords.dims3()?;
+    let (batch_size, seq_len, _) = coords.dims3()?;
 
     // broadcast_matmul handles broadcasting automatically
     // [2, 3, 1] × [2, 1, 3] -> [2, 3, 3]
@@ -297,10 +298,10 @@ pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     // Gather features
     let neighbor_features = nodes.gather(&neighbors_flat, 1)?;
 
-    println!(
-        "neighbor_features dims before final reshape: {:?}",
-        neighbor_features.dims()
-    );
+    // println!(
+    //     "neighbor_features dims before final reshape: {:?}",
+    //     neighbor_features.dims()
+    // );
 
     // Reshape back to [B, N, K, C]
     neighbor_features.reshape((batch_size, n_nodes, k_neighbors, n_features))

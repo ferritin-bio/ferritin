@@ -534,47 +534,29 @@ impl ProteinMPNN {
                 let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
 
                 for t_ in 0..l {
-                    let t = decoding_order.i((.., t_))?.contiguous()?;
-                    println!("t dims: {:?}", t.dims());
-
-                    // Reshape t for gathering
-                    let t_gather = t.unsqueeze(1)?.contiguous()?; // Shape [B, 1]
-                    println!("t_gather dims: {:?}", t_gather.dims());
-                    println!("chain_mask dims: {:?}", chain_mask.dims());
+                    let t = decoding_order.i((.., t_))?;
+                    let t_gather = t.unsqueeze(1)?; // Shape [B, 1]
 
                     // Gather and squeeze for each tensor
                     let chain_mask_t = chain_mask.gather(&t_gather, 1)?.squeeze(1)?;
                     let mask_t = mask.gather(&t_gather, 1)?.squeeze(1)?;
 
-                    println!("mask_t dims: {:?}", mask_t.dims());
-                    // let chain_mask_t = chain_mask.gather(&t.unsqueeze(1)?, 1)?.squeeze(1)?;
-                    // let mask_t = mask.gather(&t.unsqueeze(1)?, 1)?.squeeze(1)?;
-
                     // For bias, we need to expand for all classes
                     let t_bias = t_gather
                         .unsqueeze(2)? // Shape [B, 1, 1]
-                        .expand((b, 1, 21))?; // Shape [B, 1, 21]
-                    let bias_t = bias.gather(&t_bias, 1)?.squeeze(1)?;
+                        .expand((b, 1, 21))?
+                        .contiguous()?; // Shape [B, 1, 21]
 
-                    // let bias_t = bias
-                    //     .gather(&t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, 21))?, 1)?
-                    //     .squeeze(1)?;
+                    let bias_t = bias.gather(&t_bias, 1)?.squeeze(1)?.contiguous()?;
 
                     // For e_idx, expand to match number of neighbors
                     let t_idx = t_gather
                         .unsqueeze(2)? // Shape [B, 1, 1]
-                        .expand((b, 1, e_idx.dim(2)?))?; // Shape [B, 1, K]
+                        .expand((b, 1, e_idx.dim(2)?))?
+                        .contiguous()?; // Shape [B, 1, K]
+
                     let e_idx_t = e_idx.gather(&t_idx, 1)?;
 
-                    // let e_idx_t = e_idx.gather(
-                    //     &t.unsqueeze(1)?
-                    //         .unsqueeze(2)?
-                    //         .repeat((1, 1, e_idx.dim(2)?))?,
-                    //     1,
-                    // )?;
-
-                    println!("chain_mask_t dims: {:?}", chain_mask_t.dims());
-                    println!("e_idx_t dims: {:?}", e_idx_t.dims());
                     let t_he = t_gather
                         .unsqueeze(2)?
                         .unsqueeze(3)?
@@ -590,9 +572,9 @@ impl ProteinMPNN {
                     let h_e = h_e.contiguous()?;
                     let h_e_t = h_e.gather(&t_he, 1)?;
 
-                    println!("h_e_t dims: {:?}", h_e_t.dims());
-                    println!("h_s dims: {:?}", h_s.dims());
-                    println!("e_idx_t dims: {:?}", e_idx_t.dims());
+                    // println!("h_e_t dims: {:?}", h_e_t.dims());
+                    // println!("h_s dims: {:?}", h_s.dims());
+                    // println!("e_idx_t dims: {:?}", e_idx_t.dims());
 
                     // let h_e_t = h_e.gather(
                     //     &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
@@ -604,11 +586,13 @@ impl ProteinMPNN {
                     //     1,
                     // )?;
 
-                    println!("Gravy! 06");
                     println!("h_s dims: {:?}", h_s.dims());
                     println!("h_e_t dims: {:?}", h_e_t.dims());
                     println!("e_idx_t dims: {:?}", e_idx_t.dims());
+
+                    println!("Concat!");
                     let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
+
                     println!("Gravy! 07");
                     let h_exv_encoder_t = h_exv_encoder_fw.gather(
                         &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
