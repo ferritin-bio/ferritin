@@ -36,8 +36,8 @@ pub fn cat_neighbors_nodes(
     e_idx: &Tensor,
 ) -> Result<Tensor> {
     let h_nodes_gathered = gather_nodes(h_nodes, e_idx)?;
-    println!("h_nodes_gathered dims: {:?}", h_nodes_gathered.dims());
-    println!("h_neighbors dims: {:?}", h_neighbors.dims());
+    // println!("h_nodes_gathered dims: {:?}", h_nodes_gathered.dims());
+    // println!("h_neighbors dims: {:?}", h_neighbors.dims());
     // todo: fix this hacky Dtype
     //
     let h_neighbors = h_neighbors.expand((
@@ -47,7 +47,7 @@ pub fn cat_neighbors_nodes(
         h_neighbors.dim(3)?, // 128
     ))?;
 
-    println!("h_neighbors dims 02: {:?}", h_neighbors.dims());
+    // println!("h_neighbors dims 02: {:?}", h_neighbors.dims());
 
     let ten = Tensor::cat(
         &[h_neighbors, h_nodes_gathered.to_dtype(DType::F32)?],
@@ -300,11 +300,11 @@ pub fn gather_edges(edges: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
 /// Features [B,N,C] at Neighbor indices [B,N,K] => [B,N,K,C]
 /// Flatten and expand indices per batch [B,N,K] => [B,NK] => [B,NK,C]
 pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
-    print!(
-        "IN GATHER NODES. Nodes, neighbor_idx: {:?}, {:?}",
-        nodes.dims(),
-        neighbor_idx.dims()
-    );
+    // print!(
+    //     "IN GATHER NODES. Nodes, neighbor_idx: {:?}, {:?}",
+    //     nodes.dims(),
+    //     neighbor_idx.dims()
+    // );
     let (batch_size, n_nodes, n_features) = nodes.dims3()?;
     let (_, _, k_neighbors) = neighbor_idx.dims3()?;
 
@@ -321,10 +321,10 @@ pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     // Gather features
     let neighbor_features = nodes.gather(&neighbors_flat, 1)?;
 
-    println!(
-        "neighbor_features dims before final reshape: {:?}",
-        neighbor_features.dims()
-    );
+    // println!(
+    //     "neighbor_features dims before final reshape: {:?}",
+    //     neighbor_features.dims()
+    // );
 
     // Reshape back to [B, N, K, C]
     neighbor_features.reshape((batch_size, n_nodes, k_neighbors, n_features))

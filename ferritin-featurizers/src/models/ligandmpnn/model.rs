@@ -17,6 +17,7 @@ use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, Linear, VarBuilder};
 use candle_transformers::generation::LogitsProcessor;
+use candle_transformers::models::whisper::DTYPE;
 
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
@@ -589,7 +590,6 @@ impl ProteinMPNN {
                     let (_b, seqlen1, _feats) = &h_s.dims3()?;
                     let (_b1, seqlen2, _k) = &e_idx_t.dims3()?;
 
-                    // assert_eq!(seqlen1, seqlen2);
                     let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
 
                     let h_exv_encoder_t = h_exv_encoder_fw.gather(
@@ -601,6 +601,7 @@ impl ProteinMPNN {
                         ))?,
                         1,
                     )?;
+                    println!("h_exv_encoder_t dims: {:?}", h_exv_encoder_t.dims());
 
                     let mask_bw_t = mask_bw.gather(
                         &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
@@ -611,31 +612,55 @@ impl ProteinMPNN {
                         ))?,
                         1,
                     )?;
+                    println!("mask_bw_t dims: {:?}", mask_bw_t.dims());
 
                     println!("Sample: Entering Decoder! ");
                     // Todo: Consider factorign this out..
                     for (l, layer) in self.decoder_layers.iter().enumerate() {
-                        println!("h_v_stack[l] dims: {:?}", h_v_stack[l].dims());
-                        println!("h_es_t dims: {:?}", h_es_t.dims());
-                        println!("e_idx_t dims: {:?}", e_idx_t.dims());
-
                         let h_esv_decoder_t =
                             cat_neighbors_nodes(&h_v_stack[l], &h_es_t, &e_idx_t)?;
+
                         let h_v_t = h_v_stack[l].gather(
                             &t.unsqueeze(1)?
                                 .unsqueeze(2)?
                                 .repeat((1, 1, h_v_stack[l].dim(2)?))?,
                             1,
                         )?;
+
+                        // First expand mask_bw_t
+                        let mask_bw_t = mask_bw_t
+                            .expand((
+                                mask_bw_t.dim(0)?,       // 1
+                                h_esv_decoder_t.dim(1)?, // 93
+                                mask_bw_t.dim(2)?,       // 24
+                                h_esv_decoder_t.dim(3)?, // 384
+                            ))?
+                            .to_dtype(DType::F32)?;
+
+                        // Then expand h_exv_encoder_t
+                        let h_exv_encoder_t = h_exv_encoder_t
+                            .expand((
+                                h_exv_encoder_t.dim(0)?, // 1
+                                h_esv_decoder_t.dim(1)?, // 93
+                                h_exv_encoder_t.dim(2)?, // 24
+                                h_exv_encoder_t.dim(3)?, // 384
+                            ))?
+                            .to_dtype(DType::F32)?;
+
                         let h_esv_t = mask_bw_t.mul(&h_esv_decoder_t)?.add(&h_exv_encoder_t)?;
+
+                        println!("After initial gather 02");
                         let new_h_v = layer.forward(&h_v_t, &h_esv_t, Some(&mask_t), None, None)?;
+
                         // note: scatter_add is different between pytorch and candle
+                        println!("After initial gather 03");
                         h_v_stack[l + 1] = h_v_stack[l + 1].scatter_add(
                             &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, h_v.dim(2)?))?,
                             &new_h_v,
                             1,
                         )?;
                     }
+                    println!("Freshness !!");
                     let h_v_t = h_v_stack
                         .last()
                         .unwrap()
