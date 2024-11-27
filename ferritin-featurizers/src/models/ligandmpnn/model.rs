@@ -5,7 +5,7 @@
 //! Consider factoring out model creation of the DEC
 //! and ENC layers using a function.
 //!
-//! here is an example of paramatereizable netowrk creation:
+//! here is an example of paramatereizable network creation:
 //! https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/resnet.rs
 //!
 use super::configs::{ModelTypes, ProteinMPNNConfig};
@@ -93,7 +93,6 @@ impl EncLayer {
         let dropout3 = Dropout::new(dropout_ratio);
 
         // note in the pytorch code they add the GELU activation here.
-
         let dense = PositionWiseFeedForward::new(vb.pp("dense"), num_hidden, num_hidden * 4)?;
 
         Ok(Self {
@@ -307,15 +306,14 @@ impl DecLayer {
 
 // https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L10C7-L10C18
 pub struct ProteinMPNN {
-    config: ProteinMPNNConfig, // device here ??
+    config: ProteinMPNNConfig,
     decoder_layers: Vec<DecLayer>,
     device: Device,
     encoder_layers: Vec<EncLayer>,
-    features: ProteinFeaturesModel, // this needs to be a model with weights etc
+    features: ProteinFeaturesModel,
     w_e: Linear,
     w_out: Linear,
-    // self.W_s = torch.nn.Embedding(vocab, hidden_dim)
-    w_s: Embedding, // This should be an embedding layer....
+    w_s: Embedding,
 }
 
 impl ProteinMPNN {
@@ -325,7 +323,6 @@ impl ProteinMPNN {
         for i in 0..config.num_encoder_layers {
             encoder_layers.push(EncLayer::load(vb.pp("encoder_layers"), config, i as i32)?);
         }
-
         // Decoder
         let mut decoder_layers = Vec::with_capacity(config.num_decoder_layers as usize);
         for i in 0..config.num_decoder_layers {
@@ -355,7 +352,7 @@ impl ProteinMPNN {
         let features = ProteinFeaturesModel::load(vb.pp("features"), config.clone())?;
 
         Ok(Self {
-            config: config.clone(), // check the clone later...
+            config: config.clone(), // todo: check the\is clone later...
             decoder_layers,
             device: Device::Cpu,
             encoder_layers,
@@ -365,21 +362,18 @@ impl ProteinMPNN {
             w_s,
         })
     }
-    fn predict(&self) {
-        // Implement prediction logic
-        todo!()
-    }
-    fn train(&mut self) {
-        // Implement training logic
-        // .forward()?
-        todo!()
-    }
+    // fn predict(&self) {
+    //     // Implement prediction logic
+    //     todo!()
+    // }
+    // fn train(&mut self) {
+    //     // Implement training logic
+    //     // .forward()?
+    //     todo!()
+    // }
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
-        // todo: get device more elegantly
-        let device = &Device::Cpu;
+        let device = &Device::Cpu; // todo: get device more elegantly
         let s_true = &features.get_sequence();
-        let (b, l) = s_true.dims2()?;
-
         let mask = match features.get_sequence_mask() {
             Some(m) => m,
             None => &Tensor::zeros_like(&s_true)?,
@@ -546,11 +540,13 @@ impl ProteinMPNN {
                     // Reshape t for gathering
                     let t_gather = t.unsqueeze(1)?.contiguous()?; // Shape [B, 1]
                     println!("t_gather dims: {:?}", t_gather.dims());
+                    println!("chain_mask dims: {:?}", chain_mask.dims());
 
                     // Gather and squeeze for each tensor
                     let chain_mask_t = chain_mask.gather(&t_gather, 1)?.squeeze(1)?;
                     let mask_t = mask.gather(&t_gather, 1)?.squeeze(1)?;
 
+                    println!("mask_t dims: {:?}", mask_t.dims());
                     // let chain_mask_t = chain_mask.gather(&t.unsqueeze(1)?, 1)?.squeeze(1)?;
                     // let mask_t = mask.gather(&t.unsqueeze(1)?, 1)?.squeeze(1)?;
 
@@ -717,7 +713,7 @@ impl ProteinMPNN {
                     let s_t = s_t
                         .mul(&chain_mask_t)?
                         .add(&s_true_t.mul(&(Tensor::ones_like(&chain_mask_t)? - chain_mask_t)?)?)?
-                        .to_dtype(candle_core::DType::I64)?;
+                        .to_dtype(DType::I64)?;
 
                     h_s = h_s.scatter_add(
                         &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, h_s.dim(2)?))?,
@@ -1036,7 +1032,7 @@ impl ProteinMPNN {
     // }
 
     pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
-        let ProteinFeatures { s, x, x_mask, .. } = &features;
+        let ProteinFeatures { s, _x, x_mask, .. } = &features;
 
         let s_true = &s.clone();
         let device = s_true.device();
