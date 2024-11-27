@@ -538,14 +538,9 @@ impl ProteinMPNN {
                 for t_ in 0..l {
                     let t = decoding_order.i((.., t_))?;
                     let t_gather = t.unsqueeze(1)?; // Shape [B, 1]
-
-                    // println!("t_gather: {:?}", t_gather.dims());
-
-                    // Gather and squeeze for each tensor
+                                                    // Gather and squeeze for each tensor
                     let chain_mask_t = chain_mask.gather(&t_gather, 1)?.squeeze(1)?;
-                    // println!("chain_mask_t: {:?}", chain_mask_t.dims());
                     let mask_t = mask.gather(&t_gather, 1)?.squeeze(1)?;
-                    // println!("mask_t: {:?}", mask_t.dims());
 
                     // For bias, we need to expand for all classes
                     let t_bias = t_gather
@@ -554,24 +549,20 @@ impl ProteinMPNN {
                         .contiguous()?; // Shape [B, 1, 21]
 
                     let bias_t = bias.gather(&t_bias, 1)?.squeeze(1)?.contiguous()?;
-                    // println!("bias_t: {:?}", bias_t.dims());
 
                     // For e_idx, expand to match number of neighbors
                     let t_idx = t_gather
                         .unsqueeze(2)? // Shape [B, 1, 1]
                         .expand((b, 1, e_idx.dim(2)?))?
                         .contiguous()?; // Shape [B, 1, K]
-                                        // println!("t_idx dims: {:?}", t_idx.dims());
 
                     let e_idx_t = e_idx.gather(&t_idx, 1)?;
-                    // println!("e_idx_t dims: {:?}", e_idx_t.dims()); // Result shape: [B, 1, E]
 
                     let e_idx_t = e_idx_t.expand((
                         e_idx_t.dim(0)?, // batch size (1)
                         e_idx.dim(1)?,   // original middle dim (93)
                         e_idx_t.dim(2)?, // neighbor dim (24)
                     ))?;
-                    // println!("e_idx_t dims: {:?}", e_idx_t.dims()); // Result shape: [B, 1, E]
 
                     let t_he = t_gather
                         .unsqueeze(2)?
@@ -587,9 +578,8 @@ impl ProteinMPNN {
                     // Ensure h_e is contiguous before gathering
                     let h_e = h_e.contiguous()?;
                     let h_e_t = h_e.gather(&t_he, 1)?;
-                    let (_b, seqlen1, _feats) = &h_s.dims3()?;
-                    let (_b1, seqlen2, _k) = &e_idx_t.dims3()?;
-
+                    let (_b, _seqlen1, _feats) = &h_s.dims3()?;
+                    let (_b1, _seqlen2, _k) = &e_idx_t.dims3()?;
                     let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
 
                     let h_exv_encoder_t = h_exv_encoder_fw.gather(
@@ -601,7 +591,6 @@ impl ProteinMPNN {
                         ))?,
                         1,
                     )?;
-                    println!("h_exv_encoder_t dims: {:?}", h_exv_encoder_t.dims());
 
                     let mask_bw_t = mask_bw.gather(
                         &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
@@ -612,10 +601,8 @@ impl ProteinMPNN {
                         ))?,
                         1,
                     )?;
-                    println!("mask_bw_t dims: {:?}", mask_bw_t.dims());
 
-                    println!("Sample: Entering Decoder! ");
-                    // Todo: Consider factorign this out..
+                    // Todo: Consider factoring this out into its own funtion.
                     for (l, layer) in self.decoder_layers.iter().enumerate() {
                         let h_esv_decoder_t =
                             cat_neighbors_nodes(&h_v_stack[l], &h_es_t, &e_idx_t)?;
@@ -649,18 +636,29 @@ impl ProteinMPNN {
 
                         let h_esv_t = mask_bw_t.mul(&h_esv_decoder_t)?.add(&h_exv_encoder_t)?;
 
-                        println!("After initial gather 02");
+                        // Expand h_v_t to match the sequence length dimension
+                        let h_v_t = h_v_t.expand((
+                            h_v_t.dim(0)?,   // 1
+                            h_esv_t.dim(1)?, // 93
+                            h_v_t.dim(2)?,   // 128
+                        ))?;
+
                         let new_h_v = layer.forward(&h_v_t, &h_esv_t, Some(&mask_t), None, None)?;
 
                         // note: scatter_add is different between pytorch and candle
-                        println!("After initial gather 03");
                         h_v_stack[l + 1] = h_v_stack[l + 1].scatter_add(
-                            &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, h_v.dim(2)?))?,
+                            &t.unsqueeze(1)?.unsqueeze(2)?.repeat((
+                                1,
+                                new_h_v.dim(1)?,
+                                h_v.dim(2)?,
+                            ))?,
                             &new_h_v,
                             1,
                         )?;
                     }
+
                     println!("Freshness !!");
+
                     let h_v_t = h_v_stack
                         .last()
                         .unwrap()
@@ -673,8 +671,12 @@ impl ProteinMPNN {
                             1,
                         )?
                         .squeeze(1)?;
+
+                    println!("Freshness 01 !!");
                     let logits = self.w_out.forward(&h_v_t)?;
                     let log_probs = log_softmax(&logits, D::Minus1)?;
+
+                    println!("Freshness 02 !!");
 
                     // Todo: Temperature should be added upstream
                     let temperature = 20f64;
@@ -691,6 +693,8 @@ impl ProteinMPNN {
                     // this sample should probably be brought up higher for reuse
                     // Todo: this may ormay not be the same as pytorch multinomial
                     let seed = 2;
+
+                    println!("Freshness 02 !!");
                     let mut logproc = LogitsProcessor::new(seed, Some(temperature), Some(0.25));
                     let logits: Vec<u32> = vec![(); l]
                         .iter()
