@@ -37,11 +37,29 @@ pub fn cat_neighbors_nodes(
 ) -> Result<Tensor> {
     let h_nodes_gathered = gather_nodes(h_nodes, e_idx)?;
     println!("h_nodes_gathered dims: {:?}", h_nodes_gathered.dims());
+    println!("h_neighbors dims: {:?}", h_neighbors.dims());
     // todo: fix this hacky Dtype
-    Tensor::cat(
-        &[h_neighbors, &h_nodes_gathered.to_dtype(DType::F32)?],
+    //
+    let h_neighbors = h_neighbors.expand((
+        h_neighbors.dim(0)?, // 1
+        h_nodes.dim(1)?,     // 93
+        h_neighbors.dim(2)?, // 24
+        h_neighbors.dim(3)?, // 128
+    ))?;
+
+    println!("h_neighbors dims 02: {:?}", h_neighbors.dims());
+
+    let ten = Tensor::cat(
+        &[h_neighbors, h_nodes_gathered.to_dtype(DType::F32)?],
         D::Minus1,
-    )
+    );
+
+    // let dims = &ten.as_ref().unwrap().dims();
+
+    // println!("tensorcat: {:?}", dims);
+
+    // assert_eq!(true, false);
+    ten
 }
 
 /// Retrieve the nearest Neighbor of a set of coordinates.
@@ -303,10 +321,10 @@ pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     // Gather features
     let neighbor_features = nodes.gather(&neighbors_flat, 1)?;
 
-    // println!(
-    //     "neighbor_features dims before final reshape: {:?}",
-    //     neighbor_features.dims()
-    // );
+    println!(
+        "neighbor_features dims before final reshape: {:?}",
+        neighbor_features.dims()
+    );
 
     // Reshape back to [B, N, K, C]
     neighbor_features.reshape((batch_size, n_nodes, k_neighbors, n_features))
