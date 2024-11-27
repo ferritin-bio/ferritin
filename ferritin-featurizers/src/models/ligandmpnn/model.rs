@@ -530,9 +530,8 @@ impl ProteinMPNN {
                 let chain_mask = &chain_mask.repeat((b, 1))?.contiguous()?;
                 let mask = x_mask.as_ref().unwrap().repeat((b, 1))?.contiguous()?;
                 let bias = bias.repeat((b, 1, 1))?.contiguous()?;
-
-                let all_probs = Tensor::zeros((b, l, 20), DType::F32, device)?;
-                let all_log_probs = Tensor::zeros((b, l, 21), DType::F32, device)?; // why is this one 21 and the others are 20?
+                let mut all_probs = Tensor::zeros((b, l, 20), DType::F32, device)?;
+                let mut all_log_probs = Tensor::zeros((b, l, 21), DType::F32, device)?; // why is this one 21 and the others are 20?
                 let mut h_s = Tensor::zeros_like(&h_v)?.contiguous()?;
                 let s = (Tensor::ones((b, l), DType::I64, device)? * 20.)?;
 
@@ -555,46 +554,100 @@ impl ProteinMPNN {
                     let chain_mask_t = chain_mask.gather(&t_gather, 1)?.squeeze(1)?;
                     let mask_t = mask.gather(&t_gather, 1)?.squeeze(1)?;
 
-                    // For bias, we need to expand for all classes
-                    let t_bias = t_gather
-                        .unsqueeze(2)? // Shape [B, 1, 1]
-                        .expand((b, 1, 21))?
-                        .contiguous()?; // Shape [B, 1, 21]
-                    let bias_t = bias.gather(&t_bias, 1)?.squeeze(1)?.contiguous()?;
+                    // Gather bias for current position
+                    let bias_t = bias
+                        .gather(&t_gather.unsqueeze(2)?.expand((b, 1, 21))?.contiguous()?, 1)?
+                        .squeeze(1)?;
 
-                    // For e_idx, expand to match number of neighbors
-                    let t_idx = t_gather
-                        .unsqueeze(2)? // Shape [B, 1, 1]
-                        .expand((b, 1, e_idx.dim(2)?))?
-                        .contiguous()?; // Shape [B, 1, K]
+                    // Gather current position tensors
+                    let e_idx_t = e_idx.gather(
+                        &t_gather
+                            .unsqueeze(2)?
+                            .expand((b, 1, e_idx.dim(2)?))?
+                            .contiguous()?,
+                        1,
+                    )?;
 
-                    let e_idx_t = e_idx.gather(&t_idx, 1)?;
-                    let e_idx_t = e_idx_t.expand((
-                        e_idx_t.dim(0)?, // batch size (1)
-                        e_idx.dim(1)?,   // original middle dim (93)
-                        e_idx_t.dim(2)?, // neighbor dim (24)
-                    ))?;
+                    let h_e_t = h_e.gather(
+                        &t_gather
+                            .unsqueeze(2)?
+                            .unsqueeze(3)?
+                            .expand((b, 1, h_e.dim(2)?, h_e.dim(3)?))?
+                            .contiguous()?,
+                        1,
+                    )?;
 
-                    let t_he = t_gather
-                        .unsqueeze(2)?
-                        .unsqueeze(3)?
+                    let h_s = h_s
+                        .unsqueeze(1)? // Add sequence length dimension [1, 1, 93, 128]
                         .expand((
-                            1,           // batch
-                            1,           // single index
-                            h_e.dim(2)?, // number of neighbors
-                            h_e.dim(3)?, // feature dimension
+                            b,
+                            1,           // single position
+                            h_s.dim(1)?, // 93
+                            h_s.dim(2)?, // 128
                         ))?
                         .contiguous()?;
 
-                    // Ensure h_e is contiguous before gathering
-                    let h_e = h_e.contiguous()?;
-                    let h_e_t = h_e.gather(&t_he, 1)?;
-                    let (_b, _seqlen1, _feats) = &h_s.dims3()?;
-                    let (_b1, _seqlen2, _k) = &e_idx_t.dims3()?;
+                    // Expand h_e_t to match expected dimensions
+                    let h_e_t = h_e_t.expand((
+                        b,             // batch
+                        h_e_t.dim(1)?, // seq length (1)
+                        h_e_t.dim(2)?, // neighbors (24)
+                        h_e_t.dim(3)?, // features (128)
+                    ))?;
+
+                    // Expand e_idx_t to match
+                    let e_idx_t = e_idx_t.expand((
+                        b,               // batch
+                        e_idx_t.dim(1)?, // seq length (1)
+                        e_idx_t.dim(2)?, // neighbors (24)
+                    ))?;
+
+                    println!("05....");
+                    println!("h_s dims: {:?}", h_s.dims());
+                    println!("h_e_t dims: {:?}", h_e_t.dims());
+                    println!("e_idx_t dims: {:?}", e_idx_t.dims());
+
                     let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
+
+                    println!("06....");
                     let h_exv_encoder_t = h_exv_encoder_fw.gather(
-                        &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
+                        &t_gather
+                            .unsqueeze(2)?
+                            .unsqueeze(3)?
+                            .expand((b, 1, h_exv_encoder_fw.dim(2)?, h_exv_encoder_fw.dim(3)?))?
+                            .contiguous()?,
+                        1,
+                    )?;
+
+                    let mask_bw_t = mask_bw.gather(
+                        &t_gather.unsqueeze(2)?.unsqueeze(3)?.expand((
+                            b,
                             1,
+                            mask_bw.dim(2)?,
+                            mask_bw.dim(3)?,
+                        ))?,
+                        1,
+                    )?;
+
+                    // Gather current position tensors
+                    let e_idx_t =
+                        e_idx.gather(&t_gather.unsqueeze(2)?.expand((b, 1, e_idx.dim(2)?))?, 1)?;
+
+                    let h_e_t = h_e.gather(
+                        &t_gather.unsqueeze(2)?.unsqueeze(3)?.expand((
+                            b,
+                            1,
+                            h_e.dim(2)?,
+                            h_e.dim(3)?,
+                        ))?,
+                        1,
+                    )?;
+
+                    let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
+
+                    let h_exv_encoder_t = h_exv_encoder_fw.gather(
+                        &t_gather.unsqueeze(2)?.unsqueeze(3)?.expand((
+                            b,
                             1,
                             h_exv_encoder_fw.dim(2)?,
                             h_exv_encoder_fw.dim(3)?,
@@ -603,8 +656,8 @@ impl ProteinMPNN {
                     )?;
 
                     let mask_bw_t = mask_bw.gather(
-                        &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
-                            1,
+                        &t_gather.unsqueeze(2)?.unsqueeze(3)?.expand((
+                            b,
                             1,
                             mask_bw.dim(2)?,
                             mask_bw.dim(3)?,
@@ -612,286 +665,52 @@ impl ProteinMPNN {
                         1,
                     )?;
 
-                    // Todo: Consider factoring this out into its own funtion.
-                    for (l, layer) in self.decoder_layers.iter().enumerate() {
-                        let h_esv_decoder_t =
-                            cat_neighbors_nodes(&h_v_stack[l], &h_es_t, &e_idx_t)?;
-
-                        let h_v_t = h_v_stack[l].gather(
-                            &t.unsqueeze(1)?
-                                .unsqueeze(2)?
-                                .repeat((1, 1, h_v_stack[l].dim(2)?))?,
-                            1,
-                        )?;
-
-                        // First expand mask_bw_t
-                        let mask_bw_t = mask_bw_t
-                            .expand((
-                                mask_bw_t.dim(0)?,       // 1
-                                h_esv_decoder_t.dim(1)?, // 93
-                                mask_bw_t.dim(2)?,       // 24
-                                h_esv_decoder_t.dim(3)?, // 384
-                            ))?
-                            .to_dtype(DType::F32)?;
-
-                        // Then expand h_exv_encoder_t
-                        let h_exv_encoder_t = h_exv_encoder_t
-                            .expand((
-                                h_exv_encoder_t.dim(0)?, // 1
-                                h_esv_decoder_t.dim(1)?, // 93
-                                h_exv_encoder_t.dim(2)?, // 24
-                                h_exv_encoder_t.dim(3)?, // 384
-                            ))?
-                            .to_dtype(DType::F32)?;
-
-                        let h_esv_t = mask_bw_t.mul(&h_esv_decoder_t)?.add(&h_exv_encoder_t)?;
-
-                        // Expand h_v_t to match the sequence length dimension
-                        let h_v_t = h_v_t.expand((
-                            h_v_t.dim(0)?,   // 1
-                            h_esv_t.dim(1)?, // 93
-                            h_v_t.dim(2)?,   // 128
-                        ))?;
-
-                        let new_h_v = layer.forward(&h_v_t, &h_esv_t, Some(&mask_t), None, None)?;
-
-                        println!("Before scatter_add:");
-                        println!("h_v_stack[l + 1] dims: {:?}", h_v_stack[l + 1].dims());
-                        println!("t dims: {:?}", t.dims());
-                        println!("new_h_v dims: {:?}", new_h_v.dims());
-
-                        let scatter_indices = t
-                            .unsqueeze(1)?
-                            .unsqueeze(2)?
-                            .repeat((1, new_h_v.dim(1)?, h_v.dim(2)?))?
-                            .to_dtype(DType::I64)?; // Make sure indices are i64
-
-                        println!("scatter_indices dims: {:?}", scatter_indices.dims());
-                        println!(
-                            "scatter_indices values: {:?}",
-                            scatter_indices.to_vec3::<i64>()?
-                        );
-
-                        // Perform scatter_add
-                        h_v_stack[l + 1] =
-                            h_v_stack[l + 1].scatter_add(&scatter_indices, &new_h_v, 1)?;
-
-                        // note: scatter_add is different between pytorch and candle
-                        // h_v_stack[l + 1] = h_v_stack[l + 1].scatter_add(
-                        //     &t.unsqueeze(1)?.unsqueeze(2)?.repeat((
-                        //         1,
-                        //         new_h_v.dim(1)?,
-                        //         h_v.dim(2)?,
-                        //     ))?,
-                        //     &new_h_v,
-                        //     1,
-                        // )?;
-                    }
-
-                    println!(
-                        "h_v_stack last dims: {:?}",
-                        h_v_stack.last().unwrap().dims()
-                    );
-                    // println!(
-                    //     "h_v_stack last values: {:?}",
-                    //     h_v_stack.last().unwrap().to_vec3::<f32>()?
-                    // );
-
-                    println!(
-                        "h_v_stack last dims: {:?}",
-                        h_v_stack.last().unwrap().dims()
-                    );
-                    // println!(
-                    //     "h_v_stack last values: {:?}",
-                    //     h_v_stack.last().unwrap().to_vec3::<f32>()?
-                    // );
-
-                    // let gather_indices = t.unsqueeze(1)?.unsqueeze(2)?.repeat((
-                    //     1,
-                    //     1,
-                    //     h_v_stack.last().unwrap().dim(2)?.to_dtype(DType::I64)?,
-                    // ))?;
-                    //
-                    let gather_indices = t
-                        .unsqueeze(1)?
-                        .unsqueeze(2)?
-                        .repeat((1, 1, h_v_stack.last().unwrap().dim(2)?))?
-                        .to_dtype(DType::I64)?;
-
-                    println!("gather_indices dims: {:?}", gather_indices.dims());
-                    println!(
-                        "gather_indices values: {:?}",
-                        gather_indices.to_vec3::<i64>()?
-                    );
-
-                    println!("t dims: {:?}", t.dims());
-                    // println!("t values: {:?}", t.to_vec1::<i64>()?);
-
-                    // Then perform the gather
+                    // Generate logits and sample
                     let h_v_t = h_v_stack
                         .last()
                         .unwrap()
-                        .gather(&gather_indices, 1)?
+                        .gather(
+                            &t_gather.unsqueeze(2)?.expand((
+                                b,
+                                1,
+                                h_v_stack.last().unwrap().dim(2)?,
+                            ))?,
+                            1,
+                        )?
                         .squeeze(1)?;
 
-                    println!("h_v_t after gather dims: {:?}", h_v_t.dims());
-                    // println!("h_v_t after gather values: {:?}", h_v_t.to_vec3::<f32>()?);
-
-                    // let h_v_t = h_v_stack
-                    //     .last()
-                    //     .unwrap()
-                    //     .gather(
-                    //         &t.unsqueeze(1)?.unsqueeze(2)?.repeat((
-                    //             1,
-                    //             1,
-                    //             h_v_stack.last().unwrap().dim(2)?,
-                    //         ))?,
-                    //         1,
-                    //     )?
-                    //     .squeeze(1)?;
-
-                    println!("Input tensors:");
-                    println!("h_v_t dims: {:?}", h_v_t.dims());
-                    println!("h_v_t values: {:?}", h_v_t.to_vec2::<f32>()?);
-                    println!("bias_t dims: {:?}", bias_t.dims());
-                    println!("bias_t values: {:?}", bias_t.to_vec2::<f32>()?);
-                    //  Generate logits from hidden state
-                    let logits = self.w_out.forward(&h_v_t)?;
-                    println!("Raw logits dims: {:?}", logits.dims());
-                    println!("Raw logits values: {:?}", logits.to_vec2::<f32>()?);
-
-                    println!(
-                        "1. Initial logits - min: {:?}, max: {:?}",
-                        logits.min(D::Minus1)?,
-                        logits.max(D::Minus1)?
-                    );
-
-                    let logits = logits.clamp(-100f32, 100f32)?;
-
-                    // Create log probabilities (used for loss calculation)
-                    let log_probs = log_softmax(&logits, D::Minus1)?;
-                    println!(
-                        "2. Log probs - min: {:?}, max: {:?}",
-                        log_probs.min(D::Minus1)?,
-                        log_probs.max(D::Minus1)?
-                    );
-
-                    // Todo: Temperature should be added upstream
                     let temperature = 1.0f64;
-
-                    let scaled_logits =
-                        (logits.add(&bias_t)? / temperature)?.clamp(-100f32, 100f32)?;
-
-                    println!(
-                        "3. Scaled logits - min: {:?}, max: {:?}",
-                        scaled_logits.min(D::Minus1)?,
-                        scaled_logits.max(D::Minus1)?
-                    );
-
-                    let probs = softmax(&scaled_logits, D::Minus1)?;
-                    println!(
-                        "4. Probs - min: {:?}, max: {:?}",
-                        probs.min(D::Minus1)?,
-                        probs.max(D::Minus1)?
-                    );
-
-                    // Normalize probabilities for the first 20 classes (excluding 'X')
-                    let probs_first_20 = probs.narrow(1, 0, 20)?;
-                    let sum_first_20 = probs_first_20.sum_keepdim(1)?;
-                    println!("5. Sum of first 20 probs: {:?}", sum_first_20);
-
-                    let probs_sample = probs_first_20.div(&sum_first_20.expand((1, 20))?)?;
-                    println!(
-                        "6. Normalized probs - min: {:?}, max: {:?}",
-                        probs_sample.min(D::Minus1)?,
-                        probs_sample.max(D::Minus1)?
-                    );
-
-                    // Reshape to 1D before sampling
-                    let probs_sample_1d = probs_sample.reshape((20,))?;
-
-                    // // Create sampling probabilities with temperature scaling and bias
-                    // // let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
-                    // // Normalize probabilities for the first 20 classes (excluding 'X')
-                    // let probs_sample = probs
-                    //     .narrow(1, 0, 20)?
-                    //     .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((1, 20))?)?;
-
-                    // let probs_sample_1d = probs_sample.reshape((20,))?;
-                    // println!("Probability sum: {:?}", probs_sample_1d.sum(D::Minus1)?);
-                    // println!("Min probability: {:?}", probs_sample_1d.min(D::Minus1)?);
-                    // println!("Max probability: {:?}", probs_sample_1d.max(D::Minus1)?);
-
-                    let probs_sample_1d = {
-                        let sum = probs_sample_1d.sum(D::Minus1)?;
-                        println!("7. Final sum before sampling: {:?}", sum);
-                        probs_sample_1d.div(&sum)?
-                    };
-
-                    // pytorch direct translation
-                    // let s_t = probs_sample.multinomial(1, true)?.squeeze(1)?;
-                    //
-                    // note: this sampling is not the same as pytorch's.
-                    // https://github.com/huggingface/candle/blob/dcd83336b68049763973709733bf2721a687507d/candle-transformers/src/generation/mod.rs#L47
-                    // this sample should probably be brought up higher for reuse
-                    // Todo: this may ormay not be the same as pytorch multinomial
                     let seed = 299792458;
-                    // let mut logproc = LogitsProcessor::new(seed, Some(temperature), Some(0.25));
-                    // let logits: Vec<u32> = vec![(); l]
-                    //     .iter()
-                    //     .map(|_| logproc.sample(&probs_sample))
-                    //     .filter_map(Result::ok)
-                    //     .collect();
 
-                    // println!("Freshness 05 !!");
-                    // // Todo: this definitely needs to be checked for Dimensions
-                    // let s_t = Tensor::from_vec(logits, l, device)?;
+                    let logits = self.w_out.forward(&h_v_t)?;
+                    let log_probs = log_softmax(&logits, D::Minus1)?;
 
-                    println!("Pre-sampling!");
-                    // let s_t = multinomial_sample(&probs_sample, temperature, seed)?;
-                    let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
+                    // Sample new token
+                    let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
+                    let probs_sample = probs
+                        .narrow(1, 0, 20)?
+                        .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
 
-                    println!("Freshness 06 !!");
-                    // note: need to double-check pytorch vs candle
-                    let all_probs = all_probs.scatter_add(
-                        &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, 20))?,
-                        &chain_mask_t
-                            .unsqueeze(1)?
-                            .unsqueeze(2)?
-                            .mul(&probs_sample.unsqueeze(1)?)?,
-                        1,
-                    )?;
+                    let s_t = multinomial_sample(&probs_sample, temperature, seed)?;
 
-                    // these need to mutate out of scope - e.g. to the top-level cvar
-                    let all_log_probs = all_log_probs.scatter_add(
-                        &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, 21))?,
-                        &chain_mask_t
-                            .unsqueeze(1)?
-                            .unsqueeze(2)?
-                            .mul(&log_probs.unsqueeze(1)?)?,
-                        1,
-                    )?;
-
-                    let s_true_t = s_true.gather(&t.unsqueeze(1)?, 1)?.squeeze(1)?;
-                    let s_t = s_t
-                        .mul(&chain_mask_t)?
-                        .add(&s_true_t.mul(&(Tensor::ones_like(&chain_mask_t)? - chain_mask_t)?)?)?
-                        .to_dtype(DType::I64)?;
-
-                    h_s = h_s.scatter_add(
-                        &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, h_s.dim(2)?))?,
+                    // Update the running tensors
+                    let h_s = h_s.scatter_add(
+                        &t_gather.unsqueeze(2)?.expand((b, 1, h_s.dim(2)?))?,
                         &self.w_s.forward(&s_t)?.unsqueeze(1)?,
                         1,
                     )?;
 
-                    // the below line approach may not be correct.
-                    let zeros = Tensor::zeros_like(&s)?;
-                    let scattered = zeros.scatter_add(
-                        &t.unsqueeze(1)?,
-                        &s_t.unsqueeze(1)?,
-                        1, // Assuming you're scattering along dimension 1
+                    all_probs = all_probs.scatter_add(
+                        &t_gather.unsqueeze(2)?.expand((b, 1, 20))?,
+                        &(chain_mask_t.unsqueeze(1)?.mul(&probs_sample))?,
+                        1,
                     )?;
-                    let s = s.add(&scattered)?;
+
+                    all_log_probs = all_log_probs.scatter_add(
+                        &t_gather.unsqueeze(2)?.expand((b, 1, 21))?,
+                        &(chain_mask_t.unsqueeze(1)?.mul(&log_probs))?,
+                        1,
+                    )?;
                 }
 
                 Ok(ScoreOutput {
