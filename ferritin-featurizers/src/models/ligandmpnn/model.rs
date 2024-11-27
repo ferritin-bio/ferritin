@@ -1032,7 +1032,7 @@ impl ProteinMPNN {
     // }
 
     pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
-        let ProteinFeatures { s, _x, x_mask, .. } = &features;
+        let ProteinFeatures { s, x, x_mask, .. } = &features;
 
         let s_true = &s.clone();
         let device = s_true.device();
