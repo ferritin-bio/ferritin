@@ -376,7 +376,7 @@ impl ProteinMPNN {
     }
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
         // todo: get device more elegantly
-        let device = &candle_core::Device::Cpu;
+        let device = &Device::Cpu;
         let s_true = &features.get_sequence();
         let (b, l) = s_true.dims2()?;
 
@@ -540,7 +540,7 @@ impl ProteinMPNN {
                 let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
 
                 for t_ in 0..l {
-                    let t = decoding_order.i((.., t_ as usize))?.contiguous()?;
+                    let t = decoding_order.i((.., t_))?.contiguous()?;
                     println!("t dims: {:?}", t.dims());
 
                     // Reshape t for gathering
@@ -693,23 +693,23 @@ impl ProteinMPNN {
                     // Todo: this definitely needs to be checked for Dimensions
                     let s_t = Tensor::from_vec(logits, l, device)?;
 
-                    // note: need to double check pytorch vs candle
+                    // note: need to double-check pytorch vs candle
                     let all_probs = all_probs.scatter_add(
                         &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, 20))?,
-                        &(chain_mask_t
+                        &chain_mask_t
                             .unsqueeze(1)?
                             .unsqueeze(2)?
-                            .mul(&probs_sample.unsqueeze(1)?))?,
+                            .mul(&probs_sample.unsqueeze(1)?)?,
                         1,
                     )?;
 
                     // these need to mutate out of scope - e.g. to the top-level cvar
                     let all_log_probs = all_log_probs.scatter_add(
                         &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, 21))?,
-                        &(chain_mask_t
+                        &chain_mask_t
                             .unsqueeze(1)?
                             .unsqueeze(2)?
-                            .mul(&log_probs.unsqueeze(1)?))?,
+                            .mul(&log_probs.unsqueeze(1)?)?,
                         1,
                     )?;
 
@@ -725,7 +725,7 @@ impl ProteinMPNN {
                         1,
                     )?;
 
-                    // the below line approach may note be correct.
+                    // the below line approach may not be correct.
                     let zeros = Tensor::zeros_like(&s)?;
                     let scattered = zeros.scatter_add(
                         &t.unsqueeze(1)?,
@@ -745,9 +745,9 @@ impl ProteinMPNN {
             Some(symmetry_residues) => {
                 todo!()
                 // // note this is a literal translation of the code... Howver I think this could lead to
-                // // possible unintentional overwritign of value - e.g. if there are multiple identical
+                // // possible unintentional overwriting of value - e.g. if there are multiple identical
                 // // values in the index. (I guess you might expect that if they are symetrical. Howver the
-                // // weigths do no have to be thesame)
+                // // weights do not have to be the same)
                 // let symmetry_weights = symmetry_weights.as_ref().unwrap();
                 // // let symmetry_weights_tensor = Tensro::ones(l, candle_core::DType::F32, device)?;
                 // let mut symmetry_weights_vec = vec![1.0_f64; l];
@@ -1096,7 +1096,7 @@ impl ProteinMPNN {
                 //     .unsqueeze(0)?
                 //     .repeat((b, 1))?;
 
-                // let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?; // need to double check here
+                // let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?; // need to double-check here
                 // let tril = Tensor::tril2(l, DType::F64, device)?;
 
                 // // First, perform the matrix multiplication between the lower triangle and the first permutation matrix
@@ -1143,7 +1143,7 @@ impl ProteinMPNN {
                 (mask_fw, mask_bw, e_idx, decoding_order)
             }
         };
-        let b_decoder = b_decoder as usize;
+        let b_decoder = b_decoder;
         let s_true = s_true.repeat(&[b_decoder, 1])?;
         let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
         let h_e = h_e.repeat(&[b_decoder, 1, 1, 1])?;

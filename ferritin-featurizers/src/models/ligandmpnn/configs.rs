@@ -17,7 +17,7 @@ use super::featurizer::ProteinFeatures;
 use super::model::ProteinMPNN;
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
 use anyhow::Error;
-use candle_core::pickle::{read_pth_tensor_info, PthTensors};
+use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use clap::ValueEnum;
@@ -105,7 +105,7 @@ impl MPNNExecConfig {
 
         // R_idx = np.array(CA_resnums, dtype=np.int32)
         let res_idx = ac.get_res_index();
-        let res_idx_len = res_idx.len() as usize;
+        let res_idx_len = res_idx.len();
         let res_idx_tensor = Tensor::from_vec(res_idx, (1, res_idx_len), &device)?;
 
         // update residue info

@@ -16,9 +16,6 @@ pub fn execute(
     membrane_mpnn_specific: MembraneMPNNConfig,
     multi_pdb_config: MultiPDBConfig,
 ) -> anyhow::Result<()> {
-    println!(
-        "This run script is very crude at the moment and does not handle MOST of the CLI args....."
-    );
 
     // todo - whats the best way to handle device?
     let device = &Device::Cpu;
