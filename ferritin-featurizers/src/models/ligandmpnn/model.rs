@@ -617,19 +617,26 @@ impl ProteinMPNN {
                         let h_esv_t = mask_bw_t.mul(&h_esv_decoder_t)?.add(&h_exv_encoder_t)?;
 
                         // Update h_v_stack[l + 1]
-                        let new_h_v =
-                            self.decoder_layers[l].forward(&h_v_t, &h_esv_t, Some(&mask_t))?;
-                        h_v_stack[l + 1] = h_v_stack[l + 1].scatter(
-                            1,
-                            &t_gather
-                                .unsqueeze(2)?
-                                .expand((b, 1, h_v.dim(2)?))?
-                                .contiguous()?,
-                            &new_h_v,
+                        let new_h_v = self.decoder_layers[l].forward(
+                            &h_v_t,
+                            &h_esv_t,
+                            Some(&mask_t),
+                            None,
+                            None,
                         )?;
+
+                        // Update h_v_stack
+                        let zero_mask = t_gather
+                            .unsqueeze(2)?
+                            .expand((b, 1, h_v.dim(2)?))?
+                            .contiguous()?
+                            .zeros_like()?;
+                        h_v_stack[l + 1] =
+                            h_v_stack[l + 1].scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                        h_v_stack[l + 1] = h_v_stack[l + 1].scatter_add(&t_gather, &new_h_v, 1)?;
+                        // Add new values
                     }
 
-                    // Get final h_v_t and generate logits
                     let h_v_t = h_v_stack
                         .last()
                         .unwrap()
@@ -642,55 +649,131 @@ impl ProteinMPNN {
                         )?
                         .squeeze(1)?;
 
+                    // Generate logits and probabilities
                     let logits = self.w_out.forward(&h_v_t)?;
                     let log_probs = log_softmax(&logits, D::Minus1)?;
 
                     // Generate probabilities and sample
-                    let probs =
-                        softmax(&(logits.add(&bias_t)?.div_scalar(temperature)?)?, D::Minus1)?;
+                    let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
 
+                    // Sample new token
                     let s_t = multinomial_sample(&probs_sample, temperature, seed)?;
 
                     // Gather true sequence values if needed
                     let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
                     let s_t = s_t
                         .mul(&chain_mask_t)?
-                        .add(&s_true_t.mul(&chain_mask_t.neg()?.add_scalar(1.0)?)?)?;
+                        .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?;
 
-                    // Update running tensors
-                    h_s = h_s.scatter(
-                        1,
-                        &t_gather
-                            .unsqueeze(2)?
-                            .expand((b, 1, h_s.dim(2)?))?
-                            .contiguous()?,
-                        &self.w_s.forward(&s_t)?.unsqueeze(1)?,
-                    )?;
+                    // Update h_s
+                    let h_s_update = self.w_s.forward(&s_t)?.unsqueeze(1)?;
+                    let zero_mask = t_gather
+                        .unsqueeze(2)?
+                        .expand((b, 1, h_s.dim(2)?))?
+                        .contiguous()?
+                        .zeros_like()?;
+                    h_s = h_s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    h_s = h_s.scatter_add(&t_gather, &h_s_update, 1)?;
 
-                    s = s.scatter(1, &t_gather, &s_t.unsqueeze(1)?)?;
+                    // Update s
+                    let zero_mask = t_gather.zeros_like()?;
+                    let s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    let s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
 
-                    all_probs = all_probs.scatter(
-                        1,
-                        &t_gather.unsqueeze(2)?.expand((b, 1, 20))?.contiguous()?,
-                        &chain_mask_t
-                            .unsqueeze(1)?
-                            .unsqueeze(2)?
-                            .expand((b, 1, 20))?
-                            .mul(&probs_sample.unsqueeze(1)?)?,
-                    )?;
+                    // Update all_probs
+                    let probs_update = chain_mask_t
+                        .unsqueeze(1)?
+                        .unsqueeze(2)?
+                        .expand((b, 1, 20))?
+                        .mul(&probs_sample.unsqueeze(1)?)?;
+                    let zero_mask = t_gather
+                        .unsqueeze(2)?
+                        .expand((b, 1, 20))?
+                        .contiguous()?
+                        .zeros_like()?;
+                    all_probs = all_probs.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    all_probs = all_probs.scatter_add(&t_gather, &probs_update, 1)?; // Add new values
 
-                    all_log_probs = all_log_probs.scatter(
-                        1,
-                        &t_gather.unsqueeze(2)?.expand((b, 1, 21))?.contiguous()?,
-                        &chain_mask_t
-                            .unsqueeze(1)?
-                            .unsqueeze(2)?
-                            .expand((b, 1, 21))?
-                            .mul(&log_probs.unsqueeze(1)?)?,
-                    )?;
+                    // Update all_log_probs
+                    let log_probs_update = chain_mask_t
+                        .unsqueeze(1)?
+                        .unsqueeze(2)?
+                        .expand((b, 1, 21))?
+                        .mul(&log_probs.unsqueeze(1)?)?;
+                    let zero_mask = t_gather
+                        .unsqueeze(2)?
+                        .expand((b, 1, 21))?
+                        .contiguous()?
+                        .zeros_like()?;
+                    all_log_probs = all_log_probs.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    all_log_probs = all_log_probs.scatter_add(&t_gather, &log_probs_update, 1)?;
+                    // Add new values
+
+                    // // Get final h_v_t and generate logits
+                    // let h_v_t = h_v_stack
+                    //     .last()
+                    //     .unwrap()
+                    //     .gather(
+                    //         &t_gather
+                    //             .unsqueeze(2)?
+                    //             .expand((b, 1, h_v_stack.last().unwrap().dim(2)?))?
+                    //             .contiguous()?,
+                    //         1,
+                    //     )?
+                    //     .squeeze(1)?;
+
+                    // let logits = self.w_out.forward(&h_v_t)?;
+                    // let log_probs = log_softmax(&logits, D::Minus1)?;
+
+                    // // Generate probabilities and sample
+                    // let probs =
+                    //     softmax(&(logits.add(&bias_t)?.div_scalar(temperature)?)?, D::Minus1)?;
+                    // let probs_sample = probs
+                    //     .narrow(1, 0, 20)?
+                    //     .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
+
+                    // let s_t = multinomial_sample(&probs_sample, temperature, seed)?;
+
+                    // // Gather true sequence values if needed
+                    // let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
+                    // let s_t = s_t
+                    //     .mul(&chain_mask_t)?
+                    //     .add(&s_true_t.mul(&chain_mask_t.neg()?.add_scalar(1.0)?)?)?;
+
+                    // // Update running tensors
+                    // h_s = h_s.scatter(
+                    //     1,
+                    //     &t_gather
+                    //         .unsqueeze(2)?
+                    //         .expand((b, 1, h_s.dim(2)?))?
+                    //         .contiguous()?,
+                    //     &self.w_s.forward(&s_t)?.unsqueeze(1)?,
+                    // )?;
+
+                    // s = s.scatter(1, &t_gather, &s_t.unsqueeze(1)?)?;
+
+                    // all_probs = all_probs.scatter(
+                    //     1,
+                    //     &t_gather.unsqueeze(2)?.expand((b, 1, 20))?.contiguous()?,
+                    //     &chain_mask_t
+                    //         .unsqueeze(1)?
+                    //         .unsqueeze(2)?
+                    //         .expand((b, 1, 20))?
+                    //         .mul(&probs_sample.unsqueeze(1)?)?,
+                    // )?;
+
+                    // all_log_probs = all_log_probs.scatter(
+                    //     1,
+                    //     &t_gather.unsqueeze(2)?.expand((b, 1, 21))?.contiguous()?,
+                    //     &chain_mask_t
+                    //         .unsqueeze(1)?
+                    //         .unsqueeze(2)?
+                    //         .expand((b, 1, 21))?
+                    //         .mul(&log_probs.unsqueeze(1)?)?,
+                    // )?;
                 }
 
                 Ok(ScoreOutput {
