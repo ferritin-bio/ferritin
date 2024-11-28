@@ -401,16 +401,17 @@ impl ProteinMPNN {
             ModelTypes::ProteinMPNN => {
                 let (e, e_idx) = self.features.forward(features, device)?;
                 println!("After embedding dims: {:?}", e.dims());
-                println!(
-                    "After embedding values: {:?}",
-                    e.narrow(2, 0, 5)?.to_vec3::<f32>()?
-                );
+                // println!(
+                //     "After embedding first position values: {:?}",
+                //     e.get(0)?.get(0)?.to_vec2::<f32>()?
+                // );
 
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     DType::F64,
                     device,
                 )?;
+
                 let mut h_e = self.w_e.forward(&e)?;
                 let mask_attend =
                     gather_nodes(&mask.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
@@ -422,7 +423,21 @@ impl ProteinMPNN {
                 ))?;
                 let mask_attend = (&mask_expanded * &mask_attend)?;
 
-                for layer in &self.encoder_layers {
+                for (i, layer) in &self.encoder_layers.iter().enumerate() {
+                    println!("Starting encoder layer {}", i);
+                    println!("h_v before layer {} dims: {:?}", i, h_v.dims());
+                    println!(
+                        "h_v before layer {} values: {:?}",
+                        i,
+                        h_v.get(0)?.get(0)?.to_vec2::<f32>()?
+                    );
+                    println!("h_e before layer {} dims: {:?}", i, h_e.dims());
+                    println!(
+                        "h_e before layer {} values: {:?}",
+                        i,
+                        h_e.get(0)?.get(0)?.to_vec2::<f32>()?
+                    );
+
                     let (new_h_v, new_h_e) = layer.forward(
                         &h_v,
                         &h_e,
@@ -431,6 +446,18 @@ impl ProteinMPNN {
                         Some(&mask_attend),
                         Some(false),
                     )?;
+                    println!("After layer {} forward pass:", i);
+                    println!("new_h_v dims: {:?}", new_h_v.dims());
+                    println!(
+                        "new_h_v values: {:?}",
+                        new_h_v.get(0)?.get(0)?.to_vec2::<f32>()?
+                    );
+                    println!("new_h_e dims: {:?}", new_h_e.dims());
+                    println!(
+                        "new_h_e values: {:?}",
+                        new_h_e.get(0)?.get(0)?.to_vec2::<f32>()?
+                    );
+
                     h_v = new_h_v;
                     h_e = new_h_e;
                 }
@@ -513,9 +540,10 @@ impl ProteinMPNN {
         // # [B,L,21] - amino acid bias per position
         //  bias = feature_dict["bias"]
         let bias = Tensor::zeros((b, l, 21), DType::F32, device)?;
-        println!("We need to add the bias!");
+        println!("todo: We need to add the bias!");
 
         // Todo! Fix this hack.
+        println!("todo: move temp and seed upstream");
         let temperature = 1.0f64;
         let seed = 111;
         let symmetry_residues: Option<Vec<i32>> = None;
