@@ -138,8 +138,25 @@ impl EncLayer {
         mask_attend: Option<&Tensor>,
         training: Option<bool>,
     ) -> Result<(Tensor, Tensor)> {
-        println!("EncLayer: Forward method.");
+        println!("EncoderLayer: Starting forward pass");
+
+        println!(
+            "Input h_v dims: {:?}, first values: {:?}",
+            h_v.dims(),
+            h_v.to_dtype(DType::F32)?
+                .get(0)?
+                .get(0)?
+                .narrow(0, 0, 5)?
+                .to_vec1::<f32>()?
+        );
+
         let h_ev = cat_neighbors_nodes(h_v, h_e, e_idx)?;
+        println!(
+            "After cat_neighbors_nodes h_ev dims: {:?}, first values: {:?}",
+            h_ev.dims(),
+            h_ev.get(0)?.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
+        );
+
         let h_v_expand = h_v.unsqueeze(D::Minus2)?;
         // Explicitly specify the expansion dimensions
         let expand_shape = [
@@ -150,29 +167,102 @@ impl EncLayer {
         ];
         let h_v_expand = h_v_expand.expand(&expand_shape)?;
         let h_v_expand = h_v_expand.to_dtype(h_ev.dtype())?;
+        println!(
+            "h_v_expand dims: {:?}, first values: {:?}",
+            h_v_expand.dims(),
+            h_v_expand
+                .get(0)?
+                .get(0)?
+                .narrow(0, 0, 5)?
+                .to_vec1::<f32>()?
+        );
 
         // Now concatenate along the last dimension
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
-        let h_message = self
-            .w1
-            .forward(&h_ev)?
-            .gelu()?
-            .apply(&self.w2)?
-            .gelu()?
-            .apply(&self.w3)?;
+
+        println!(
+            "After concat h_ev dims: {:?}, first values: {:?}",
+            h_ev.dims(),
+            h_ev.get(0)?.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
+        );
+
+        // After each layer in message calculation
+        let h_message = self.w1.forward(&h_ev)?;
+        println!(
+            "After w1 dims: {:?}, first values: {:?}",
+            h_message.dims(),
+            h_message
+                .get(0)?
+                .get(0)?
+                .narrow(0, 0, 5)?
+                .to_vec1::<f32>()?
+        );
+
+        let h_message = h_message.gelu()?;
+        println!(
+            "After gelu1 dims: {:?}, first values: {:?}",
+            h_message.dims(),
+            h_message
+                .get(0)?
+                .get(0)?
+                .narrow(0, 0, 5)?
+                .to_vec1::<f32>()?
+        );
+
+        let h_message = h_message.apply(&self.w2)?.gelu()?.apply(&self.w3)?;
+        println!(
+            "After w2,gelu,w3 dims: {:?}, first values: {:?}",
+            h_message.dims(),
+            h_message
+                .get(0)?
+                .get(0)?
+                .narrow(0, 0, 5)?
+                .to_vec1::<f32>()?
+        );
 
         let h_message = if let Some(mask) = mask_attend {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
         } else {
             h_message
         };
+        println!(
+            "After mask dims: {:?}, first values: {:?}",
+            h_message.dims(),
+            h_message
+                .get(0)?
+                .get(0)?
+                .narrow(0, 0, 5)?
+                .to_vec1::<f32>()?
+        );
+
         let dh = h_message.sum(D::Minus2)? / self.scale;
+
+        println!(
+            "After sum/scale dh dims: {:?}, first values: {:?}",
+            dh.dims(),
+            dh.get(0)?.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
+        );
+
         let h_v = {
             let dh_dropout = self
                 .dropout1
                 .forward(&dh?, training.expect("Training must be specified"))?;
             let dh_dropout = dh_dropout.to_dtype(DType::F32)?;
             let h_v = h_v.to_dtype(DType::F32)?;
+            println!(
+                "Before norm1 add dims: {:?}, first values: {:?}",
+                h_v.dims(),
+                h_v.get(0)?.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
+            );
+            println!(
+                "dh_dropout dims: {:?}, first values: {:?}",
+                dh_dropout.dims(),
+                dh_dropout
+                    .get(0)?
+                    .get(0)?
+                    .narrow(0, 0, 5)?
+                    .to_vec1::<f32>()?
+            );
             self.norm1.forward(&(h_v + dh_dropout)?)?
         };
 
@@ -214,6 +304,7 @@ impl EncLayer {
                 .forward(&h_message, training.expect("Training Must be specified"))?;
             self.norm3.forward(&(h_e + h_message_dropout)?)?
         };
+        println!("EncoderLayer: Finishing forward pass");
         Ok((h_v, h_e))
     }
 }
@@ -423,19 +514,25 @@ impl ProteinMPNN {
                 ))?;
                 let mask_attend = (&mask_expanded * &mask_attend)?;
 
-                for (i, layer) in &self.encoder_layers.iter().enumerate() {
+                for (i, layer) in self.encoder_layers.iter().enumerate() {
                     println!("Starting encoder layer {}", i);
+
+                    // Debug h_v (3D tensor)
                     println!("h_v before layer {} dims: {:?}", i, h_v.dims());
+                    let h_v_f32 = h_v.to_dtype(DType::F32)?;
                     println!(
                         "h_v before layer {} values: {:?}",
                         i,
-                        h_v.get(0)?.get(0)?.to_vec2::<f32>()?
+                        h_v_f32.to_vec3::<f32>()?
                     );
+
+                    // Debug h_e (4D tensor) - access first batch and first sequence position
                     println!("h_e before layer {} dims: {:?}", i, h_e.dims());
+                    let h_e_f32 = h_e.to_dtype(DType::F32)?;
                     println!(
-                        "h_e before layer {} values: {:?}",
+                        "h_e before layer {} first position values: {:?}",
                         i,
-                        h_e.get(0)?.get(0)?.to_vec2::<f32>()?
+                        h_e_f32.get(0)?.get(0)?.to_vec2::<f32>()?
                     );
 
                     let (new_h_v, new_h_e) = layer.forward(
@@ -447,15 +544,18 @@ impl ProteinMPNN {
                         Some(false),
                     )?;
                     println!("After layer {} forward pass:", i);
+
+                    // Debug new_h_v
                     println!("new_h_v dims: {:?}", new_h_v.dims());
-                    println!(
-                        "new_h_v values: {:?}",
-                        new_h_v.get(0)?.get(0)?.to_vec2::<f32>()?
-                    );
+                    let new_h_v_f32 = new_h_v.to_dtype(DType::F32)?;
+                    println!("new_h_v values: {:?}", new_h_v_f32.to_vec3::<f32>()?);
+
+                    // Debug new_h_e
                     println!("new_h_e dims: {:?}", new_h_e.dims());
+                    let new_h_e_f32 = new_h_e.to_dtype(DType::F32)?;
                     println!(
-                        "new_h_e values: {:?}",
-                        new_h_e.get(0)?.get(0)?.to_vec2::<f32>()?
+                        "new_h_e first position values: {:?}",
+                        new_h_e_f32.get(0)?.get(0)?.to_vec2::<f32>()?
                     );
 
                     h_v = new_h_v;
