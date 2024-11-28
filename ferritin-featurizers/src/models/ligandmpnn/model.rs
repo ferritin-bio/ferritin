@@ -499,6 +499,8 @@ impl ProteinMPNN {
         println!("We need to add the bias!");
 
         // Todo! Fix this hack.
+        let temperature = 1.0f64;
+        let seed = 111;
         let symmetry_residues: Option<Vec<i32>> = None;
         match symmetry_residues {
             None => {
@@ -542,6 +544,7 @@ impl ProteinMPNN {
                 }
                 let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
                 let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
+
                 let mask_fw = mask_fw
                     .broadcast_as(h_exv_encoder.shape())?
                     .to_dtype(h_exv_encoder.dtype())?;
@@ -551,15 +554,15 @@ impl ProteinMPNN {
                 for t_ in 0..l {
                     let t = decoding_order.i((.., t_))?;
                     let t_gather = t.unsqueeze(1)?; // Shape [B, 1]
+
+                    // Gather masks and bias
                     let chain_mask_t = chain_mask.gather(&t_gather, 1)?.squeeze(1)?;
                     let mask_t = mask.gather(&t_gather, 1)?.squeeze(1)?;
-
-                    // Gather bias for current position
                     let bias_t = bias
                         .gather(&t_gather.unsqueeze(2)?.expand((b, 1, 21))?.contiguous()?, 1)?
                         .squeeze(1)?;
 
-                    // Gather current position tensors
+                    // Gather edge and node indices/features
                     let e_idx_t = e_idx.gather(
                         &t_gather
                             .unsqueeze(2)?
@@ -577,39 +580,8 @@ impl ProteinMPNN {
                         1,
                     )?;
 
-                    let h_s = h_s
-                        .unsqueeze(1)? // Add sequence length dimension [1, 1, 93, 128]
-                        .expand((
-                            b,
-                            1,           // single position
-                            h_s.dim(1)?, // 93
-                            h_s.dim(2)?, // 128
-                        ))?
-                        .contiguous()?;
-
-                    // Expand h_e_t to match expected dimensions
-                    let h_e_t = h_e_t.expand((
-                        b,             // batch
-                        h_e_t.dim(1)?, // seq length (1)
-                        h_e_t.dim(2)?, // neighbors (24)
-                        h_e_t.dim(3)?, // features (128)
-                    ))?;
-
-                    // Expand e_idx_t to match
-                    let e_idx_t = e_idx_t.expand((
-                        b,               // batch
-                        e_idx_t.dim(1)?, // seq length (1)
-                        e_idx_t.dim(2)?, // neighbors (24)
-                    ))?;
-
-                    println!("05....");
-                    println!("h_s dims: {:?}", h_s.dims());
-                    println!("h_e_t dims: {:?}", h_e_t.dims());
-                    println!("e_idx_t dims: {:?}", e_idx_t.dims());
-
                     let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
 
-                    println!("06....");
                     let h_exv_encoder_t = h_exv_encoder_fw.gather(
                         &t_gather
                             .unsqueeze(2)?
@@ -620,96 +592,104 @@ impl ProteinMPNN {
                     )?;
 
                     let mask_bw_t = mask_bw.gather(
-                        &t_gather.unsqueeze(2)?.unsqueeze(3)?.expand((
-                            b,
-                            1,
-                            mask_bw.dim(2)?,
-                            mask_bw.dim(3)?,
-                        ))?,
+                        &t_gather
+                            .unsqueeze(2)?
+                            .unsqueeze(3)?
+                            .expand((b, 1, mask_bw.dim(2)?, mask_bw.dim(3)?))?
+                            .contiguous()?,
                         1,
                     )?;
 
-                    // Gather current position tensors
-                    let e_idx_t =
-                        e_idx.gather(&t_gather.unsqueeze(2)?.expand((b, 1, e_idx.dim(2)?))?, 1)?;
+                    // Decoder layers loop
+                    for l in 0..self.decoder_layers.len() {
+                        let h_v_stack_l = &h_v_stack[l];
 
-                    let h_e_t = h_e.gather(
-                        &t_gather.unsqueeze(2)?.unsqueeze(3)?.expand((
-                            b,
+                        let h_esv_decoder_t = cat_neighbors_nodes(h_v_stack_l, &h_es_t, &e_idx_t)?;
+
+                        let h_v_t = h_v_stack_l.gather(
+                            &t_gather
+                                .unsqueeze(2)?
+                                .expand((b, 1, h_v_stack_l.dim(2)?))?
+                                .contiguous()?,
                             1,
-                            h_e.dim(2)?,
-                            h_e.dim(3)?,
-                        ))?,
-                        1,
-                    )?;
+                        )?;
 
-                    let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
+                        let h_esv_t = mask_bw_t.mul(&h_esv_decoder_t)?.add(&h_exv_encoder_t)?;
 
-                    let h_exv_encoder_t = h_exv_encoder_fw.gather(
-                        &t_gather.unsqueeze(2)?.unsqueeze(3)?.expand((
-                            b,
+                        // Update h_v_stack[l + 1]
+                        let new_h_v =
+                            self.decoder_layers[l].forward(&h_v_t, &h_esv_t, Some(&mask_t))?;
+                        h_v_stack[l + 1] = h_v_stack[l + 1].scatter(
                             1,
-                            h_exv_encoder_fw.dim(2)?,
-                            h_exv_encoder_fw.dim(3)?,
-                        ))?,
-                        1,
-                    )?;
+                            &t_gather
+                                .unsqueeze(2)?
+                                .expand((b, 1, h_v.dim(2)?))?
+                                .contiguous()?,
+                            &new_h_v,
+                        )?;
+                    }
 
-                    let mask_bw_t = mask_bw.gather(
-                        &t_gather.unsqueeze(2)?.unsqueeze(3)?.expand((
-                            b,
-                            1,
-                            mask_bw.dim(2)?,
-                            mask_bw.dim(3)?,
-                        ))?,
-                        1,
-                    )?;
-
-                    // Generate logits and sample
+                    // Get final h_v_t and generate logits
                     let h_v_t = h_v_stack
                         .last()
                         .unwrap()
                         .gather(
-                            &t_gather.unsqueeze(2)?.expand((
-                                b,
-                                1,
-                                h_v_stack.last().unwrap().dim(2)?,
-                            ))?,
+                            &t_gather
+                                .unsqueeze(2)?
+                                .expand((b, 1, h_v_stack.last().unwrap().dim(2)?))?
+                                .contiguous()?,
                             1,
                         )?
                         .squeeze(1)?;
 
-                    let temperature = 1.0f64;
-                    let seed = 299792458;
-
                     let logits = self.w_out.forward(&h_v_t)?;
                     let log_probs = log_softmax(&logits, D::Minus1)?;
 
-                    // Sample new token
-                    let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
+                    // Generate probabilities and sample
+                    let probs =
+                        softmax(&(logits.add(&bias_t)?.div_scalar(temperature)?)?, D::Minus1)?;
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
 
                     let s_t = multinomial_sample(&probs_sample, temperature, seed)?;
 
-                    // Update the running tensors
-                    let h_s = h_s.scatter_add(
-                        &t_gather.unsqueeze(2)?.expand((b, 1, h_s.dim(2)?))?,
+                    // Gather true sequence values if needed
+                    let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
+                    let s_t = s_t
+                        .mul(&chain_mask_t)?
+                        .add(&s_true_t.mul(&chain_mask_t.neg()?.add_scalar(1.0)?)?)?;
+
+                    // Update running tensors
+                    h_s = h_s.scatter(
+                        1,
+                        &t_gather
+                            .unsqueeze(2)?
+                            .expand((b, 1, h_s.dim(2)?))?
+                            .contiguous()?,
                         &self.w_s.forward(&s_t)?.unsqueeze(1)?,
-                        1,
                     )?;
 
-                    all_probs = all_probs.scatter_add(
-                        &t_gather.unsqueeze(2)?.expand((b, 1, 20))?,
-                        &(chain_mask_t.unsqueeze(1)?.mul(&probs_sample))?,
+                    s = s.scatter(1, &t_gather, &s_t.unsqueeze(1)?)?;
+
+                    all_probs = all_probs.scatter(
                         1,
+                        &t_gather.unsqueeze(2)?.expand((b, 1, 20))?.contiguous()?,
+                        &chain_mask_t
+                            .unsqueeze(1)?
+                            .unsqueeze(2)?
+                            .expand((b, 1, 20))?
+                            .mul(&probs_sample.unsqueeze(1)?)?,
                     )?;
 
-                    all_log_probs = all_log_probs.scatter_add(
-                        &t_gather.unsqueeze(2)?.expand((b, 1, 21))?,
-                        &(chain_mask_t.unsqueeze(1)?.mul(&log_probs))?,
+                    all_log_probs = all_log_probs.scatter(
                         1,
+                        &t_gather.unsqueeze(2)?.expand((b, 1, 21))?.contiguous()?,
+                        &chain_mask_t
+                            .unsqueeze(1)?
+                            .unsqueeze(2)?
+                            .expand((b, 1, 21))?
+                            .mul(&log_probs.unsqueeze(1)?)?,
                     )?;
                 }
 
@@ -1126,6 +1106,7 @@ impl ProteinMPNN {
         let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
         let h_e = h_e.repeat(&[b_decoder, 1, 1, 1])?;
         let mask = x_mask.as_ref().unwrap().repeat(&[b_decoder, 1])?;
+
         let h_s = self.w_s.forward(&s_true)?; // embedding layer
         let h_es = cat_neighbors_nodes(&h_s, &h_e, &e_idx)?;
         // Build encoder embeddings
