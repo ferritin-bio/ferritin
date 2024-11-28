@@ -140,21 +140,27 @@ impl EncLayer {
     ) -> Result<(Tensor, Tensor)> {
         println!("EncoderLayer: Starting forward pass");
 
+        // Initial values - use get(0) to get first batch, narrow for first few values
+        println!("Input h_v dims: {:?}", h_v.dims());
         println!(
-            "Input h_v dims: {:?}, first values: {:?}",
-            h_v.dims(),
+            "Input h_v first values: {:?}",
             h_v.to_dtype(DType::F32)?
                 .get(0)?
-                .get(0)?
-                .narrow(0, 0, 5)?
-                .to_vec1::<f32>()?
+                .narrow(0, 0, 1)? // Get first sequence position
+                .narrow(1, 0, 5)? // Get first 5 features
+                .to_vec2::<f32>()?
         );
 
         let h_ev = cat_neighbors_nodes(h_v, h_e, e_idx)?;
+        println!("After cat_neighbors_nodes h_ev dims: {:?}", h_ev.dims());
         println!(
-            "After cat_neighbors_nodes h_ev dims: {:?}, first values: {:?}",
-            h_ev.dims(),
-            h_ev.get(0)?.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
+            "h_ev first values: {:?}",
+            h_ev.to_dtype(DType::F32)?
+                .get(0)?
+                .narrow(0, 0, 1)? // First sequence position
+                .narrow(1, 0, 5)? // First 5 neighbors
+                .narrow(2, 0, 5)? // First 5 features
+                .to_vec3::<f32>()?
         );
 
         let h_v_expand = h_v.unsqueeze(D::Minus2)?;
@@ -165,104 +171,44 @@ impl EncLayer {
             h_ev.dims()[2],       // number of neighbors
             h_v_expand.dims()[3], // hidden dimension
         ];
-        let h_v_expand = h_v_expand.expand(&expand_shape)?;
-        let h_v_expand = h_v_expand.to_dtype(h_ev.dtype())?;
+        let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
+        println!("h_v_expand dims: {:?}", h_v_expand.dims());
         println!(
-            "h_v_expand dims: {:?}, first values: {:?}",
-            h_v_expand.dims(),
+            "h_v_expand first values: {:?}",
             h_v_expand
+                .to_dtype(DType::F32)?
                 .get(0)?
-                .get(0)?
-                .narrow(0, 0, 5)?
-                .to_vec1::<f32>()?
+                .narrow(0, 0, 1)? // First sequence position
+                .narrow(1, 0, 5)? // First 5 neighbors
+                .narrow(2, 0, 5)? // First 5 features
+                .to_vec3::<f32>()?
         );
 
         // Now concatenate along the last dimension
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
 
-        println!(
-            "After concat h_ev dims: {:?}, first values: {:?}",
-            h_ev.dims(),
-            h_ev.get(0)?.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
-        );
-
         // After each layer in message calculation
         let h_message = self.w1.forward(&h_ev)?;
-        println!(
-            "After w1 dims: {:?}, first values: {:?}",
-            h_message.dims(),
-            h_message
-                .get(0)?
-                .get(0)?
-                .narrow(0, 0, 5)?
-                .to_vec1::<f32>()?
-        );
 
         let h_message = h_message.gelu()?;
-        println!(
-            "After gelu1 dims: {:?}, first values: {:?}",
-            h_message.dims(),
-            h_message
-                .get(0)?
-                .get(0)?
-                .narrow(0, 0, 5)?
-                .to_vec1::<f32>()?
-        );
 
         let h_message = h_message.apply(&self.w2)?.gelu()?.apply(&self.w3)?;
-        println!(
-            "After w2,gelu,w3 dims: {:?}, first values: {:?}",
-            h_message.dims(),
-            h_message
-                .get(0)?
-                .get(0)?
-                .narrow(0, 0, 5)?
-                .to_vec1::<f32>()?
-        );
 
         let h_message = if let Some(mask) = mask_attend {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
         } else {
             h_message
         };
-        println!(
-            "After mask dims: {:?}, first values: {:?}",
-            h_message.dims(),
-            h_message
-                .get(0)?
-                .get(0)?
-                .narrow(0, 0, 5)?
-                .to_vec1::<f32>()?
-        );
 
-        let dh = h_message.sum(D::Minus2)? / self.scale;
-
-        println!(
-            "After sum/scale dh dims: {:?}, first values: {:?}",
-            dh.dims(),
-            dh.get(0)?.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
-        );
+        let dh = (h_message.sum(D::Minus2)? / self.scale)?;
 
         let h_v = {
             let dh_dropout = self
                 .dropout1
-                .forward(&dh?, training.expect("Training must be specified"))?;
+                .forward(&dh, training.expect("Training must be specified"))?;
             let dh_dropout = dh_dropout.to_dtype(DType::F32)?;
             let h_v = h_v.to_dtype(DType::F32)?;
-            println!(
-                "Before norm1 add dims: {:?}, first values: {:?}",
-                h_v.dims(),
-                h_v.get(0)?.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
-            );
-            println!(
-                "dh_dropout dims: {:?}, first values: {:?}",
-                dh_dropout.dims(),
-                dh_dropout
-                    .get(0)?
-                    .get(0)?
-                    .narrow(0, 0, 5)?
-                    .to_vec1::<f32>()?
-            );
+
             self.norm1.forward(&(h_v + dh_dropout)?)?
         };
 
