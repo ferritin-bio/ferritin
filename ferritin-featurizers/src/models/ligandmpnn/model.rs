@@ -703,14 +703,38 @@ impl ProteinMPNN {
                     println!("Test 13");
                     // Generate probabilities and sample
                     let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
+                    println!("Test 14");
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
 
+                    // Let's add debug prints:
+                    println!("logits: {:?}", logits.to_vec2::<f32>()?);
+                    println!("bias_t: {:?}", bias_t.to_vec2::<f32>()?);
+                    println!("probs after softmax: {:?}", probs.to_vec2::<f32>()?);
+                    println!(
+                        "probs_sample before sampling: {:?}",
+                        probs_sample.to_vec2::<f32>()?
+                    );
+
                     // Sample new token
-                    let s_t = multinomial_sample(&probs_sample, temperature, seed)?;
+                    println!("Test 15");
+                    println!("probs_sample dims: {:?}", probs_sample.dims());
+                    println!("probs_sample: {:?}", probs_sample.to_vec2::<f32>()?);
+
+                    let probs_sample_1d = probs_sample
+                        .squeeze(0)? // Remove batch dimension -> [20]
+                        .clamp(1e-10, 1.0)? // Ensure no zeros
+                        .div(&probs_sample.sum_keepdim(1)?.squeeze(0)?)? // Normalize to sum to 1
+                        .contiguous()?;
+
+                    println!("probs_sample_1d: {:?}", probs_sample_1d.to_vec1::<f32>()?);
+                    println!("probs_sample_1d sum: {:?}", probs_sample_1d.sum(0)?);
+
+                    let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
 
                     // Gather true sequence values if needed
+                    println!("Test 16");
                     let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
                     let s_t = s_t
                         .mul(&chain_mask_t)?
