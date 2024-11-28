@@ -490,6 +490,7 @@ impl ProteinMPNN {
         let decoding_order = (&chain_mask + 0.0001)?
             .mul(&rand_tensor.abs()?)?
             .arg_sort_last_dim(false)?;
+
         println!("Decoding Order: {:?}", decoding_order.dims());
 
         // Todo add  bias
@@ -571,6 +572,7 @@ impl ProteinMPNN {
                         1,
                     )?;
 
+                    println!("Test 05");
                     let h_e_t = h_e.gather(
                         &t_gather
                             .unsqueeze(2)?
@@ -579,6 +581,25 @@ impl ProteinMPNN {
                             .contiguous()?,
                         1,
                     )?;
+
+                    println!("h_s dims: {:?}", h_s.dims());
+                    println!("h_e_t dims: {:?}", h_e_t.dims());
+                    println!("e_idx_t dims: {:?}", e_idx_t.dims());
+
+                    let b = h_s.dim(0)?; // batch size
+                    let l = h_s.dim(1)?; // sequence length
+                    let n = e_idx_t.dim(2)?; // number of neighbors
+                    let c = h_s.dim(2)?; // channels/features
+
+                    let h_e_t = h_e_t
+                        .squeeze(1)? // [B, N, C]
+                        .unsqueeze(1)? // [B, 1, N, C]
+                        .expand((b, l, n, c))? // [B, L, N, C]
+                        .contiguous()?;
+
+                    let e_idx_t = e_idx_t
+                        .expand((b, l, n))? // [B, L, N]
+                        .contiguous()?;
 
                     let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
 
@@ -600,12 +621,16 @@ impl ProteinMPNN {
                         1,
                     )?;
 
+                    println!("Test 09");
                     // Decoder layers loop
                     for l in 0..self.decoder_layers.len() {
+                        println!("X 01");
                         let h_v_stack_l = &h_v_stack[l];
 
+                        println!("X 02");
                         let h_esv_decoder_t = cat_neighbors_nodes(h_v_stack_l, &h_es_t, &e_idx_t)?;
 
+                        println!("X 03");
                         let h_v_t = h_v_stack_l.gather(
                             &t_gather
                                 .unsqueeze(2)?
@@ -614,7 +639,25 @@ impl ProteinMPNN {
                             1,
                         )?;
 
-                        let h_esv_t = mask_bw_t.mul(&h_esv_decoder_t)?.add(&h_exv_encoder_t)?;
+                        let mask_bw_t = mask_bw_t.expand(h_esv_decoder_t.dims())?.contiguous()?;
+
+                        let h_exv_encoder_t = h_exv_encoder_t
+                            .expand(h_esv_decoder_t.dims())?
+                            .contiguous()?
+                            .to_dtype(DType::F64)?;
+
+                        let h_esv_t = mask_bw_t
+                            .mul(&h_esv_decoder_t.to_dtype(DType::F64)?)?
+                            .add(&h_exv_encoder_t)?
+                            .to_dtype(DType::F32)?;
+
+                        let h_v_t = h_v_t
+                            .expand((
+                                h_esv_t.dim(0)?, // batch size
+                                h_esv_t.dim(1)?, // sequence length (93)
+                                h_v_t.dim(2)?,   // features (128)
+                            ))?
+                            .contiguous()?;
 
                         // Update h_v_stack[l + 1]
                         let new_h_v = self.decoder_layers[l].forward(
@@ -625,18 +668,21 @@ impl ProteinMPNN {
                             None,
                         )?;
 
-                        // Update h_v_stack
-                        let zero_mask = t_gather
-                            .unsqueeze(2)?
-                            .expand((b, 1, h_v.dim(2)?))?
-                            .contiguous()?
-                            .zeros_like()?;
+                        // Create gather indices matching PyTorch pattern
+                        let gather_indices = t_gather
+                            .unsqueeze(2)? // Like [:, None, None]
+                            .expand((t_gather.dim(0)?, t_gather.dim(1)?, h_v.dim(2)?))? // Like repeat(1, 1, h_V.shape[-1])
+                            .contiguous()?;
+
+                        // Gather operation
+                        let new_h_v_t = new_h_v.gather(&gather_indices, 1)?;
+
+                        // Use same indices for scatter
                         h_v_stack[l + 1] =
-                            h_v_stack[l + 1].scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                        h_v_stack[l + 1] = h_v_stack[l + 1].scatter_add(&t_gather, &new_h_v, 1)?;
-                        // Add new values
+                            h_v_stack[l + 1].scatter_add(&gather_indices, &new_h_v_t, 1)?;
                     }
 
+                    println!("Test 10");
                     let h_v_t = h_v_stack
                         .last()
                         .unwrap()
@@ -649,10 +695,12 @@ impl ProteinMPNN {
                         )?
                         .squeeze(1)?;
 
+                    println!("Test 11");
                     // Generate logits and probabilities
                     let logits = self.w_out.forward(&h_v_t)?;
+                    println!("Test 12");
                     let log_probs = log_softmax(&logits, D::Minus1)?;
-
+                    println!("Test 13");
                     // Generate probabilities and sample
                     let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
                     let probs_sample = probs
@@ -675,8 +723,8 @@ impl ProteinMPNN {
                         .expand((b, 1, h_s.dim(2)?))?
                         .contiguous()?
                         .zeros_like()?;
-                    h_s = h_s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                    h_s = h_s.scatter_add(&t_gather, &h_s_update, 1)?;
+                    let h_s = h_s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    let h_s = h_s.scatter_add(&t_gather, &h_s_update, 1)?;
 
                     // Update s
                     let zero_mask = t_gather.zeros_like()?;
