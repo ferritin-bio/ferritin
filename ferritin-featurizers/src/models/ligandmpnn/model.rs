@@ -394,9 +394,18 @@ impl ProteinMPNN {
             None => &Tensor::zeros_like(&s_true)?,
         };
 
+        println!("Starting encode function");
+        // Initial feature processing
+
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
                 let (e, e_idx) = self.features.forward(features, device)?;
+                println!("After embedding dims: {:?}", e.dims());
+                println!(
+                    "After embedding values: {:?}",
+                    e.narrow(2, 0, 5)?.to_vec3::<f32>()?
+                );
+
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     DType::F64,
@@ -425,6 +434,9 @@ impl ProteinMPNN {
                     h_v = new_h_v;
                     h_e = new_h_e;
                 }
+                println!("Final h_v dims: {:?}", h_v.dims());
+                println!("Final h_e dims: {:?}", h_e.dims());
+                println!("Final e_idx dims: {:?}", e_idx.dims());
                 Ok((h_v, h_e, e_idx))
             }
             ModelTypes::LigandMPNN => {
@@ -484,6 +496,10 @@ impl ProteinMPNN {
 
         // encode...
         let (h_v, h_e, e_idx) = self.encode(features)?;
+        println!("h_v before repeat dims: {:?}", h_v.dims());
+        println!("h_e before repeat dims: {:?}", h_e.dims());
+        println!("h_v before repeat values: {:?}", h_v.to_vec3::<f32>()?);
+        println!("h_e before repeat values: {:?}", h_e.to_vec3::<f32>()?);
 
         // this might be  a bad rand implementation
         let rand_tensor = Tensor::randn(0., 0.25, (b, l), device)?.to_dtype(DType::F32)?;
@@ -539,9 +555,23 @@ impl ProteinMPNN {
                 let s = (Tensor::ones((b, l), DType::I64, device)? * 20.)?;
 
                 // updated layers are here.
+                println!("Initial h_v dims: {:?}", h_v.dims());
+                println!("Initial h_v values: {:?}", h_v.to_vec3::<f32>()?);
+
                 let mut h_v_stack = vec![h_v.clone()];
-                for _ in 0..self.decoder_layers.len() {
-                    h_v_stack.push(Tensor::zeros_like(&h_v)?);
+                println!("h_v_stack[0] dims: {:?}", h_v_stack[0].dims());
+                println!("h_v_stack[0] values: {:?}", h_v_stack[0].to_vec3::<f32>()?);
+
+                for i in 0..self.decoder_layers.len() {
+                    let zeros = Tensor::zeros_like(&h_v)?;
+                    println!("zeros layer {} dims: {:?}", i, zeros.dims());
+                    println!(
+                        "zeros layer {} first few values: {:?}",
+                        i,
+                        zeros.narrow(2, 0, 5)?.to_vec3::<f32>()?
+                    );
+                    h_v_stack.push(zeros);
+                    // h_v_stack.push(Tensor::zeros_like(&h_v)?);
                 }
                 let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
                 let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
@@ -627,8 +657,17 @@ impl ProteinMPNN {
                         println!("X 01");
                         let h_v_stack_l = &h_v_stack[l];
 
+                        println!("Layer {}", l);
+                        println!("h_v_stack_l dims: {:?}", h_v_stack_l.dims());
+                        println!("h_v_stack_l values: {:?}", h_v_stack_l.to_vec3::<f32>()?);
+
                         println!("X 02");
                         let h_esv_decoder_t = cat_neighbors_nodes(h_v_stack_l, &h_es_t, &e_idx_t)?;
+                        println!("h_esv_decoder_t dims: {:?}", h_esv_decoder_t.dims());
+                        // println!(
+                        //     "h_esv_decoder_t first few values: {:?}",
+                        //     h_esv_decoder_t.slice_along(2, 0..5)?.to_vec3::<f32>()?
+                        // );
 
                         println!("X 03");
                         let h_v_t = h_v_stack_l.gather(
@@ -638,6 +677,8 @@ impl ProteinMPNN {
                                 .contiguous()?,
                             1,
                         )?;
+                        println!("h_v_t dims: {:?}", h_v_t.dims());
+                        println!("h_v_t values: {:?}", h_v_t.to_vec3::<f32>()?);
 
                         let mask_bw_t = mask_bw_t.expand(h_esv_decoder_t.dims())?.contiguous()?;
 
@@ -650,6 +691,12 @@ impl ProteinMPNN {
                             .mul(&h_esv_decoder_t.to_dtype(DType::F64)?)?
                             .add(&h_exv_encoder_t)?
                             .to_dtype(DType::F32)?;
+
+                        println!("h_esv_t dims: {:?}", h_esv_t.dims());
+                        // println!(
+                        //     "h_esv_t first few values: {:?}",
+                        //     h_esv_t.slice_along(2, 0..5)?.to_vec3::<f32>()?
+                        // );
 
                         let h_v_t = h_v_t
                             .expand((
@@ -667,6 +714,9 @@ impl ProteinMPNN {
                             None,
                             None,
                         )?;
+
+                        println!("new_h_v dims: {:?}", new_h_v.dims());
+                        println!("new_h_v values: {:?}", new_h_v.to_vec3::<f32>()?);
 
                         // Create gather indices matching PyTorch pattern
                         let gather_indices = t_gather
@@ -694,6 +744,9 @@ impl ProteinMPNN {
                             1,
                         )?
                         .squeeze(1)?;
+
+                    println!("h_v_t dims: {:?}", h_v_t.dims());
+                    println!("h_v_t values: {:?}", h_v_t.to_vec2::<f32>()?);
 
                     println!("Test 11");
                     // Generate logits and probabilities
