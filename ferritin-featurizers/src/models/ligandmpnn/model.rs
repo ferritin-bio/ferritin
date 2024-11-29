@@ -971,10 +971,6 @@ impl ProteinMPNN {
                     );
 
                     // Sample new token
-                    println!("Test 15");
-                    println!("probs_sample dims: {:?}", probs_sample.dims());
-                    println!("probs_sample: {:?}", probs_sample.to_vec2::<f32>()?);
-
                     let probs_sample_1d = {
                         // Get sum first
                         let sum = probs_sample.sum(1)?; // Sum across probabilities dimension
@@ -984,18 +980,8 @@ impl ProteinMPNN {
                         let normalized = probs_sample
                             .squeeze(0)? // Remove batch dimension -> [20]
                             .clamp(1e-10, 1.0)?;
-
-                        println!("SUM: {:?}", sum);
-
-                        // let normalized: Tensor = (normalized / sum.to_vec0()?)?;
                         let normalized = normalized.broadcast_div(&sum)?;
-
                         let normalized = normalized.contiguous()?;
-
-                        println!("normalized dims: {:?}", normalized.dims());
-                        println!("normalized values: {:?}", normalized.to_vec1::<f32>()?);
-                        println!("normalized sum: {:?}", normalized.sum(0)?.to_vec0::<f32>()?);
-
                         normalized
                     };
 
@@ -1006,21 +992,48 @@ impl ProteinMPNN {
 
                     // Gather true sequence values if needed
                     println!("Test 16");
+                    println!("s_t dtype: {:?}", s_t.dtype());
+                    println!("chain_mask_t dtype: {:?}", chain_mask_t.dtype());
+                    // println!("s_true_t dtype: {:?}", s_true_t.dtype());
+
+                    // todo: move this upstream
+                    let s_t = s_t.to_dtype(DType::F32)?;
+                    let s_true = s_true.to_dtype(DType::F32)?;
                     let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
+
+                    println!("s_true_t dtype: {:?}", s_true_t.dtype());
                     let s_t = s_t
                         .mul(&chain_mask_t)?
                         .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?;
 
+                    println!("Test 17");
                     // Update h_s
-                    let h_s_update = self.w_s.forward(&s_t)?.unsqueeze(1)?;
-                    let zero_mask = t_gather
-                        .unsqueeze(2)?
-                        .expand((b, 1, h_s.dim(2)?))?
-                        .contiguous()?
-                        .zeros_like()?;
-                    let h_s = h_s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                    let h_s = h_s.scatter_add(&t_gather, &h_s_update, 1)?;
+                    // thi sis t
+                    let s_t_idx = s_t.to_dtype(DType::U32)?;
+                    let h_s_update = self.w_s.forward(&s_t_idx)?.unsqueeze(1)?;
 
+                    println!("Test 17 01");
+                    // Print initial dimensions
+                    println!("t_gather dims: {:?}", t_gather.dims()); // Probably [1, 1]
+                    println!("h_s dims: {:?}", h_s.dims()); // Probably [1, 93, 128]
+                    println!("h_s_update dims: {:?}", h_s_update.dims()); // Probably [1, 1, 128]
+
+                    // Expand t_gather for scatter operation
+                    let t_gather_expanded = t_gather
+                        .unsqueeze(2)? // [1, 1, 1]
+                        .expand((b, 1, 1))? // Keep the middle dim as 1 for indexing
+                        .contiguous()?;
+
+                    let zero_mask = Tensor::zeros((b, 1, h_s.dim(2)?), h_s.dtype(), h_s.device())?;
+
+                    println!("Test 18");
+                    println!("t_gather_expanded dims: {:?}", t_gather_expanded.dims());
+                    println!("zero_mask dims: {:?}", zero_mask.dims());
+
+                    h_s = h_s.scatter_add(&t_gather_expanded, &zero_mask, 1)?; // Zero out
+
+                    println!("Test 19");
+                    h_s = h_s.scatter_add(&t_gather_expanded, &h_s_update, 1)?;
                     // Update s
                     let zero_mask = t_gather.zeros_like()?;
                     let s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
