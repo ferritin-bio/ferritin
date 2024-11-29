@@ -930,49 +930,49 @@ impl ProteinMPNN {
                     // h_s = h_s.scatter_add(&t_gather_expanded, &h_s_update, 1)?;
 
                     println!("Test 17 04");
-                    let t_gather_expanded = t_gather
-                        .unsqueeze(2)?
-                        .expand((b, 1, h_s.dim(2)?))?
-                        .contiguous()?;
+                    // Instead of expanding t_gather, reshape it to 1D
+                    let t_gather_expanded = t_gather.reshape(&[b])?; // Shape: [1]
+
+                    let h_s_update = h_s_update
+                        .squeeze(0)? // Remove any extra dimensions
+                        .unsqueeze(1)?; // Add back the sequence dimension to match h_s rank
+
+                    println!("t_gather_expanded shape: {:?}", t_gather_expanded.dims());
+                    println!("h_s_update shape: {:?}", h_s_update.dims());
+                    println!("h_s shape: {:?}", h_s.dims());
 
                     println!("Test 17 05");
-                    h_s =
-                        h_s.index_add(&t_gather_expanded, &Tensor::zeros_like(&h_s_update)?, 1)?;
+                    h_s = h_s.index_add(
+                        &t_gather_expanded, // Shape: [1]
+                        &Tensor::zeros_like(&h_s_update)?,
+                        1,
+                    )?;
 
                     println!("Test 17 06");
                     h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
 
                     // Update s
                     println!("Test 17 07");
-                    let zero_mask = t_gather.zeros_like()?;
+                    let zero_mask = t_gather.zeros_like()?.to_dtype(DType::I64)?;
                     println!("Test 17 08");
                     let s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    let s_t = s_t.to_dtype(DType::I64)?;
                     println!("Test 17 09");
                     let s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
                     println!("Test 17 10");
-
-                    // // Update all_probs
-                    // let probs_update = chain_mask_t
-                    //     .unsqueeze(1)?
-                    //     .unsqueeze(2)?
-                    //     .expand((b, 1, 20))?
-                    //     .mul(&probs_sample.unsqueeze(1)?)?;
-                    // let zero_mask = t_gather
-                    //     .unsqueeze(2)?
-                    //     .expand((b, 1, 20))?
-                    //     .contiguous()?
-                    //     .zeros_like()?;
-                    // all_probs = all_probs.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                    // all_probs = all_probs.scatter_add(&t_gather, &probs_update, 1)?; // Add new values
 
                     let probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
                         .expand((b, 1, 20))?
                         .mul(&probs_sample.unsqueeze(1)?)?;
+
+                    println!("Test 17 11");
                     let t_expanded = t_gather.unsqueeze(2)?.expand((b, 1, 20))?.contiguous()?;
+                    println!("Test 17 12");
                     all_probs =
                         all_probs.index_add(&t_expanded, &Tensor::zeros_like(&probs_update)?, 1)?;
+                    println!("Test 17 13");
                     all_probs = all_probs.index_add(&t_expanded, &probs_update, 1)?;
 
                     // // Update all_log_probs
