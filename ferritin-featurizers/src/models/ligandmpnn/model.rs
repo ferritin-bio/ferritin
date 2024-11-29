@@ -898,69 +898,28 @@ impl ProteinMPNN {
                         .mul(&chain_mask_t)?
                         .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?;
 
-                    println!("Test 17");
                     let s_t_idx = s_t.to_dtype(DType::U32)?;
-                    println!("Test 17 01");
                     // Ensure s_t_idx is 1D before passing to w_s
                     let s_t_idx = s_t_idx.reshape(&[s_t_idx.dim(0)?])?;
-                    println!("Test 17 02");
                     let h_s_update = self.w_s.forward(&s_t_idx)?.unsqueeze(1)?;
-                    println!("Test 17 03");
 
-                    // // Print initial dimensions
-                    // println!("t_gather dims: {:?}", t_gather.dims()); // Probably [1, 1]
-                    // println!("h_s dims: {:?}", h_s.dims()); // Probably [1, 93, 128]
-                    // println!("h_s_update dims: {:?}", h_s_update.dims()); // Probably [1, 1, 128]
-
-                    // // Expand t_gather for scatter operation
-                    // let t_gather_expanded = t_gather
-                    //     .unsqueeze(2)? // [1, 1, 1]
-                    //     .expand((b, 1, 1))? // Keep the middle dim as 1 for indexing
-                    //     .contiguous()?;
-
-                    // let zero_mask = Tensor::zeros((b, 1, h_s.dim(2)?), h_s.dtype(), h_s.device())?;
-
-                    // println!("Test 18");
-                    // println!("t_gather_expanded dims: {:?}", t_gather_expanded.dims());
-                    // println!("zero_mask dims: {:?}", zero_mask.dims());
-
-                    // h_s = h_s.scatter_add(&t_gather_expanded, &zero_mask, 1)?; // Zero out
-
-                    // println!("Test 19");
-                    // h_s = h_s.scatter_add(&t_gather_expanded, &h_s_update, 1)?;
-
-                    println!("Test 17 04");
                     // Instead of expanding t_gather, reshape it to 1D
                     let t_gather_expanded = t_gather.reshape(&[b])?; // Shape: [1]
-
                     let h_s_update = h_s_update
                         .squeeze(0)? // Remove any extra dimensions
                         .unsqueeze(1)?; // Add back the sequence dimension to match h_s rank
-
-                    println!("t_gather_expanded shape: {:?}", t_gather_expanded.dims());
-                    println!("h_s_update shape: {:?}", h_s_update.dims());
-                    println!("h_s shape: {:?}", h_s.dims());
-
-                    println!("Test 17 05");
                     h_s = h_s.index_add(
                         &t_gather_expanded, // Shape: [1]
                         &Tensor::zeros_like(&h_s_update)?,
                         1,
                     )?;
-
-                    println!("Test 17 06");
                     h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
-
-                    // Update s
-                    println!("Test 17 07");
                     let zero_mask = t_gather.zeros_like()?.to_dtype(DType::I64)?;
-                    println!("Test 17 08");
                     let s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
                     let s_t = s_t.to_dtype(DType::I64)?;
-                    println!("Test 17 09");
                     let s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
-                    println!("Test 17 10");
 
+                    println!("Test 17 10");
                     let probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
