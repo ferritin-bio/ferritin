@@ -858,22 +858,8 @@ impl ProteinMPNN {
                     println!("Test 09");
                     // Decoder layers loop
                     for l in 0..self.decoder_layers.len() {
-                        println!("X 01");
                         let h_v_stack_l = &h_v_stack[l];
-
-                        println!("Layer {}", l);
-                        println!("h_v_stack_l dims: {:?}", h_v_stack_l.dims());
-                        println!("h_v_stack_l values: {:?}", h_v_stack_l.to_vec3::<f32>()?);
-
-                        println!("X 02");
                         let h_esv_decoder_t = cat_neighbors_nodes(h_v_stack_l, &h_es_t, &e_idx_t)?;
-                        println!("h_esv_decoder_t dims: {:?}", h_esv_decoder_t.dims());
-                        // println!(
-                        //     "h_esv_decoder_t first few values: {:?}",
-                        //     h_esv_decoder_t.slice_along(2, 0..5)?.to_vec3::<f32>()?
-                        // );
-
-                        println!("X 03");
                         let h_v_t = h_v_stack_l.gather(
                             &t_gather
                                 .unsqueeze(2)?
@@ -881,23 +867,15 @@ impl ProteinMPNN {
                                 .contiguous()?,
                             1,
                         )?;
-                        println!("h_v_t dims: {:?}", h_v_t.dims());
-                        println!("h_v_t values: {:?}", h_v_t.to_vec3::<f32>()?);
-
                         let mask_bw_t = mask_bw_t.expand(h_esv_decoder_t.dims())?.contiguous()?;
-
                         let h_exv_encoder_t = h_exv_encoder_t
                             .expand(h_esv_decoder_t.dims())?
                             .contiguous()?
                             .to_dtype(DType::F64)?;
-
                         let h_esv_t = mask_bw_t
                             .mul(&h_esv_decoder_t.to_dtype(DType::F64)?)?
                             .add(&h_exv_encoder_t)?
                             .to_dtype(DType::F32)?;
-
-                        println!("h_esv_t dims: {:?}", h_esv_t.dims());
-
                         let h_v_t = h_v_t
                             .expand((
                                 h_esv_t.dim(0)?, // batch size
@@ -914,10 +892,6 @@ impl ProteinMPNN {
                             None,
                             None,
                         )?;
-
-                        println!("new_h_v dims: {:?}", new_h_v.dims());
-                        println!("new_h_v values: {:?}", new_h_v.to_vec3::<f32>()?);
-
                         // Create gather indices matching PyTorch pattern
                         let gather_indices = t_gather
                             .unsqueeze(2)? // Like [:, None, None]
@@ -932,7 +906,6 @@ impl ProteinMPNN {
                             h_v_stack[l + 1].scatter_add(&gather_indices, &new_h_v_t, 1)?;
                     }
 
-                    println!("Test 10");
                     let h_v_t = h_v_stack
                         .last()
                         .unwrap()
@@ -945,38 +918,17 @@ impl ProteinMPNN {
                         )?
                         .squeeze(1)?;
 
-                    println!("h_v_t dims: {:?}", h_v_t.dims());
-                    println!("h_v_t values: {:?}", h_v_t.to_vec2::<f32>()?);
-
-                    println!("Test 11");
                     // Generate logits and probabilities
                     let logits = self.w_out.forward(&h_v_t)?;
-                    println!("Test 12");
                     let log_probs = log_softmax(&logits, D::Minus1)?;
-                    println!("Test 13");
-                    // Generate probabilities and sample
                     let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
-                    println!("Test 14");
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
-
-                    // Let's add debug prints:
-                    println!("logits: {:?}", logits.to_vec2::<f32>()?);
-                    println!("bias_t: {:?}", bias_t.to_vec2::<f32>()?);
-                    println!("probs after softmax: {:?}", probs.to_vec2::<f32>()?);
-                    println!(
-                        "probs_sample before sampling: {:?}",
-                        probs_sample.to_vec2::<f32>()?
-                    );
-
                     // Sample new token
                     let probs_sample_1d = {
                         // Get sum first
                         let sum = probs_sample.sum(1)?; // Sum across probabilities dimension
-                        println!("sum dims: {:?}", sum.dims());
-                        println!("sum values: {:?}", sum.to_vec1::<f32>()?);
-
                         let normalized = probs_sample
                             .squeeze(0)? // Remove batch dimension -> [20]
                             .clamp(1e-10, 1.0)?;
@@ -984,24 +936,11 @@ impl ProteinMPNN {
                         let normalized = normalized.contiguous()?;
                         normalized
                     };
-
-                    println!("probs_sample_1d: {:?}", probs_sample_1d.to_vec1::<f32>()?);
-                    println!("probs_sample_1d sum: {:?}", probs_sample_1d.sum(0)?);
-
                     let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
-
-                    // Gather true sequence values if needed
-                    println!("Test 16");
-                    println!("s_t dtype: {:?}", s_t.dtype());
-                    println!("chain_mask_t dtype: {:?}", chain_mask_t.dtype());
-                    // println!("s_true_t dtype: {:?}", s_true_t.dtype());
-
                     // todo: move this upstream
                     let s_t = s_t.to_dtype(DType::F32)?;
                     let s_true = s_true.to_dtype(DType::F32)?;
                     let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
-
-                    println!("s_true_t dtype: {:?}", s_true_t.dtype());
                     let s_t = s_t
                         .mul(&chain_mask_t)?
                         .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?;
@@ -1066,70 +1005,6 @@ impl ProteinMPNN {
                         .zeros_like()?;
                     all_log_probs = all_log_probs.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
                     all_log_probs = all_log_probs.scatter_add(&t_gather, &log_probs_update, 1)?;
-                    // Add new values
-
-                    // // Get final h_v_t and generate logits
-                    // let h_v_t = h_v_stack
-                    //     .last()
-                    //     .unwrap()
-                    //     .gather(
-                    //         &t_gather
-                    //             .unsqueeze(2)?
-                    //             .expand((b, 1, h_v_stack.last().unwrap().dim(2)?))?
-                    //             .contiguous()?,
-                    //         1,
-                    //     )?
-                    //     .squeeze(1)?;
-
-                    // let logits = self.w_out.forward(&h_v_t)?;
-                    // let log_probs = log_softmax(&logits, D::Minus1)?;
-
-                    // // Generate probabilities and sample
-                    // let probs =
-                    //     softmax(&(logits.add(&bias_t)?.div_scalar(temperature)?)?, D::Minus1)?;
-                    // let probs_sample = probs
-                    //     .narrow(1, 0, 20)?
-                    //     .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
-
-                    // let s_t = multinomial_sample(&probs_sample, temperature, seed)?;
-
-                    // // Gather true sequence values if needed
-                    // let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
-                    // let s_t = s_t
-                    //     .mul(&chain_mask_t)?
-                    //     .add(&s_true_t.mul(&chain_mask_t.neg()?.add_scalar(1.0)?)?)?;
-
-                    // // Update running tensors
-                    // h_s = h_s.scatter(
-                    //     1,
-                    //     &t_gather
-                    //         .unsqueeze(2)?
-                    //         .expand((b, 1, h_s.dim(2)?))?
-                    //         .contiguous()?,
-                    //     &self.w_s.forward(&s_t)?.unsqueeze(1)?,
-                    // )?;
-
-                    // s = s.scatter(1, &t_gather, &s_t.unsqueeze(1)?)?;
-
-                    // all_probs = all_probs.scatter(
-                    //     1,
-                    //     &t_gather.unsqueeze(2)?.expand((b, 1, 20))?.contiguous()?,
-                    //     &chain_mask_t
-                    //         .unsqueeze(1)?
-                    //         .unsqueeze(2)?
-                    //         .expand((b, 1, 20))?
-                    //         .mul(&probs_sample.unsqueeze(1)?)?,
-                    // )?;
-
-                    // all_log_probs = all_log_probs.scatter(
-                    //     1,
-                    //     &t_gather.unsqueeze(2)?.expand((b, 1, 21))?.contiguous()?,
-                    //     &chain_mask_t
-                    //         .unsqueeze(1)?
-                    //         .unsqueeze(2)?
-                    //         .expand((b, 1, 21))?
-                    //         .mul(&log_probs.unsqueeze(1)?)?,
-                    // )?;
                 }
 
                 Ok(ScoreOutput {
