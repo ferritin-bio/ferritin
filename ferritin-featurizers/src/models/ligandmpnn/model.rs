@@ -689,7 +689,7 @@ impl ProteinMPNN {
         println!("h_v before repeat dims: {:?}", h_v.dims());
         println!("h_e before repeat dims: {:?}", h_e.dims());
         println!("h_v before repeat values: {:?}", h_v.to_vec3::<f32>()?);
-        println!("h_e before repeat values: {:?}", h_e.to_vec3::<f32>()?);
+        // println!("h_e before repeat values: {:?}", h_e.to_vec3::<f32>()?);
 
         // this might be  a bad rand implementation
         let rand_tensor = Tensor::randn(0., 0.25, (b, l), device)?.to_dtype(DType::F32)?;
@@ -897,10 +897,6 @@ impl ProteinMPNN {
                             .to_dtype(DType::F32)?;
 
                         println!("h_esv_t dims: {:?}", h_esv_t.dims());
-                        // println!(
-                        //     "h_esv_t first few values: {:?}",
-                        //     h_esv_t.slice_along(2, 0..5)?.to_vec3::<f32>()?
-                        // );
 
                         let h_v_t = h_v_t
                             .expand((
@@ -979,11 +975,29 @@ impl ProteinMPNN {
                     println!("probs_sample dims: {:?}", probs_sample.dims());
                     println!("probs_sample: {:?}", probs_sample.to_vec2::<f32>()?);
 
-                    let probs_sample_1d = probs_sample
-                        .squeeze(0)? // Remove batch dimension -> [20]
-                        .clamp(1e-10, 1.0)? // Ensure no zeros
-                        .div(&probs_sample.sum_keepdim(1)?.squeeze(0)?)? // Normalize to sum to 1
-                        .contiguous()?;
+                    let probs_sample_1d = {
+                        // Get sum first
+                        let sum = probs_sample.sum(1)?; // Sum across probabilities dimension
+                        println!("sum dims: {:?}", sum.dims());
+                        println!("sum values: {:?}", sum.to_vec1::<f32>()?);
+
+                        let normalized = probs_sample
+                            .squeeze(0)? // Remove batch dimension -> [20]
+                            .clamp(1e-10, 1.0)?;
+
+                        println!("SUM: {:?}", sum);
+
+                        // let normalized: Tensor = (normalized / sum.to_vec0()?)?;
+                        let normalized = normalized.broadcast_div(&sum)?;
+
+                        let normalized = normalized.contiguous()?;
+
+                        println!("normalized dims: {:?}", normalized.dims());
+                        println!("normalized values: {:?}", normalized.to_vec1::<f32>()?);
+                        println!("normalized sum: {:?}", normalized.sum(0)?.to_vec0::<f32>()?);
+
+                        normalized
+                    };
 
                     println!("probs_sample_1d: {:?}", probs_sample_1d.to_vec1::<f32>()?);
                     println!("probs_sample_1d sum: {:?}", probs_sample_1d.sum(0)?);
