@@ -140,30 +140,9 @@ impl EncLayer {
     ) -> Result<(Tensor, Tensor)> {
         println!("EncoderLayer: Starting forward pass");
 
-        // Initial values - use get(0) to get first batch, narrow for first few values
-        println!("Input h_v dims: {:?}", h_v.dims());
-        println!(
-            "Input h_v first values: {:?}",
-            h_v.to_dtype(DType::F32)?
-                .get(0)?
-                .narrow(0, 0, 1)? // Get first sequence position
-                .narrow(1, 0, 5)? // Get first 5 features
-                .to_vec2::<f32>()?
-        );
-
         let h_ev = cat_neighbors_nodes(h_v, h_e, e_idx)?;
-        println!("After cat_neighbors_nodes h_ev dims: {:?}", h_ev.dims());
-        println!(
-            "h_ev first values: {:?}",
-            h_ev.to_dtype(DType::F32)?
-                .get(0)?
-                .narrow(0, 0, 1)? // First sequence position
-                .narrow(1, 0, 5)? // First 5 neighbors
-                .narrow(2, 0, 5)? // First 5 features
-                .to_vec3::<f32>()?
-        );
-
         let h_v_expand = h_v.unsqueeze(D::Minus2)?;
+
         // Explicitly specify the expansion dimensions
         let expand_shape = [
             h_ev.dims()[0],       // batch size
@@ -172,87 +151,19 @@ impl EncLayer {
             h_v_expand.dims()[3], // hidden dimension
         ];
         let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
-        println!("h_v_expand dims: {:?}", h_v_expand.dims());
-        println!(
-            "h_v_expand first values: {:?}",
-            h_v_expand
-                .to_dtype(DType::F32)?
-                .get(0)?
-                .narrow(0, 0, 1)? // First sequence position
-                .narrow(1, 0, 5)? // First 5 neighbors
-                .narrow(2, 0, 5)? // First 5 features
-                .to_vec3::<f32>()?
-        );
-
-        // Now concatenate along the last dimension
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
-
-        println!("After concat h_ev dims: {:?}", h_ev.dims());
-        println!(
-            "After concat first values: {:?}",
-            h_ev.to_dtype(DType::F32)?
-                .get(0)?
-                .narrow(0, 0, 1)? // First sequence position
-                .narrow(1, 0, 5)? // First 5 neighbors
-                .narrow(2, 0, 5)? // First 5 features
-                .to_vec3::<f32>()?
-        );
-
         let h_message = self.w1.forward(&h_ev)?;
-        println!(
-            "After w1 max: {:?}",
-            h_message.max(D::Minus1)?.to_vec3::<f32>()?
-        );
         let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w1
-
         let h_message = h_message.gelu()?;
-        println!(
-            "After gelu max: {:?}",
-            h_message.max(D::Minus1)?.to_vec3::<f32>()?
-        );
-
         let h_message = h_message.apply(&self.w2)?;
-        println!(
-            "After w2 max: {:?}",
-            h_message.max(D::Minus1)?.to_vec3::<f32>()?
-        );
         let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w2
-
         let h_message = h_message.gelu()?;
-        println!(
-            "After second gelu max: {:?}",
-            h_message.max(D::Minus1)?.to_vec3::<f32>()?
-        );
-
         let h_message = h_message.apply(&self.w3)?;
-        println!(
-            "After w3 max: {:?}",
-            h_message.max(D::Minus1)?.to_vec3::<f32>()?
-        );
         let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w3
 
         let h_message = if let Some(mask) = mask_attend {
             let mask = mask.unsqueeze(D::Minus1)?;
-            println!("ENCODER_LAYER: Mask dims: {:?}", mask.dims());
-            println!("ENCODER_LAYER: h_message dims: {:?}", h_message.dims());
-            println!(
-                "ENCODER_LAYER: Mask first values: {:?}",
-                mask.get(0)?
-                    .narrow(0, 0, 1)?
-                    .narrow(1, 0, 5)?
-                    .to_vec3::<f32>()?
-            );
-
-            println!("ENCODER_LAYER: Before broadcast_mul:");
-            println!("mask shape: {:?}", mask.dims());
-            println!("h_message shape: {:?}", h_message.dims());
-
             let result = mask.broadcast_mul(&h_message)?;
-            println!(
-                "ENCODER_LAYER: After broadcast_mul shape: {:?}",
-                result.dims()
-            );
-
             result
         } else {
             h_message
@@ -265,18 +176,12 @@ impl EncLayer {
             let scale = if self.scale == 0.0 { 1.0 } else { self.scale };
             (sum / scale)?
         };
-        println!(
-            "After division dh max: {:?}",
-            dh.max(D::Minus1)?.to_vec2::<f32>()?
-        );
-
         let h_v = {
             let dh_dropout = self
                 .dropout1
                 .forward(&dh, training.expect("Training must be specified"))?;
             let dh_dropout = dh_dropout.to_dtype(DType::F32)?;
             let h_v = h_v.to_dtype(DType::F32)?;
-
             self.norm1.forward(&(h_v + dh_dropout)?)?
         };
 
@@ -746,7 +651,6 @@ impl ProteinMPNN {
                     .to_dtype(h_exv_encoder.dtype())?;
                 let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
 
-                println!("Prepare the decoding Tensors....");
                 for t_ in 0..l {
                     let t = decoding_order.i((.., t_))?;
                     let t_gather = t.unsqueeze(1)?; // Shape [B, 1]
@@ -808,7 +712,6 @@ impl ProteinMPNN {
                             .contiguous()?,
                         1,
                     )?;
-                    println!("Start Decoding.... ");
                     // Decoder layers loop
                     for l in 0..self.decoder_layers.len() {
                         let h_v_stack_l = &h_v_stack[l];
@@ -846,19 +749,15 @@ impl ProteinMPNN {
                         )?;
 
                         let t_expanded = t_gather.reshape(&[b])?; // This will give us a 1D tensor of shape [b]
-
                         let decoder_output = decoder_output
                             .narrow(1, 0, 1)?
                             .squeeze(1)? // Now [1, 128]
                             .unsqueeze(1)?; // Now [1, 1, 128] - same rank as target
-
                         h_v_stack[l + 1] =
                             h_v_stack[l + 1].index_add(&t_expanded, &decoder_output, 1)?;
                         h_v_stack[l + 1] =
                             h_v_stack[l + 1].index_add(&t_expanded, &decoder_output, 1)?;
                     }
-
-                    println!("Finished Decoding...");
                     let h_v_t = h_v_stack
                         .last()
                         .unwrap()
@@ -870,7 +769,6 @@ impl ProteinMPNN {
                             1,
                         )?
                         .squeeze(1)?;
-
                     // Generate logits and probabilities
                     let logits = self.w_out.forward(&h_v_t)?;
                     let log_probs = log_softmax(&logits, D::Minus1)?;
@@ -897,12 +795,10 @@ impl ProteinMPNN {
                     let s_t = s_t
                         .mul(&chain_mask_t)?
                         .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?;
-
                     let s_t_idx = s_t.to_dtype(DType::U32)?;
                     // Ensure s_t_idx is 1D before passing to w_s
                     let s_t_idx = s_t_idx.reshape(&[s_t_idx.dim(0)?])?;
                     let h_s_update = self.w_s.forward(&s_t_idx)?.unsqueeze(1)?;
-
                     // Instead of expanding t_gather, reshape it to 1D
                     let t_gather_expanded = t_gather.reshape(&[b])?; // Shape: [1]
                     let h_s_update = h_s_update
@@ -918,41 +814,30 @@ impl ProteinMPNN {
                     let s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
                     let s_t = s_t.to_dtype(DType::I64)?;
                     let s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
-
-                    println!("Test 17 10");
                     let probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
                         .expand((b, 1, 20))?
                         .mul(&probs_sample.unsqueeze(1)?)?;
-
-                    println!("Test 17 11");
-                    let t_expanded = t_gather.unsqueeze(2)?.expand((b, 1, 20))?.contiguous()?;
-                    println!("Test 17 12");
+                    let t_expanded = t_gather.reshape(&[b])?; // Shape: [1]
+                    let probs_update = probs_update
+                        .squeeze(1)? // Remove extra dimension
+                        .unsqueeze(1)?; // Add back sequence dimension to match all_probs rank
                     all_probs =
                         all_probs.index_add(&t_expanded, &Tensor::zeros_like(&probs_update)?, 1)?;
-                    println!("Test 17 13");
                     all_probs = all_probs.index_add(&t_expanded, &probs_update, 1)?;
 
-                    // // Update all_log_probs
-                    // let log_probs_update = chain_mask_t
-                    //     .unsqueeze(1)?
-                    //     .unsqueeze(2)?
-                    //     .expand((b, 1, 21))?
-                    //     .mul(&log_probs.unsqueeze(1)?)?;
-                    // let zero_mask = t_gather
-                    //     .unsqueeze(2)?
-                    //     .expand((b, 1, 21))?
-                    //     .contiguous()?
-                    //     .zeros_like()?;
-                    // all_log_probs = all_log_probs.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                    // all_log_probs = all_log_probs.scatter_add(&t_gather, &log_probs_update, 1)?;
                     let log_probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
                         .expand((b, 1, 21))?
                         .mul(&log_probs.unsqueeze(1)?)?;
-                    let t_expanded = t_gather.unsqueeze(2)?.expand((b, 1, 21))?.contiguous()?;
+
+                    // Reshape log_probs_update to match all_log_probs rank
+                    let log_probs_update = log_probs_update
+                        .squeeze(1)? // Remove extra dimension
+                        .unsqueeze(1)?; // Add back sequence dimension to match rank
+
                     all_log_probs = all_log_probs.index_add(
                         &t_expanded,
                         &Tensor::zeros_like(&log_probs_update)?,

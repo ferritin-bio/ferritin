@@ -24,7 +24,7 @@ use clap::ValueEnum;
 use ferritin_core::AtomCollection;
 use ferritin_test_data::TestFile;
 
-/// Responsibel for taking CLI args and returning the Features and Model
+/// Responsible for taking CLI args and returning the Features and Model
 ///
 pub struct MPNNExecConfig {
     pub(crate) protein_inputs: String, // Todo: make this optionally plural
@@ -98,7 +98,8 @@ impl MPNNExecConfig {
         let x_37 = ac.to_numeric_atom37(&device)?;
         // println!("This is the encoded 37 atom coords: {:?}", x_37.dims());
 
-        let x_37_mask = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), base_dtype, &device)?;
+        // Note: default to 1!
+        let x_37_mask = Tensor::ones((x_37.dim(0)?, x_37.dim(1)?), base_dtype, &device)?;
         // println!("This is the atom map: {:?}", x_37_mask.dims());
 
         let (y, y_t, y_m) = ac.to_numeric_ligand_atoms(&device)?;
