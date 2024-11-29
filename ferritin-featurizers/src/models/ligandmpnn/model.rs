@@ -675,7 +675,6 @@ impl ProteinMPNN {
             ..
         } = features;
 
-        // let b_decoder = batch_size.unwrap() as usize;
         let s_true = s.clone();
         let device = s.device();
         let (b, l) = s.dims2()?;
@@ -683,22 +682,13 @@ impl ProteinMPNN {
         // Todo: This is a hack. we should be passing in encoded chains.
         let chain_mask = Tensor::ones_like(&x_mask.as_ref().unwrap())?.to_dtype(DType::F32)?;
         let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?.contiguous()?; // update chain_M to include missing regions;
-
-        // encode...
         let (h_v, h_e, e_idx) = self.encode(features)?;
-        println!("h_v before repeat dims: {:?}", h_v.dims());
-        println!("h_e before repeat dims: {:?}", h_e.dims());
-        println!("h_v before repeat values: {:?}", h_v.to_vec3::<f32>()?);
-        // println!("h_e before repeat values: {:?}", h_e.to_vec3::<f32>()?);
 
         // this might be  a bad rand implementation
         let rand_tensor = Tensor::randn(0., 0.25, (b, l), device)?.to_dtype(DType::F32)?;
         let decoding_order = (&chain_mask + 0.0001)?
             .mul(&rand_tensor.abs()?)?
             .arg_sort_last_dim(false)?;
-
-        println!("Decoding Order: {:?}", decoding_order.dims());
-
         // Todo add  bias
         // # [B,L,21] - amino acid bias per position
         //  bias = feature_dict["bias"]
@@ -723,7 +713,6 @@ impl ProteinMPNN {
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
                 let mask_1d = x_mask.as_ref().unwrap().reshape((b, l, 1, 1))?;
-
                 // Broadcast mask_1d to match mask_attend's shape
                 let mask_1d = mask_1d
                     .broadcast_as(mask_attend.shape())?
@@ -737,49 +726,21 @@ impl ProteinMPNN {
                 let s_true = s_true.repeat((b, 1))?;
                 let h_v = h_v.repeat((b, 1, 1))?;
                 let h_e = h_e.repeat((b, 1, 1, 1))?;
-
                 let chain_mask = &chain_mask.repeat((b, 1))?.contiguous()?;
-                println!("INIT: chain_mask dims: {:?}", chain_mask.dims());
-                println!(
-                    "INIT: chain_mask first values: {:?}",
-                    chain_mask.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
-                );
-
                 let mask = x_mask.as_ref().unwrap().repeat((b, 1))?.contiguous()?;
                 let bias = bias.repeat((b, 1, 1))?.contiguous()?;
-                println!("INIT: bias dims: {:?}", bias.dims());
-                println!(
-                    "INIT: bias first values: {:?}",
-                    bias.get(0)?.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
-                );
-
                 let mut all_probs = Tensor::zeros((b, l, 20), DType::F32, device)?;
                 let mut all_log_probs = Tensor::zeros((b, l, 21), DType::F32, device)?; // why is this one 21 and the others are 20?
                 let mut h_s = Tensor::zeros_like(&h_v)?.contiguous()?;
                 let s = (Tensor::ones((b, l), DType::I64, device)? * 20.)?;
-
-                // updated layers are here.
-                println!("Initial h_v dims: {:?}", h_v.dims());
-                println!("Initial h_v values: {:?}", h_v.to_vec3::<f32>()?);
-
                 let mut h_v_stack = vec![h_v.clone()];
-                println!("h_v_stack[0] dims: {:?}", h_v_stack[0].dims());
-                println!("h_v_stack[0] values: {:?}", h_v_stack[0].to_vec3::<f32>()?);
 
                 for i in 0..self.decoder_layers.len() {
                     let zeros = Tensor::zeros_like(&h_v)?;
-                    println!("zeros layer {} dims: {:?}", i, zeros.dims());
-                    println!(
-                        "zeros layer {} first few values: {:?}",
-                        i,
-                        zeros.narrow(2, 0, 5)?.to_vec3::<f32>()?
-                    );
                     h_v_stack.push(zeros);
-                    // h_v_stack.push(Tensor::zeros_like(&h_v)?);
                 }
                 let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
                 let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
-
                 let mask_fw = mask_fw
                     .broadcast_as(h_exv_encoder.shape())?
                     .to_dtype(h_exv_encoder.dtype())?;
@@ -805,8 +766,6 @@ impl ProteinMPNN {
                             .contiguous()?,
                         1,
                     )?;
-
-                    println!("Test 05");
                     let h_e_t = h_e.gather(
                         &t_gather
                             .unsqueeze(2)?
@@ -815,10 +774,6 @@ impl ProteinMPNN {
                             .contiguous()?,
                         1,
                     )?;
-
-                    println!("h_s dims: {:?}", h_s.dims());
-                    println!("h_e_t dims: {:?}", h_e_t.dims());
-                    println!("e_idx_t dims: {:?}", e_idx_t.dims());
 
                     let b = h_s.dim(0)?; // batch size
                     let l = h_s.dim(1)?; // sequence length
@@ -836,7 +791,6 @@ impl ProteinMPNN {
                         .contiguous()?;
 
                     let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
-
                     let h_exv_encoder_t = h_exv_encoder_fw.gather(
                         &t_gather
                             .unsqueeze(2)?
@@ -854,8 +808,7 @@ impl ProteinMPNN {
                             .contiguous()?,
                         1,
                     )?;
-
-                    println!("Test 09");
+                    println!("Start Decoding.... ");
                     // Decoder layers loop
                     for l in 0..self.decoder_layers.len() {
                         let h_v_stack_l = &h_v_stack[l];
@@ -884,28 +837,28 @@ impl ProteinMPNN {
                             ))?
                             .contiguous()?;
 
-                        // Update h_v_stack[l + 1]
-                        let new_h_v = self.decoder_layers[l].forward(
+                        let decoder_output = self.decoder_layers[l].forward(
                             &h_v_t,
                             &h_esv_t,
                             Some(&mask_t),
                             None,
                             None,
                         )?;
-                        // Create gather indices matching PyTorch pattern
-                        let gather_indices = t_gather
-                            .unsqueeze(2)? // Like [:, None, None]
-                            .expand((t_gather.dim(0)?, t_gather.dim(1)?, h_v.dim(2)?))? // Like repeat(1, 1, h_V.shape[-1])
-                            .contiguous()?;
 
-                        // Gather operation
-                        let new_h_v_t = new_h_v.gather(&gather_indices, 1)?;
+                        let t_expanded = t_gather.reshape(&[b])?; // This will give us a 1D tensor of shape [b]
 
-                        // Use same indices for scatter
+                        let decoder_output = decoder_output
+                            .narrow(1, 0, 1)?
+                            .squeeze(1)? // Now [1, 128]
+                            .unsqueeze(1)?; // Now [1, 1, 128] - same rank as target
+
                         h_v_stack[l + 1] =
-                            h_v_stack[l + 1].scatter_add(&gather_indices, &new_h_v_t, 1)?;
+                            h_v_stack[l + 1].index_add(&t_expanded, &decoder_output, 1)?;
+                        h_v_stack[l + 1] =
+                            h_v_stack[l + 1].index_add(&t_expanded, &decoder_output, 1)?;
                     }
 
+                    println!("Finished Decoding...");
                     let h_v_t = h_v_stack
                         .last()
                         .unwrap()
@@ -946,65 +899,107 @@ impl ProteinMPNN {
                         .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?;
 
                     println!("Test 17");
-                    // Update h_s
-                    // thi sis t
                     let s_t_idx = s_t.to_dtype(DType::U32)?;
-                    let h_s_update = self.w_s.forward(&s_t_idx)?.unsqueeze(1)?;
-
                     println!("Test 17 01");
-                    // Print initial dimensions
-                    println!("t_gather dims: {:?}", t_gather.dims()); // Probably [1, 1]
-                    println!("h_s dims: {:?}", h_s.dims()); // Probably [1, 93, 128]
-                    println!("h_s_update dims: {:?}", h_s_update.dims()); // Probably [1, 1, 128]
+                    // Ensure s_t_idx is 1D before passing to w_s
+                    let s_t_idx = s_t_idx.reshape(&[s_t_idx.dim(0)?])?;
+                    println!("Test 17 02");
+                    let h_s_update = self.w_s.forward(&s_t_idx)?.unsqueeze(1)?;
+                    println!("Test 17 03");
 
-                    // Expand t_gather for scatter operation
+                    // // Print initial dimensions
+                    // println!("t_gather dims: {:?}", t_gather.dims()); // Probably [1, 1]
+                    // println!("h_s dims: {:?}", h_s.dims()); // Probably [1, 93, 128]
+                    // println!("h_s_update dims: {:?}", h_s_update.dims()); // Probably [1, 1, 128]
+
+                    // // Expand t_gather for scatter operation
+                    // let t_gather_expanded = t_gather
+                    //     .unsqueeze(2)? // [1, 1, 1]
+                    //     .expand((b, 1, 1))? // Keep the middle dim as 1 for indexing
+                    //     .contiguous()?;
+
+                    // let zero_mask = Tensor::zeros((b, 1, h_s.dim(2)?), h_s.dtype(), h_s.device())?;
+
+                    // println!("Test 18");
+                    // println!("t_gather_expanded dims: {:?}", t_gather_expanded.dims());
+                    // println!("zero_mask dims: {:?}", zero_mask.dims());
+
+                    // h_s = h_s.scatter_add(&t_gather_expanded, &zero_mask, 1)?; // Zero out
+
+                    // println!("Test 19");
+                    // h_s = h_s.scatter_add(&t_gather_expanded, &h_s_update, 1)?;
+
+                    println!("Test 17 04");
                     let t_gather_expanded = t_gather
-                        .unsqueeze(2)? // [1, 1, 1]
-                        .expand((b, 1, 1))? // Keep the middle dim as 1 for indexing
+                        .unsqueeze(2)?
+                        .expand((b, 1, h_s.dim(2)?))?
                         .contiguous()?;
 
-                    let zero_mask = Tensor::zeros((b, 1, h_s.dim(2)?), h_s.dtype(), h_s.device())?;
+                    println!("Test 17 05");
+                    h_s =
+                        h_s.index_add(&t_gather_expanded, &Tensor::zeros_like(&h_s_update)?, 1)?;
 
-                    println!("Test 18");
-                    println!("t_gather_expanded dims: {:?}", t_gather_expanded.dims());
-                    println!("zero_mask dims: {:?}", zero_mask.dims());
+                    println!("Test 17 06");
+                    h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
 
-                    h_s = h_s.scatter_add(&t_gather_expanded, &zero_mask, 1)?; // Zero out
-
-                    println!("Test 19");
-                    h_s = h_s.scatter_add(&t_gather_expanded, &h_s_update, 1)?;
                     // Update s
+                    println!("Test 17 07");
                     let zero_mask = t_gather.zeros_like()?;
+                    println!("Test 17 08");
                     let s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    println!("Test 17 09");
                     let s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
+                    println!("Test 17 10");
 
-                    // Update all_probs
+                    // // Update all_probs
+                    // let probs_update = chain_mask_t
+                    //     .unsqueeze(1)?
+                    //     .unsqueeze(2)?
+                    //     .expand((b, 1, 20))?
+                    //     .mul(&probs_sample.unsqueeze(1)?)?;
+                    // let zero_mask = t_gather
+                    //     .unsqueeze(2)?
+                    //     .expand((b, 1, 20))?
+                    //     .contiguous()?
+                    //     .zeros_like()?;
+                    // all_probs = all_probs.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    // all_probs = all_probs.scatter_add(&t_gather, &probs_update, 1)?; // Add new values
+
                     let probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
                         .expand((b, 1, 20))?
                         .mul(&probs_sample.unsqueeze(1)?)?;
-                    let zero_mask = t_gather
-                        .unsqueeze(2)?
-                        .expand((b, 1, 20))?
-                        .contiguous()?
-                        .zeros_like()?;
-                    all_probs = all_probs.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                    all_probs = all_probs.scatter_add(&t_gather, &probs_update, 1)?; // Add new values
+                    let t_expanded = t_gather.unsqueeze(2)?.expand((b, 1, 20))?.contiguous()?;
+                    all_probs =
+                        all_probs.index_add(&t_expanded, &Tensor::zeros_like(&probs_update)?, 1)?;
+                    all_probs = all_probs.index_add(&t_expanded, &probs_update, 1)?;
 
-                    // Update all_log_probs
+                    // // Update all_log_probs
+                    // let log_probs_update = chain_mask_t
+                    //     .unsqueeze(1)?
+                    //     .unsqueeze(2)?
+                    //     .expand((b, 1, 21))?
+                    //     .mul(&log_probs.unsqueeze(1)?)?;
+                    // let zero_mask = t_gather
+                    //     .unsqueeze(2)?
+                    //     .expand((b, 1, 21))?
+                    //     .contiguous()?
+                    //     .zeros_like()?;
+                    // all_log_probs = all_log_probs.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    // all_log_probs = all_log_probs.scatter_add(&t_gather, &log_probs_update, 1)?;
                     let log_probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
                         .expand((b, 1, 21))?
                         .mul(&log_probs.unsqueeze(1)?)?;
-                    let zero_mask = t_gather
-                        .unsqueeze(2)?
-                        .expand((b, 1, 21))?
-                        .contiguous()?
-                        .zeros_like()?;
-                    all_log_probs = all_log_probs.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                    all_log_probs = all_log_probs.scatter_add(&t_gather, &log_probs_update, 1)?;
+                    let t_expanded = t_gather.unsqueeze(2)?.expand((b, 1, 21))?.contiguous()?;
+                    all_log_probs = all_log_probs.index_add(
+                        &t_expanded,
+                        &Tensor::zeros_like(&log_probs_update)?,
+                        1,
+                    )?;
+                    all_log_probs = all_log_probs.index_add(&t_expanded, &log_probs_update, 1)?;
                 }
 
                 Ok(ScoreOutput {
