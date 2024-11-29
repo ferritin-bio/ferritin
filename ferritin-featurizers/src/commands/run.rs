@@ -16,7 +16,6 @@ pub fn execute(
     membrane_mpnn_specific: MembraneMPNNConfig,
     multi_pdb_config: MultiPDBConfig,
 ) -> anyhow::Result<()> {
-
     // todo - whats the best way to handle device?
     let device = &Device::Cpu;
 
@@ -55,6 +54,7 @@ pub fn execute(
     // println!("{:?}", model_score);
 
     // Sample from the Model!
+    // Note: sampling from the model
     println!("Sampling from the Model...");
     let model_sample = model.sample(&prot_features);
     println!("{:?}", model_sample);
