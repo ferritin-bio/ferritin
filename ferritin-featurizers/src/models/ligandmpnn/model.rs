@@ -240,7 +240,7 @@ impl EncLayer {
                 mask.get(0)?
                     .narrow(0, 0, 1)?
                     .narrow(1, 0, 5)?
-                    .to_vec2::<f32>()?
+                    .to_vec3::<f32>()?
             );
 
             println!("ENCODER_LAYER: Before broadcast_mul:");
@@ -517,27 +517,64 @@ impl ProteinMPNN {
                 let mut h_e = self.w_e.forward(&e)?;
 
                 let mask_attend = if let Some(mask) = features.get_sequence_mask() {
+                    println!("Original mask dims: {:?}", mask.dims());
+                    println!(
+                        "Original mask values: {:?}",
+                        mask.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
+                    );
+
                     // First unsqueeze mask
                     let mask_expanded = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
-                    println!("ENCODE: mask_expanded dims: {:?}", mask_expanded.dims());
+                    println!(
+                        "Expanded mask values: {:?}",
+                        mask_expanded.get(0)?.narrow(0, 0, 5)?.to_vec2::<f32>()?
+                    );
 
                     // Gather using E_idx
                     let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?;
-                    let mask_gathered = mask_gathered.squeeze(D::Minus1)?;
-                    println!("ENCODE: mask_gathered dims: {:?}", mask_gathered.dims());
-
-                    // Multiply original mask with gathered mask
-                    let mask_attend = mask.unsqueeze(D::Minus1)?.broadcast_mul(&mask_gathered)?;
-                    println!("ENCODE: mask_attend dims: {:?}", mask_attend.dims());
+                    println!("Gathered mask dims: {:?}", mask_gathered.dims());
                     println!(
-                        "ENCODE: mask_attend first values: {:?}",
-                        mask_attend.get(0)?.narrow(0, 0, 5)?.to_vec2::<f32>()?
+                        "Gathered mask values: {:?}",
+                        mask_gathered
+                            .get(0)?
+                            .narrow(0, 0, 5)?
+                            .narrow(1, 0, 5)?
+                            .to_vec3::<f32>()?
                     );
 
+                    let mask_gathered = mask_gathered.squeeze(D::Minus1)?;
+
+                    // Multiply original mask with gathered mask
+                    let mask_attend = {
+                        let mask_unsqueezed = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
+                        println!("mask_unsqueezed dims: {:?}", mask_unsqueezed.dims());
+
+                        // Explicitly expand mask_unsqueezed to match mask_gathered dimensions
+                        let mask_expanded = mask_unsqueezed
+                            .expand((
+                                mask_gathered.dim(0)?, // batch
+                                mask_gathered.dim(1)?, // sequence length
+                                mask_gathered.dim(2)?, // number of neighbors
+                            ))?
+                            .contiguous()?;
+                        println!("mask_expanded dims: {:?}", mask_expanded.dims());
+
+                        // Now do the multiplication with explicit shapes
+                        mask_expanded.mul(&mask_gathered)?
+                    };
                     mask_attend
                 } else {
                     let (b, l) = mask.dims2()?;
-                    Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, device)?
+                    let ones = Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, device)?;
+                    println!("Created default ones mask dims: {:?}", ones.dims());
+                    println!(
+                        "Created default ones mask values: {:?}",
+                        ones.get(0)?
+                            .narrow(0, 0, 5)?
+                            .narrow(1, 0, 5)?
+                            .to_vec2::<f32>()?
+                    );
+                    ones
                 };
 
                 for (i, layer) in self.encoder_layers.iter().enumerate() {
