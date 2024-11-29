@@ -17,14 +17,14 @@ use super::featurizer::ProteinFeatures;
 use super::model::ProteinMPNN;
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
 use anyhow::Error;
-use candle_core::pickle::{read_pth_tensor_info, PthTensors};
+use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use clap::ValueEnum;
 use ferritin_core::AtomCollection;
 use ferritin_test_data::TestFile;
 
-/// Responsibel for taking CLI args and returning the Features and Model
+/// Responsible for taking CLI args and returning the Features and Model
 ///
 pub struct MPNNExecConfig {
     pub(crate) protein_inputs: String, // Todo: make this optionally plural
@@ -90,22 +90,23 @@ impl MPNNExecConfig {
         let s = ac
             .encode_amino_acids(&device)
             .expect("A complete convertion to locations");
-        println!("This is the encoded sequences S: {:?}", s);
+        // println!("This is the encoded sequences S: {:?}", s);
 
         // protein -> coords. Note update
         // todo: choose based on model type
-        println!("Getting the 37 atom coords...");
+        // println!("Getting the 37 atom coords...");
         let x_37 = ac.to_numeric_atom37(&device)?;
-        println!("This is the encoded 37 atom coords: {:?}", x_37.dims());
+        // println!("This is the encoded 37 atom coords: {:?}", x_37.dims());
 
-        let x_37_mask = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), base_dtype, &device)?;
-        println!("This is the atom map: {:?}", x_37_mask.dims());
+        // Note: default to 1!
+        let x_37_mask = Tensor::ones((x_37.dim(0)?, x_37.dim(1)?), base_dtype, &device)?;
+        // println!("This is the atom map: {:?}", x_37_mask.dims());
 
         let (y, y_t, y_m) = ac.to_numeric_ligand_atoms(&device)?;
 
         // R_idx = np.array(CA_resnums, dtype=np.int32)
         let res_idx = ac.get_res_index();
-        let res_idx_len = res_idx.len() as usize;
+        let res_idx_len = res_idx.len();
         let res_idx_tensor = Tensor::from_vec(res_idx, (1, res_idx_len), &device)?;
 
         // update residue info
@@ -149,7 +150,7 @@ impl MPNNExecConfig {
         // pub omit_aa_per_residue_multi: Option<String>,
         // pub bias_aa_per_residue_multi: Option<String>,
 
-        println!("Returning Protien Features....");
+        // println!("Returning Protein Features....");
         // return ligand MPNN.
         Ok(ProteinFeatures {
             s,                           // protein amino acids sequences as 1D Tensor of u32

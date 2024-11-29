@@ -5,7 +5,7 @@
 //! Consider factoring out model creation of the DEC
 //! and ENC layers using a function.
 //!
-//! here is an example of paramatereizable netowrk creation:
+//! here is an example of paramatereizable network creation:
 //! https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/resnet.rs
 //!
 use super::configs::{ModelTypes, ProteinMPNNConfig};
@@ -16,7 +16,22 @@ use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, Linear, VarBuilder};
-use candle_transformers::generation::LogitsProcessor;
+use candle_transformers::generation::{LogitsProcessor, Sampling};
+
+pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result<Tensor> {
+    // Create the logits processor with its required arguments
+    let mut logits_processor = LogitsProcessor::new(
+        seed,              // seed for reproducibility
+        Some(temperature), // temperature scaling
+        None,              // top_p (nucleus sampling), we don't need this
+    );
+
+    // Sample from the probabilities
+    let idx = logits_processor.sample(&probs)?;
+
+    // Convert to tensor
+    Tensor::new(&[idx], probs.device())
+}
 
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
@@ -93,7 +108,6 @@ impl EncLayer {
         let dropout3 = Dropout::new(dropout_ratio);
 
         // note in the pytorch code they add the GELU activation here.
-
         let dense = PositionWiseFeedForward::new(vb.pp("dense"), num_hidden, num_hidden * 4)?;
 
         Ok(Self {
@@ -124,9 +138,11 @@ impl EncLayer {
         mask_attend: Option<&Tensor>,
         training: Option<bool>,
     ) -> Result<(Tensor, Tensor)> {
-        println!("EncLayer: Forward method.");
+        println!("EncoderLayer: Starting forward pass");
+
         let h_ev = cat_neighbors_nodes(h_v, h_e, e_idx)?;
         let h_v_expand = h_v.unsqueeze(D::Minus2)?;
+
         // Explicitly specify the expansion dimensions
         let expand_shape = [
             h_ev.dims()[0],       // batch size
@@ -134,29 +150,36 @@ impl EncLayer {
             h_ev.dims()[2],       // number of neighbors
             h_v_expand.dims()[3], // hidden dimension
         ];
-        let h_v_expand = h_v_expand.expand(&expand_shape)?;
-        let h_v_expand = h_v_expand.to_dtype(h_ev.dtype())?;
-
-        // Now concatenate along the last dimension
+        let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
-        let h_message = self
-            .w1
-            .forward(&h_ev)?
-            .gelu()?
-            .apply(&self.w2)?
-            .gelu()?
-            .apply(&self.w3)?;
+        let h_message = self.w1.forward(&h_ev)?;
+        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w1
+        let h_message = h_message.gelu()?;
+        let h_message = h_message.apply(&self.w2)?;
+        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w2
+        let h_message = h_message.gelu()?;
+        let h_message = h_message.apply(&self.w3)?;
+        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w3
 
         let h_message = if let Some(mask) = mask_attend {
-            mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
+            let mask = mask.unsqueeze(D::Minus1)?;
+            let result = mask.broadcast_mul(&h_message)?;
+            result
         } else {
             h_message
         };
-        let dh = h_message.sum(D::Minus2)? / self.scale;
+
+        // Safe division with scale
+        println!("Scale value: {:?}", self.scale);
+        let dh = {
+            let sum = h_message.sum(D::Minus2)?;
+            let scale = if self.scale == 0.0 { 1.0 } else { self.scale };
+            (sum / scale)?
+        };
         let h_v = {
             let dh_dropout = self
                 .dropout1
-                .forward(&dh?, training.expect("Training must be specified"))?;
+                .forward(&dh, training.expect("Training must be specified"))?;
             let dh_dropout = dh_dropout.to_dtype(DType::F32)?;
             let h_v = h_v.to_dtype(DType::F32)?;
             self.norm1.forward(&(h_v + dh_dropout)?)?
@@ -175,9 +198,8 @@ impl EncLayer {
             h_v
         };
         let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
-        println!("EncLayer: 09");
-        // let h_v_expand = h_v.unsqueeze(D::Minus2)?.expand(h_ev.shape().dims())?;
         let h_v_expand = h_v.unsqueeze(D::Minus2)?;
+
         // Explicitly specify the expansion dimensions
         let expand_shape = [
             h_ev.dims()[0],       // batch size
@@ -187,10 +209,7 @@ impl EncLayer {
         ];
         let h_v_expand = h_v_expand.expand(&expand_shape)?;
         let h_v_expand = h_v_expand.to_dtype(h_ev.dtype())?;
-
-        println!("EncLayer: 10");
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
-        println!("EncLayer: 11");
         let h_message = self
             .w11
             .forward(&h_ev)?
@@ -204,7 +223,7 @@ impl EncLayer {
                 .forward(&h_message, training.expect("Training Must be specified"))?;
             self.norm3.forward(&(h_e + h_message_dropout)?)?
         };
-
+        println!("EncoderLayer: Finishing forward pass");
         Ok((h_v, h_e))
     }
 }
@@ -312,15 +331,14 @@ impl DecLayer {
 
 // https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L10C7-L10C18
 pub struct ProteinMPNN {
-    config: ProteinMPNNConfig, // device here ??
+    config: ProteinMPNNConfig,
     decoder_layers: Vec<DecLayer>,
     device: Device,
     encoder_layers: Vec<EncLayer>,
-    features: ProteinFeaturesModel, // this needs to be a model with weights etc
+    features: ProteinFeaturesModel,
     w_e: Linear,
     w_out: Linear,
-    // self.W_s = torch.nn.Embedding(vocab, hidden_dim)
-    w_s: Embedding, // This should be an embedding layer....
+    w_s: Embedding,
 }
 
 impl ProteinMPNN {
@@ -330,7 +348,6 @@ impl ProteinMPNN {
         for i in 0..config.num_encoder_layers {
             encoder_layers.push(EncLayer::load(vb.pp("encoder_layers"), config, i as i32)?);
         }
-
         // Decoder
         let mut decoder_layers = Vec::with_capacity(config.num_decoder_layers as usize);
         for i in 0..config.num_decoder_layers {
@@ -360,7 +377,7 @@ impl ProteinMPNN {
         let features = ProteinFeaturesModel::load(vb.pp("features"), config.clone())?;
 
         Ok(Self {
-            config: config.clone(), // check the clone later...
+            config: config.clone(), // todo: check the\is clone later...
             decoder_layers,
             device: Device::Cpu,
             encoder_layers,
@@ -370,46 +387,122 @@ impl ProteinMPNN {
             w_s,
         })
     }
-    fn predict(&self) {
-        // Implement prediction logic
-        todo!()
-    }
-    fn train(&mut self) {
-        // Implement training logic
-        // .forward()?
-        todo!()
-    }
+    // fn predict(&self) {
+    //     // Implement prediction logic
+    //     todo!()
+    // }
+    // fn train(&mut self) {
+    //     // Implement training logic
+    //     // .forward()?
+    //     todo!()
+    // }
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
-        // todo: get device more elegantly
-        let device = &candle_core::Device::Cpu;
+        let device = &Device::Cpu; // todo: get device more elegantly
         let s_true = &features.get_sequence();
-        let (b, l) = s_true.dims2()?;
 
+        // needed for the MaskAttend
         let mask = match features.get_sequence_mask() {
             Some(m) => m,
-            None => &Tensor::zeros_like(&s_true)?,
+            None => &Tensor::ones_like(&s_true)?,
         };
+
+        println!("Starting encode function");
 
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
                 let (e, e_idx) = self.features.forward(features, device)?;
+                println!("After embedding dims: {:?}", e.dims());
+
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     DType::F64,
                     device,
                 )?;
+
                 let mut h_e = self.w_e.forward(&e)?;
-                let mask_attend =
-                    gather_nodes(&mask.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
 
-                let mask_expanded = mask.unsqueeze(D::Minus1)?.expand((
-                    mask.dim(0)?,
-                    mask.dim(1)?,
-                    mask_attend.dim(2)?,
-                ))?;
-                let mask_attend = (&mask_expanded * &mask_attend)?;
+                let mask_attend = if let Some(mask) = features.get_sequence_mask() {
+                    println!("Original mask dims: {:?}", mask.dims());
+                    println!(
+                        "Original mask values: {:?}",
+                        mask.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
+                    );
 
-                for layer in &self.encoder_layers {
+                    // First unsqueeze mask
+                    let mask_expanded = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
+                    println!(
+                        "Expanded mask values: {:?}",
+                        mask_expanded.get(0)?.narrow(0, 0, 5)?.to_vec2::<f32>()?
+                    );
+
+                    // Gather using E_idx
+                    let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?;
+                    println!("Gathered mask dims: {:?}", mask_gathered.dims());
+                    println!(
+                        "Gathered mask values: {:?}",
+                        mask_gathered
+                            .get(0)?
+                            .narrow(0, 0, 5)?
+                            .narrow(1, 0, 5)?
+                            .to_vec3::<f32>()?
+                    );
+
+                    let mask_gathered = mask_gathered.squeeze(D::Minus1)?;
+
+                    // Multiply original mask with gathered mask
+                    let mask_attend = {
+                        let mask_unsqueezed = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
+                        println!("mask_unsqueezed dims: {:?}", mask_unsqueezed.dims());
+
+                        // Explicitly expand mask_unsqueezed to match mask_gathered dimensions
+                        let mask_expanded = mask_unsqueezed
+                            .expand((
+                                mask_gathered.dim(0)?, // batch
+                                mask_gathered.dim(1)?, // sequence length
+                                mask_gathered.dim(2)?, // number of neighbors
+                            ))?
+                            .contiguous()?;
+                        println!("mask_expanded dims: {:?}", mask_expanded.dims());
+
+                        // Now do the multiplication with explicit shapes
+                        mask_expanded.mul(&mask_gathered)?
+                    };
+                    mask_attend
+                } else {
+                    let (b, l) = mask.dims2()?;
+                    let ones = Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, device)?;
+                    println!("Created default ones mask dims: {:?}", ones.dims());
+                    println!(
+                        "Created default ones mask values: {:?}",
+                        ones.get(0)?
+                            .narrow(0, 0, 5)?
+                            .narrow(1, 0, 5)?
+                            .to_vec2::<f32>()?
+                    );
+                    ones
+                };
+
+                for (i, layer) in self.encoder_layers.iter().enumerate() {
+                    println!("Starting encoder layer {}", i);
+
+                    // Debug h_v (3D tensor)
+                    println!("h_v before layer {} dims: {:?}", i, h_v.dims());
+                    let h_v_f32 = h_v.to_dtype(DType::F32)?;
+                    println!(
+                        "h_v before layer {} values: {:?}",
+                        i,
+                        h_v_f32.to_vec3::<f32>()?
+                    );
+
+                    // Debug h_e (4D tensor) - access first batch and first sequence position
+                    println!("h_e before layer {} dims: {:?}", i, h_e.dims());
+                    let h_e_f32 = h_e.to_dtype(DType::F32)?;
+                    println!(
+                        "h_e before layer {} first position values: {:?}",
+                        i,
+                        h_e_f32.get(0)?.get(0)?.to_vec2::<f32>()?
+                    );
+
                     let (new_h_v, new_h_e) = layer.forward(
                         &h_v,
                         &h_e,
@@ -418,9 +511,27 @@ impl ProteinMPNN {
                         Some(&mask_attend),
                         Some(false),
                     )?;
+                    println!("After layer {} forward pass:", i);
+
+                    // Debug new_h_v
+                    println!("new_h_v dims: {:?}", new_h_v.dims());
+                    let new_h_v_f32 = new_h_v.to_dtype(DType::F32)?;
+                    println!("new_h_v values: {:?}", new_h_v_f32.to_vec3::<f32>()?);
+
+                    // Debug new_h_e
+                    println!("new_h_e dims: {:?}", new_h_e.dims());
+                    let new_h_e_f32 = new_h_e.to_dtype(DType::F32)?;
+                    println!(
+                        "new_h_e first position values: {:?}",
+                        new_h_e_f32.get(0)?.get(0)?.to_vec2::<f32>()?
+                    );
+
                     h_v = new_h_v;
                     h_e = new_h_e;
                 }
+                println!("Final h_v dims: {:?}", h_v.dims());
+                println!("Final h_e dims: {:?}", h_e.dims());
+                println!("Final e_idx dims: {:?}", e_idx.dims());
                 Ok((h_v, h_e, e_idx))
             }
             ModelTypes::LigandMPNN => {
@@ -459,7 +570,7 @@ impl ProteinMPNN {
             }
         }
     }
-    fn sample(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
+    pub fn sample(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
         let ProteinFeatures {
             x,
             s,
@@ -469,44 +580,37 @@ impl ProteinMPNN {
             ..
         } = features;
 
-        // let b_decoder = batch_size.unwrap() as usize;
-
-        let (b, l) = s.shape().dims2()?;
-        let device = s.device();
         let s_true = s.clone();
+        let device = s.device();
+        let (b, l) = s.dims2()?;
 
-        // Todo: fix chain_mask
-        // output_dict.get_chain_mask(vec!['A'.to_string(), 'B'.to_string()], device)?;
-        // let chains_to_design = vec!["A".to_string(), "B".to_string()];
-        // let chains = self
-        //     .chain_letters
-        //     .iter()
-        //     .map(|item| chains_to_design.contains(item) as u32);
-        // let chain_mask = Tensor::from_iter(chains, &device);
-
-        // true and utter hack!
-        let chain_mask = Tensor::from_vec(vec![0i64, 0], (2, 1), &device)?;
-
-        // encode...
+        // Todo: This is a hack. we should be passing in encoded chains.
+        let chain_mask = Tensor::ones_like(&x_mask.as_ref().unwrap())?.to_dtype(DType::F32)?;
+        let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?.contiguous()?; // update chain_M to include missing regions;
         let (h_v, h_e, e_idx) = self.encode(features)?;
-        let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?; // update chain_M to include missing regions;
 
         // this might be  a bad rand implementation
-        let rand_tensor = Tensor::randn(0., 0.25, (b as usize, l as usize), device)?;
-        let decoding_order = (&chain_mask + 0.0001)?;
-        let decoding_order = decoding_order.mul(&rand_tensor.abs()?)?;
-        let decoding_order = decoding_order.arg_sort_last_dim(false)?;
-
-        // add match statement here
-        // I'd like to add the other optional components to the match
+        let rand_tensor = Tensor::randn(0., 0.25, (b, l), device)?.to_dtype(DType::F32)?;
+        let decoding_order = (&chain_mask + 0.0001)?
+            .mul(&rand_tensor.abs()?)?
+            .arg_sort_last_dim(false)?;
+        // Todo add  bias
+        // # [B,L,21] - amino acid bias per position
+        //  bias = feature_dict["bias"]
+        let bias = Tensor::ones((b, l, 21), DType::F32, device)?;
+        println!("todo: We need to add the bias!");
 
         // Todo! Fix this hack.
+        println!("todo: move temp and seed upstream");
+        let temperature = 1.0f64;
+        let seed = 111;
         let symmetry_residues: Option<Vec<i32>> = None;
         match symmetry_residues {
             None => {
-                let e_idx = e_idx.repeat(&[b, 1, 1])?;
+                let e_idx = e_idx.repeat(&[b, 1, 1])?.contiguous()?;
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
                 let tril = Tensor::tril2(l, DType::F64, device)?;
+                let tril = tril.unsqueeze(0)?;
                 let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; //tensor of shape (b, i, q)
                 let order_mask_backward =
                     temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // This will give us a tensor of shape (b, q, p)
@@ -514,174 +618,232 @@ impl ProteinMPNN {
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
                 let mask_1d = x_mask.as_ref().unwrap().reshape((b, l, 1, 1))?;
+                // Broadcast mask_1d to match mask_attend's shape
+                let mask_1d = mask_1d
+                    .broadcast_as(mask_attend.shape())?
+                    .to_dtype(DType::F64)?;
+
                 let mask_bw = mask_1d.mul(&mask_attend)?;
                 let mask_fw = mask_1d.mul(&(Tensor::ones_like(&mask_attend)? - mask_attend)?)?;
 
+                // Note: `sample` begins to diverge from the `score` here.
                 // repeat for decoding
                 let s_true = s_true.repeat((b, 1))?;
                 let h_v = h_v.repeat((b, 1, 1))?;
                 let h_e = h_e.repeat((b, 1, 1, 1))?;
-                let chain_mask = &chain_mask.repeat((b, 1))?;
-                let mask = x_mask.as_ref().unwrap().repeat((b, 1))?;
-
-                // Todo add  bias
-                // let bias = bias.repeat((b_decoder, 1, 1))?;
-                let bias = Tensor::zeros((b, l, 20), DType::F32, device)?;
-                let all_probs = Tensor::zeros((b, l, 20), DType::F32, device)?;
-                let all_log_probs = Tensor::zeros((b, l, 21), DType::F32, device)?; // why is this one 21 and the others are 20?
-                let mut h_s = Tensor::zeros_like(&h_v)?;
-                let s =
-                    Tensor::ones((b, l), DType::I64, device)?.mul(&Tensor::new(20., device)?)?;
-
-                // updated layers are here.
+                let chain_mask = &chain_mask.repeat((b, 1))?.contiguous()?;
+                let mask = x_mask.as_ref().unwrap().repeat((b, 1))?.contiguous()?;
+                let bias = bias.repeat((b, 1, 1))?.contiguous()?;
+                let mut all_probs = Tensor::zeros((b, l, 20), DType::F32, device)?;
+                let mut all_log_probs = Tensor::zeros((b, l, 21), DType::F32, device)?; // why is this one 21 and the others are 20?
+                let mut h_s = Tensor::zeros_like(&h_v)?.contiguous()?;
+                let s = (Tensor::ones((b, l), DType::I64, device)? * 20.)?;
                 let mut h_v_stack = vec![h_v.clone()];
-                h_v_stack.extend(
-                    (0..self.decoder_layers.len()).map(|_| Tensor::zeros_like(&h_v).unwrap()),
-                );
+
+                for i in 0..self.decoder_layers.len() {
+                    let zeros = Tensor::zeros_like(&h_v)?;
+                    h_v_stack.push(zeros);
+                }
                 let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
                 let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
+                let mask_fw = mask_fw
+                    .broadcast_as(h_exv_encoder.shape())?
+                    .to_dtype(h_exv_encoder.dtype())?;
                 let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
 
                 for t_ in 0..l {
-                    let t = decoding_order.i((.., t_ as usize))?;
-                    let chain_mask_t = chain_mask.gather(&t.unsqueeze(1)?, 1)?.squeeze(1)?;
-                    let mask_t = mask.gather(&t.unsqueeze(1)?, 1)?.squeeze(1)?;
+                    let t = decoding_order.i((.., t_))?;
+                    let t_gather = t.unsqueeze(1)?; // Shape [B, 1]
+
+                    // Gather masks and bias
+                    let chain_mask_t = chain_mask.gather(&t_gather, 1)?.squeeze(1)?;
+                    let mask_t = mask.gather(&t_gather, 1)?.squeeze(1)?;
                     let bias_t = bias
-                        .gather(&t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, 21))?, 1)?
+                        .gather(&t_gather.unsqueeze(2)?.expand((b, 1, 21))?.contiguous()?, 1)?
                         .squeeze(1)?;
+
+                    // Gather edge and node indices/features
                     let e_idx_t = e_idx.gather(
-                        &t.unsqueeze(1)?
+                        &t_gather
                             .unsqueeze(2)?
-                            .repeat((1, 1, e_idx.dim(2)?))?,
+                            .expand((b, 1, e_idx.dim(2)?))?
+                            .contiguous()?,
                         1,
                     )?;
                     let h_e_t = h_e.gather(
-                        &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
-                            1,
-                            1,
-                            h_e.dim(2)?,
-                            h_e.dim(3)?,
-                        ))?,
-                        1,
-                    )?;
-                    let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
-                    let h_exv_encoder_t = h_exv_encoder_fw.gather(
-                        &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
-                            1,
-                            1,
-                            h_exv_encoder_fw.dim(2)?,
-                            h_exv_encoder_fw.dim(3)?,
-                        ))?,
-                        1,
-                    )?;
-                    let mask_bw_t = mask_bw.gather(
-                        &t.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?.repeat((
-                            1,
-                            1,
-                            mask_bw.dim(2)?,
-                            mask_bw.dim(3)?,
-                        ))?,
+                        &t_gather
+                            .unsqueeze(2)?
+                            .unsqueeze(3)?
+                            .expand((b, 1, h_e.dim(2)?, h_e.dim(3)?))?
+                            .contiguous()?,
                         1,
                     )?;
 
-                    // Todo: Consider factorign this out..
-                    for (l, layer) in self.decoder_layers.iter().enumerate() {
-                        let h_esv_decoder_t =
-                            cat_neighbors_nodes(&h_v_stack[l], &h_es_t, &e_idx_t)?;
-                        let h_v_t = h_v_stack[l].gather(
-                            &t.unsqueeze(1)?
+                    let b = h_s.dim(0)?; // batch size
+                    let l = h_s.dim(1)?; // sequence length
+                    let n = e_idx_t.dim(2)?; // number of neighbors
+                    let c = h_s.dim(2)?; // channels/features
+
+                    let h_e_t = h_e_t
+                        .squeeze(1)? // [B, N, C]
+                        .unsqueeze(1)? // [B, 1, N, C]
+                        .expand((b, l, n, c))? // [B, L, N, C]
+                        .contiguous()?;
+
+                    let e_idx_t = e_idx_t
+                        .expand((b, l, n))? // [B, L, N]
+                        .contiguous()?;
+
+                    let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
+                    let h_exv_encoder_t = h_exv_encoder_fw.gather(
+                        &t_gather
+                            .unsqueeze(2)?
+                            .unsqueeze(3)?
+                            .expand((b, 1, h_exv_encoder_fw.dim(2)?, h_exv_encoder_fw.dim(3)?))?
+                            .contiguous()?,
+                        1,
+                    )?;
+
+                    let mask_bw_t = mask_bw.gather(
+                        &t_gather
+                            .unsqueeze(2)?
+                            .unsqueeze(3)?
+                            .expand((b, 1, mask_bw.dim(2)?, mask_bw.dim(3)?))?
+                            .contiguous()?,
+                        1,
+                    )?;
+                    // Decoder layers loop
+                    for l in 0..self.decoder_layers.len() {
+                        let h_v_stack_l = &h_v_stack[l];
+                        let h_esv_decoder_t = cat_neighbors_nodes(h_v_stack_l, &h_es_t, &e_idx_t)?;
+                        let h_v_t = h_v_stack_l.gather(
+                            &t_gather
                                 .unsqueeze(2)?
-                                .repeat((1, 1, h_v_stack[l].dim(2)?))?,
+                                .expand((b, 1, h_v_stack_l.dim(2)?))?
+                                .contiguous()?,
                             1,
                         )?;
-                        let h_esv_t = mask_bw_t.mul(&h_esv_decoder_t)?.add(&h_exv_encoder_t)?;
-                        let new_h_v = layer.forward(&h_v_t, &h_esv_t, Some(&mask_t), None, None)?;
-                        // note: scatter_add is different between pytorch and candle
-                        h_v_stack[l + 1] = h_v_stack[l + 1].scatter_add(
-                            &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, h_v.dim(2)?))?,
-                            &new_h_v,
-                            1,
+                        let mask_bw_t = mask_bw_t.expand(h_esv_decoder_t.dims())?.contiguous()?;
+                        let h_exv_encoder_t = h_exv_encoder_t
+                            .expand(h_esv_decoder_t.dims())?
+                            .contiguous()?
+                            .to_dtype(DType::F64)?;
+                        let h_esv_t = mask_bw_t
+                            .mul(&h_esv_decoder_t.to_dtype(DType::F64)?)?
+                            .add(&h_exv_encoder_t)?
+                            .to_dtype(DType::F32)?;
+                        let h_v_t = h_v_t
+                            .expand((
+                                h_esv_t.dim(0)?, // batch size
+                                h_esv_t.dim(1)?, // sequence length (93)
+                                h_v_t.dim(2)?,   // features (128)
+                            ))?
+                            .contiguous()?;
+
+                        let decoder_output = self.decoder_layers[l].forward(
+                            &h_v_t,
+                            &h_esv_t,
+                            Some(&mask_t),
+                            None,
+                            None,
                         )?;
+
+                        let t_expanded = t_gather.reshape(&[b])?; // This will give us a 1D tensor of shape [b]
+                        let decoder_output = decoder_output
+                            .narrow(1, 0, 1)?
+                            .squeeze(1)? // Now [1, 128]
+                            .unsqueeze(1)?; // Now [1, 1, 128] - same rank as target
+                        h_v_stack[l + 1] =
+                            h_v_stack[l + 1].index_add(&t_expanded, &decoder_output, 1)?;
+                        h_v_stack[l + 1] =
+                            h_v_stack[l + 1].index_add(&t_expanded, &decoder_output, 1)?;
                     }
                     let h_v_t = h_v_stack
                         .last()
                         .unwrap()
                         .gather(
-                            &t.unsqueeze(1)?.unsqueeze(2)?.repeat((
-                                1,
-                                1,
-                                h_v_stack.last().unwrap().dim(2)?,
-                            ))?,
+                            &t_gather
+                                .unsqueeze(2)?
+                                .expand((b, 1, h_v_stack.last().unwrap().dim(2)?))?
+                                .contiguous()?,
                             1,
                         )?
                         .squeeze(1)?;
+                    // Generate logits and probabilities
                     let logits = self.w_out.forward(&h_v_t)?;
                     let log_probs = log_softmax(&logits, D::Minus1)?;
-
-                    // Todo: Temperature should be added upstream
-                    let temperature = 20f64;
                     let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
-                        .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?)?;
-
-                    // pytorch direct translation
-                    // let s_t = probs_sample.multinomial(1, true)?.squeeze(1)?;
-                    //
-                    // note: this sampling is not the same as pytorch's.
-                    // https://github.com/huggingface/candle/blob/dcd83336b68049763973709733bf2721a687507d/candle-transformers/src/generation/mod.rs#L47
-                    // this sample should probably be brought up higher for reuse
-                    // Todo: this may ormay not be the same as pytorch multinomial
-                    let seed = 2;
-                    let mut logproc = LogitsProcessor::new(seed, Some(temperature), Some(0.25));
-                    let logits: Vec<u32> = vec![(); l]
-                        .iter()
-                        .map(|_| logproc.sample(&probs_sample))
-                        .filter_map(Result::ok)
-                        .collect();
-                    // Todo: this definitely needs to be checked for Dimensions
-                    let s_t = Tensor::from_vec(logits, l, device)?;
-
-                    // note: need to double check pytorch vs candle
-                    let all_probs = all_probs.scatter_add(
-                        &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, 20))?,
-                        &(chain_mask_t
-                            .unsqueeze(1)?
-                            .unsqueeze(2)?
-                            .mul(&probs_sample.unsqueeze(1)?))?,
-                        1,
-                    )?;
-
-                    // these need to mutate out of scope - e.g. to the top-level cvar
-                    let all_log_probs = all_log_probs.scatter_add(
-                        &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, 21))?,
-                        &(chain_mask_t
-                            .unsqueeze(1)?
-                            .unsqueeze(2)?
-                            .mul(&log_probs.unsqueeze(1)?))?,
-                        1,
-                    )?;
-
-                    let s_true_t = s_true.gather(&t.unsqueeze(1)?, 1)?.squeeze(1)?;
+                        .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
+                    // Sample new token
+                    let probs_sample_1d = {
+                        // Get sum first
+                        let sum = probs_sample.sum(1)?; // Sum across probabilities dimension
+                        let normalized = probs_sample
+                            .squeeze(0)? // Remove batch dimension -> [20]
+                            .clamp(1e-10, 1.0)?;
+                        let normalized = normalized.broadcast_div(&sum)?;
+                        let normalized = normalized.contiguous()?;
+                        normalized
+                    };
+                    let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
+                    // todo: move this upstream
+                    let s_t = s_t.to_dtype(DType::F32)?;
+                    let s_true = s_true.to_dtype(DType::F32)?;
+                    let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
                     let s_t = s_t
                         .mul(&chain_mask_t)?
-                        .add(&s_true_t.mul(&(Tensor::ones_like(&chain_mask_t)? - chain_mask_t)?)?)?
-                        .to_dtype(candle_core::DType::I64)?;
-
-                    h_s = h_s.scatter_add(
-                        &t.unsqueeze(1)?.unsqueeze(2)?.repeat((1, 1, h_s.dim(2)?))?,
-                        &self.w_s.forward(&s_t)?.unsqueeze(1)?,
+                        .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?;
+                    let s_t_idx = s_t.to_dtype(DType::U32)?;
+                    // Ensure s_t_idx is 1D before passing to w_s
+                    let s_t_idx = s_t_idx.reshape(&[s_t_idx.dim(0)?])?;
+                    let h_s_update = self.w_s.forward(&s_t_idx)?.unsqueeze(1)?;
+                    // Instead of expanding t_gather, reshape it to 1D
+                    let t_gather_expanded = t_gather.reshape(&[b])?; // Shape: [1]
+                    let h_s_update = h_s_update
+                        .squeeze(0)? // Remove any extra dimensions
+                        .unsqueeze(1)?; // Add back the sequence dimension to match h_s rank
+                    h_s = h_s.index_add(
+                        &t_gather_expanded, // Shape: [1]
+                        &Tensor::zeros_like(&h_s_update)?,
                         1,
                     )?;
+                    h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
+                    let zero_mask = t_gather.zeros_like()?.to_dtype(DType::I64)?;
+                    let s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    let s_t = s_t.to_dtype(DType::I64)?;
+                    let s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
+                    let probs_update = chain_mask_t
+                        .unsqueeze(1)?
+                        .unsqueeze(2)?
+                        .expand((b, 1, 20))?
+                        .mul(&probs_sample.unsqueeze(1)?)?;
+                    let t_expanded = t_gather.reshape(&[b])?; // Shape: [1]
+                    let probs_update = probs_update
+                        .squeeze(1)? // Remove extra dimension
+                        .unsqueeze(1)?; // Add back sequence dimension to match all_probs rank
+                    all_probs =
+                        all_probs.index_add(&t_expanded, &Tensor::zeros_like(&probs_update)?, 1)?;
+                    all_probs = all_probs.index_add(&t_expanded, &probs_update, 1)?;
 
-                    // the below line approach may note be correct.
-                    let zeros = Tensor::zeros_like(&s)?;
-                    let scattered = zeros.scatter_add(
-                        &t.unsqueeze(1)?,
-                        &s_t.unsqueeze(1)?,
-                        1, // Assuming you're scattering along dimension 1
+                    let log_probs_update = chain_mask_t
+                        .unsqueeze(1)?
+                        .unsqueeze(2)?
+                        .expand((b, 1, 21))?
+                        .mul(&log_probs.unsqueeze(1)?)?;
+
+                    // Reshape log_probs_update to match all_log_probs rank
+                    let log_probs_update = log_probs_update
+                        .squeeze(1)? // Remove extra dimension
+                        .unsqueeze(1)?; // Add back sequence dimension to match rank
+
+                    all_log_probs = all_log_probs.index_add(
+                        &t_expanded,
+                        &Tensor::zeros_like(&log_probs_update)?,
+                        1,
                     )?;
-                    let s = s.add(&scattered)?;
+                    all_log_probs = all_log_probs.index_add(&t_expanded, &log_probs_update, 1)?;
                 }
 
                 Ok(ScoreOutput {
@@ -694,9 +856,9 @@ impl ProteinMPNN {
             Some(symmetry_residues) => {
                 todo!()
                 // // note this is a literal translation of the code... Howver I think this could lead to
-                // // possible unintentional overwritign of value - e.g. if there are multiple identical
+                // // possible unintentional overwriting of value - e.g. if there are multiple identical
                 // // values in the index. (I guess you might expect that if they are symetrical. Howver the
-                // // weigths do no have to be thesame)
+                // // weights do not have to be the same)
                 // let symmetry_weights = symmetry_weights.as_ref().unwrap();
                 // // let symmetry_weights_tensor = Tensro::ones(l, candle_core::DType::F32, device)?;
                 // let mut symmetry_weights_vec = vec![1.0_f64; l];
@@ -986,23 +1148,27 @@ impl ProteinMPNN {
 
     pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
         let ProteinFeatures { s, x, x_mask, .. } = &features;
+
         let s_true = &s.clone();
-        let mask = &x_mask.as_ref().clone();
-        let (b, l) = s_true.dims2()?;
-        let b_decoder = b;
         let device = s_true.device();
-        let randn = Tensor::randn(0., 1., (b, l), device)?.to_dtype(DType::F32)?;
+        let (b, l) = s_true.dims2()?;
+
+        let mask = &x_mask.as_ref().clone();
+        let b_decoder: usize = b;
+
+        // Todo: This is a hack. we shouldbe passing in encoded chains.
+        // Update chain_mask to include missing regions
+        let chain_mask = Tensor::zeros_like(mask.unwrap())?.to_dtype(DType::F32)?;
+        let chain_mask = mask.unwrap().mul(&chain_mask)?;
+
+        // encode ...
         let (h_v, h_e, e_idx) = self.encode(features)?;
 
-        // Todo! This is a hack. we shou ldbe passing in encoded chains.
-        let chain_mask = Tensor::zeros_like(mask.unwrap())?.to_dtype(DType::F32)?;
-
-        // Update chain_mask to include missing regions
-        let chain_mask = mask.unwrap().mul(&chain_mask)?;
+        let rand_tensor = Tensor::randn(0., 1., (b, l), device)?.to_dtype(DType::F32)?;
 
         // Compute decoding order
         let decoding_order = (chain_mask + 0.001)?
-            .mul(&randn.abs()?)?
+            .mul(&rand_tensor.abs()?)?
             .arg_sort_last_dim(false)?;
 
         let symmetry_residues: Option<Vec<i32>> = None;
@@ -1041,7 +1207,7 @@ impl ProteinMPNN {
                 //     .unsqueeze(0)?
                 //     .repeat((b, 1))?;
 
-                // let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?; // need to double check here
+                // let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?; // need to double-check here
                 // let tril = Tensor::tril2(l, DType::F64, device)?;
 
                 // // First, perform the matrix multiplication between the lower triangle and the first permutation matrix
@@ -1067,7 +1233,6 @@ impl ProteinMPNN {
                 // (mask_fw, mask_bw, e_idx, decoding_order)
             }
             None => {
-                let b_decoder = b_decoder as usize;
                 let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
                 let tril = Tensor::tril2(l, DType::F64, device)?;
@@ -1083,16 +1248,18 @@ impl ProteinMPNN {
                 let mask_1d = mask_1d
                     .broadcast_as(mask_attend.shape())?
                     .to_dtype(DType::F64)?;
+
                 let mask_bw = mask_1d.mul(&mask_attend)?;
                 let mask_fw = mask_1d.mul(&(mask_attend - 1.0)?.neg()?)?;
                 (mask_fw, mask_bw, e_idx, decoding_order)
             }
         };
-        let b_decoder = b_decoder as usize;
+        let b_decoder = b_decoder;
         let s_true = s_true.repeat(&[b_decoder, 1])?;
         let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
         let h_e = h_e.repeat(&[b_decoder, 1, 1, 1])?;
         let mask = x_mask.as_ref().unwrap().repeat(&[b_decoder, 1])?;
+
         let h_s = self.w_s.forward(&s_true)?; // embedding layer
         let h_es = cat_neighbors_nodes(&h_s, &h_e, &e_idx)?;
         // Build encoder embeddings

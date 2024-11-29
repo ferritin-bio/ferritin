@@ -116,7 +116,6 @@ impl LMPNNFeatures for AtomCollection {
     }
     /// create numeric Tensor of shape [<sequence-length>, 37, 3]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
-        println!("In the Tensor core.");
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
 

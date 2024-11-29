@@ -36,11 +36,30 @@ pub fn cat_neighbors_nodes(
     e_idx: &Tensor,
 ) -> Result<Tensor> {
     let h_nodes_gathered = gather_nodes(h_nodes, e_idx)?;
+    // println!("h_nodes_gathered dims: {:?}", h_nodes_gathered.dims());
+    // println!("h_neighbors dims: {:?}", h_neighbors.dims());
     // todo: fix this hacky Dtype
-    Tensor::cat(
-        &[h_neighbors, &h_nodes_gathered.to_dtype(DType::F32)?],
+    //
+    let h_neighbors = h_neighbors.expand((
+        h_neighbors.dim(0)?, // 1
+        h_nodes.dim(1)?,     // 93
+        h_neighbors.dim(2)?, // 24
+        h_neighbors.dim(3)?, // 128
+    ))?;
+
+    // println!("h_neighbors dims 02: {:?}", h_neighbors.dims());
+
+    let ten = Tensor::cat(
+        &[h_neighbors, h_nodes_gathered.to_dtype(DType::F32)?],
         D::Minus1,
-    )
+    );
+
+    // let dims = &ten.as_ref().unwrap().dims();
+
+    // println!("tensorcat: {:?}", dims);
+
+    // assert_eq!(true, false);
+    ten
 }
 
 /// Retrieve the nearest Neighbor of a set of coordinates.
@@ -51,8 +70,7 @@ pub fn compute_nearest_neighbors(
     k: usize,
     eps: f32,
 ) -> Result<(Tensor, Tensor)> {
-    let batch_size = coords.dim(0)?;
-    let seq_len = coords.dim(1)?;
+    let (batch_size, seq_len, _) = coords.dims3()?;
 
     // broadcast_matmul handles broadcasting automatically
     // [2, 3, 1] × [2, 1, 3] -> [2, 3, 3]
@@ -282,10 +300,17 @@ pub fn gather_edges(edges: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
 /// Features [B,N,C] at Neighbor indices [B,N,K] => [B,N,K,C]
 /// Flatten and expand indices per batch [B,N,K] => [B,NK] => [B,NK,C]
 pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
+    // print!(
+    //     "IN GATHER NODES. Nodes, neighbor_idx: {:?}, {:?}",
+    //     nodes.dims(),
+    //     neighbor_idx.dims()
+    // );
     let (batch_size, n_nodes, n_features) = nodes.dims3()?;
     let (_, _, k_neighbors) = neighbor_idx.dims3()?;
+
     // Reshape neighbor_idx to [B, N*K]
     let neighbors_flat = neighbor_idx.reshape((batch_size, n_nodes * k_neighbors))?;
+
     // Add feature dimension and expand
     let neighbors_flat = neighbors_flat
         .unsqueeze(2)? // Add feature dimension [B, N*K, 1]
@@ -295,6 +320,12 @@ pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     let neighbors_flat = neighbors_flat.contiguous()?;
     // Gather features
     let neighbor_features = nodes.gather(&neighbors_flat, 1)?;
+
+    // println!(
+    //     "neighbor_features dims before final reshape: {:?}",
+    //     neighbor_features.dims()
+    // );
+
     // Reshape back to [B, N, K, C]
     neighbor_features.reshape((batch_size, n_nodes, k_neighbors, n_features))
 }
