@@ -187,20 +187,88 @@ impl EncLayer {
         // Now concatenate along the last dimension
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
 
-        // After each layer in message calculation
+        println!("After concat h_ev dims: {:?}", h_ev.dims());
+        println!(
+            "After concat first values: {:?}",
+            h_ev.to_dtype(DType::F32)?
+                .get(0)?
+                .narrow(0, 0, 1)? // First sequence position
+                .narrow(1, 0, 5)? // First 5 neighbors
+                .narrow(2, 0, 5)? // First 5 features
+                .to_vec3::<f32>()?
+        );
+
         let h_message = self.w1.forward(&h_ev)?;
+        println!(
+            "After w1 max: {:?}",
+            h_message.max(D::Minus1)?.to_vec3::<f32>()?
+        );
+        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w1
 
         let h_message = h_message.gelu()?;
+        println!(
+            "After gelu max: {:?}",
+            h_message.max(D::Minus1)?.to_vec3::<f32>()?
+        );
 
-        let h_message = h_message.apply(&self.w2)?.gelu()?.apply(&self.w3)?;
+        let h_message = h_message.apply(&self.w2)?;
+        println!(
+            "After w2 max: {:?}",
+            h_message.max(D::Minus1)?.to_vec3::<f32>()?
+        );
+        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w2
+
+        let h_message = h_message.gelu()?;
+        println!(
+            "After second gelu max: {:?}",
+            h_message.max(D::Minus1)?.to_vec3::<f32>()?
+        );
+
+        let h_message = h_message.apply(&self.w3)?;
+        println!(
+            "After w3 max: {:?}",
+            h_message.max(D::Minus1)?.to_vec3::<f32>()?
+        );
+        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w3
 
         let h_message = if let Some(mask) = mask_attend {
-            mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
+            let mask = mask.unsqueeze(D::Minus1)?;
+            println!("ENCODER_LAYER: Mask dims: {:?}", mask.dims());
+            println!("ENCODER_LAYER: h_message dims: {:?}", h_message.dims());
+            println!(
+                "ENCODER_LAYER: Mask first values: {:?}",
+                mask.get(0)?
+                    .narrow(0, 0, 1)?
+                    .narrow(1, 0, 5)?
+                    .to_vec2::<f32>()?
+            );
+
+            println!("ENCODER_LAYER: Before broadcast_mul:");
+            println!("mask shape: {:?}", mask.dims());
+            println!("h_message shape: {:?}", h_message.dims());
+
+            let result = mask.broadcast_mul(&h_message)?;
+            println!(
+                "ENCODER_LAYER: After broadcast_mul shape: {:?}",
+                result.dims()
+            );
+
+            result
         } else {
             h_message
         };
 
-        let dh = (h_message.sum(D::Minus2)? / self.scale)?;
+        // Safe division with scale
+        println!("Scale value: {:?}", self.scale);
+        let dh = {
+            let sum = h_message.sum(D::Minus2)?;
+            let scale = if self.scale == 0.0 { 1.0 } else { self.scale };
+            (sum / scale)?
+        };
+        println!(
+            "After division dh max: {:?}",
+            dh.max(D::Minus1)?.to_vec2::<f32>()?
+        );
 
         let h_v = {
             let dh_dropout = self
@@ -426,22 +494,19 @@ impl ProteinMPNN {
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
         let device = &Device::Cpu; // todo: get device more elegantly
         let s_true = &features.get_sequence();
+
+        // needed for the MaskAttend
         let mask = match features.get_sequence_mask() {
             Some(m) => m,
-            None => &Tensor::zeros_like(&s_true)?,
+            None => &Tensor::ones_like(&s_true)?,
         };
 
         println!("Starting encode function");
-        // Initial feature processing
 
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
                 let (e, e_idx) = self.features.forward(features, device)?;
                 println!("After embedding dims: {:?}", e.dims());
-                // println!(
-                //     "After embedding first position values: {:?}",
-                //     e.get(0)?.get(0)?.to_vec2::<f32>()?
-                // );
 
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
@@ -450,15 +515,30 @@ impl ProteinMPNN {
                 )?;
 
                 let mut h_e = self.w_e.forward(&e)?;
-                let mask_attend =
-                    gather_nodes(&mask.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
 
-                let mask_expanded = mask.unsqueeze(D::Minus1)?.expand((
-                    mask.dim(0)?,
-                    mask.dim(1)?,
-                    mask_attend.dim(2)?,
-                ))?;
-                let mask_attend = (&mask_expanded * &mask_attend)?;
+                let mask_attend = if let Some(mask) = features.get_sequence_mask() {
+                    // First unsqueeze mask
+                    let mask_expanded = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
+                    println!("ENCODE: mask_expanded dims: {:?}", mask_expanded.dims());
+
+                    // Gather using E_idx
+                    let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?;
+                    let mask_gathered = mask_gathered.squeeze(D::Minus1)?;
+                    println!("ENCODE: mask_gathered dims: {:?}", mask_gathered.dims());
+
+                    // Multiply original mask with gathered mask
+                    let mask_attend = mask.unsqueeze(D::Minus1)?.broadcast_mul(&mask_gathered)?;
+                    println!("ENCODE: mask_attend dims: {:?}", mask_attend.dims());
+                    println!(
+                        "ENCODE: mask_attend first values: {:?}",
+                        mask_attend.get(0)?.narrow(0, 0, 5)?.to_vec2::<f32>()?
+                    );
+
+                    mask_attend
+                } else {
+                    let (b, l) = mask.dims2()?;
+                    Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, device)?
+                };
 
                 for (i, layer) in self.encoder_layers.iter().enumerate() {
                     println!("Starting encoder layer {}", i);
@@ -564,7 +644,7 @@ impl ProteinMPNN {
         let (b, l) = s.dims2()?;
 
         // Todo: This is a hack. we should be passing in encoded chains.
-        let chain_mask = Tensor::zeros_like(&x_mask.as_ref().unwrap())?.to_dtype(DType::F32)?;
+        let chain_mask = Tensor::ones_like(&x_mask.as_ref().unwrap())?.to_dtype(DType::F32)?;
         let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?.contiguous()?; // update chain_M to include missing regions;
 
         // encode...
@@ -585,7 +665,7 @@ impl ProteinMPNN {
         // Todo add  bias
         // # [B,L,21] - amino acid bias per position
         //  bias = feature_dict["bias"]
-        let bias = Tensor::zeros((b, l, 21), DType::F32, device)?;
+        let bias = Tensor::ones((b, l, 21), DType::F32, device)?;
         println!("todo: We need to add the bias!");
 
         // Todo! Fix this hack.
@@ -620,9 +700,22 @@ impl ProteinMPNN {
                 let s_true = s_true.repeat((b, 1))?;
                 let h_v = h_v.repeat((b, 1, 1))?;
                 let h_e = h_e.repeat((b, 1, 1, 1))?;
+
                 let chain_mask = &chain_mask.repeat((b, 1))?.contiguous()?;
+                println!("INIT: chain_mask dims: {:?}", chain_mask.dims());
+                println!(
+                    "INIT: chain_mask first values: {:?}",
+                    chain_mask.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
+                );
+
                 let mask = x_mask.as_ref().unwrap().repeat((b, 1))?.contiguous()?;
                 let bias = bias.repeat((b, 1, 1))?.contiguous()?;
+                println!("INIT: bias dims: {:?}", bias.dims());
+                println!(
+                    "INIT: bias first values: {:?}",
+                    bias.get(0)?.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
+                );
+
                 let mut all_probs = Tensor::zeros((b, l, 20), DType::F32, device)?;
                 let mut all_log_probs = Tensor::zeros((b, l, 21), DType::F32, device)?; // why is this one 21 and the others are 20?
                 let mut h_s = Tensor::zeros_like(&h_v)?.contiguous()?;
