@@ -141,8 +141,19 @@ impl EncLayer {
         println!("EncoderLayer: Starting forward pass");
 
         println!("metal 01");
+        println!(
+            "h_v dims: {:?}, dtype: {:?}, device: {:?}",
+            h_v.dims(),
+            h_v.dtype(),
+            h_v.device()
+        );
+        println!("h_e dims: {:?}, dtype: {:?}", h_e.dims(), h_e.dtype());
+        println!("e_idx dims: {:?}, dtype: {:?}", e_idx.dims(), e_idx.dtype());
+        let h_v = h_v.to_dtype(DType::F32)?;
 
-        let h_ev = cat_neighbors_nodes(h_v, h_e, e_idx)?;
+        let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
+        println!("metal 02");
+        println!("h_ev dims: {:?}, dtype: {:?}", h_ev.dims(), h_ev.dtype());
         let h_v_expand = h_v.unsqueeze(D::Minus2)?;
 
         // Explicitly specify the expansion dimensions
@@ -416,7 +427,7 @@ impl ProteinMPNN {
                 let (e, e_idx) = self.features.forward(features, &self.device)?;
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
-                    DType::F64,
+                    base_dtype,
                     &self.device,
                 )?;
                 let mut h_e = self.w_e.forward(&e)?;
@@ -452,10 +463,8 @@ impl ProteinMPNN {
                     ones
                 };
 
+                println!("Beginning the Encoding...");
                 for (i, layer) in self.encoder_layers.iter().enumerate() {
-                    // let h_v_f32 = h_v.to_dtype(DType::F32)?;
-                    // let h_e_f32 = h_e.to_dtype(DType::F32)?;
-
                     let (new_h_v, new_h_e) = layer.forward(
                         &h_v,
                         &h_e,

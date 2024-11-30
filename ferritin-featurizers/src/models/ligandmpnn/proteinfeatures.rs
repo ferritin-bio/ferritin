@@ -271,6 +271,7 @@ impl ProteinFeaturesModel {
         let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
         let e = self.edge_embedding.forward(&e)?;
         println!("About to start the normalization...");
+
         let e = self.norm_edges.forward(&e)?;
         Ok((e, e_idx))
     }
