@@ -24,7 +24,7 @@ fn is_heavy_atom(element: &Element) -> bool {
 
 /// Convert the AtomCollection into a struct that can be passed to a model.
 pub trait LMPNNFeatures {
-    fn encode_amino_acids(&self, device: &Device) -> Result<(Tensor)>; // ( residue types )
+    fn encode_amino_acids(&self, device: &Device) -> Result<Tensor>; // ( residue types )
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures>; // need more control over this featurization process
     fn get_res_index(&self) -> Vec<u32>;
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]

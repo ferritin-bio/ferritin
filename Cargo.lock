@@ -1552,8 +1552,7 @@ dependencies = [
 [[package]]
 name = "candle-core"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e61e6a12c4b0660f105c11cbce42a5b33a392e73caaf465261b24210878fbe0e"
+source = "git+https://github.com/huggingface/candle.git#dba7a9c93e4c84c8197e8a5b56f40adcf2650bde"
 dependencies = [
  "byteorder",
  "candle-metal-kernels",
@@ -1598,8 +1597,7 @@ dependencies = [
 [[package]]
 name = "candle-metal-kernels"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2db22aa60f6927d706fa8df2dabe5c7ca2919ba056c69c0c94aa6bdb5ca31c9"
+source = "git+https://github.com/huggingface/candle.git#dba7a9c93e4c84c8197e8a5b56f40adcf2650bde"
 dependencies = [
  "metal 0.27.0",
  "once_cell",
@@ -1610,8 +1608,7 @@ dependencies = [
 [[package]]
 name = "candle-nn"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2032a3a41999801c5997ee7896ce816c361c49988435dedb7830634293c0798e"
+source = "git+https://github.com/huggingface/candle.git#dba7a9c93e4c84c8197e8a5b56f40adcf2650bde"
 dependencies = [
  "candle-core",
  "candle-metal-kernels",
@@ -1627,8 +1624,7 @@ dependencies = [
 [[package]]
 name = "candle-transformers"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b88bf4dbf13c3fa0a51624e4a2bf4db1d97596bbefd471424892a0b852013b7c"
+source = "git+https://github.com/huggingface/candle.git#dba7a9c93e4c84c8197e8a5b56f40adcf2650bde"
 dependencies = [
  "byteorder",
  "candle-core",

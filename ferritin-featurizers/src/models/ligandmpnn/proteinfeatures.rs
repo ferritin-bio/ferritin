@@ -249,7 +249,7 @@ impl ProteinFeaturesModel {
         let d_chains = (&chain_labels.unsqueeze(2)?.broadcast_as(target_shape)?
             - &chain_labels.unsqueeze(1)?.broadcast_as(target_shape)?)?
             .eq(0.0)?
-            .to_dtype(DType::I64)?;
+            .to_dtype(DType::U32)?;
 
         // E_chains = gather_edges(d_chains[:, :, :, None], E_idx)[:, :, :, 0]
         println!(
@@ -263,7 +263,7 @@ impl ProteinFeaturesModel {
         println!("About to start the embeddings calculation...");
         let e_positional = self
             .embeddings
-            .forward(&offset.to_dtype(DType::I64)?, &e_chains)?;
+            .forward(&offset.to_dtype(DType::U32)?, &e_chains)?;
 
         println!("About to cat the pos embeddings...");
 

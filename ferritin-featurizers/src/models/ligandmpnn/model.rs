@@ -27,7 +27,7 @@ pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result
     );
 
     // Sample from the probabilities
-    let idx = logits_processor.sample(&probs)?;
+    let idx = logits_processor.sample(probs)?;
 
     // Convert to tensor
     Tensor::new(&[idx], probs.device())
