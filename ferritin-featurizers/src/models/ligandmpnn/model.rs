@@ -568,12 +568,15 @@ impl ProteinMPNN {
                 let s_true = s_true.repeat((b, 1))?;
                 let h_v = h_v.repeat((b, 1, 1))?;
                 let h_e = h_e.repeat((b, 1, 1, 1))?;
-                let chain_mask = &chain_mask.repeat((b, 1))?.contiguous()?;
                 let mask = x_mask.as_ref().unwrap().repeat((b, 1))?.contiguous()?;
-                let bias = bias.repeat((b, 1, 1))?.contiguous()?;
+                let chain_mask = &chain_mask.repeat((b, 1))?;
+                let bias = bias.repeat((b, 1, 1))?;
                 let mut all_probs = Tensor::zeros((b, l, 20), sample_dtype, device)?;
                 let mut all_log_probs = Tensor::zeros((b, l, 21), sample_dtype, device)?; // why is this one 21 and the others are 20?
-                let mut h_s = Tensor::zeros_like(&h_v)?.contiguous()?;
+
+                // let mut h_s = Tensor::zeros_like(&h_v)?.contiguous()?;
+                let mut h_s = Tensor::zeros_like(&h_v)?;
+
                 let s = (Tensor::ones((b, l), DType::I64, device)? * 20.)?;
                 let mut h_v_stack = vec![h_v.clone()];
 
