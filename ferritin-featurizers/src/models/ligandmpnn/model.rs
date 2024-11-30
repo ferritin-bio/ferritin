@@ -139,23 +139,9 @@ impl EncLayer {
         training: Option<bool>,
     ) -> Result<(Tensor, Tensor)> {
         println!("EncoderLayer: Starting forward pass");
-
-        println!("metal 01");
-        println!(
-            "h_v dims: {:?}, dtype: {:?}, device: {:?}",
-            h_v.dims(),
-            h_v.dtype(),
-            h_v.device()
-        );
-        println!("h_e dims: {:?}, dtype: {:?}", h_e.dims(), h_e.dtype());
-        println!("e_idx dims: {:?}, dtype: {:?}", e_idx.dims(), e_idx.dtype());
         let h_v = h_v.to_dtype(DType::F32)?;
-
         let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
-        println!("metal 02");
-        println!("h_ev dims: {:?}, dtype: {:?}", h_ev.dims(), h_ev.dtype());
         let h_v_expand = h_v.unsqueeze(D::Minus2)?;
-
         // Explicitly specify the expansion dimensions
         let expand_shape = [
             h_ev.dims()[0],       // batch size
@@ -163,9 +149,9 @@ impl EncLayer {
             h_ev.dims()[2],       // number of neighbors
             h_v_expand.dims()[3], // hidden dimension
         ];
-        println!("metal 02");
+
         let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
-        let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
+        let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?.contiguous()?;
         let h_message = self.w1.forward(&h_ev)?;
         let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w1
         let h_message = h_message.gelu()?;
@@ -175,7 +161,6 @@ impl EncLayer {
         let h_message = h_message.apply(&self.w3)?;
         let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w3
 
-        println!("metal 03");
         let h_message = if let Some(mask) = mask_attend {
             let mask = mask.unsqueeze(D::Minus1)?;
             let result = mask.broadcast_mul(&h_message)?;
@@ -184,13 +169,13 @@ impl EncLayer {
             h_message
         };
 
-        println!("metal 04");
         // Safe division with scale
         let dh = {
             let sum = h_message.sum(D::Minus2)?;
             let scale = if self.scale == 0.0 { 1.0 } else { self.scale };
             (sum / scale)?
         };
+
         println!("metal 05");
         let h_v = {
             let dh_dropout = self
@@ -435,12 +420,9 @@ impl ProteinMPNN {
                 let mask_attend = if let Some(mask) = features.get_sequence_mask() {
                     // First unsqueeze mask
                     let mask_expanded = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
-
-                    // Gather using E_idx
+                                                                    // Gather using E_idx
                     let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?;
-
                     let mask_gathered = mask_gathered.squeeze(D::Minus1)?;
-
                     // Multiply original mask with gathered mask
                     let mask_attend = {
                         let mask_unsqueezed = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
@@ -451,7 +433,6 @@ impl ProteinMPNN {
                             mask_gathered.dim(1)?, // sequence length
                             mask_gathered.dim(2)?, // number of neighbors
                         ))?;
-
                         // Now do the multiplication with explicit shapes
                         mask_expanded.mul(&mask_gathered)?
                     };
@@ -462,7 +443,6 @@ impl ProteinMPNN {
                     println!("Created default ones mask dims: {:?}", ones.dims());
                     ones
                 };
-
                 println!("Beginning the Encoding...");
                 for (i, layer) in self.encoder_layers.iter().enumerate() {
                     let (new_h_v, new_h_e) = layer.forward(
@@ -473,9 +453,6 @@ impl ProteinMPNN {
                         Some(&mask_attend),
                         Some(false),
                     )?;
-
-                    // let new_h_v_f32 = new_h_v.to_dtype(DType::F32)?;
-                    // let new_h_e_f32 = new_h_e.to_dtype(DType::F32)?;
                     h_v = new_h_v;
                     h_e = new_h_e;
                 }
