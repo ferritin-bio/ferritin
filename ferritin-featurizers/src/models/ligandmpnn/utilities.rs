@@ -304,7 +304,8 @@ pub fn gather_nodes(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     let neighbors_flat = neighbors_flat
         .unsqueeze(2)? // Add feature dimension [B, N*K, 1]
         .expand((batch_size, n_nodes * k_neighbors, n_features))?; // Expand to [B, N*K, C]
-                                                                   // make contiguous for the gather.
+
+    // make contiguous for the gather.
     let neighbors_flat = neighbors_flat.contiguous()?;
     // Gather features
     let neighbor_features = nodes.gather(&neighbors_flat, 1)?;
