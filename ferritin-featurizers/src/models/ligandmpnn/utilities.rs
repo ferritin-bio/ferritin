@@ -112,16 +112,25 @@ pub fn topk_last_dim(xs: &Tensor, topk: usize) -> Result<(Tensor, Tensor)> {
 /// note that the internal ordering is different between
 /// backbone only [N/CA/C/O] and all-atom [N/CA/C/CB/O]....
 pub fn create_backbone_mask_37(xyz_37: &Tensor) -> Result<Tensor> {
-    let backbone_indices = Tensor::new(&[0u32, 1, 2, 4], xyz_37.device())?;
-    let backbone_selection = xyz_37.index_select(&backbone_indices, 1)?; // [154, 4, 3]
-                                                                         // Check if coordinates exist (sum over xyz dimensions)
-    let exists = backbone_selection.sum(2)?; // [154, 4]
+    let (b, l, rescount, _) = xyz_37.dims4()?;
 
-    // All 4 atoms must exist
-    let all_exist = exists.sum_keepdim(1)?; // [154, 1]
-    Ok(all_exist)
+    // Create a vector with 1s at positions 0,1,2,4 and 0s elsewhere
+    let mut values = vec![0f32; rescount];
+    for &idx in &[0, 1, 2, 4] {
+        if idx < rescount {
+            values[idx] = 1.0;
+        }
+    }
+
+    // Create the base mask for one sequence, explicitly specifying the data type
+    let base_mask = Tensor::new(values.as_slice(), xyz_37.device())?.to_dtype(DType::F32)?;
+
+    // Create the full mask by repeating it for each batch and length
+    let mask = base_mask.unsqueeze(0)?.unsqueeze(0)?; // Add batch and length dimensions
+    let mask = mask.broadcast_as((b, l, rescount))?;
+
+    Ok(mask)
 }
-
 /// Get Pseudo CB
 pub fn calculate_cb(xyz_37: &Tensor) -> Result<Tensor> {
     // make sure we are dealing with
@@ -553,6 +562,7 @@ mod tests {
     use ferritin_test_data::TestFile;
     use pdbtbx;
     use pdbtbx::Element;
+    use safetensors::Dtype;
 
     #[test]
     fn test_residue_codes() {
@@ -695,7 +705,7 @@ mod tests {
             ("OXT", (0, 0,36, ..), vec![0.0, 0.0, 0.0]),
         ];
         for (atom_name, (b,i, j, k), expected) in allatom_coords {
-            let actual: Vec<f32> = ac_backbone_tensor.i((b, di, j, k)).unwrap().to_vec1().unwrap();
+            let actual: Vec<f32> = ac_backbone_tensor.i((b, i, j, k)).unwrap().to_vec1().unwrap();
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
         }
     }
@@ -757,12 +767,14 @@ mod tests {
             .expect("XYZ creation for all-atoms");
         assert_eq!(xyz_37.dims(), [1, 154, 37, 3]);
 
+        // # xyz_37_m = feature_dict["xyz_37_m"] #[B,L,37] - mask for all coords
         let xyz_m = create_backbone_mask_37(&xyz_37).expect("masking procedure should work");
-        assert_eq!(xyz_m.dims(), &[154, 1]);
+        assert_eq!(xyz_m.dims(), &[1, 154, 37]);
     }
     #[test]
     fn test_compute_nearest_neighbors() {
         let device = Device::Cpu;
+        let test_dtype = DType::F32;
 
         // Create a simple 2x3x3 tensor representing 2 sequences of 3 points in 3D space
         let coords = Tensor::new(
@@ -772,10 +784,10 @@ mod tests {
             ],
             &device,
         )
-        .unwrap();
+        .unwrap().to_dtype(test_dtype).unwrap();
 
         // Create mask indicating all points are valid
-        let mask = Tensor::ones((2, 3), DType::F32, &device).unwrap();
+        let mask = Tensor::ones((2, 3), test_dtype, &device).unwrap();
 
         // Get 2 nearest neighbors for each point
         let (distances, indices) = compute_nearest_neighbors(&coords, &mask, 2, 1e-6).unwrap();
