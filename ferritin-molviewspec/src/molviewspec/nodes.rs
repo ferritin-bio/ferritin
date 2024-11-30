@@ -91,7 +91,7 @@ pub enum NodeParams {
 
 /// Node
 ///
-/// This is the core datastructure for generating MSVJ files. Each node type can have a type, params, and children.
+/// This is the core data structure for generating MSVJ files. Each node type can have a type, params, and children.
 ///
 /// Methods derived from the Python API found [here](https://github.com/molstar/mol-view-spec/blob/master/molviewspec/molviewspec/builder.py)
 ///
@@ -404,7 +404,7 @@ impl State {
             None
         }
     }
-    /// Set Canves Information Location
+    /// Set Canvas Information Location
     pub fn canvas() {
         unimplemented!()
     }
@@ -427,7 +427,7 @@ impl State {
     }
 }
 
-/// Types of coumpounds: for pse I am only using PDB
+/// Types of compounds: for pse I am only using PDB
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum ParseFormatT {

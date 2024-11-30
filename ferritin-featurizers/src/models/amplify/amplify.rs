@@ -22,7 +22,7 @@ use candle_nn::{
 /// Configuration Struct for AMPLIFY
 ///
 /// Currently only holds the weight params for
-/// those modeld found on GH: the 120M and 350M models.
+/// those models found on GH: the 120M and 350M models.
 ///
 pub struct AMPLIFYConfig {
     pub hidden_size: usize,
@@ -94,6 +94,7 @@ impl AMPLIFYConfig {
     }
 }
 
+//noinspection SpellCheckingInspection
 /// Amplify EncoderBlock implementation
 ///
 /// References for coding the block from similar models.
@@ -101,7 +102,7 @@ impl AMPLIFYConfig {
 /// - [T5](https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331)
 /// - [distilbert](https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198)
 /// - [glm4](https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340)
-/// - [SwiGLu Imple](https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462)
+/// - [SwiGLu Implementation](https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462)
 #[derive(Debug)]
 pub struct EncoderBlock {
     q: Linear,

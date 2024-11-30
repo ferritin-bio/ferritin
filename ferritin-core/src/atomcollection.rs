@@ -15,7 +15,7 @@ use pdbtbx::Element;
 ///
 /// The core data structure of ferritin-core.
 ///
-/// it strives to be simple, high perfomance, and extensible using
+/// it strives to be simple, high performance, and extensible using
 /// traits.
 ///
 pub struct AtomCollection {
@@ -147,7 +147,7 @@ impl AtomCollection {
     }
 
     pub fn connect_via_distance(&self) -> Vec<Bond> {
-        // note: was intendin to follow Biotite's algo
+        // note: was intending to follow Biotite's algo
         unimplemented!()
     }
     pub fn get_size(&self) -> usize {
@@ -215,7 +215,7 @@ impl AtomCollection {
     }
     /// Iter_Residues Will Iterate Through the AtomCollection one Residue at a time.
     ///
-    /// This is the base for any onther residue filtration code.
+    /// This is the base for any other residue filtration code.
     pub fn iter_residues_all(&self) -> ResidueIter {
         ResidueIter::new(self, self.get_residue_starts())
     }

@@ -5,7 +5,7 @@
 //! Consider factoring out model creation of the DEC
 //! and ENC layers using a function.
 //!
-//! here is an example of paramatereizable network creation:
+//! here is an example of paramaterizable network creation:
 //! https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/resnet.rs
 //!
 use super::configs::{ModelTypes, ProteinMPNNConfig};
@@ -16,7 +16,7 @@ use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, Linear, VarBuilder};
-use candle_transformers::generation::{LogitsProcessor, Sampling};
+use candle_transformers::generation::LogitsProcessor;
 
 pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result<Tensor> {
     // Create the logits processor with its required arguments
@@ -170,7 +170,6 @@ impl EncLayer {
         };
 
         // Safe division with scale
-        println!("Scale value: {:?}", self.scale);
         let dh = {
             let sum = h_message.sum(D::Minus2)?;
             let scale = if self.scale == 0.0 { 1.0 } else { self.scale };
@@ -223,7 +222,6 @@ impl EncLayer {
                 .forward(&h_message, training.expect("Training Must be specified"))?;
             self.norm3.forward(&(h_e + h_message_dropout)?)?
         };
-        println!("EncoderLayer: Finishing forward pass");
         Ok((h_v, h_e))
     }
 }
@@ -406,53 +404,30 @@ impl ProteinMPNN {
             None => &Tensor::ones_like(&s_true)?,
         };
 
-        println!("Starting encode function");
 
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
                 let (e, e_idx) = self.features.forward(features, device)?;
-                println!("After embedding dims: {:?}", e.dims());
-
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     DType::F64,
                     device,
                 )?;
-
                 let mut h_e = self.w_e.forward(&e)?;
 
                 let mask_attend = if let Some(mask) = features.get_sequence_mask() {
-                    println!("Original mask dims: {:?}", mask.dims());
-                    println!(
-                        "Original mask values: {:?}",
-                        mask.get(0)?.narrow(0, 0, 5)?.to_vec1::<f32>()?
-                    );
 
                     // First unsqueeze mask
                     let mask_expanded = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
-                    println!(
-                        "Expanded mask values: {:?}",
-                        mask_expanded.get(0)?.narrow(0, 0, 5)?.to_vec2::<f32>()?
-                    );
 
                     // Gather using E_idx
                     let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?;
-                    println!("Gathered mask dims: {:?}", mask_gathered.dims());
-                    println!(
-                        "Gathered mask values: {:?}",
-                        mask_gathered
-                            .get(0)?
-                            .narrow(0, 0, 5)?
-                            .narrow(1, 0, 5)?
-                            .to_vec3::<f32>()?
-                    );
 
                     let mask_gathered = mask_gathered.squeeze(D::Minus1)?;
 
                     // Multiply original mask with gathered mask
                     let mask_attend = {
                         let mask_unsqueezed = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
-                        println!("mask_unsqueezed dims: {:?}", mask_unsqueezed.dims());
 
                         // Explicitly expand mask_unsqueezed to match mask_gathered dimensions
                         let mask_expanded = mask_unsqueezed
@@ -462,7 +437,6 @@ impl ProteinMPNN {
                                 mask_gathered.dim(2)?, // number of neighbors
                             ))?
                             .contiguous()?;
-                        println!("mask_expanded dims: {:?}", mask_expanded.dims());
 
                         // Now do the multiplication with explicit shapes
                         mask_expanded.mul(&mask_gathered)?
@@ -472,37 +446,14 @@ impl ProteinMPNN {
                     let (b, l) = mask.dims2()?;
                     let ones = Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, device)?;
                     println!("Created default ones mask dims: {:?}", ones.dims());
-                    println!(
-                        "Created default ones mask values: {:?}",
-                        ones.get(0)?
-                            .narrow(0, 0, 5)?
-                            .narrow(1, 0, 5)?
-                            .to_vec2::<f32>()?
-                    );
+
                     ones
                 };
 
                 for (i, layer) in self.encoder_layers.iter().enumerate() {
-                    println!("Starting encoder layer {}", i);
 
-                    // Debug h_v (3D tensor)
-                    println!("h_v before layer {} dims: {:?}", i, h_v.dims());
                     let h_v_f32 = h_v.to_dtype(DType::F32)?;
-                    println!(
-                        "h_v before layer {} values: {:?}",
-                        i,
-                        h_v_f32.to_vec3::<f32>()?
-                    );
-
-                    // Debug h_e (4D tensor) - access first batch and first sequence position
-                    println!("h_e before layer {} dims: {:?}", i, h_e.dims());
                     let h_e_f32 = h_e.to_dtype(DType::F32)?;
-                    println!(
-                        "h_e before layer {} first position values: {:?}",
-                        i,
-                        h_e_f32.get(0)?.get(0)?.to_vec2::<f32>()?
-                    );
-
                     let (new_h_v, new_h_e) = layer.forward(
                         &h_v,
                         &h_e,
@@ -511,27 +462,13 @@ impl ProteinMPNN {
                         Some(&mask_attend),
                         Some(false),
                     )?;
-                    println!("After layer {} forward pass:", i);
 
-                    // Debug new_h_v
-                    println!("new_h_v dims: {:?}", new_h_v.dims());
                     let new_h_v_f32 = new_h_v.to_dtype(DType::F32)?;
-                    println!("new_h_v values: {:?}", new_h_v_f32.to_vec3::<f32>()?);
-
-                    // Debug new_h_e
-                    println!("new_h_e dims: {:?}", new_h_e.dims());
                     let new_h_e_f32 = new_h_e.to_dtype(DType::F32)?;
-                    println!(
-                        "new_h_e first position values: {:?}",
-                        new_h_e_f32.get(0)?.get(0)?.to_vec2::<f32>()?
-                    );
-
                     h_v = new_h_v;
                     h_e = new_h_e;
                 }
-                println!("Final h_v dims: {:?}", h_v.dims());
-                println!("Final h_e dims: {:?}", h_e.dims());
-                println!("Final e_idx dims: {:?}", e_idx.dims());
+
                 Ok((h_v, h_e, e_idx))
             }
             ModelTypes::LigandMPNN => {

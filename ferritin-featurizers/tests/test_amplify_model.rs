@@ -1,8 +1,6 @@
 use anyhow::Result;
-use candle_core::{DType, Device, Tensor, D};
-use candle_hf_hub::{api::sync::Api, Repo, RepoType};
-use candle_nn::VarBuilder;
-use ferritin_featurizers::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
+use candle_core::{Device, D};
+use ferritin_featurizers::{AMPLIFY};
 
 #[test]
 // #[ignore = "downloads large model weights (>100MB) from HuggingFace"]

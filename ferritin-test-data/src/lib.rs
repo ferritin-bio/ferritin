@@ -15,7 +15,7 @@ use tempfile::{Builder, NamedTempFile};
 ///
 /// ```ignore
 /// // returns (filepath, _tempfile_handle).
-/// // _handle ensures the tempfile remains in scpre
+/// // _handle ensures the tempfile remains in scope
 /// use ferritin_test_data::TestFile;
 /// let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
 /// let (pymol_file, _temp) = TestFile::pymol_01().create_temp().unwrap();
