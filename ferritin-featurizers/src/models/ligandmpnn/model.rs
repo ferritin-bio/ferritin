@@ -404,7 +404,6 @@ impl ProteinMPNN {
             None => &Tensor::ones_like(&s_true)?,
         };
 
-
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
                 let (e, e_idx) = self.features.forward(features, device)?;
@@ -416,7 +415,6 @@ impl ProteinMPNN {
                 let mut h_e = self.w_e.forward(&e)?;
 
                 let mask_attend = if let Some(mask) = features.get_sequence_mask() {
-
                     // First unsqueeze mask
                     let mask_expanded = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
 
@@ -430,13 +428,11 @@ impl ProteinMPNN {
                         let mask_unsqueezed = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
 
                         // Explicitly expand mask_unsqueezed to match mask_gathered dimensions
-                        let mask_expanded = mask_unsqueezed
-                            .expand((
-                                mask_gathered.dim(0)?, // batch
-                                mask_gathered.dim(1)?, // sequence length
-                                mask_gathered.dim(2)?, // number of neighbors
-                            ))?
-                            .contiguous()?;
+                        let mask_expanded = mask_unsqueezed.expand((
+                            mask_gathered.dim(0)?, // batch
+                            mask_gathered.dim(1)?, // sequence length
+                            mask_gathered.dim(2)?, // number of neighbors
+                        ))?;
 
                         // Now do the multiplication with explicit shapes
                         mask_expanded.mul(&mask_gathered)?
@@ -451,9 +447,9 @@ impl ProteinMPNN {
                 };
 
                 for (i, layer) in self.encoder_layers.iter().enumerate() {
+                    // let h_v_f32 = h_v.to_dtype(DType::F32)?;
+                    // let h_e_f32 = h_e.to_dtype(DType::F32)?;
 
-                    let h_v_f32 = h_v.to_dtype(DType::F32)?;
-                    let h_e_f32 = h_e.to_dtype(DType::F32)?;
                     let (new_h_v, new_h_e) = layer.forward(
                         &h_v,
                         &h_e,
@@ -463,8 +459,8 @@ impl ProteinMPNN {
                         Some(false),
                     )?;
 
-                    let new_h_v_f32 = new_h_v.to_dtype(DType::F32)?;
-                    let new_h_e_f32 = new_h_e.to_dtype(DType::F32)?;
+                    // let new_h_v_f32 = new_h_v.to_dtype(DType::F32)?;
+                    // let new_h_e_f32 = new_h_e.to_dtype(DType::F32)?;
                     h_v = new_h_v;
                     h_e = new_h_e;
                 }
@@ -526,7 +522,7 @@ impl ProteinMPNN {
 
         // Todo: This is a hack. we should be passing in encoded chains.
         let chain_mask = Tensor::ones_like(&x_mask.as_ref().unwrap())?.to_dtype(sample_dtype)?;
-        let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?.contiguous()?; // update chain_M to include missing regions;
+        let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?;
         let (h_v, h_e, e_idx) = self.encode(features)?;
 
         // this might be  a bad rand implementation
@@ -547,8 +543,9 @@ impl ProteinMPNN {
         let symmetry_residues: Option<Vec<i32>> = None;
         match symmetry_residues {
             None => {
-                let e_idx = e_idx.repeat(&[b, 1, 1])?.contiguous()?;
-                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?.to_dtype(sample_dtype)?;
+                let e_idx = e_idx.repeat(&[b, 1, 1])?;
+                let permutation_matrix_reverse =
+                    one_hot(decoding_order.clone(), l, 1., 0.)?.to_dtype(sample_dtype)?;
                 let tril = Tensor::tril2(l, sample_dtype, device)?;
                 let tril = tril.unsqueeze(0)?;
                 let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; //tensor of shape (b, i, q)
@@ -1087,7 +1084,6 @@ impl ProteinMPNN {
     // }
 
     pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
-
         // "global" dtype
         let sample_dtype = DType::F32;
         let ProteinFeatures { s, x, x_mask, .. } = &features;
