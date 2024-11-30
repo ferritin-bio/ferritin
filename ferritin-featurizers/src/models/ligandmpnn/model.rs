@@ -175,7 +175,6 @@ impl EncLayer {
             let scale = if self.scale == 0.0 { 1.0 } else { self.scale };
             (sum / scale)?
         };
-        println!("metal 05");
         let h_v = {
             let dh_dropout = self
                 .dropout1
@@ -184,24 +183,19 @@ impl EncLayer {
             let h_v = h_v.to_dtype(DType::F32)?;
             self.norm1.forward(&(h_v + dh_dropout)?)?
         };
-        println!("metal 06");
         let dh = self.dense.forward(&h_v)?;
-        println!("metal 07");
         let h_v = {
             let dh_dropout = self
                 .dropout2
                 .forward(&dh, training.expect("Training Must be specified"))?;
             self.norm2.forward(&(&h_v + &dh_dropout)?)?
         };
-        println!("metal 08");
         let h_v = if let Some(mask) = mask_v {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_v)?
         } else {
             h_v
         };
-        println!("metal 09");
         let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
-        println!("metal 10");
         let h_v_expand = h_v.unsqueeze(D::Minus2)?;
 
         // Explicitly specify the expansion dimensions
@@ -211,11 +205,9 @@ impl EncLayer {
             h_ev.dims()[2],       // number of neighbors
             h_v_expand.dims()[3], // hidden dimension
         ];
-        println!("metal 11");
         let h_v_expand = h_v_expand.expand(&expand_shape)?;
         let h_v_expand = h_v_expand.to_dtype(h_ev.dtype())?;
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?.contiguous()?;
-        println!("metal 12");
         let h_message = self
             .w11
             .forward(&h_ev)?
