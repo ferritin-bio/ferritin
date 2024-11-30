@@ -8,9 +8,9 @@ description.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-candle-core = "0.8"
+candle-core = { version = "0.8", features = ["metal"] }
 candle-hf-hub = "0.3.3"
-candle-nn = "0.8"
+candle-nn = { version = "0.8", features = ["metal"] }
 candle-transformers = "0.8.0"
 clap = "4.5.21"
 ferritin-core = { path = "../ferritin-core" }

@@ -35,14 +35,14 @@ pub struct MPNNExecConfig {
     pub(crate) membrane_mpnn_config: Option<MembraneMPNNConfig>,
     pub(crate) multi_pdb_config: Option<MultiPDBConfig>,
     pub(crate) residue_control_config: Option<ResidueControl>,
-    // device: &candle_core::Device,
+    pub(crate) device: Device,
     pub(crate) seed: i32,
 }
 
 impl MPNNExecConfig {
     pub fn new(
         seed: i32,
-        device: &Device,
+        device: Device,
         pdb_path: String,
         model_type: ModelTypes,
         run_config: RunConfig,
@@ -62,15 +62,17 @@ impl MPNNExecConfig {
             residue_control_config: residue_config,
             multi_pdb_config: multi_pdb_specific,
             seed,
-            // device: device,
+            device: device,
         })
     }
     // Todo: refactor this to use loader.
     pub fn load_model(&self) -> Result<ProteinMPNN, Error> {
+        let default_dtype = DType::F32;
+
         // this is a hidden dep....
         let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
         let pth = PthTensors::new(mpnn_file, Some("model_state_dict"))?;
-        let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, Device::Cpu);
+        let vb = VarBuilder::from_backend(Box::new(pth), default_dtype, self.device.clone());
         let pconf = ProteinMPNNConfig::proteinmpnn();
         Ok(ProteinMPNN::load(vb, &pconf).expect("Unable to load the PMPNN Model"))
     }
@@ -78,7 +80,7 @@ impl MPNNExecConfig {
         todo!()
     }
     pub fn generate_protein_features(&self) -> Result<ProteinFeatures, Error> {
-        let device = Device::Cpu;
+        let device = self.device.clone();
         let base_dtype = DType::F32;
 
         // init the Protein Features
