@@ -1,4 +1,4 @@
-[package]
+ [package]
 name = "ferritin-bevy"
 version.workspace = true
 edition.workspace = true
@@ -7,8 +7,8 @@ license.workspace = true
 description.workspace = true
 
 [dependencies]
-bevy = "=0.15.0-rc.3"
-bon = "3.0.0"
+bevy = "0.15.0"
+bon = "3.1.1"
 ferritin-core = { path = "../ferritin-core" }
 pdbtbx.workspace = true
 
