@@ -252,7 +252,6 @@ impl ProteinFeaturesModel {
 
         // E_chains = gather_edges(d_chains[:, :, :, None], E_idx)[:, :, :, 0]
         let e_chains = gather_edges(&d_chains.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
-
         println!("About to start the embeddings calculation...");
         println!(
             "Offset dims: {:?}, dtype: {:?}",
@@ -311,8 +310,9 @@ impl PositionalEncodings {
     //     return E
     fn forward(&self, offset: &Tensor, mask: &Tensor) -> Result<Tensor> {
         println!("In positional Embedding: forward");
-
         println!("Offset: {:?} ", offset);
+        println!("Offset DTYPE: {:?} ", offset.dtype());
+
         // Offset: Tensor[dims 1, 93, 24; u32, metal:4294969325]
 
         let max_rel = self.max_relative_feature as f64;
@@ -327,24 +327,32 @@ impl PositionalEncodings {
         let d = (masked_d + extra_term?)?;
 
         // Convert to integers for one_hot
-        let d = d.to_dtype(DType::U32)?;
+        // let d = d.to_dtype(DType::U32)?;
 
-        // one_hot with correct depth using candle_nn::encoding::one_hot
-        let depth = (2 * self.max_relative_feature + 2) as i64;
-        println!("Depth before one hot: {}", depth);
-        println!("Shape of d: {:?}", d.dims());
-        let d_cpu = d.to_device(&Device::Cpu)?;
-        let d_vec = d_cpu.to_vec3::<u32>()?; // Since shape is [1, 93, 24]
+        // Todo: confirms this is correct.
+        // Better to move this upsteam
+        // Normalize the values by subtracting 97 (ASCII 'a') to make them 0-based
+        // let d_normalized = (d - 97u32)?; // This will make 'a'=0, 'b'=1, etc.
+        let offset_val = Tensor::full(97u32, d.dims(), d.device());
+        let d_normalized = (d - offset_val)?;
+
+        println!("After normalization:");
+        let d_cpu = d_normalized.to_device(&Device::Cpu)?;
+        let d_vec = d_cpu.to_vec3::<u32>()?;
         println!(
-            "Max value: {}",
+            "Max value after norm: {}",
             d_vec.iter().flatten().flatten().max().unwrap()
         );
         println!(
-            "Min value: {}",
+            "Min value after norm: {}",
             d_vec.iter().flatten().flatten().min().unwrap()
         );
 
-        let d_onehot = one_hot(d, depth as usize, 1f32, 0f32)?;
+        // one_hot with correct depth using candle_nn::encoding::one_hot
+        let depth = (2 * self.max_relative_feature + 2) as i64;
+        // let d_onehot = one_hot(d, depth as usize, 1f32, 0f32)?;
+        let d_onehot = one_hot(d_normalized, depth as usize, 1f32, 0f32)?;
+
         let d_onehot_float = d_onehot.to_dtype(DType::F32)?;
 
         self.linear.forward(&d_onehot_float)

@@ -140,6 +140,8 @@ impl EncLayer {
     ) -> Result<(Tensor, Tensor)> {
         println!("EncoderLayer: Starting forward pass");
 
+        println!("metal 01");
+
         let h_ev = cat_neighbors_nodes(h_v, h_e, e_idx)?;
         let h_v_expand = h_v.unsqueeze(D::Minus2)?;
 
@@ -150,6 +152,7 @@ impl EncLayer {
             h_ev.dims()[2],       // number of neighbors
             h_v_expand.dims()[3], // hidden dimension
         ];
+        println!("metal 02");
         let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?;
         let h_message = self.w1.forward(&h_ev)?;
@@ -161,6 +164,7 @@ impl EncLayer {
         let h_message = h_message.apply(&self.w3)?;
         let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w3
 
+        println!("metal 03");
         let h_message = if let Some(mask) = mask_attend {
             let mask = mask.unsqueeze(D::Minus1)?;
             let result = mask.broadcast_mul(&h_message)?;
@@ -169,12 +173,14 @@ impl EncLayer {
             h_message
         };
 
+        println!("metal 04");
         // Safe division with scale
         let dh = {
             let sum = h_message.sum(D::Minus2)?;
             let scale = if self.scale == 0.0 { 1.0 } else { self.scale };
             (sum / scale)?
         };
+        println!("metal 05");
         let h_v = {
             let dh_dropout = self
                 .dropout1
