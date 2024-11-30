@@ -37,7 +37,7 @@ pub trait LMPNNFeatures {
 /// datasets
 impl LMPNNFeatures for AtomCollection {
     /// Return a 2D tensor of [1, seqlength]
-    fn encode_amino_acids(&self, device: &Device) -> Result<(Tensor)> {
+    fn encode_amino_acids(&self, device: &Device) -> Result<Tensor> {
         let n = self.iter_residues_aminoacid().count();
         let s = self
             .iter_residues_aminoacid()
