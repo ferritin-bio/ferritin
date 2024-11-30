@@ -74,8 +74,6 @@ impl ProteinFeaturesModel {
         // 5. Applies the RBF formula: exp(-(x-μ)²/σ²)
         const D_MIN: f64 = 2.0;
         const D_MAX: f64 = 22.0;
-
-        println!("d-Mu....");
         // Create centers (μ)
         let d_mu = linspace(D_MIN, D_MAX, self.num_rbf, &Device::Cpu)? // Use CPU device
             .to_dtype(DType::F32)? // Convert to F32 on CPU
@@ -252,12 +250,6 @@ impl ProteinFeaturesModel {
             .to_dtype(DType::U32)?;
 
         // E_chains = gather_edges(d_chains[:, :, :, None], E_idx)[:, :, :, 0]
-        println!(
-            "Dtypes for dechains and e_idx:  {:?}, {:?}",
-            d_chains.dtype(),
-            e_idx.dtype()
-        );
-
         let e_chains = gather_edges(&d_chains.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
 
         println!("About to start the embeddings calculation...");
@@ -311,7 +303,6 @@ impl PositionalEncodings {
         println!("In positional Embedding: forward");
 
         let max_rel = self.max_relative_feature as f64;
-
         // First part: clip(offset + max_rel, 0, 2*max_rel)
         let d = (offset + max_rel)?;
         let d = d.clamp(0f64, 2.0 * max_rel)?;
@@ -323,10 +314,11 @@ impl PositionalEncodings {
         let d = (masked_d + extra_term?)?;
 
         // Convert to integers for one_hot
-        let d = d.to_dtype(DType::I64)?;
+        let d = d.to_dtype(DType::U32)?;
 
         // one_hot with correct depth using candle_nn::encoding::one_hot
         let depth = (2 * self.max_relative_feature + 2) as i64;
+        println!("Depth before one hot {}", depth);
         let d_onehot = one_hot(d, depth as usize, 1f32, 0f32)?;
         let d_onehot_float = d_onehot.to_dtype(DType::F32)?;
 
