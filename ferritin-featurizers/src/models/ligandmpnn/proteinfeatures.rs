@@ -75,10 +75,12 @@ impl ProteinFeaturesModel {
         const D_MIN: f64 = 2.0;
         const D_MAX: f64 = 22.0;
 
+        println!("d-Mu....");
         // Create centers (μ)
-        let d_mu = linspace(D_MIN, D_MAX, self.num_rbf, device)?
+        let d_mu = linspace(D_MIN, D_MAX, self.num_rbf, &Device::Cpu)? // Use CPU device
+            .to_dtype(DType::F32)? // Convert to F32 on CPU
             .reshape((1, 1, 1, self.num_rbf))?
-            .to_dtype(DType::F32)?;
+            .to_device(device)?; // Move to Metal device after conversion
 
         // Calculate width (σ)
         let d_sigma = (D_MAX - D_MIN) / self.num_rbf as f64;
@@ -87,15 +89,11 @@ impl ProteinFeaturesModel {
         let d_mu_broadcast = d_mu.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
         let d_expanded_broadcast =
             d_expanded.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
-        println!(
-            "Devices for d_expanded_broadcast,d_mu_broadcast, d_mu : {:?}, {:?}, {:?} ",
-            d_expanded_broadcast.device(),
-            d_mu_broadcast.device(),
-            d_mu.device()
-        );
-        let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma)?;
+        let d_sigma_tensor =
+            Tensor::new(&[d_sigma as f32], &device)?.broadcast_as(d_expanded_broadcast.shape())?;
+        let d_expanded = d_expanded.to_dtype(DType::F32)?.contiguous()?;
+        let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma_tensor)?;
         let rbf = diff.powf(2.0)?.neg()?.exp()?;
-
         Ok(rbf)
     }
 
@@ -207,6 +205,7 @@ impl ProteinFeaturesModel {
         let mut rbf_all = Vec::new();
         println!("RBF Device: {:?}", device);
         rbf_all.push(self._rbf(&d_neighbors, device)?);
+        println!("RBF Device _get_rbf");
         rbf_all.push(self._get_rbf(&n, &n, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&c, &c, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&o, &o, &e_idx, device)?);
@@ -236,6 +235,7 @@ impl ProteinFeaturesModel {
 
         let dims = r_idx.dims();
         let target_shape = (dims[0], dims[1], dims[1]);
+        println!("I am in the RBF");
         let r_idx_expanded1 = r_idx
             .unsqueeze(2)?
             .broadcast_as(target_shape)?
