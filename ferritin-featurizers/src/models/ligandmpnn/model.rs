@@ -548,7 +548,7 @@ impl ProteinMPNN {
         match symmetry_residues {
             None => {
                 let e_idx = e_idx.repeat(&[b, 1, 1])?.contiguous()?;
-                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
+                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?.to_dtype(sample_dtype)?;
                 let tril = Tensor::tril2(l, sample_dtype, device)?;
                 let tril = tril.unsqueeze(0)?;
                 let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; //tensor of shape (b, i, q)
