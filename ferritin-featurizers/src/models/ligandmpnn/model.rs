@@ -329,14 +329,14 @@ impl DecLayer {
 
 // https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L10C7-L10C18
 pub struct ProteinMPNN {
-    config: ProteinMPNNConfig,
-    decoder_layers: Vec<DecLayer>,
-    device: Device,
-    encoder_layers: Vec<EncLayer>,
-    features: ProteinFeaturesModel,
-    w_e: Linear,
-    w_out: Linear,
-    w_s: Embedding,
+    pub(crate) config: ProteinMPNNConfig,
+    pub(crate) decoder_layers: Vec<DecLayer>,
+    pub(crate) device: Device,
+    pub(crate) encoder_layers: Vec<EncLayer>,
+    pub(crate) features: ProteinFeaturesModel,
+    pub(crate) w_e: Linear,
+    pub(crate) w_out: Linear,
+    pub(crate) w_s: Embedding,
 }
 
 impl ProteinMPNN {
@@ -377,7 +377,7 @@ impl ProteinMPNN {
         Ok(Self {
             config: config.clone(), // todo: check the\is clone later...
             decoder_layers,
-            device: Device::Cpu,
+            device: vb.device().clone(),
             encoder_layers,
             features,
             w_e,
@@ -395,8 +395,9 @@ impl ProteinMPNN {
     //     todo!()
     // }
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
-        let device = &Device::Cpu; // todo: get device more elegantly
+        println!("encoded device! {:?}", self.device);
         let s_true = &features.get_sequence();
+        let base_dtype = DType::F32;
 
         // needed for the MaskAttend
         let mask = match features.get_sequence_mask() {
@@ -406,11 +407,11 @@ impl ProteinMPNN {
 
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
-                let (e, e_idx) = self.features.forward(features, device)?;
+                let (e, e_idx) = self.features.forward(features, &self.device)?;
                 let mut h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     DType::F64,
-                    device,
+                    &self.device,
                 )?;
                 let mut h_e = self.w_e.forward(&e)?;
 
@@ -440,9 +441,8 @@ impl ProteinMPNN {
                     mask_attend
                 } else {
                     let (b, l) = mask.dims2()?;
-                    let ones = Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, device)?;
+                    let ones = Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, &self.device)?;
                     println!("Created default ones mask dims: {:?}", ones.dims());
-
                     ones
                 };
 

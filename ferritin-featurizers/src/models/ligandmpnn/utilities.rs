@@ -91,13 +91,9 @@ pub fn compute_nearest_neighbors(
 
 // https://github.com/huggingface/candle/pull/2375/files#diff-e4d52a71060a80ac8c549f2daffcee77f9bf4de8252ad067c47b1c383c3ac828R957
 pub fn topk_last_dim(xs: &Tensor, topk: usize) -> Result<(Tensor, Tensor)> {
-    println!("topk_last_dim!");
     let sorted_indices = xs.arg_sort_last_dim(false)?.to_dtype(DType::U32)?;
-    println!("topk_last_dim!");
     let topk_indices = sorted_indices.narrow(D::Minus1, 0, topk)?.contiguous()?;
-    println!("topk_last_dim!");
     let gathered = xs.gather(&topk_indices, D::Minus1)?;
-    println!("gatheres!");
     Ok((gathered, topk_indices))
 }
 

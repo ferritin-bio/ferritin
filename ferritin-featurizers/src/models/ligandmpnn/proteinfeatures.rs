@@ -35,7 +35,6 @@ impl ProteinFeaturesModel {
             vb.device(),               // device this should be passed in as param,
             vb.pp("embeddings"),       // VarBuilder,
         )?;
-
         let edge_embedding =
             linear::linear_no_bias(edge_in, edge_features, vb.pp("edge_embedding"))?;
         let norm_edges = layer_norm(
@@ -88,7 +87,12 @@ impl ProteinFeaturesModel {
         let d_mu_broadcast = d_mu.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
         let d_expanded_broadcast =
             d_expanded.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
-
+        println!(
+            "Devices for d_expanded_broadcast,d_mu_broadcast, d_mu : {:?}, {:?}, {:?} ",
+            d_expanded_broadcast.device(),
+            d_mu_broadcast.device(),
+            d_mu.device()
+        );
         let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma)?;
         let rbf = diff.powf(2.0)?.neg()?.exp()?;
 
@@ -201,6 +205,7 @@ impl ProteinFeaturesModel {
         let (d_neighbors, e_idx) = self._dist(&ca, &mask, self.augment_eps as f64)?;
 
         let mut rbf_all = Vec::new();
+        println!("RBF Device: {:?}", device);
         rbf_all.push(self._rbf(&d_neighbors, device)?);
         rbf_all.push(self._get_rbf(&n, &n, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&c, &c, &e_idx, device)?);

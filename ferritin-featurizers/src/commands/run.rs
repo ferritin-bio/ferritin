@@ -60,6 +60,7 @@ pub fn execute(
     println!("About to Load the model!");
     let model = exec.load_model()?;
     println!("Model Loaded!");
+    println!("Model Loaded on the {:?}", model.device);
 
     println!("Generating Protein Features");
     let prot_features = exec.generate_protein_features()?;
