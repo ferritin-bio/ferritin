@@ -784,7 +784,7 @@ mod tests {
         assert_eq!(indices.dims(), &[2, 3, 2]); // [batch, seq_len, k]
 
         // For first sequence, point [1,0,0] should have [0,0,0] and [2,0,0] as nearest neighbors
-        let point_neighbors: Vec<i64> = indices.i((0, 1, ..)).unwrap().to_vec1().unwrap();
+        let point_neighbors: Vec<u32> = indices.i((0, 1, ..)).unwrap().to_vec1().unwrap();
         assert_eq!(point_neighbors, vec![0, 2]);
 
         // Check distances are correct

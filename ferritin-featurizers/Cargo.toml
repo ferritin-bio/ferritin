@@ -8,6 +8,7 @@ description.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+# candle-core = { git = "https://github.com/zachcp/candle.git", branch = "20241130-metal-dep-bump", features = ["metal"] }
 candle-core = { version = "0.8", features = ["metal"] }
 candle-hf-hub = "0.3.3"
 candle-nn = { version = "0.8", features = ["metal"] }
