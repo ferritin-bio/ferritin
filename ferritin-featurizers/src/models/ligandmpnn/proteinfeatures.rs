@@ -239,6 +239,7 @@ impl ProteinFeaturesModel {
             .broadcast_as(target_shape)?
             .to_dtype(DType::F32)?; // [1, 93, 93]
 
+        println!("Prepraring the Offset Tensor...");
         let offset = (r_idx_expanded1 - r_idx_expanded2)?;
         let offset = gather_edges(&offset.unsqueeze(D::Minus1)?, &e_idx)?;
         let offset = offset.squeeze(D::Minus1)?;
@@ -253,12 +254,21 @@ impl ProteinFeaturesModel {
         let e_chains = gather_edges(&d_chains.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
 
         println!("About to start the embeddings calculation...");
+        println!(
+            "Offset dims: {:?}, dtype: {:?}",
+            offset.dims(),
+            offset.dtype()
+        );
+        println!(
+            "e_chains dims: {:?}, dtype: {:?}",
+            e_chains.dims(),
+            e_chains.dtype()
+        );
         let e_positional = self
             .embeddings
             .forward(&offset.to_dtype(DType::U32)?, &e_chains)?;
 
         println!("About to cat the pos embeddings...");
-
         let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
         let e = self.edge_embedding.forward(&e)?;
         println!("About to start the normalization...");
@@ -302,6 +312,9 @@ impl PositionalEncodings {
     fn forward(&self, offset: &Tensor, mask: &Tensor) -> Result<Tensor> {
         println!("In positional Embedding: forward");
 
+        println!("Offset: {:?} ", offset);
+        // Offset: Tensor[dims 1, 93, 24; u32, metal:4294969325]
+
         let max_rel = self.max_relative_feature as f64;
         // First part: clip(offset + max_rel, 0, 2*max_rel)
         let d = (offset + max_rel)?;
@@ -318,7 +331,19 @@ impl PositionalEncodings {
 
         // one_hot with correct depth using candle_nn::encoding::one_hot
         let depth = (2 * self.max_relative_feature + 2) as i64;
-        println!("Depth before one hot {}", depth);
+        println!("Depth before one hot: {}", depth);
+        println!("Shape of d: {:?}", d.dims());
+        let d_cpu = d.to_device(&Device::Cpu)?;
+        let d_vec = d_cpu.to_vec3::<u32>()?; // Since shape is [1, 93, 24]
+        println!(
+            "Max value: {}",
+            d_vec.iter().flatten().flatten().max().unwrap()
+        );
+        println!(
+            "Min value: {}",
+            d_vec.iter().flatten().flatten().min().unwrap()
+        );
+
         let d_onehot = one_hot(d, depth as usize, 1f32, 0f32)?;
         let d_onehot_float = d_onehot.to_dtype(DType::F32)?;
 
