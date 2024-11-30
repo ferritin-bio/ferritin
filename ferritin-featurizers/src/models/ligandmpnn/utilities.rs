@@ -57,6 +57,7 @@ pub fn compute_nearest_neighbors(
     k: usize,
     eps: f32,
 ) -> Result<(Tensor, Tensor)> {
+    // Todo: fix the F32/F64 issue
     let (_batch_size, seq_len, _) = coords.dims3()?;
 
     // broadcast_matmul handles broadcasting automatically
@@ -64,7 +65,7 @@ pub fn compute_nearest_neighbors(
     let mask_2d = mask
         .unsqueeze(2)?
         .broadcast_matmul(&mask.unsqueeze(1)?)?
-        .to_dtype(DType::F64)?; // Convert to f64 once, at the start
+        .to_dtype(DType::F32)?; // Convert to f64 once, at the start
 
     // Compute pairwise distances with broadcasting
     let distances = (coords
@@ -73,7 +74,8 @@ pub fn compute_nearest_neighbors(
         .powf(2.)?
         .sum(D::Minus1)?
         + eps as f64)?
-        .sqrt()?;
+        .sqrt()?
+        .to_dtype(DType::F32)?;
 
     // Apply mask
     // Get max values for adjustment
