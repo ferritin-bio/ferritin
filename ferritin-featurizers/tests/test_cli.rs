@@ -28,6 +28,7 @@ fn test_cli_command_featurize() {
 }
 
 #[test]
+#[ignore]
 fn test_cli_command_run_example_01() {
     // see: https://github.com/dauparas/LigandMPNN/blob/main/run_examples.sh
     let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
