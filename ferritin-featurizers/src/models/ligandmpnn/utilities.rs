@@ -588,8 +588,8 @@ mod tests {
         let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
         let ac = AtomCollection::from(&pdb);
         let ac_backbone_tensor: Tensor = ac.to_numeric_backbone_atoms(&device).expect("REASON");
-        // 154 residues; N/CA/C/O; positions
-        assert_eq!(ac_backbone_tensor.dims(), &[154, 4, 3]);
+        // batch size of 1;154 residues; N/CA/C/O; positions
+        assert_eq!(ac_backbone_tensor.dims(), &[1, 154, 4, 3]);
 
         // Check my residue coords in the Tensor
         // ATOM   1    N  N   . MET A 1 1   ? 24.277 8.374   -9.854  1.00 38.41  ? 0   MET A N   1
@@ -598,24 +598,26 @@ mod tests {
         // ATOM   4    O  O   . MET A 1 1   ? 26.748 9.469   -10.197 1.00 37.13  ? 0   MET A O   1
         let backbone_coords = [
             // Methionine - AA00
-            ("N", (0, 0, ..), vec![24.277, 8.374, -9.854]),
-            ("CA", (0, 1, ..), vec![24.404, 9.859, -9.939]),
-            ("C", (0, 2, ..), vec![25.814, 10.249, -10.359]),
-            ("O", (0, 3, ..), vec![26.748, 9.469, -10.197]),
+            ("N", (0,0, 0, ..), vec![24.277, 8.374, -9.854]),
+            ("CA", (0, 0, 1, ..), vec![24.404, 9.859, -9.939]),
+            ("C", (0, 0, 2, ..), vec![25.814, 10.249, -10.359]),
+            ("O", (0, 0, 3, ..), vec![26.748, 9.469, -10.197]),
             // Valine - AA01
-            ("N", (1, 0, ..), vec![25.964, 11.453, -10.903]),
-            ("CA", (1, 1, ..), vec![27.263, 11.924, -11.359]),
-            ("C", (1, 2, ..), vec![27.392, 13.428, -11.115]),
-            ("O", (1, 3, ..), vec![26.443, 14.184, -11.327]),
+            ("N", (0,1, 0, ..), vec![25.964, 11.453, -10.903]),
+            ("CA", (0,1, 1, ..), vec![27.263, 11.924, -11.359]),
+            ("C", (0,1, 2, ..), vec![27.392, 13.428, -11.115]),
+            ("O", (0,1, 3, ..), vec![26.443, 14.184, -11.327]),
             // Glycing - AAlast
-            ("N", (153, 0, ..), vec![23.474, -3.227, 5.994]),
-            ("CA", (153, 1, ..), vec![22.818, -2.798, 7.211]),
-            ("C", (153, 2, ..), vec![22.695, -1.282, 7.219]),
-            ("O", (153, 3, ..), vec![21.870, -0.745, 7.992]),
+            ("N", (0,153, 0, ..), vec![23.474, -3.227, 5.994]),
+            ("CA", (0,153, 1, ..), vec![22.818, -2.798, 7.211]),
+            ("C", (0,153, 2, ..), vec![22.695, -1.282, 7.219]),
+            ("O", (0,153, 3, ..), vec![21.870, -0.745, 7.992]),
         ];
 
-        for (atom_name, (i, j, k), expected) in backbone_coords {
-            let actual: Vec<f32> = ac_backbone_tensor.i((i, j, k)).unwrap().to_vec1().unwrap();
+        for (atom_name, (b, i, j, k), expected) in backbone_coords {
+            // assert_eq!(ac_backbone_tensor.dims(), &[1, 154, 4, 3])
+            let actual: Vec<f32> = ac_backbone_tensor.i((b, i, j, k)).unwrap().to_vec1().unwrap();
+            println!("ACTUAL: {:?}", actual);
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
         }
     }
@@ -627,8 +629,8 @@ mod tests {
         let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
         let ac = AtomCollection::from(&pdb);
         let ac_backbone_tensor: Tensor = ac.to_numeric_atom37(&device).expect("REASON");
-        // 154 residues; N/CA/C/O; positions
-        assert_eq!(ac_backbone_tensor.dims(), &[154, 37, 3]);
+        // batch size of 1154 residues; all atoms; positions
+        assert_eq!(ac_backbone_tensor.dims(), &[1, 154, 37, 3]);
 
         // Check my residue coords in the Tensor
         // ATOM   1    N  N   . MET A 1 1   ? 24.277 8.374   -9.854  1.00 38.41  ? 0   MET A N   1
@@ -753,7 +755,7 @@ mod tests {
         let xyz_37 = ac
             .to_numeric_atom37(&device)
             .expect("XYZ creation for all-atoms");
-        assert_eq!(xyz_37.dims(), [154, 37, 3]);
+        assert_eq!(xyz_37.dims(), [1, 154, 37, 3]);
 
         let xyz_m = create_backbone_mask_37(&xyz_37).expect("masking procedure should work");
         assert_eq!(xyz_m.dims(), &[154, 1]);
