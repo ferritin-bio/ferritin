@@ -58,7 +58,7 @@ impl ProteinFeaturesModel {
         })
     }
 
-    /// This function calculates the nearest Ca coordinates and retunrs the ditances and indices.
+    /// This function calculates the nearest Ca coordinates and returns the distances and indices.
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
         println!("in _dist: ");
         println!("Tensor dims: x, mask: {:?}, {:?}", x.dims(), mask.dims());
@@ -79,7 +79,7 @@ impl ProteinFeaturesModel {
         // Create centers (μ)
         let d_mu = linspace(D_MIN, D_MAX, self.num_rbf, device)?
             .reshape((1, 1, 1, self.num_rbf))?
-            .to_dtype(candle_core::DType::F32)?;
+            .to_dtype(DType::F32)?;
 
         // Calculate width (σ)
         let d_sigma = (D_MAX - D_MIN) / self.num_rbf as f64;
@@ -249,7 +249,7 @@ impl ProteinFeaturesModel {
         let d_chains = (&chain_labels.unsqueeze(2)?.broadcast_as(target_shape)?
             - &chain_labels.unsqueeze(1)?.broadcast_as(target_shape)?)?
             .eq(0.0)?
-            .to_dtype(candle_core::DType::I64)?;
+            .to_dtype(DType::I64)?;
 
         // E_chains = gather_edges(d_chains[:, :, :, None], E_idx)[:, :, :, 0]
         let e_chains = gather_edges(&d_chains.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
@@ -257,9 +257,9 @@ impl ProteinFeaturesModel {
         println!("About to start the embeddings calculation...");
         let e_positional = self
             .embeddings
-            .forward(&offset.to_dtype(candle_core::DType::I64)?, &e_chains)?;
+            .forward(&offset.to_dtype(DType::I64)?, &e_chains)?;
 
-        println!("About to cat the pos embeddigns...");
+        println!("About to cat the pos embeddings...");
 
         let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
         let e = self.edge_embedding.forward(&e)?;

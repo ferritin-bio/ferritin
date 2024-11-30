@@ -70,7 +70,7 @@ pub fn compute_nearest_neighbors(
     k: usize,
     eps: f32,
 ) -> Result<(Tensor, Tensor)> {
-    let (batch_size, seq_len, _) = coords.dims3()?;
+    let (_batch_size, seq_len, _) = coords.dims3()?;
 
     // broadcast_matmul handles broadcasting automatically
     // [2, 3, 1] × [2, 1, 3] -> [2, 3, 3]
@@ -562,7 +562,6 @@ mod tests {
     use ferritin_test_data::TestFile;
     use pdbtbx;
     use pdbtbx::Element;
-    use safetensors::Dtype;
 
     #[test]
     fn test_residue_codes() {

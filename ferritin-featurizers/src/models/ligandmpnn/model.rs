@@ -5,7 +5,7 @@
 //! Consider factoring out model creation of the DEC
 //! and ENC layers using a function.
 //!
-//! here is an example of paramatereizable network creation:
+//! here is an example of paramaterizable network creation:
 //! https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/resnet.rs
 //!
 use super::configs::{ModelTypes, ProteinMPNNConfig};
@@ -16,7 +16,7 @@ use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, Linear, VarBuilder};
-use candle_transformers::generation::{LogitsProcessor, Sampling};
+use candle_transformers::generation::LogitsProcessor;
 
 pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result<Tensor> {
     // Create the logits processor with its required arguments

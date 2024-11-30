@@ -72,7 +72,7 @@ pub struct PSEData {
     #[serde(with = "serde_bytes")]
     pub wizard: Vec<u8>,
     pub moviescenes: Vec<Vec<i32>>,
-    // High level state settings; we need to prpogate these.
+    // High level state settings; we need to propogate these.
     pub settings: Vec<Settings>,
     pub movie: (
         i32,
