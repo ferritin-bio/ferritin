@@ -203,9 +203,7 @@ impl ProteinFeaturesModel {
         let (d_neighbors, e_idx) = self._dist(&ca, &mask, self.augment_eps as f64)?;
 
         let mut rbf_all = Vec::new();
-        println!("RBF Device: {:?}", device);
         rbf_all.push(self._rbf(&d_neighbors, device)?);
-        println!("RBF Device _get_rbf");
         rbf_all.push(self._get_rbf(&n, &n, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&c, &c, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&o, &o, &e_idx, device)?);
@@ -232,10 +230,8 @@ impl ProteinFeaturesModel {
         rbf_all.push(self._get_rbf(&c, &o, &e_idx, device)?);
 
         let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
-
         let dims = r_idx.dims();
         let target_shape = (dims[0], dims[1], dims[1]);
-        println!("I am in the RBF");
         let r_idx_expanded1 = r_idx
             .unsqueeze(2)?
             .broadcast_as(target_shape)?
@@ -248,7 +244,6 @@ impl ProteinFeaturesModel {
         let offset = (r_idx_expanded1 - r_idx_expanded2)?;
         let offset = gather_edges(&offset.unsqueeze(D::Minus1)?, &e_idx)?;
         let offset = offset.squeeze(D::Minus1)?;
-
         let dims = chain_labels.dims();
         let target_shape = (dims[0], dims[1], dims[1]);
         let d_chains = (&chain_labels.unsqueeze(2)?.broadcast_as(target_shape)?
@@ -257,6 +252,12 @@ impl ProteinFeaturesModel {
             .to_dtype(DType::I64)?;
 
         // E_chains = gather_edges(d_chains[:, :, :, None], E_idx)[:, :, :, 0]
+        println!(
+            "Dtypes for dechains and e_idx:  {:?}, {:?}",
+            d_chains.dtype(),
+            e_idx.dtype()
+        );
+
         let e_chains = gather_edges(&d_chains.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
 
         println!("About to start the embeddings calculation...");

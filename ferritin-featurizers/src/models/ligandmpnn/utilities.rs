@@ -283,14 +283,15 @@ pub fn cross_product(a: &Tensor, b: &Tensor) -> Result<Tensor> {
 /// Features [B,N,N,C] at Neighbor indices [B,N,K] => Neighbor features [B,N,K,C]
 pub fn gather_edges(edges: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     let (d1, d2, d3) = neighbor_idx.dims3()?;
+    println!("neighbor_idx dtype {:?}", neighbor_idx.dtype());
     let neighbors =
         neighbor_idx
             .unsqueeze(D::Minus1)?
             .expand((d1, d2, d3, edges.dim(D::Minus1)?))?;
 
-    // println!("Neighbors idx: {:?}", neighbors.dims());
+    println!("Neighbors idx: {:?}", neighbors.dims());
     let edge_gather = edges.gather(&neighbors, 2)?;
-    // println!("edge_gather idx: {:?}", edge_gather.dims());
+    println!("edge_gather idx: {:?}", edge_gather.dims());
     Ok(edge_gather)
 }
 
