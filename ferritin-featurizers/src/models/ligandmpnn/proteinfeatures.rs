@@ -35,7 +35,6 @@ impl ProteinFeaturesModel {
             vb.device(),               // device this should be passed in as param,
             vb.pp("embeddings"),       // VarBuilder,
         )?;
-
         let edge_embedding =
             linear::linear_no_bias(edge_in, edge_features, vb.pp("edge_embedding"))?;
         let norm_edges = layer_norm(
@@ -75,11 +74,11 @@ impl ProteinFeaturesModel {
         // 5. Applies the RBF formula: exp(-(x-μ)²/σ²)
         const D_MIN: f64 = 2.0;
         const D_MAX: f64 = 22.0;
-
         // Create centers (μ)
-        let d_mu = linspace(D_MIN, D_MAX, self.num_rbf, device)?
+        let d_mu = linspace(D_MIN, D_MAX, self.num_rbf, &Device::Cpu)? // Use CPU device
+            .to_dtype(DType::F32)? // Convert to F32 on CPU
             .reshape((1, 1, 1, self.num_rbf))?
-            .to_dtype(DType::F32)?;
+            .to_device(device)?; // Move to Metal device after conversion
 
         // Calculate width (σ)
         let d_sigma = (D_MAX - D_MIN) / self.num_rbf as f64;
@@ -88,10 +87,11 @@ impl ProteinFeaturesModel {
         let d_mu_broadcast = d_mu.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
         let d_expanded_broadcast =
             d_expanded.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
-
-        let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma)?;
+        let d_sigma_tensor =
+            Tensor::new(&[d_sigma as f32], &device)?.broadcast_as(d_expanded_broadcast.shape())?;
+        let d_expanded = d_expanded.to_dtype(DType::F32)?.contiguous()?;
+        let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma_tensor)?;
         let rbf = diff.powf(2.0)?.neg()?.exp()?;
-
         Ok(rbf)
     }
 
@@ -228,7 +228,6 @@ impl ProteinFeaturesModel {
         rbf_all.push(self._get_rbf(&c, &o, &e_idx, device)?);
 
         let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
-
         let dims = r_idx.dims();
         let target_shape = (dims[0], dims[1], dims[1]);
         let r_idx_expanded1 = r_idx
@@ -240,27 +239,22 @@ impl ProteinFeaturesModel {
             .broadcast_as(target_shape)?
             .to_dtype(DType::F32)?; // [1, 93, 93]
 
+        println!("Prepraring the Offset Tensor...");
         let offset = (r_idx_expanded1 - r_idx_expanded2)?;
         let offset = gather_edges(&offset.unsqueeze(D::Minus1)?, &e_idx)?;
         let offset = offset.squeeze(D::Minus1)?;
-
         let dims = chain_labels.dims();
         let target_shape = (dims[0], dims[1], dims[1]);
         let d_chains = (&chain_labels.unsqueeze(2)?.broadcast_as(target_shape)?
             - &chain_labels.unsqueeze(1)?.broadcast_as(target_shape)?)?
             .eq(0.0)?
-            .to_dtype(DType::I64)?;
-
+            .to_dtype(DType::U32)?;
         // E_chains = gather_edges(d_chains[:, :, :, None], E_idx)[:, :, :, 0]
         let e_chains = gather_edges(&d_chains.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
-
-        println!("About to start the embeddings calculation...");
         let e_positional = self
             .embeddings
-            .forward(&offset.to_dtype(DType::I64)?, &e_chains)?;
-
+            .forward(&offset.to_dtype(DType::U32)?, &e_chains)?;
         println!("About to cat the pos embeddings...");
-
         let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
         let e = self.edge_embedding.forward(&e)?;
         println!("About to start the normalization...");
@@ -303,9 +297,12 @@ impl PositionalEncodings {
     //     return E
     fn forward(&self, offset: &Tensor, mask: &Tensor) -> Result<Tensor> {
         println!("In positional Embedding: forward");
+        println!("Offset: {:?} ", offset);
+        println!("Offset DTYPE: {:?} ", offset.dtype());
+
+        // Offset: Tensor[dims 1, 93, 24; u32, metal:4294969325]
 
         let max_rel = self.max_relative_feature as f64;
-
         // First part: clip(offset + max_rel, 0, 2*max_rel)
         let d = (offset + max_rel)?;
         let d = d.clamp(0f64, 2.0 * max_rel)?;
@@ -317,11 +314,32 @@ impl PositionalEncodings {
         let d = (masked_d + extra_term?)?;
 
         // Convert to integers for one_hot
-        let d = d.to_dtype(DType::I64)?;
+        // let d = d.to_dtype(DType::U32)?;
+
+        // Todo: confirms this is correct.
+        // Better to move this upsteam
+        // Normalize the values by subtracting 97 (ASCII 'a') to make them 0-based
+        // let d_normalized = (d - 97u32)?; // This will make 'a'=0, 'b'=1, etc.
+        let offset_val = Tensor::full(97u32, d.dims(), d.device());
+        let d_normalized = (d - offset_val)?;
+
+        println!("After normalization:");
+        let d_cpu = d_normalized.to_device(&Device::Cpu)?;
+        let d_vec = d_cpu.to_vec3::<u32>()?;
+        println!(
+            "Max value after norm: {}",
+            d_vec.iter().flatten().flatten().max().unwrap()
+        );
+        println!(
+            "Min value after norm: {}",
+            d_vec.iter().flatten().flatten().min().unwrap()
+        );
 
         // one_hot with correct depth using candle_nn::encoding::one_hot
         let depth = (2 * self.max_relative_feature + 2) as i64;
-        let d_onehot = one_hot(d, depth as usize, 1f32, 0f32)?;
+        // let d_onehot = one_hot(d, depth as usize, 1f32, 0f32)?;
+        let d_onehot = one_hot(d_normalized, depth as usize, 1f32, 0f32)?;
+
         let d_onehot_float = d_onehot.to_dtype(DType::F32)?;
 
         self.linear.forward(&d_onehot_float)
