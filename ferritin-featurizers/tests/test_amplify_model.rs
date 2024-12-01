@@ -25,23 +25,16 @@ pub fn device(cpu: bool) -> Result<Device> {
     }
 }
 
-// #[ignore = "downloads large model weights (>100MB) from HuggingFace"]
+#[ignore = "downloads large model weights (>100MB) from HuggingFace"]
 #[test]
 fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
-    // Load the Model adn the Tokenizer
-
-    let dev = device(true)?;
+    let dev = device(false)?;
     let (tokenizer, amplify) = AMPLIFY::load_from_huggingface(dev.clone())?;
-
-    // Test the outputs of the Encoding from the Amplify Test Suite
     let AMPLIFY_TEST_SEQ = "MSVVGIDLGFQSCYVAVARAGGIETIANEYSDRCTPACISFGPKNR";
     let pmatrix = tokenizer.encode(&[AMPLIFY_TEST_SEQ.to_string()], None, true, false)?;
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
-
-    // Run the sequence through the model.
     let encoded = amplify.forward(&pmatrix.to_device(&dev)?, None, true, true)?;
 
-    println!("Encoded!");
     // Choosing ARGMAX. We expect this to be the most predicted sequence.
     // it should return the identity of an unmasked sequence
     let predictions = &encoded.logits.argmax(D::Minus1)?;
@@ -51,17 +44,38 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(final_seq, decoded.replace(" ", ""));
     assert!(&encoded.attentions.is_some());
     assert!(&encoded.hidden_states.is_some());
+    println!("Decoded Seq: {:?}", decoded);
 
-    // Now test the outputs of the attention vectors.
-    // for each member of the output, assert that the difference
-    // between the saved pytorch model and the Candle model is
-    // less than a tolerance.
-    //
+    // Run a bigger sequence through the model.
+    let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
+    let pmatrix = tokenizer.encode(&[sprot_01.to_string()], None, true, false)?;
+    let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
+    let encoded_long = amplify.forward(&pmatrix.to_device(&dev)?, None, true, true)?;
+
+    if let Some(norm) = &encoded_long.get_contact_map()? {
+        assert_eq!(norm.dims3()?, (256, 256, 240));
+    }
+
+    Ok(())
+}
+
+#[test]
+#[ignore = "downloads large model weights (>100MB) from HuggingFace"]
+fn test_amplify_against_reference() -> Result<(), Box<dyn std::error::Error>> {
     let tolerance = 1e-5f32;
     // let tolerance = 1e-2f32;
 
     let (path, _handle) = ferritin_test_data::TestFile::amplify_output_01().create_temp()?;
-    let example_data = candle_core::safetensors::load(path, &dev)?;
+    let example_data = candle_core::safetensors::load(path, &Device::Cpu)?;
+    let (tokenizer, amplify) = AMPLIFY::load_from_huggingface(Device::Cpu)?;
+    // Test the outputs of the Encoding from the Amplify Test Suite
+    let AMPLIFY_TEST_SEQ = "MSVVGIDLGFQSCYVAVARAGGIETIANEYSDRCTPACISFGPKNR";
+    let pmatrix = tokenizer.encode(&[AMPLIFY_TEST_SEQ.to_string()], None, true, false)?;
+    let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
+
+    // Run the sequence through the model.
+    let encoded = amplify.forward(&pmatrix.to_device(&Device::Cpu)?, None, true, true)?;
+
     for (idx, attention) in encoded.attentions.unwrap().iter().enumerate() {
         println!("idx: {:?}, attention: {:?}", idx, attention);
 
@@ -99,20 +113,5 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
 
     // Check that we can retrieve the contact map from the Model Outputs.
     //
-
-    // Run a bigger sequence through the model.
-    let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
-    let pmatrix = tokenizer.encode(&[sprot_01.to_string()], None, true, false)?;
-    let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
-    let encoded_long = amplify.forward(&pmatrix, None, true, true)?;
-
-    if let Some(norm) = &encoded_long.get_contact_map()? {
-        assert_eq!(norm.dims3()?, (256, 256, 240));
-    }
-
-    // Check that we can run Multiple sequences through the model:
-    //
-    // todo!();
-
     Ok(())
 }
