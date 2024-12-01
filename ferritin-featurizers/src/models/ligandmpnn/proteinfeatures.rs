@@ -58,9 +58,10 @@ impl ProteinFeaturesModel {
     }
 
     /// This function calculates the nearest Ca coordinates and returns the distances and indices.
+    // Todo: potential refactor
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
-        println!("in _dist: ");
-        println!("Tensor dims: x, mask: {:?}, {:?}", x.dims(), mask.dims());
+        // println!("in _dist: ");
+        // println!("Tensor dims: x, mask: {:?}, {:?}", x.dims(), mask.dims());
         compute_nearest_neighbors(x, mask, self.top_k, eps as f32)
     }
     fn _rbf(&self, d: &Tensor, device: &Device) -> Result<Tensor> {
@@ -89,7 +90,7 @@ impl ProteinFeaturesModel {
             d_expanded.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
         let d_sigma_tensor =
             Tensor::new(&[d_sigma as f32], &device)?.broadcast_as(d_expanded_broadcast.shape())?;
-        let d_expanded = d_expanded.to_dtype(DType::F32)?.contiguous()?;
+        // let d_expanded = d_expanded.to_dtype(DType::F32)?.contiguous()?;
         let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma_tensor)?;
         let rbf = diff.powf(2.0)?.neg()?.exp()?;
         Ok(rbf)
@@ -121,30 +122,23 @@ impl ProteinFeaturesModel {
         let b_expanded = b.unsqueeze(1)?.broadcast_as(target_shape)?;
         // Now both tensors should be [1, 93, 93, 3]
         let diff = (a_expanded - b_expanded)?;
-
         let squared_diff = diff.powf(2.0)?;
         let sum_squared_diff = squared_diff.sum(3)?;
         let d_a_b = (sum_squared_diff + 1e-6)?.sqrt()?;
         let d_a_b_neighbors = gather_edges(&d_a_b.unsqueeze(D::Minus1)?, &e_idx)?;
         let d_a_b_neighbors = d_a_b_neighbors.squeeze(D::Minus1)?;
-
-        // Apply RBF
         let rbf_a_b = self._rbf(&d_a_b_neighbors, device)?;
-
         Ok(rbf_a_b)
     }
 
     fn compute_pairwise_distances(&self, a: &Tensor, b: &Tensor) -> Result<Tensor> {
         const EPSILON: f64 = 1e-6; // Numerical stability constant
-
         let a_expanded = a.unsqueeze(2)?;
         let b_expanded = b.unsqueeze(1)?;
-
         // Euclidean distance calculation
         let diff = (a_expanded - b_expanded)?;
         let squared_distances = diff.powf(2.0)?.sum(3)?;
         let distances = (squared_distances + EPSILON)?.sqrt()?;
-
         Ok(distances)
     }
 
@@ -175,7 +169,6 @@ impl ProteinFeaturesModel {
         } else {
             x.clone()
         };
-
         let b = (&x.narrow(2, 1, 1)? - &x.narrow(2, 0, 1)?)?
             .squeeze(2)?
             .contiguous()?;
@@ -254,10 +247,10 @@ impl ProteinFeaturesModel {
         let e_positional = self
             .embeddings
             .forward(&offset.to_dtype(DType::U32)?, &e_chains)?;
-        println!("About to cat the pos embeddings...");
+        // println!("About to cat the pos embeddings...");
         let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
         let e = self.edge_embedding.forward(&e)?;
-        println!("About to start the normalization...");
+        // println!("About to start the normalization...");
         let e = self.norm_edges.forward(&e)?;
         Ok((e, e_idx))
     }
@@ -296,52 +289,34 @@ impl PositionalEncodings {
     //     E = self.linear(d_onehot.float())
     //     return E
     fn forward(&self, offset: &Tensor, mask: &Tensor) -> Result<Tensor> {
-        println!("In positional Embedding: forward");
-        println!("Offset: {:?} ", offset);
-        println!("Offset DTYPE: {:?} ", offset.dtype());
-
+        // println!("In positional Embedding: forward");
         // Offset: Tensor[dims 1, 93, 24; u32, metal:4294969325]
-
         let max_rel = self.max_relative_feature as f64;
         // First part: clip(offset + max_rel, 0, 2*max_rel)
         let d = (offset + max_rel)?;
         let d = d.clamp(0f64, 2.0 * max_rel)?;
-
         // Second part: d * mask + (1-mask)*(2*max_rel + 1)
         let masked_d = d.mul(mask)?;
         let inverse_mask = (mask * -1.0)? + 1.0; // (1-mask)
         let extra_term = inverse_mask? * ((2.0 * max_rel) + 1.0);
         let d = (masked_d + extra_term?)?;
-
         // Convert to integers for one_hot
         // let d = d.to_dtype(DType::U32)?;
-
+        //
         // Todo: confirms this is correct.
         // Better to move this upsteam
         // Normalize the values by subtracting 97 (ASCII 'a') to make them 0-based
         // let d_normalized = (d - 97u32)?; // This will make 'a'=0, 'b'=1, etc.
         let offset_val = Tensor::full(97u32, d.dims(), d.device());
         let d_normalized = (d - offset_val)?;
-
-        println!("After normalization:");
+        // println!("After normalization:");
         let d_cpu = d_normalized.to_device(&Device::Cpu)?;
         let d_vec = d_cpu.to_vec3::<u32>()?;
-        println!(
-            "Max value after norm: {}",
-            d_vec.iter().flatten().flatten().max().unwrap()
-        );
-        println!(
-            "Min value after norm: {}",
-            d_vec.iter().flatten().flatten().min().unwrap()
-        );
-
         // one_hot with correct depth using candle_nn::encoding::one_hot
         let depth = (2 * self.max_relative_feature + 2) as i64;
         // let d_onehot = one_hot(d, depth as usize, 1f32, 0f32)?;
         let d_onehot = one_hot(d_normalized, depth as usize, 1f32, 0f32)?;
-
         let d_onehot_float = d_onehot.to_dtype(DType::F32)?;
-
         self.linear.forward(&d_onehot_float)
     }
 }
