@@ -72,11 +72,12 @@ pub fn execute(
     std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
     std::fs::create_dir_all(format!("{}/packed", out_folder))?;
 
-    println!("out_folder: {}", out_folder);
     // Score a Protein!
-    // println!("Scoring the Protein...");
-    // let model_score = model.score(&prot_features, false);
-    // println!("{:?}", model_score);
+    println!("Scoring the Protein...");
+    let model_score = model.score(&prot_features, false);
+    println!("{:?}", model_score);
+
+    let fasta_string = exec.create_fasta_string(model_score);
 
     // Sample from the Model!
     // Note: sampling from the model
