@@ -32,16 +32,15 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     // Load the Model adn the Tokenizer
 
     let dev = device(false)?;
-    let (tokenizer, amplify) = AMPLIFY::load_from_huggingface(dev)?;
+    let (tokenizer, amplify) = AMPLIFY::load_from_huggingface(dev.clone())?;
 
     // Test the outputs of the Encoding from the Amplify Test Suite
-    //
     let AMPLIFY_TEST_SEQ = "MSVVGIDLGFQSCYVAVARAGGIETIANEYSDRCTPACISFGPKNR";
     let pmatrix = tokenizer.encode(&[AMPLIFY_TEST_SEQ.to_string()], None, true, false)?;
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
 
     // Run the sequence through the model.
-    let encoded = amplify.forward(&pmatrix, None, true, true)?;
+    let encoded = amplify.forward(&pmatrix.to_device(&dev)?, None, true, true)?;
 
     // Choosing ARGMAX. We expect this to be the most predicted sequence.
     // it should return the identity of an unmasked sequence

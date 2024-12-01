@@ -158,13 +158,39 @@ impl EncoderBlock {
         freqs_cis: &Tensor,
         output_attentions: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
+        println!(
+            "x dims: {:?}, device: {:?}, contiguous: {}",
+            x.dims(),
+            x.device(),
+            x.is_contiguous()
+        );
+        if let Some(mask) = pad_mask {
+            println!(
+                "pad_mask dims: {:?}, device: {:?}, contiguous: {}",
+                mask.dims(),
+                mask.device(),
+                mask.is_contiguous()
+            );
+        }
+        println!(
+            "freqs_cis dims: {:?}, device: {:?}, contiguous: {}",
+            freqs_cis.dims(),
+            freqs_cis.device(),
+            freqs_cis.is_contiguous()
+        );
         let normed = self.attention_norm.forward(x)?;
+        println!("hello");
         let (attn, contacts) =
             self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
+        println!("hello");
         let x = x.add(&attn)?;
+        println!("hello");
         let normed = self.ffn_norm.forward(&x)?;
+        println!("hello");
         let ffn_output = self.ffn_forward(&normed)?;
+        println!("hello");
         let ff = self.ffn_dropout.forward(&ffn_output, false)?; // Todo: pass in the Inference/Training bit
+        println!("hello");
         let x = x.add(&ff)?;
         Ok((x, contacts))
     }
@@ -246,9 +272,10 @@ impl EncoderBlock {
     ) -> Result<(Tensor, Option<Tensor>)> {
         // Query, Key, Value projections
         let (batch_size, seq_len, _) = x.dims3()?;
-        let xq = self.q.forward(x)?; // [batch_size, seq_len, hidden_size]
-        let xk = self.k.forward(x)?;
-        let xv = self.v.forward(x)?;
+        // [batch_size, seq_len, hidden_size]
+        let xq = self.q.forward(x)?.contiguous()?;
+        let xk = self.k.forward(x)?.contiguous()?;
+        let xv = self.v.forward(x)?.contiguous()?;
         // Reshape for rotary embeddings
         let xq = xq.reshape((
             batch_size,
@@ -268,8 +295,26 @@ impl EncoderBlock {
             self.config.num_attention_heads,
             self.d_head,
         ))?;
-
+        println!(
+            "xq dims: {:?}, device: {:?}, contiguous: {}",
+            xq.dims(),
+            xq.device(),
+            xq.is_contiguous()
+        );
+        println!(
+            "xk dims: {:?}, device: {:?}, contiguous: {}",
+            xk.dims(),
+            xk.device(),
+            xk.is_contiguous()
+        );
+        println!(
+            "freqs_cis dims: {:?}, device: {:?}, contiguous: {}",
+            freqs_cis.dims(),
+            freqs_cis.device(),
+            freqs_cis.is_contiguous()
+        );
         let (xq, xk) = apply_rotary_emb(&xq, &xk, &freqs_cis)?;
+        println!("Post Rotary.");
         let dropout_prob = self.config.dropout_prob;
 
         // need to handle pad_mask better ....
@@ -290,19 +335,21 @@ impl EncoderBlock {
             None
         };
 
+        println!("Dot prod...");
         let attn = self.scaled_dot_product_attention(
-            &xq.permute((0, 2, 1, 3))?,
-            &xk.permute((0, 2, 1, 3))?,
-            &xv.permute((0, 2, 1, 3))?,
+            &xq.permute((0, 2, 1, 3))?.contiguous()?,
+            &xk.permute((0, 2, 1, 3))?.contiguous()?,
+            &xv.permute((0, 2, 1, 3))?.contiguous()?,
             pad_mask.as_ref(),
             dropout_prob,
             false,
         )?;
+        println!("permute...");
         // `[batch, num_heads, seq_len, head_dim]` → `[batch, seq_len, num_heads, head_dim]`
         let attn = attn.permute((0, 2, 1, 3))?;
         let _attn = if output_attentions {
-            let xq_t = xq.permute((0, 2, 1, 3))?;
-            let xk_t = xk.permute((0, 2, 3, 1))?;
+            let xq_t = xq.permute((0, 2, 1, 3))?.contiguous()?;
+            let xk_t = xk.permute((0, 2, 3, 1))?.contiguous()?;
             let mut attn_weights = xq_t.matmul(&xk_t)?;
             let scale = (xq.dim(D::Minus1)? as f64).sqrt();
             attn_weights = (attn_weights / scale)?;
@@ -415,10 +462,17 @@ impl AMPLIFY {
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
         // Embedding layer
-        let mut x = self.encoder.forward(src)?;
+        let mut x = self.encoder.forward(src)?.contiguous()?;
         // Transform through encoder blocks
         // println!("AMPLIFY.forward():  running through the transformer");
+        println!("Encode 00");
         for layer in self.transformer_encoder.iter() {
+            println!("x dims: {:?}, contiguous: {}", x.dims(), x.is_contiguous());
+            println!(
+                "freqs_cis dims: {:?}, contiguous: {}",
+                freqs_cis.dims(),
+                freqs_cis.is_contiguous()
+            );
             let (new_x, attn) =
                 layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
             x = new_x;
@@ -434,6 +488,7 @@ impl AMPLIFY {
 
         // Final layer norm and decoder
         // println!("AMPLIFY.forward():  calculating logits");
+        println!("Encode 01");
         let logits = if self.config.layer_norm_before_last_layer {
             self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
         } else {
