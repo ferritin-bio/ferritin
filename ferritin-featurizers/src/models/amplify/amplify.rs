@@ -469,7 +469,7 @@ impl AMPLIFY {
         let layer_norm_2 = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("layer_norm_2"))?;
         let decoder = linear(cfg.hidden_size, cfg.vocab_size, vb.pp("decoder"))?;
         let head_dim = cfg.hidden_size / cfg.num_attention_heads;
-        let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?;
+        let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?.to_device(vb.device())?;
 
         Ok(Self {
             encoder,
@@ -482,7 +482,7 @@ impl AMPLIFY {
     }
     /// Retreive the model and make it available for usage.
     /// hardcode the 120M for the moment...
-    pub fn load_from_huggingface() -> Result<(ProteinTokenizer, Self)> {
+    pub fn load_from_huggingface(device: Device) -> Result<(ProteinTokenizer, Self)> {
         let ampconfig = AMPLIFYConfig::amp_120m();
         let model_id = "chandar-lab/AMPLIFY_120M";
         let revision = "main";
@@ -496,8 +496,9 @@ impl AMPLIFY {
         let weights_path = repo
             .get("model.safetensors")
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+
         let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
+            VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &device)?
         };
         let config = AMPLIFYConfig::amp_120m();
         let model = AMPLIFY::load(vb, &config)?;
