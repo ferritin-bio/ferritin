@@ -1,7 +1,6 @@
 use anyhow::Result;
-use candle_core::{Device, D};
-// use candle_examples::device;
 use candle_core::utils::{cuda_is_available, metal_is_available};
+use candle_core::{Device, D};
 use ferritin_featurizers::AMPLIFY;
 
 pub fn device(cpu: bool) -> Result<Device> {
@@ -31,7 +30,7 @@ pub fn device(cpu: bool) -> Result<Device> {
 fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     // Load the Model adn the Tokenizer
 
-    let dev = device(false)?;
+    let dev = device(true)?;
     let (tokenizer, amplify) = AMPLIFY::load_from_huggingface(dev.clone())?;
 
     // Test the outputs of the Encoding from the Amplify Test Suite
@@ -43,7 +42,6 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     let encoded = amplify.forward(&pmatrix.to_device(&dev)?, None, true, true)?;
 
     println!("Encoded!");
-
     // Choosing ARGMAX. We expect this to be the most predicted sequence.
     // it should return the identity of an unmasked sequence
     let predictions = &encoded.logits.argmax(D::Minus1)?;
@@ -59,8 +57,8 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     // between the saved pytorch model and the Candle model is
     // less than a tolerance.
     //
-    // let tolerance = 1e-5f32;
-    let tolerance = 1e-2f32;
+    let tolerance = 1e-5f32;
+    // let tolerance = 1e-2f32;
 
     let (path, _handle) = ferritin_test_data::TestFile::amplify_output_01().create_temp()?;
     let example_data = candle_core::safetensors::load(path, &dev)?;
