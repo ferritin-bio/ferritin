@@ -352,26 +352,22 @@ impl ProteinMPNN {
         for i in 0..config.num_decoder_layers {
             decoder_layers.push(DecLayer::load(vb.pp("decoder_layers"), config, i as i32)?);
         }
-
         // Weights
         let w_e = linear::linear(
             config.edge_features as usize,
             config.hidden_dim as usize,
             vb.pp("W_e"),
         )?;
-
         let w_out = linear::linear(
             config.hidden_dim as usize,
             config.num_letters as usize,
             vb.pp("W_out"),
         )?;
-
         let w_s = embedding(
             config.vocab as usize,
             config.hidden_dim as usize,
             vb.pp("W_s"),
         )?;
-
         // Features
         let features = ProteinFeaturesModel::load(vb.pp("features"), config.clone())?;
 
@@ -417,9 +413,9 @@ impl ProteinMPNN {
                 let mut h_e = self.w_e.forward(&e)?;
 
                 let mask_attend = if let Some(mask) = features.get_sequence_mask() {
-                    // First unsqueeze mask
                     let mask_expanded = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
-                                                                    // Gather using E_idx
+
+                    // Gather using E_idx
                     let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?;
                     let mask_gathered = mask_gathered.squeeze(D::Minus1)?;
                     // Multiply original mask with gathered mask
@@ -761,9 +757,7 @@ impl ProteinMPNN {
                         .mul(&log_probs.unsqueeze(1)?)?;
 
                     // Reshape log_probs_update to match all_log_probs rank
-                    let log_probs_update = log_probs_update
-                        .squeeze(1)? // Remove extra dimension
-                        .unsqueeze(1)?; // Add back sequence dimension to match rank
+                    let log_probs_update = log_probs_update.squeeze(1)?.unsqueeze(1)?;
 
                     all_log_probs = all_log_probs.index_add(
                         &t_expanded,
@@ -775,8 +769,8 @@ impl ProteinMPNN {
 
                 Ok(ScoreOutput {
                     s,
-                    log_probs: all_probs, // needs a fix - currently these don't get updated
-                    logits: all_log_probs, // needs a fix - currently these don't get updated
+                    log_probs: all_probs,
+                    logits: all_log_probs,
                     decoding_order,
                 })
             }
@@ -1074,7 +1068,6 @@ impl ProteinMPNN {
     // }
 
     pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
-        // "global" dtype
         let sample_dtype = DType::F32;
         let ProteinFeatures { s, x, x_mask, .. } = &features;
 
@@ -1091,7 +1084,6 @@ impl ProteinMPNN {
 
         // encode ...
         let (h_v, h_e, e_idx) = self.encode(features)?;
-
         let rand_tensor = Tensor::randn(0., 1., (b, l), device)?.to_dtype(sample_dtype)?;
 
         // Compute decoding order
@@ -1102,7 +1094,7 @@ impl ProteinMPNN {
         let symmetry_residues: Option<Vec<i32>> = None;
 
         let (mask_fw, mask_bw, e_idx, decoding_order) = match symmetry_residues {
-            // Note: I lifted this code form above. I didn't look to see if they are 100pct identical.
+            // Note: I lifted this code from above. I didn't look to see if they are 100pct identical.
             // If they ARE then I will want to refactor to a score fn that can be used in a few places.
             Some(symmetry_residues) => {
                 todo!();
@@ -1176,7 +1168,6 @@ impl ProteinMPNN {
                 let mask_1d = mask_1d
                     .broadcast_as(mask_attend.shape())?
                     .to_dtype(sample_dtype)?;
-
                 let mask_bw = mask_1d.mul(&mask_attend)?;
                 let mask_fw = mask_1d.mul(&(mask_attend - 1.0)?.neg()?)?;
                 (mask_fw, mask_bw, e_idx, decoding_order)
@@ -1187,7 +1178,6 @@ impl ProteinMPNN {
         let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
         let h_e = h_e.repeat(&[b_decoder, 1, 1, 1])?;
         let mask = x_mask.as_ref().unwrap().repeat(&[b_decoder, 1])?;
-
         let h_s = self.w_s.forward(&s_true)?; // embedding layer
         let h_es = cat_neighbors_nodes(&h_s, &h_e, &e_idx)?;
         // Build encoder embeddings

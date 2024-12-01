@@ -246,9 +246,10 @@ impl EncoderBlock {
     ) -> Result<(Tensor, Option<Tensor>)> {
         // Query, Key, Value projections
         let (batch_size, seq_len, _) = x.dims3()?;
-        let xq = self.q.forward(x)?; // [batch_size, seq_len, hidden_size]
-        let xk = self.k.forward(x)?;
-        let xv = self.v.forward(x)?;
+        // [batch_size, seq_len, hidden_size]
+        let xq = self.q.forward(x)?.contiguous()?;
+        let xk = self.k.forward(x)?.contiguous()?;
+        let xv = self.v.forward(x)?.contiguous()?;
         // Reshape for rotary embeddings
         let xq = xq.reshape((
             batch_size,
@@ -268,7 +269,6 @@ impl EncoderBlock {
             self.config.num_attention_heads,
             self.d_head,
         ))?;
-
         let (xq, xk) = apply_rotary_emb(&xq, &xk, &freqs_cis)?;
         let dropout_prob = self.config.dropout_prob;
 
@@ -291,18 +291,19 @@ impl EncoderBlock {
         };
 
         let attn = self.scaled_dot_product_attention(
-            &xq.permute((0, 2, 1, 3))?,
-            &xk.permute((0, 2, 1, 3))?,
-            &xv.permute((0, 2, 1, 3))?,
+            &xq.permute((0, 2, 1, 3))?.contiguous()?,
+            &xk.permute((0, 2, 1, 3))?.contiguous()?,
+            &xv.permute((0, 2, 1, 3))?.contiguous()?,
             pad_mask.as_ref(),
             dropout_prob,
             false,
         )?;
+
         // `[batch, num_heads, seq_len, head_dim]` → `[batch, seq_len, num_heads, head_dim]`
         let attn = attn.permute((0, 2, 1, 3))?;
         let _attn = if output_attentions {
-            let xq_t = xq.permute((0, 2, 1, 3))?;
-            let xk_t = xk.permute((0, 2, 3, 1))?;
+            let xq_t = xq.permute((0, 2, 1, 3))?.contiguous()?;
+            let xk_t = xk.permute((0, 2, 3, 1))?.contiguous()?;
             let mut attn_weights = xq_t.matmul(&xk_t)?;
             let scale = (xq.dim(D::Minus1)? as f64).sqrt();
             attn_weights = (attn_weights / scale)?;
@@ -415,9 +416,9 @@ impl AMPLIFY {
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
         // Embedding layer
-        let mut x = self.encoder.forward(src)?;
+        let mut x = self.encoder.forward(src)?.contiguous()?;
         // Transform through encoder blocks
-        // println!("AMPLIFY.forward():  running through the transformer");
+        // println!("AMPLIFY.forward():  running through the transformer");;
         for layer in self.transformer_encoder.iter() {
             let (new_x, attn) =
                 layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
@@ -469,7 +470,7 @@ impl AMPLIFY {
         let layer_norm_2 = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("layer_norm_2"))?;
         let decoder = linear(cfg.hidden_size, cfg.vocab_size, vb.pp("decoder"))?;
         let head_dim = cfg.hidden_size / cfg.num_attention_heads;
-        let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?;
+        let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?.to_device(vb.device())?;
 
         Ok(Self {
             encoder,
@@ -482,7 +483,7 @@ impl AMPLIFY {
     }
     /// Retreive the model and make it available for usage.
     /// hardcode the 120M for the moment...
-    pub fn load_from_huggingface() -> Result<(ProteinTokenizer, Self)> {
+    pub fn load_from_huggingface(device: Device) -> Result<(ProteinTokenizer, Self)> {
         let ampconfig = AMPLIFYConfig::amp_120m();
         let model_id = "chandar-lab/AMPLIFY_120M";
         let revision = "main";
@@ -496,8 +497,9 @@ impl AMPLIFY {
         let weights_path = repo
             .get("model.safetensors")
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+
         let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
+            VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &device)?
         };
         let config = AMPLIFYConfig::amp_120m();
         let model = AMPLIFY::load(vb, &config)?;
