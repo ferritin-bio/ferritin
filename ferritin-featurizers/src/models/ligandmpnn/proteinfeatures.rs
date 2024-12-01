@@ -300,21 +300,13 @@ impl PositionalEncodings {
         let inverse_mask = (mask * -1.0)? + 1.0; // (1-mask)
         let extra_term = inverse_mask? * ((2.0 * max_rel) + 1.0);
         let d = (masked_d + extra_term?)?;
-        // Convert to integers for one_hot
-        // let d = d.to_dtype(DType::U32)?;
-        //
-        // Todo: confirms this is correct.
-        // Better to move this upsteam
+
+        // Todo: confirms this is correct: we are converting the mask
         // Normalize the values by subtracting 97 (ASCII 'a') to make them 0-based
         // let d_normalized = (d - 97u32)?; // This will make 'a'=0, 'b'=1, etc.
         let offset_val = Tensor::full(97u32, d.dims(), d.device());
         let d_normalized = (d - offset_val)?;
-        // println!("After normalization:");
-        let d_cpu = d_normalized.to_device(&Device::Cpu)?;
-        // let d_vec = d_cpu.to_vec3::<u32>()?;
-        // one_hot with correct depth using candle_nn::encoding::one_hot
         let depth = (2 * self.max_relative_feature + 2) as i64;
-        // let d_onehot = one_hot(d, depth as usize, 1f32, 0f32)?;
         let d_onehot = one_hot(d_normalized, depth as usize, 1f32, 0f32)?;
         let d_onehot_float = d_onehot.to_dtype(DType::F32)?;
         self.linear.forward(&d_onehot_float)
