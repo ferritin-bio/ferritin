@@ -229,6 +229,9 @@ name = "anyhow"
 version = "1.0.93"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c95c10ba0b00a02636238b814946408b1322d5ac4760326e6fb8ec956d85775"
+dependencies = [
+ "backtrace",
+]
 
 [[package]]
 name = "approx"
@@ -1552,6 +1555,28 @@ dependencies = [
 [[package]]
 name = "candle-core"
 version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e61e6a12c4b0660f105c11cbce42a5b33a392e73caaf465261b24210878fbe0e"
+dependencies = [
+ "byteorder",
+ "gemm",
+ "half",
+ "memmap2",
+ "num-traits",
+ "num_cpus",
+ "rand",
+ "rand_distr",
+ "rayon",
+ "safetensors",
+ "thiserror",
+ "ug",
+ "yoke",
+ "zip",
+]
+
+[[package]]
+name = "candle-core"
+version = "0.8.0"
 source = "git+https://github.com/zachcp/candle.git?branch=20241201-SA#5e648c32dee876e2fcf1afd06255392a6ba741e3"
 dependencies = [
  "byteorder",
@@ -1571,6 +1596,27 @@ dependencies = [
  "ug-metal",
  "yoke",
  "zip",
+]
+
+[[package]]
+name = "candle-examples"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39960a56b3faf88bb018c984e393766e3126016116ceef8817568624d89cb610"
+dependencies = [
+ "anyhow",
+ "candle-core 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "candle-hf-hub",
+ "candle-nn 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "candle-transformers 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "csv",
+ "image",
+ "num-traits",
+ "rayon",
+ "safetensors",
+ "serde",
+ "serde_json",
+ "tokenizers 0.19.1",
 ]
 
 [[package]]
@@ -1608,9 +1654,24 @@ dependencies = [
 [[package]]
 name = "candle-nn"
 version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2032a3a41999801c5997ee7896ce816c361c49988435dedb7830634293c0798e"
+dependencies = [
+ "candle-core 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "half",
+ "num-traits",
+ "rayon",
+ "safetensors",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "candle-nn"
+version = "0.8.0"
 source = "git+https://github.com/zachcp/candle.git?branch=20241201-SA#5e648c32dee876e2fcf1afd06255392a6ba741e3"
 dependencies = [
- "candle-core",
+ "candle-core 0.8.0 (git+https://github.com/zachcp/candle.git?branch=20241201-SA)",
  "candle-metal-kernels",
  "half",
  "metal 0.27.0",
@@ -1624,11 +1685,30 @@ dependencies = [
 [[package]]
 name = "candle-transformers"
 version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b88bf4dbf13c3fa0a51624e4a2bf4db1d97596bbefd471424892a0b852013b7c"
+dependencies = [
+ "byteorder",
+ "candle-core 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "candle-nn 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "fancy-regex",
+ "num-traits",
+ "rand",
+ "rayon",
+ "serde",
+ "serde_json",
+ "serde_plain",
+ "tracing",
+]
+
+[[package]]
+name = "candle-transformers"
+version = "0.8.0"
 source = "git+https://github.com/zachcp/candle.git?branch=20241201-SA#5e648c32dee876e2fcf1afd06255392a6ba741e3"
 dependencies = [
  "byteorder",
- "candle-core",
- "candle-nn",
+ "candle-core 0.8.0 (git+https://github.com/zachcp/candle.git?branch=20241201-SA)",
+ "candle-nn 0.8.0 (git+https://github.com/zachcp/candle.git?branch=20241201-SA)",
  "fancy-regex",
  "num-traits",
  "rand",
@@ -2023,6 +2103,27 @@ name = "crunchy"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
+
+[[package]]
+name = "csv"
+version = "1.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "acdc4883a9c96732e4733212c01447ebd805833b7275a73ca3ee080fd77afdaf"
+dependencies = [
+ "csv-core",
+ "itoa",
+ "ryu",
+ "serde",
+]
+
+[[package]]
+name = "csv-core"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5efa2b3d7902f4b634a20cae3c9c4e6209dc4779feb6863329607560143efa70"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "ctrlc"
@@ -2465,11 +2566,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
- "candle-core",
+ "candle-core 0.8.0 (git+https://github.com/zachcp/candle.git?branch=20241201-SA)",
+ "candle-examples",
  "candle-hf-hub",
  "candle-metal-kernels",
- "candle-nn",
- "candle-transformers",
+ "candle-nn 0.8.0 (git+https://github.com/zachcp/candle.git?branch=20241201-SA)",
+ "candle-transformers 0.8.0 (git+https://github.com/zachcp/candle.git?branch=20241201-SA)",
  "clap",
  "ferritin-core",
  "ferritin-test-data",
@@ -2479,7 +2581,7 @@ dependencies = [
  "safetensors",
  "strum",
  "tempfile",
- "tokenizers",
+ "tokenizers 0.21.0",
 ]
 
 [[package]]
@@ -3556,6 +3658,8 @@ dependencies = [
  "byteorder-lite",
  "num-traits",
  "png",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -5893,6 +5997,37 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokenizers"
+version = "0.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e500fad1dd3af3d626327e6a3fe5050e664a6eaa4708b8ca92f1794aaf73e6fd"
+dependencies = [
+ "aho-corasick",
+ "derive_builder",
+ "esaxx-rs",
+ "getrandom",
+ "itertools 0.12.1",
+ "lazy_static",
+ "log",
+ "macro_rules_attribute",
+ "monostate",
+ "onig",
+ "paste",
+ "rand",
+ "rayon",
+ "rayon-cond",
+ "regex",
+ "regex-syntax 0.8.5",
+ "serde",
+ "serde_json",
+ "spm_precompiled",
+ "thiserror",
+ "unicode-normalization-alignments",
+ "unicode-segmentation",
+ "unicode_categories",
+]
+
+[[package]]
+name = "tokenizers"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ecededfed68a69bc657e486510089e255e53c3d38cc7d4d59c8742668ca2cae"
@@ -7247,4 +7382,19 @@ dependencies = [
  "indexmap",
  "num_enum",
  "thiserror",
+]
+
+[[package]]
+name = "zune-core"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f423a2c17029964870cfaabb1f13dfab7d092a62a29a89264f4d36990ca414a"
+
+[[package]]
+name = "zune-jpeg"
+version = "0.4.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16099418600b4d8f028622f73ff6e3deaabdff330fb9a2a131dea781ee8b0768"
+dependencies = [
+ "zune-core",
 ]

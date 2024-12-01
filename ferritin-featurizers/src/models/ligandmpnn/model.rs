@@ -352,26 +352,22 @@ impl ProteinMPNN {
         for i in 0..config.num_decoder_layers {
             decoder_layers.push(DecLayer::load(vb.pp("decoder_layers"), config, i as i32)?);
         }
-
         // Weights
         let w_e = linear::linear(
             config.edge_features as usize,
             config.hidden_dim as usize,
             vb.pp("W_e"),
         )?;
-
         let w_out = linear::linear(
             config.hidden_dim as usize,
             config.num_letters as usize,
             vb.pp("W_out"),
         )?;
-
         let w_s = embedding(
             config.vocab as usize,
             config.hidden_dim as usize,
             vb.pp("W_s"),
         )?;
-
         // Features
         let features = ProteinFeaturesModel::load(vb.pp("features"), config.clone())?;
 
@@ -417,9 +413,9 @@ impl ProteinMPNN {
                 let mut h_e = self.w_e.forward(&e)?;
 
                 let mask_attend = if let Some(mask) = features.get_sequence_mask() {
-                    // First unsqueeze mask
                     let mask_expanded = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
-                                                                    // Gather using E_idx
+
+                    // Gather using E_idx
                     let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?;
                     let mask_gathered = mask_gathered.squeeze(D::Minus1)?;
                     // Multiply original mask with gathered mask

@@ -70,6 +70,7 @@ impl MPNNExecConfig {
         let default_dtype = DType::F32;
 
         // this is a hidden dep....
+        // todo: use hf_hub
         let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
         let pth = PthTensors::new(mpnn_file, Some("model_state_dict"))?;
         let vb = VarBuilder::from_backend(Box::new(pth), default_dtype, self.device.clone());
@@ -87,18 +88,12 @@ impl MPNNExecConfig {
         let (pdb, _) = pdbtbx::open(self.protein_inputs.clone()).expect("A PDB  or CIF file");
         let ac = AtomCollection::from(&pdb);
 
-        // aa -> int
         // let s = ac.encode_amino_acids(&device)?;
         let s = ac
             .encode_amino_acids(&device)
             .expect("A complete convertion to locations");
-        // println!("This is the encoded sequences S: {:?}", s);
 
-        // protein -> coords. Note update
-        // todo: choose based on model type
-        // println!("Getting the 37 atom coords...");
         let x_37 = ac.to_numeric_atom37(&device)?;
-        // println!("This is the encoded 37 atom coords: {:?}", x_37.dims());
 
         // Note: default to 1!
         let x_37_mask = Tensor::ones((x_37.dim(0)?, x_37.dim(1)?), base_dtype, &device)?;
