@@ -6,6 +6,7 @@ use assert_cmd::Command;
 use ferritin_test_data::TestFile;
 use std::path::Path;
 use tempfile;
+
 #[test]
 fn test_cli_command_run_example_01() {
     let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
@@ -20,7 +21,8 @@ fn test_cli_command_run_example_01() {
         .arg("--model-type")
         .arg("protein_mpnn")
         .arg("--out-folder")
-        .arg(&out_folder);
+        .arg("./outputs/default");
+    // .arg(&out_folder);
 
     let assert = cmd.assert().success();
     println!("Successful command....");

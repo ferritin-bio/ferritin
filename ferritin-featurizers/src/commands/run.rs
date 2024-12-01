@@ -60,7 +60,6 @@ pub fn execute(
     println!("About to Load the model!");
     let model = exec.load_model()?;
     println!("Model Loaded!");
-    println!("Model Loaded on the {:?}", model.device);
 
     println!("Generating Protein Features");
     let prot_features = exec.generate_protein_features()?;
@@ -68,10 +67,12 @@ pub fn execute(
 
     // Create the output folders
     println!("Creating the Outputs");
+    println!("out_folder: {}", out_folder);
     std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
     std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
     std::fs::create_dir_all(format!("{}/packed", out_folder))?;
 
+    println!("out_folder: {}", out_folder);
     // Score a Protein!
     // println!("Scoring the Protein...");
     // let model_score = model.score(&prot_features, false);
@@ -79,9 +80,9 @@ pub fn execute(
 
     // Sample from the Model!
     // Note: sampling from the model
-    println!("Sampling from the Model...");
-    let model_sample = model.sample(&prot_features);
-    println!("{:?}", model_sample);
+    // println!("Sampling from the Model...");
+    // let model_sample = model.sample(&prot_features);
+    // println!("{:?}", model_sample);
 
     // model.score() -> Result<ScoreOutput>
 
