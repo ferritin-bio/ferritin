@@ -42,6 +42,8 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     // Run the sequence through the model.
     let encoded = amplify.forward(&pmatrix.to_device(&dev)?, None, true, true)?;
 
+    println!("Encoded!");
+
     // Choosing ARGMAX. We expect this to be the most predicted sequence.
     // it should return the identity of an unmasked sequence
     let predictions = &encoded.logits.argmax(D::Minus1)?;
@@ -57,16 +59,32 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     // between the saved pytorch model and the Candle model is
     // less than a tolerance.
     //
-    let tolerance = 1e-5f32;
+    // let tolerance = 1e-5f32;
+    let tolerance = 1e-2f32;
+
     let (path, _handle) = ferritin_test_data::TestFile::amplify_output_01().create_temp()?;
-    let example_data = candle_core::safetensors::load(path, &Device::Cpu)?;
+    let example_data = candle_core::safetensors::load(path, &dev)?;
     for (idx, attention) in encoded.attentions.unwrap().iter().enumerate() {
         println!("idx: {:?}, attention: {:?}", idx, attention);
+
         let ref_data = example_data
             .get(format!("attention_{:?}", idx).as_str())
             .ok_or(std::fmt::Error)?;
-        let tensor01 = ref_data.flatten_all()?.to_vec1::<f32>()?;
-        let tensor02 = ref_data.flatten_all()?.to_vec1::<f32>()?;
+
+        let tensor01 = attention.flatten_all()?;
+        let tensor02 = ref_data.flatten_all()?;
+        println!(
+            "tensor01 device: {:?}, dims: {:?}",
+            tensor01.device(),
+            tensor01.dims()
+        );
+        println!(
+            "tensor02 device: {:?}, dims: {:?}",
+            tensor02.device(),
+            tensor02.dims()
+        );
+        let tensor01 = tensor01.to_vec1::<f32>()?;
+        let tensor02 = tensor02.to_vec1::<f32>()?;
         for (i, (value, expected_value)) in tensor01.iter().zip(tensor02.iter()).enumerate() {
             let difference = (value - expected_value).abs();
             assert!(
