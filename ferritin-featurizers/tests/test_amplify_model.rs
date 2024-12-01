@@ -59,12 +59,12 @@ fn test_amplify_full_model() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// Todo: Issue here.
 #[test]
 #[ignore = "downloads large model weights (>100MB) from HuggingFace"]
 fn test_amplify_against_reference() -> Result<(), Box<dyn std::error::Error>> {
     let tolerance = 1e-5f32;
     // let tolerance = 1e-2f32;
-
     let (path, _handle) = ferritin_test_data::TestFile::amplify_output_01().create_temp()?;
     let example_data = candle_core::safetensors::load(path, &Device::Cpu)?;
     let (tokenizer, amplify) = AMPLIFY::load_from_huggingface(Device::Cpu)?;
