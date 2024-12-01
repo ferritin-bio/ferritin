@@ -1,8 +1,4 @@
-//
-// cargo flamegraph --bin ferritin-featurizers -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
-// cargo instruments -t time --bin ferritin-featurizers -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
 use assert_cmd::Command;
-use candle_examples::device;
 use ferritin_test_data::TestFile;
 use std::path::Path;
 use tempfile;
@@ -29,33 +25,4 @@ fn test_cli_command_featurize() {
 
     assert!(outpath.exists());
     assert!(outpath.metadata().unwrap().len() > 0);
-}
-
-// #[ignore]
-#[test]
-fn test_cli_command_run_example_01() {
-    // see: https://github.com/dauparas/LigandMPNN/blob/main/run_examples.sh
-    let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
-    let out_folder = tempfile::tempdir().unwrap().into_path();
-    let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
-
-    cmd.arg("run")
-        .arg("--seed")
-        .arg("111")
-        .arg("--pdb-path")
-        .arg(pdbfile)
-        .arg("--model-type")
-        .arg("protein_mpnn")
-        .arg("--out-folder")
-        .arg(&out_folder);
-
-    // Actually execute the command and verify success
-    // and test that the file is of non-zero-size
-    let assert = cmd.assert().success();
-
-    println!("Successful command....");
-    assert!(out_folder.exists());
-
-    // Print the output from the assertion
-    println!("Output: {:?}", assert.get_output());
 }
