@@ -311,7 +311,7 @@ impl PositionalEncodings {
         let d_normalized = (d - offset_val)?;
         // println!("After normalization:");
         let d_cpu = d_normalized.to_device(&Device::Cpu)?;
-        let d_vec = d_cpu.to_vec3::<u32>()?;
+        // let d_vec = d_cpu.to_vec3::<u32>()?;
         // one_hot with correct depth using candle_nn::encoding::one_hot
         let depth = (2 * self.max_relative_feature + 2) as i64;
         // let d_onehot = one_hot(d, depth as usize, 1f32, 0f32)?;
