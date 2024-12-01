@@ -8,18 +8,22 @@ description.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
+
+candle-metal-kernels = { git = "https://github.com/zachcp/candle.git", package = "candle-metal-kernels", branch = "20241201-SA" }
+candle-core = { git = "https://github.com/zachcp/candle.git", package = "candle-core", features = [
     "metal",
-] }
+], branch = "20241201-SA" }
+
 # candle-core = { version = "0.8", features = ["metal"] }
 candle-hf-hub = "0.3.3"
+
 # candle-nn = { version = "0.8", features = ["metal"] }
-candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", features = [
+candle-nn = { git = "https://github.com/zachcp/candle.git", package = "candle-nn", features = [
     "metal",
-] }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", features = [
+], branch = "20241201-SA" }
+candle-transformers = { git = "https://github.com/zachcp/candle.git", package = "candle-transformers", features = [
     "metal",
-] }
+], branch = "20241201-SA" }
 # candle-transformers = "0.8.0"
 clap = "4.5.21"
 ferritin-core = { path = "../ferritin-core" }

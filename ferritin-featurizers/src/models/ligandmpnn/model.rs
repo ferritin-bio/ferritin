@@ -534,16 +534,10 @@ impl ProteinMPNN {
         let symmetry_residues: Option<Vec<i32>> = None;
         match symmetry_residues {
             None => {
-                println!("Metal 05");
                 let e_idx = e_idx.repeat(&[b, 1, 1])?;
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1f32, 0f32)?
                     .to_dtype(sample_dtype)?
                     .contiguous()?;
-
-                println!(
-                    "permutation_matrix_reverse {:?}",
-                    permutation_matrix_reverse.dims(),
-                );
                 let tril = Tensor::tril2(l, sample_dtype, device)?;
                 let tril = tril.unsqueeze(0)?;
                 let temp = tril
@@ -555,60 +549,44 @@ impl ProteinMPNN {
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
-                println!("Metal 06");
                 let mask_1d = x_mask.as_ref().unwrap().reshape((b, l, 1, 1))?;
-                println!("Metal 07");
                 // Broadcast mask_1d to match mask_attend's shape
                 let mask_1d = mask_1d
                     .broadcast_as(mask_attend.shape())?
                     .to_dtype(sample_dtype)?;
-
-                println!("Metal 08");
                 let mask_bw = mask_1d.mul(&mask_attend)?;
-                println!("Metal 09");
                 let mask_fw = mask_1d.mul(&(Tensor::ones_like(&mask_attend)? - mask_attend)?)?;
-                println!("Metal 010");
 
                 // Note: `sample` begins to diverge from the `score` here.
                 // repeat for decoding
                 let s_true = s_true.repeat((b, 1))?;
                 let h_v = h_v.repeat((b, 1, 1))?;
                 let h_e = h_e.repeat((b, 1, 1, 1))?;
-                println!("Metal 011");
                 let mask = x_mask.as_ref().unwrap().repeat((b, 1))?.contiguous()?;
                 let chain_mask = &chain_mask.repeat((b, 1))?;
                 let bias = bias.repeat((b, 1, 1))?;
-                println!("Metal 012");
                 let mut all_probs = Tensor::zeros((b, l, 20), sample_dtype, device)?;
                 let mut all_log_probs = Tensor::zeros((b, l, 21), sample_dtype, device)?; // why is this one 21 and the others are 20?
-                println!("Metal 013");
                 let mut h_s = Tensor::zeros_like(&h_v)?;
                 let s = (Tensor::ones((b, l), DType::U32, device)? * 20.)?;
                 let mut h_v_stack = vec![h_v.clone()];
 
-                println!("Metal 14");
                 for i in 0..self.decoder_layers.len() {
                     let zeros = Tensor::zeros_like(&h_v)?;
                     h_v_stack.push(zeros);
                 }
-                println!("Metal 15");
                 let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
                 let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
-                println!("Metal 16");
                 let mask_fw = mask_fw
                     .broadcast_as(h_exv_encoder.shape())?
                     .to_dtype(h_exv_encoder.dtype())?;
-                println!("Metal 17");
                 let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
-                println!("Metal 18");
 
                 for t_ in 0..l {
-                    println!("T 00");
                     let t = decoding_order.i((.., t_))?;
                     let t_gather = t.unsqueeze(1)?; // Shape [B, 1]
 
                     // Gather masks and bias
-                    println!("T 01");
                     let chain_mask_t = chain_mask.gather(&t_gather, 1)?.squeeze(1)?;
                     let mask_t = mask.gather(&t_gather, 1)?.squeeze(1)?.contiguous()?;
                     let bias_t = bias
@@ -616,7 +594,6 @@ impl ProteinMPNN {
                         .squeeze(1)?;
 
                     // Gather edge and node indices/features
-                    println!("T 02");
                     let e_idx_t = e_idx
                         .gather(
                             &t_gather
@@ -626,7 +603,6 @@ impl ProteinMPNN {
                             1,
                         )?
                         .contiguous()?;
-                    println!("T 03");
                     let h_e_t = h_e.gather(
                         &t_gather
                             .unsqueeze(2)?
@@ -635,27 +611,19 @@ impl ProteinMPNN {
                             .contiguous()?,
                         1,
                     )?;
-                    println!("T 04");
                     let b = h_s.dim(0)?; // batch size
                     let l = h_s.dim(1)?; // sequence length
                     let n = e_idx_t.dim(2)?; // number of neighbors
                     let c = h_s.dim(2)?; // channels/features
-
-                    println!("T 05");
                     let h_e_t = h_e_t
                         .squeeze(1)? // [B, N, C]
                         .unsqueeze(1)? // [B, 1, N, C]
                         .expand((b, l, n, c))? // [B, L, N, C]
                         .contiguous()?;
-
-                    println!("T 06");
                     let e_idx_t = e_idx_t
                         .expand((b, l, n))? // [B, L, N]
                         .contiguous()?;
-
-                    println!("T 07");
                     let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
-                    println!("T 08");
                     let h_exv_encoder_t = h_exv_encoder_fw.gather(
                         &t_gather
                             .unsqueeze(2)?
@@ -664,7 +632,6 @@ impl ProteinMPNN {
                             .contiguous()?,
                         1,
                     )?;
-                    println!("T 09");
                     let mask_bw_t = mask_bw.gather(
                         &t_gather
                             .unsqueeze(2)?
@@ -770,19 +737,11 @@ impl ProteinMPNN {
                         &Tensor::zeros_like(&h_s_update)?,
                         1,
                     )?;
-                    println!("DEC 12");
                     h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
                     let zero_mask = t_gather.zeros_like()?.to_dtype(DType::U32)?;
-                    println!("DEC 13");
-                    println!("s dtype: {:?}", s.dtype());
-                    println!("t_gather dtype: {:?}", t_gather.dtype());
-                    println!("zero_mask dtype: {:?}", zero_mask.dtype());
                     let s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                    println!("DEC 14");
                     let s_t = s_t.to_dtype(DType::U32)?;
-                    println!("DEC 15");
                     let s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
-                    println!("DEC 16");
                     let probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
@@ -795,7 +754,6 @@ impl ProteinMPNN {
                     all_probs =
                         all_probs.index_add(&t_expanded, &Tensor::zeros_like(&probs_update)?, 1)?;
                     all_probs = all_probs.index_add(&t_expanded, &probs_update, 1)?;
-
                     let log_probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
