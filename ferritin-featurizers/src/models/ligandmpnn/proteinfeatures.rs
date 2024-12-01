@@ -249,29 +249,15 @@ impl ProteinFeaturesModel {
             - &chain_labels.unsqueeze(1)?.broadcast_as(target_shape)?)?
             .eq(0.0)?
             .to_dtype(DType::U32)?;
-
         // E_chains = gather_edges(d_chains[:, :, :, None], E_idx)[:, :, :, 0]
         let e_chains = gather_edges(&d_chains.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
-        println!("About to start the embeddings calculation...");
-        println!(
-            "Offset dims: {:?}, dtype: {:?}",
-            offset.dims(),
-            offset.dtype()
-        );
-        println!(
-            "e_chains dims: {:?}, dtype: {:?}",
-            e_chains.dims(),
-            e_chains.dtype()
-        );
         let e_positional = self
             .embeddings
             .forward(&offset.to_dtype(DType::U32)?, &e_chains)?;
-
         println!("About to cat the pos embeddings...");
         let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
         let e = self.edge_embedding.forward(&e)?;
         println!("About to start the normalization...");
-
         let e = self.norm_edges.forward(&e)?;
         Ok((e, e_idx))
     }
