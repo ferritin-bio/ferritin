@@ -39,10 +39,11 @@ pub fn int_to_aa1(aa_int: u32) -> char {
         9 => 'L', 10 => 'M', 11 => 'N',
         12 => 'P', 13 => 'Q', 14 => 'R',
         15 => 'S', 16 => 'T', 17 => 'V',
-        18 => 'W', 19 => 'Y', _ => 'X',
+        18 => 'W', 19 => 'Y', 20 => 'X',
+        _ => 'X'
+
     }
 }
-
 
 pub fn cat_neighbors_nodes(
     h_nodes: &Tensor,

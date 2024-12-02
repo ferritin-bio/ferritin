@@ -595,7 +595,8 @@ impl ProteinMPNN {
                 let mut all_probs = Tensor::zeros((b, l, 20), sample_dtype, device)?;
                 let mut all_log_probs = Tensor::zeros((b, l, 21), sample_dtype, device)?; // why is this one 21 and the others are 20?
                 let mut h_s = Tensor::zeros_like(&h_v)?;
-                let mut s = (Tensor::ones((b, l), DType::U32, device)? * 20.)?;
+                // let mut s = (Tensor::ones((b, l), DType::U32, device)? * 20.)?;
+                let mut s = Tensor::ones((b, l), DType::U32, device)?;
                 let mut h_v_stack = vec![h_v.clone()];
 
                 for _ in 0..self.decoder_layers.len() {
@@ -752,7 +753,7 @@ impl ProteinMPNN {
                         normalized
                     };
                     let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
-                    println!("Sampled index: {:?}", s_t.to_vec0::<u32>()?);
+                    // println!("Sampled index: {:?}", s_t.to_vec0::<u32>()?);
 
                     // todo: move this upstream
                     let s_t = s_t.to_dtype(sample_dtype)?;
@@ -791,9 +792,9 @@ impl ProteinMPNN {
                         zero_mask.to_vec2::<u32>()?
                     );
                     println!(
-                        "s_t shape: {:?}, values: {:?}",
+                        "s_t shape: {:?}, values: ",
                         s_t.dims(),
-                        s_t.to_vec0::<u32>()?
+                        // s_t.to_vec0::<u32>()?
                     );
 
                     s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
