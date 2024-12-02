@@ -6,39 +6,41 @@ authors.workspace = true
 license.workspace = true
 description.workspace = true
 
+[target.'cfg(target_os = "macos")'.features]
+default = ["metal"]
+
+
+# Metal-enabled dependencies when feature is active
+[target.'cfg(feature = "metal")'.dependencies]
+candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", features = [
+    "metal",
+] }
+candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
+    "metal",
+] }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", features = [
+    "metal",
+] }
+candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels" }
+
 [dependencies]
 anyhow.workspace = true
-
-candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
-#candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels" }
 candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core" }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
-# candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
-#     "metal",
-# ] }
-# candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", features = [
-#     "metal",
-# ] }
-# candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", features = [
-#     "metal",
-# ] }
-# candle-core = { version = "0.8", features = ["metal"] }
-# # candle-nn = { version = "0.8", features = ["metal"] }
 candle-hf-hub = "0.3.3"
-# candle-transformers = "0.8.0"
+candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
 clap = "4.5.21"
 ferritin-core = { path = "../ferritin-core" }
+ferritin-test-data = { path = "../ferritin-test-data" }
 itertools.workspace = true
 pdbtbx.workspace = true
 rand = "0.8.5"
 safetensors = "0.4.5"
 strum = { version = "0.26", features = ["derive"] }
 tokenizers = "0.21.0"
-ferritin-test-data = { path = "../ferritin-test-data" }
-candle-examples = "0.8.0"
-
 
 [dev-dependencies]
+candle-examples = { git = "https://github.com/huggingface/candle.git", package = "candle-examples" }
 ferritin-test-data = { path = "../ferritin-test-data" }
 assert_cmd = "2.0.16"
 tempfile = "3.14.0"

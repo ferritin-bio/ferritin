@@ -34,3 +34,6 @@ license = "MIT OR Apache-2.0"
 # Disabling debug info speeds up builds a bunch,
 # and we don't rely on it for debugging that much.
 debug = 0
+
+[workspace.features]
+metal = []
