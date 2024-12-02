@@ -25,22 +25,17 @@ pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result
         Some(temperature), // temperature scaling
         None,              // top_p (nucleus sampling), we don't need this
     );
-
-    // Sample from the probabilities
     let idx = logits_processor.sample(probs)?;
-
-    // Convert to tensor
     Tensor::new(&[idx], probs.device())
 }
-
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
 pub struct ScoreOutput {
     // Sequence
-    s: Tensor,
-    log_probs: Tensor,
-    logits: Tensor,
-    decoding_order: Tensor,
+    pub(crate) s: Tensor,
+    pub(crate) log_probs: Tensor,
+    pub(crate) logits: Tensor,
+    pub(crate) decoding_order: Tensor,
 }
 
 #[derive(Clone, Debug)]

@@ -22,7 +22,6 @@ fn test_cli_command_run_example_01() {
         .arg("protein_mpnn")
         .arg("--out-folder")
         .arg("./outputs/default");
-    // .arg(&out_folder);
 
     let assert = cmd.assert().success();
     println!("Successful command....");

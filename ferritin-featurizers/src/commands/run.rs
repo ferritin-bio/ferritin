@@ -57,7 +57,6 @@ pub fn execute(
         Some(multi_pdb_config),
     )?;
 
-    println!("About to Load the model!");
     let model = exec.load_model()?;
     println!("Model Loaded!");
 
@@ -67,7 +66,7 @@ pub fn execute(
 
     // Create the output folders
     println!("Creating the Outputs");
-    println!("out_folder: {}", out_folder);
+    // println!("out_folder: {}", out_folder);
     std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
     std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
     std::fs::create_dir_all(format!("{}/packed", out_folder))?;
@@ -75,16 +74,20 @@ pub fn execute(
     // Score a Protein!
     println!("Scoring the Protein...");
     let model_score = model.score(&prot_features, false)?;
-    println!("{:?}", model_score);
-
-    let fasta_string = exec.create_fasta_string(model_score);
-    println!("OUTPUT FASTA: {:?}", fasta_string);
+    println!("Protein Score: {:?}", model_score);
 
     // Sample from the Model!
     // Note: sampling from the model
     // println!("Sampling from the Model...");
     // let model_sample = model.sample(&prot_features);
     // println!("{:?}", model_sample);
+
+    // let fasta_string = exec.create_fasta_string(model_score);
+    // println!("OUTPUT FASTA: {:?}", fasta_string);
+
+    assert_eq!(true, false);
+    // prot_features
+    // generate_protein_features()
 
     // model.score() -> Result<ScoreOutput>
 

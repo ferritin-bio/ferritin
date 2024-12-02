@@ -256,7 +256,17 @@ impl MPNNExecConfig {
         //         )
         //     )
 
-        todo!();
+        // seq = "".join(
+        //     [restype_int_to_str[AA] for AA in S_stack[ix].cpu().numpy()]
+        // )
+        //
+        println!("S: {:?}", score.s);
+        println!("log_probs: {:?}", score.log_probs);
+        println!("logits: {:?}", score.logits);
+        println!("decoding_order: {:?}", score.decoding_order);
+
+        // todo!();
+        Ok("FASTA_STRING".to_string())
     }
 }
 
