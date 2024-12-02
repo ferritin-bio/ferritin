@@ -7,30 +7,22 @@ license.workspace = true
 description.workspace = true
 
 [features]
-metal = []
-
-[target.'cfg(target_os = "macos")'.features]
-default = ["metal"]
-
-
-# Metal-enabled dependencies when feature is active
-[target.'cfg(feature = "metal")'.dependencies]
-candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", features = [
-    "metal",
-] }
-candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
-    "metal",
-] }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", features = [
-    "metal",
-] }
+metal = [
+    "candle-core/metal",         # Enable the 'metal' feature for candle-core
+    "candle-nn/metal",
+    "candle-transformers/metal",
+    "candle-metal-kernels",
+]
 
 [dependencies]
 anyhow.workspace = true
-candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core" }
+
+# Always include candle-core, but conditionally enable its metal feature
+candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
+] } # Default (no features)
 candle-hf-hub = "0.3.3"
-candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
+candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", optional = true }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", optional = true }
 clap = "4.5.21"
 ferritin-core = { path = "../ferritin-core" }
 ferritin-test-data = { path = "../ferritin-test-data" }
@@ -40,6 +32,11 @@ rand = "0.8.5"
 safetensors = "0.4.5"
 strum = { version = "0.26", features = ["derive"] }
 tokenizers = "0.21.0"
+
+# Conditionally include Metal-related dependencies for macOS
+[target.'cfg(target_os = "macos")'.dependencies]
+candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels", optional = true }
+
 
 [dev-dependencies]
 candle-examples = { git = "https://github.com/huggingface/candle.git", package = "candle-examples" }
