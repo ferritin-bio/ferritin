@@ -19,10 +19,10 @@ anyhow.workspace = true
 
 # Always include candle-core, but conditionally enable its metal feature
 candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
-] } # Default (no features)
+] }
 candle-hf-hub = "0.3.3"
-candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", optional = true }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", optional = true }
+candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
 clap = "4.5.21"
 ferritin-core = { path = "../ferritin-core" }
 ferritin-test-data = { path = "../ferritin-test-data" }
