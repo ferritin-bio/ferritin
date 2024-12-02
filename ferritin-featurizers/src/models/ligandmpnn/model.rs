@@ -593,10 +593,13 @@ impl ProteinMPNN {
                 let chain_mask = &chain_mask.repeat((b, 1))?;
                 let bias = bias.repeat((b, 1, 1))?;
                 let mut all_probs = Tensor::zeros((b, l, 20), sample_dtype, device)?;
-                let mut all_log_probs = Tensor::zeros((b, l, 21), sample_dtype, device)?; // why is this one 21 and the others are 20?
+
+                // why is this one 21 and the others are 20?
+                let mut all_log_probs = Tensor::zeros((b, l, 21), sample_dtype, device)?;
                 let mut h_s = Tensor::zeros_like(&h_v)?;
-                // let mut s = (Tensor::ones((b, l), DType::U32, device)? * 20.)?;
-                let mut s = Tensor::ones((b, l), DType::U32, device)?;
+
+                // note: we this value of 20 is `X`. We will need to replace the values below, not add them
+                let mut s = Tensor::full(20u32, (b, l), device)?;
                 let mut h_v_stack = vec![h_v.clone()];
 
                 for _ in 0..self.decoder_layers.len() {
@@ -738,10 +741,6 @@ impl ProteinMPNN {
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
-
-                    // let (values, indices) = probs.topk(3, D::Minus1, true, true)?;
-                    // println!("Top 3 probs: {:?} at indices: {:?}", values, indices);
-
                     // Sample new token
                     let probs_sample_1d = {
                         let sum = probs_sample.sum(1)?;
@@ -752,55 +751,38 @@ impl ProteinMPNN {
                         let normalized = normalized.contiguous()?;
                         normalized
                     };
-                    let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
-                    // println!("Sampled index: {:?}", s_t.to_vec0::<u32>()?);
-
-                    // todo: move this upstream
-                    let s_t = s_t.to_dtype(sample_dtype)?;
+                    let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?
+                        .to_dtype(sample_dtype)?;
                     let s_true = s_true.to_dtype(sample_dtype)?;
                     let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
                     let s_t = s_t
                         .mul(&chain_mask_t)?
                         .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?
                         .to_dtype(DType::U32)?;
+
                     let s_t_idx = s_t.to_dtype(DType::U32)?;
-                    // Ensure s_t_idx is 1D before passing to w_s
                     let s_t_idx = s_t_idx.reshape(&[s_t_idx.dim(0)?])?;
                     let h_s_update = self.w_s.forward(&s_t_idx)?.unsqueeze(1)?;
-                    // Instead of expanding t_gather, reshape it to 1D
-                    let t_gather_expanded = t_gather.reshape(&[b])?; // Shape: [1]
-                    let h_s_update = h_s_update
-                        .squeeze(0)? // Remove any extra dimensions
-                        .unsqueeze(1)?; // Add back the sequence dimension to match h_s rank
-                    h_s = h_s.index_add(
-                        &t_gather_expanded, // Shape: [1]
-                        &Tensor::zeros_like(&h_s_update)?,
-                        1,
-                    )?;
+                    let t_gather_expanded = t_gather.reshape(&[b])?;
+                    let h_s_update = h_s_update.squeeze(0)?.unsqueeze(1)?;
+                    h_s =
+                        h_s.index_add(&t_gather_expanded, &Tensor::zeros_like(&h_s_update)?, 1)?;
                     h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
-                    let zero_mask = t_gather.zeros_like()?.to_dtype(DType::U32)?;
+                    println!("Here 06");
 
-                    // Before scatter operations
-                    println!(
-                        "Before scatter - s shape: {:?}, dtype: {:?}",
-                        s.dims(),
-                        s.dtype()
-                    );
-                    println!(
-                        "zero_mask shape: {:?}, values: {:?}",
-                        zero_mask.dims(),
-                        zero_mask.to_vec2::<u32>()?
-                    );
-                    println!(
-                        "s_t shape: {:?}, values: ",
-                        s_t.dims(),
-                        // s_t.to_vec0::<u32>()?
-                    );
+                    s = {
+                        // let zero_mask = t_gather.zeros_like()?.to_dtype(DType::U32)?;
+                        // let t_idx = t_gather.to_vec0::<i64>()?; // Get the position to update
 
-                    s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                    s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
-
-                    println!("After scatter - s values: {:?}", s.to_vec2::<u32>()?);
+                        let dim = 1;
+                        // println!("t_gather shape: {:?}", t_gather.dims());
+                        // let start = t_gather.to_vec0::<u32>()? as usize;
+                        let start = t_gather.squeeze(0)?.squeeze(0)?.to_scalar::<u32>()? as usize;
+                        let s_t_expanded = s_t.unsqueeze(1)?;
+                        s.slice_scatter(&s_t_expanded, dim, start)?
+                        // s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                        // s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
+                    };
 
                     let probs_update = chain_mask_t
                         .unsqueeze(1)?
