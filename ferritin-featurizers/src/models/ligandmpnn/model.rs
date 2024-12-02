@@ -556,6 +556,7 @@ impl ProteinMPNN {
 
         // Todo! Fix this hack.
         println!("todo: move temp and seed upstream");
+        // let temperature = 0.5f64;
         let temperature = 0.05f64;
         let seed = 111;
         let symmetry_residues: Option<Vec<i32>> = None;
@@ -751,8 +752,8 @@ impl ProteinMPNN {
                         let normalized = normalized.contiguous()?;
                         normalized
                     };
-                    let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?
-                        .to_dtype(sample_dtype)?;
+                    let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
+                    let s_t = s_t.to_dtype(sample_dtype)?;
                     let s_true = s_true.to_dtype(sample_dtype)?;
                     let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
                     let s_t = s_t
@@ -768,48 +769,81 @@ impl ProteinMPNN {
                     h_s =
                         h_s.index_add(&t_gather_expanded, &Tensor::zeros_like(&h_s_update)?, 1)?;
                     h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
-                    println!("Here 06");
 
+                    let zero_mask = t_gather.zeros_like()?.to_dtype(DType::U32)?;
+
+                    println!("Here Before S:");
                     s = {
-                        // let zero_mask = t_gather.zeros_like()?.to_dtype(DType::U32)?;
                         // let t_idx = t_gather.to_vec0::<i64>()?; // Get the position to update
-                        let dim = 1;
                         // println!("t_gather shape: {:?}", t_gather.dims());
                         // let start = t_gather.to_vec0::<u32>()? as usize;
+                        // s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                        // s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
+                        let dim = 1;
                         let start = t_gather.squeeze(0)?.squeeze(0)?.to_scalar::<u32>()? as usize;
                         let s_t_expanded = s_t.unsqueeze(1)?;
                         s.slice_scatter(&s_t_expanded, dim, start)?
-                        // s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                        // s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
                     };
+                    println!("Here After S:");
 
                     let probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
                         .expand((b, 1, 20))?
                         .mul(&probs_sample.unsqueeze(1)?)?;
-                    let t_expanded = t_gather.reshape(&[b])?; // Shape: [1]
-                    let probs_update = probs_update.unsqueeze(1)?;
+                    println!("probs_update shape after mul: {:?}", probs_update.dims());
+
+                    println!("Hello 00");
+                    println!("Initial probs_update shape: {:?}", probs_update.dims());
+                    let probs_update = chain_mask_t
+                        .unsqueeze(1)?
+                        .unsqueeze(2)?
+                        .expand((b, 1, 20))?
+                        .mul(&probs_sample.unsqueeze(1)?)?;
+                    let t_expanded = t_gather.reshape(&[b])?;
+
+                    // let t_expanded = t_gather
+                    //     .reshape(&[b])?
+                    //     .unsqueeze(1)?
+                    //     .unsqueeze(2)?
+                    //     .expand((b, 1, 20))?;
+
+                    // let t_expanded = t_expanded.to_dtype(DType::I64)?;
+                    // let max_dim = all_probs.dim(1)? as i64 - 1;
+                    // println!("max_dim: {}", max_dim);
+
+                    // let t_expanded = t_expanded.clamp(0_i64, max_dim)?;
+
+                    let probs_update = probs_update
+                        .squeeze(1)? // Remove extra dimension
+                        .unsqueeze(1)?;
                     all_probs =
                         all_probs.index_add(&t_expanded, &Tensor::zeros_like(&probs_update)?, 1)?;
+                    println!("Hello 00 02 ");
                     all_probs = all_probs.index_add(&t_expanded, &probs_update, 1)?;
+
+                    println!("Hello 00 03");
                     let log_probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
                         .expand((b, 1, 21))?
                         .mul(&log_probs.unsqueeze(1)?)?;
 
+                    println!("Hello 01");
                     // Reshape log_probs_update to match all_log_probs rank
                     let log_probs_update = log_probs_update.squeeze(1)?.unsqueeze(1)?;
 
+                    println!("Hello 02");
                     all_log_probs = all_log_probs.index_add(
                         &t_expanded,
                         &Tensor::zeros_like(&log_probs_update)?,
                         1,
                     )?;
+                    println!("Hello 03");
                     all_log_probs = all_log_probs.index_add(&t_expanded, &log_probs_update, 1)?;
                 }
 
+                println!("Before Score");
                 Ok(ScoreOutput {
                     s,
                     log_probs: all_probs,
