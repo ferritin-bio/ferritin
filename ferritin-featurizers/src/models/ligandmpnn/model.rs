@@ -183,13 +183,13 @@ impl EncLayer {
         let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?.contiguous()?;
         let h_message = self.w1.forward(&h_ev)?;
-        // let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w1
+        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w1
         let h_message = h_message.gelu()?;
         let h_message = h_message.apply(&self.w2)?;
-        // let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w2
+        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w2
         let h_message = h_message.gelu()?;
         let h_message = h_message.apply(&self.w3)?;
-        // let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w3
+        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w3
 
         let h_message = if let Some(mask) = mask_attend {
             let mask = mask.unsqueeze(D::Minus1)?;
