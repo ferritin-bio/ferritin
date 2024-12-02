@@ -20,8 +20,6 @@ mod tests {
 
         let assert = Command::cargo_bin("ferritin-featurizers")
             .unwrap()
-            .env("CARGO_FEATURE_METAL", "1")
-            .args(["--features", "metal"])
             .arg("run")
             .arg("--seed")
             .arg("111")

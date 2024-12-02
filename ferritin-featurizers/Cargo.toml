@@ -8,7 +8,7 @@ description.workspace = true
 
 [features]
 metal = [
-    "candle-core/metal",         # Enable the 'metal' feature for candle-core
+    "candle-core/metal",
     "candle-nn/metal",
     "candle-transformers/metal",
     "candle-metal-kernels",
@@ -16,8 +16,6 @@ metal = [
 
 [dependencies]
 anyhow.workspace = true
-
-# Always include candle-core, but conditionally enable its metal feature
 candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
 ] }
 candle-hf-hub = "0.3.3"
@@ -33,6 +31,9 @@ safetensors = "0.4.5"
 strum = { version = "0.26", features = ["derive"] }
 tokenizers = "0.21.0"
 
+[target.'cfg(target_os = "macos")'.features]
+metal = []
+
 # Conditionally include Metal-related dependencies for macOS
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels", optional = true }
@@ -43,4 +44,3 @@ candle-examples = { git = "https://github.com/huggingface/candle.git", package =
 ferritin-test-data = { path = "../ferritin-test-data" }
 assert_cmd = "2.0.16"
 tempfile = "3.14.0"
-candle-hf-hub = "0.3.3"
