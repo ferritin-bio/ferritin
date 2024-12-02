@@ -66,7 +66,6 @@ pub fn execute(
 
     // Create the output folders
     println!("Creating the Outputs");
-    // println!("out_folder: {}", out_folder);
     std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
     std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
     std::fs::create_dir_all(format!("{}/packed", out_folder))?;
@@ -82,6 +81,8 @@ pub fn execute(
     std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
     let sequences = model_sample.get_sequences()?;
     println!("OUTPUT FASTA: {:?}", sequences);
+
+    println!("DECODING ORDER: {:?}", model_sample.get_decoding_order()?);
 
     let fasta_path = format!("{}/seqs/output.fasta", out_folder);
 

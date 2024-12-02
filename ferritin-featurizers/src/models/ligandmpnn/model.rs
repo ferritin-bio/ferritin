@@ -46,11 +46,30 @@ impl ScoreOutput {
             let mut sequence = String::with_capacity(l);
             for pos in 0..l {
                 let aa_idx = self.s.get(batch_idx)?.get(pos)?.to_vec0::<u32>()?;
+                println!("AA_IDX: {:?}", aa_idx);
                 sequence.push(int_to_aa1(aa_idx));
             }
             sequences.push(sequence);
         }
         Ok(sequences)
+    }
+    pub fn get_decoding_order(&self) -> Result<Vec<String>> {
+        println!(
+            "Decoding order:{:?}",
+            self.decoding_order.flatten_all()?.to_vec1::<f32>()?
+        );
+        // let (b, l) = self.s.dims2()?;
+        // let mut sequences = Vec::with_capacity(b);
+        // for batch_idx in 0..b {
+        //     let mut sequence = String::with_capacity(l);
+        //     for pos in 0..l {
+        //         let aa_idx = self.s.get(batch_idx)?.get(pos)?.to_vec0::<u32>()?;
+        //         println!("AA_IDX: {:?}", aa_idx);
+        //         sequence.push(int_to_aa1(aa_idx));
+        //     }
+        //     sequences.push(sequence);
+        // }
+        Ok(vec!["String".to_string()])
     }
 }
 
@@ -164,13 +183,13 @@ impl EncLayer {
         let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?.contiguous()?;
         let h_message = self.w1.forward(&h_ev)?;
-        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w1
+        // let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w1
         let h_message = h_message.gelu()?;
         let h_message = h_message.apply(&self.w2)?;
-        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w2
+        // let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w2
         let h_message = h_message.gelu()?;
         let h_message = h_message.apply(&self.w3)?;
-        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w3
+        // let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w3
 
         let h_message = if let Some(mask) = mask_attend {
             let mask = mask.unsqueeze(D::Minus1)?;
