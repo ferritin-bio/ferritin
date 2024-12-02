@@ -6,6 +6,10 @@ authors.workspace = true
 license.workspace = true
 description.workspace = true
 
+[features]
+metal = []
+
+
 [target.'cfg(target_os = "macos")'.features]
 default = ["metal"]
 
