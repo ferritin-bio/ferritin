@@ -11,7 +11,7 @@
 use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::featurizer::ProteinFeatures;
 use super::proteinfeatures::ProteinFeaturesModel;
-use super::utilities::{cat_neighbors_nodes, gather_nodes};
+use super::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
 use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
