@@ -53,23 +53,9 @@ impl ScoreOutput {
         }
         Ok(sequences)
     }
-    pub fn get_decoding_order(&self) -> Result<Vec<String>> {
-        println!(
-            "Decoding order:{:?}",
-            self.decoding_order.flatten_all()?.to_vec1::<f32>()?
-        );
-        // let (b, l) = self.s.dims2()?;
-        // let mut sequences = Vec::with_capacity(b);
-        // for batch_idx in 0..b {
-        //     let mut sequence = String::with_capacity(l);
-        //     for pos in 0..l {
-        //         let aa_idx = self.s.get(batch_idx)?.get(pos)?.to_vec0::<u32>()?;
-        //         println!("AA_IDX: {:?}", aa_idx);
-        //         sequence.push(int_to_aa1(aa_idx));
-        //     }
-        //     sequences.push(sequence);
-        // }
-        Ok(vec!["String".to_string()])
+    pub fn get_decoding_order(&self) -> Result<Vec<u32>> {
+        let values = self.decoding_order.flatten_all()?.to_vec1::<u32>()?;
+        Ok(values)
     }
 }
 
