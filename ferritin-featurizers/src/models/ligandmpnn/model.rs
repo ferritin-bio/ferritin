@@ -11,7 +11,7 @@
 use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::featurizer::ProteinFeatures;
 use super::proteinfeatures::ProteinFeaturesModel;
-use super::utilities::{cat_neighbors_nodes, gather_nodes};
+use super::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
 use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
@@ -36,6 +36,15 @@ pub struct ScoreOutput {
     pub(crate) log_probs: Tensor,
     pub(crate) logits: Tensor,
     pub(crate) decoding_order: Tensor,
+}
+impl ScoreOutput {
+    // S dims are [Batch, seqlength]
+    pub fn get_sequences(&self) {
+        // S_stack = torch.cat(S_list, 0)
+        // S_list.append(output_dict["S"])
+        //
+        todo!()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -559,7 +568,7 @@ impl ProteinMPNN {
                 let mut all_probs = Tensor::zeros((b, l, 20), sample_dtype, device)?;
                 let mut all_log_probs = Tensor::zeros((b, l, 21), sample_dtype, device)?; // why is this one 21 and the others are 20?
                 let mut h_s = Tensor::zeros_like(&h_v)?;
-                let s = (Tensor::ones((b, l), DType::U32, device)? * 20.)?;
+                let mut s = (Tensor::ones((b, l), DType::U32, device)? * 20.)?;
                 let mut h_v_stack = vec![h_v.clone()];
 
                 for i in 0..self.decoder_layers.len() {
@@ -713,7 +722,8 @@ impl ProteinMPNN {
                     let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
                     let s_t = s_t
                         .mul(&chain_mask_t)?
-                        .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?;
+                        .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?
+                        .to_dtype(DType::U32)?;
                     let s_t_idx = s_t.to_dtype(DType::U32)?;
                     // Ensure s_t_idx is 1D before passing to w_s
                     let s_t_idx = s_t_idx.reshape(&[s_t_idx.dim(0)?])?;
@@ -730,9 +740,8 @@ impl ProteinMPNN {
                     )?;
                     h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
                     let zero_mask = t_gather.zeros_like()?.to_dtype(DType::U32)?;
-                    let s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                    let s_t = s_t.to_dtype(DType::U32)?;
-                    let s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
+                    s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
                     let probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
@@ -1159,7 +1168,6 @@ impl ProteinMPNN {
                 let order_mask_backward = temp
                     .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
                     .contiguous()?; // shape (b, q, p)
-                println!("Hello 02");
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;

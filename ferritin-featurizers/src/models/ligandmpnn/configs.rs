@@ -17,6 +17,7 @@ use super::featurizer::ProteinFeatures;
 use super::model::ProteinMPNN;
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
 use crate::models::ligandmpnn::model::ScoreOutput;
+use crate::models::ligandmpnn::utilities::aa1to_int;
 use anyhow::Error;
 use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device, Tensor};
@@ -265,6 +266,10 @@ impl MPNNExecConfig {
         println!("log_probs: {:?}", score.log_probs);
         println!("logits: {:?}", score.logits);
         println!("decoding_order: {:?}", score.decoding_order);
+
+        // seq = "".join(
+        //     [restype_int_to_str[AA] for AA in S_stack[ix].cpu().numpy()]
+        // )
 
         // todo!();
         Ok("FASTA_STRING".to_string())
