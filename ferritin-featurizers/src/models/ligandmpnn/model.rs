@@ -43,7 +43,7 @@ pub struct ScoreOutput {
     pub(crate) decoding_order: Tensor,
 }
 impl ScoreOutput {
-// S dims are [Batch, seqlength]
+    // S dims are [Batch, seqlength]
     pub fn get_sequences(&self) -> Result<Vec<String>> {
         let (b, l) = self.s.dims2()?;
         let mut sequences = Vec::with_capacity(b);
@@ -727,14 +727,14 @@ impl ProteinMPNN {
                         let normalized = normalized.contiguous()?;
                         normalized
                     };
-                    let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
-                    // todo: move this upstream
-                    let s_t = s_t.to_dtype(DType::U32)?;
+                    let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?
+                        .to_dtype(DType::U32)?;
                     let s_true = s_true.to_dtype(sample_dtype)?;
                     let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
                     let s_t = s_t
                         .mul(&chain_mask_t)?
-                        .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?;
+                        .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?
+                        .to_dtype(DType::U32)?;
                     let s_t_idx = s_t.to_dtype(DType::U32)?;
                     // Ensure s_t_idx is 1D before passing to w_s
                     let s_t_idx = s_t_idx.reshape(&[s_t_idx.dim(0)?])?;
@@ -1169,10 +1169,14 @@ impl ProteinMPNN {
             }
             None => {
                 let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
-                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
+                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1f32, 0f32)?
+                    .to_dtype(sample_dtype)?
+                    .contiguous()?;
                 let tril = Tensor::tril2(l, sample_dtype, device)?;
                 let tril = tril.unsqueeze(0)?;
-                let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, i, q)
+                let temp = tril
+                    .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
+                    .contiguous()?; // shape (b, i, q)
                 let order_mask_backward =
                     temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, q, p)
                 let mask_attend = order_mask_backward

@@ -13,6 +13,11 @@ fn test_cli_command_run_example_01() {
     let out_folder = tempfile::tempdir().unwrap().into_path();
     let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
 
+    // delete it present
+    if Path::new("./outputs/default").exists() {
+        std::fs::remove_dir_all("./outputs/default").unwrap();
+    }
+
     cmd.arg("run")
         .arg("--seed")
         .arg("111")
