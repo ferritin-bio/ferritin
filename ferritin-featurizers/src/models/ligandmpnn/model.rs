@@ -25,18 +25,13 @@ pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result
         Some(temperature), // temperature scaling
         None,              // top_p (nucleus sampling), we don't need this
     );
-
-    // Sample from the probabilities
     let idx = logits_processor.sample(probs)?;
-
-    // Convert to tensor
     Tensor::new(&[idx], probs.device())
 }
-
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
 pub struct ScoreOutput {
-    /// Sequence
+    // Sequence
     pub(crate) s: Tensor,
     pub(crate) log_probs: Tensor,
     pub(crate) logits: Tensor,
@@ -623,8 +618,6 @@ impl ProteinMPNN {
                             .contiguous()?,
                         1,
                     )?;
-                    let b = h_s.dim(0)?; // batch size
-                    let l = h_s.dim(1)?; // sequence length
                     let n = e_idx_t.dim(2)?; // number of neighbors
                     let c = h_s.dim(2)?; // channels/features
                     let h_e_t = h_e_t
@@ -718,8 +711,7 @@ impl ProteinMPNN {
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
                     // Sample new token
                     let probs_sample_1d = {
-                        // Get sum first
-                        let sum = probs_sample.sum(1)?; // Sum across probabilities dimension
+                        let sum = probs_sample.sum(1)?;
                         let normalized = probs_sample
                             .squeeze(0)? // Remove batch dimension -> [20]
                             .clamp(1e-10, 1.0)?;
@@ -727,8 +719,9 @@ impl ProteinMPNN {
                         let normalized = normalized.contiguous()?;
                         normalized
                     };
-                    let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?
-                        .to_dtype(DType::U32)?;
+                    let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
+                    // todo: move this upstream
+                    let s_t = s_t.to_dtype(sample_dtype)?;
                     let s_true = s_true.to_dtype(sample_dtype)?;
                     let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
                     let s_t = s_t
@@ -1100,7 +1093,6 @@ impl ProteinMPNN {
         // encode ...
         let (h_v, h_e, e_idx) = self.encode(features)?;
         let rand_tensor = Tensor::randn(0f32, 1f32, (b, l), device)?.to_dtype(sample_dtype)?;
-
         // Compute decoding order
         let decoding_order = (chain_mask + 0.001)?
             .mul(&rand_tensor.abs()?)?
@@ -1177,8 +1169,9 @@ impl ProteinMPNN {
                 let temp = tril
                     .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
                     .contiguous()?; // shape (b, i, q)
-                let order_mask_backward =
-                    temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, q, p)
+                let order_mask_backward = temp
+                    .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
+                    .contiguous()?; // shape (b, q, p)
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;

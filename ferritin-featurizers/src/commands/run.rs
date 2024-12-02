@@ -84,6 +84,7 @@ pub fn execute(
     println!("OUTPUT FASTA: {:?}", sequences);
 
     let fasta_path = format!("{}/seqs/output.fasta", out_folder);
+
     let mut fasta_content = String::new();
     for (i, seq) in sequences.iter().enumerate() {
         fasta_content.push_str(&format!(">sequence_{}\n{}\n", i + 1, seq));
