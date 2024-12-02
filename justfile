@@ -32,6 +32,9 @@ upgrade:
     cargo upgrade
 
 
+test2:
+    cargo test --features metal -p ferritin-featurizers test_cli_command_run_example_01
+
 test:
     cargo test
 
