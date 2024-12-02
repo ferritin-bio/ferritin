@@ -44,20 +44,20 @@ pub struct ScoreOutput {
 }
 impl ScoreOutput {
 // S dims are [Batch, seqlength]
-pub fn get_sequences(&self) -> Result<Vec<String>> {
-    let (b, l) = self.s.dims2()?;
-    let mut sequences = Vec::with_capacity(b);
-    for batch_idx in 0..b {
-        let mut sequence = String::with_capacity(l);
-        for pos in 0..l {
-            let aa_idx = self.s.get(batch_idx)?.get(pos)?.to_vec0::<u32>()?;
-            sequence.push(int_to_aa1(aa_idx));
+    pub fn get_sequences(&self) -> Result<Vec<String>> {
+        let (b, l) = self.s.dims2()?;
+        let mut sequences = Vec::with_capacity(b);
+        for batch_idx in 0..b {
+            let mut sequence = String::with_capacity(l);
+            for pos in 0..l {
+                let aa_idx = self.s.get(batch_idx)?.get(pos)?.to_vec0::<u32>()?;
+                sequence.push(int_to_aa1(aa_idx));
+            }
+            sequences.push(sequence);
         }
-        sequences.push(sequence);
+        Ok(sequences)
     }
-    Ok(sequences)
 }
-
 
 #[derive(Clone, Debug)]
 struct PositionWiseFeedForward {
