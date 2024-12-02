@@ -2,23 +2,28 @@
 //
 // cargo flamegraph --bin ferritin-featurizers -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
 // cargo instruments -t time --bin ferritin-featurizers -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
+use assert_cmd::cargo::CommandCargoExt;
 use assert_cmd::Command;
 use ferritin_test_data::TestFile;
 use std::path::Path;
 use tempfile;
 
+#[cfg(target_os = "macos")]
 #[test]
 fn test_cli_command_run_example_01() {
     let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
     let out_folder = tempfile::tempdir().unwrap().into_path();
-    let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
 
-    // delete it present
+    // delete outdir if  present
     if Path::new("./outputs/default").exists() {
         std::fs::remove_dir_all("./outputs/default").unwrap();
     }
 
-    cmd.arg("run")
+    let assert = Command::cargo_bin("ferritin-featurizers")
+        .unwrap()
+        .env("CARGO_FEATURE_METAL", "1")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .arg("run")
         .arg("--seed")
         .arg("111")
         .arg("--pdb-path")
@@ -26,9 +31,10 @@ fn test_cli_command_run_example_01() {
         .arg("--model-type")
         .arg("protein_mpnn")
         .arg("--out-folder")
-        .arg("./outputs/default");
+        .arg("./outputs/default")
+        .assert()
+        .success();
 
-    let assert = cmd.assert().success();
     println!("Successful command....");
     assert!(out_folder.exists());
     println!("Output: {:?}", assert.get_output());
