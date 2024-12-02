@@ -4,7 +4,7 @@ description: "Model updates and Metal Implementation"
 author: "Zachary Charlop-Powers"
 date: "2024-12-02"
 categories: [rust, ai, proteins]
-image: "images/amp1.png"
+image: "images/metal_pre.png"
 ---
 
 
