@@ -773,7 +773,6 @@ impl ProteinMPNN {
                     s = {
                         // let zero_mask = t_gather.zeros_like()?.to_dtype(DType::U32)?;
                         // let t_idx = t_gather.to_vec0::<i64>()?; // Get the position to update
-
                         let dim = 1;
                         // println!("t_gather shape: {:?}", t_gather.dims());
                         // let start = t_gather.to_vec0::<u32>()? as usize;
@@ -790,9 +789,7 @@ impl ProteinMPNN {
                         .expand((b, 1, 20))?
                         .mul(&probs_sample.unsqueeze(1)?)?;
                     let t_expanded = t_gather.reshape(&[b])?; // Shape: [1]
-                    let probs_update = probs_update
-                        .squeeze(1)? // Remove extra dimension
-                        .unsqueeze(1)?; // Add back sequence dimension to match all_probs rank
+                    let probs_update = probs_update.unsqueeze(1)?;
                     all_probs =
                         all_probs.index_add(&t_expanded, &Tensor::zeros_like(&probs_update)?, 1)?;
                     all_probs = all_probs.index_add(&t_expanded, &probs_update, 1)?;
