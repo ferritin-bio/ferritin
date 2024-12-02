@@ -729,29 +729,18 @@ impl ProteinMPNN {
                         .squeeze(1)?;
                     // Generate logits and probabilities
                     let logits = self.w_out.forward(&h_v_t)?;
-                    println!("Logits shape: {:?}", logits.dims());
-                    println!(
-                        "Logits max/min: {:?}, {:?}",
-                        logits.max(D::Minus1)?,
-                        logits.min(D::Minus1)?
-                    );
-
                     let log_probs = log_softmax(&logits, D::Minus1)?;
                     let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
-
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
                     // Sample new token
-                    let probs_sample_1d = {
-                        let normalized = probs_sample
-                            .squeeze(0)? // Remove batch dimension -> [20]
-                            .clamp(1e-10, 1.0)?;
-                        let sum = probs_sample.sum(1)?;
-                        let normalized = normalized.broadcast_div(&sum)?;
-                        let normalized = normalized.contiguous()?;
-                        normalized
-                    };
+                    let sum = probs_sample.sum(1)?;
+                    let probs_sample_1d = probs_sample
+                        .squeeze(0)? // Remove batch dimension -> [20]
+                        .clamp(1e-10, 1.0)?
+                        .broadcast_div(&sum)?
+                        .contiguous()?;
                     let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
                     let s_t = s_t.to_dtype(sample_dtype)?;
                     let s_true = s_true.to_dtype(sample_dtype)?;
