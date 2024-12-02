@@ -1580,11 +1580,9 @@ version = "0.8.0"
 source = "git+https://github.com/huggingface/candle.git#6f715f92564c10426c5565cd30ece25aee8d72ac"
 dependencies = [
  "byteorder",
- "candle-metal-kernels",
  "gemm",
  "half",
  "memmap2",
- "metal 0.27.0",
  "num-traits",
  "num_cpus",
  "rand",
@@ -1593,7 +1591,6 @@ dependencies = [
  "safetensors",
  "thiserror",
  "ug",
- "ug-metal",
  "yoke",
  "zip",
 ]
@@ -1672,9 +1669,7 @@ version = "0.8.0"
 source = "git+https://github.com/huggingface/candle.git#6f715f92564c10426c5565cd30ece25aee8d72ac"
 dependencies = [
  "candle-core 0.8.0 (git+https://github.com/huggingface/candle.git)",
- "candle-metal-kernels",
  "half",
- "metal 0.27.0",
  "num-traits",
  "rayon",
  "safetensors",
@@ -6274,21 +6269,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
-]
-
-[[package]]
-name = "ug-metal"
-version = "0.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e4ed1df2c20a1a138f993041f650cc84ff27aaefb4342b7f986e77d00e80799"
-dependencies = [
- "half",
- "metal 0.29.0",
- "objc",
- "serde",
- "serde_json",
- "thiserror",
- "ug",
 ]
 
 [[package]]
