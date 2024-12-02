@@ -34,10 +34,8 @@ tokenizers = "0.21.0"
 [target.'cfg(target_os = "macos")'.features]
 metal = []
 
-# Conditionally include Metal-related dependencies for macOS
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels", optional = true }
-
 
 [dev-dependencies]
 candle-examples = { git = "https://github.com/huggingface/candle.git", package = "candle-examples" }
