@@ -8,6 +8,7 @@ mod tests {
     use tempfile;
 
     #[test]
+    #[cfg(feature = "metal")]
     fn test_cli_command_run_example_01() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
@@ -40,6 +41,7 @@ mod tests {
 
     #[test]
     #[ignore]
+
     fn test_cli_command_run_example_02() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();

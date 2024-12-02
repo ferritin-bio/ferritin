@@ -9,7 +9,6 @@ description.workspace = true
 [features]
 metal = []
 
-
 [target.'cfg(target_os = "macos")'.features]
 default = ["metal"]
 
@@ -25,7 +24,6 @@ candle-core = { git = "https://github.com/huggingface/candle.git", package = "ca
 candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", features = [
     "metal",
 ] }
-candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels" }
 
 [dependencies]
 anyhow.workspace = true
