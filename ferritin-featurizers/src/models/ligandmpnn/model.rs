@@ -39,11 +39,18 @@ pub struct ScoreOutput {
 }
 impl ScoreOutput {
     // S dims are [Batch, seqlength]
-    pub fn get_sequences(&self) {
-        // S_stack = torch.cat(S_list, 0)
-        // S_list.append(output_dict["S"])
-        //
-        todo!()
+    pub fn get_sequences(&self) -> Result<Vec<String>> {
+        let (b, l) = self.s.dims2()?;
+        let mut sequences = Vec::with_capacity(b);
+        for batch_idx in 0..b {
+            let mut sequence = String::with_capacity(l);
+            for pos in 0..l {
+                let aa_idx = self.s.get(batch_idx)?.get(pos)?.to_vec0::<u32>()?;
+                sequence.push(int_to_aa1(aa_idx));
+            }
+            sequences.push(sequence);
+        }
+        Ok(sequences)
     }
 }
 
@@ -571,7 +578,7 @@ impl ProteinMPNN {
                 let mut s = (Tensor::ones((b, l), DType::U32, device)? * 20.)?;
                 let mut h_v_stack = vec![h_v.clone()];
 
-                for i in 0..self.decoder_layers.len() {
+                for _ in 0..self.decoder_layers.len() {
                     let zeros = Tensor::zeros_like(&h_v)?;
                     h_v_stack.push(zeros);
                 }
@@ -611,8 +618,6 @@ impl ProteinMPNN {
                             .contiguous()?,
                         1,
                     )?;
-                    let b = h_s.dim(0)?; // batch size
-                    let l = h_s.dim(1)?; // sequence length
                     let n = e_idx_t.dim(2)?; // number of neighbors
                     let c = h_s.dim(2)?; // channels/features
                     let h_e_t = h_e_t
@@ -706,8 +711,7 @@ impl ProteinMPNN {
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
                     // Sample new token
                     let probs_sample_1d = {
-                        // Get sum first
-                        let sum = probs_sample.sum(1)?; // Sum across probabilities dimension
+                        let sum = probs_sample.sum(1)?;
                         let normalized = probs_sample
                             .squeeze(0)? // Remove batch dimension -> [20]
                             .clamp(1e-10, 1.0)?;

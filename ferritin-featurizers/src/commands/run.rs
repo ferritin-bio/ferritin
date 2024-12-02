@@ -79,10 +79,16 @@ pub fn execute(
     // println!("Scoring the Protein...");
     // let model_score = model.score(&prot_features, false)?;
     // println!("Protein Score: {:?}", model_score);
+    std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
+    let sequences = model_sample.get_sequences()?;
+    println!("OUTPUT FASTA: {:?}", sequences);
 
-    let fasta_string = exec.create_fasta_string(model_sample);
-
-    println!("OUTPUT FASTA: {:?}", fasta_string);
+    let fasta_path = format!("{}/seqs/output.fasta", out_folder);
+    let mut fasta_content = String::new();
+    for (i, seq) in sequences.iter().enumerate() {
+        fasta_content.push_str(&format!(">sequence_{}\n{}\n", i + 1, seq));
+    }
+    std::fs::write(fasta_path, fasta_content)?;
 
     // Sample from the Model!
     // Note: sampling from the model
