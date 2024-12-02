@@ -36,12 +36,28 @@ pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
 pub struct ScoreOutput {
-    // Sequence
-    s: Tensor,
-    log_probs: Tensor,
-    logits: Tensor,
-    decoding_order: Tensor,
+    /// Sequence
+    pub(crate) s: Tensor,
+    pub(crate) log_probs: Tensor,
+    pub(crate) logits: Tensor,
+    pub(crate) decoding_order: Tensor,
 }
+impl ScoreOutput {
+// S dims are [Batch, seqlength]
+pub fn get_sequences(&self) -> Result<Vec<String>> {
+    let (b, l) = self.s.dims2()?;
+    let mut sequences = Vec::with_capacity(b);
+    for batch_idx in 0..b {
+        let mut sequence = String::with_capacity(l);
+        for pos in 0..l {
+            let aa_idx = self.s.get(batch_idx)?.get(pos)?.to_vec0::<u32>()?;
+            sequence.push(int_to_aa1(aa_idx));
+        }
+        sequences.push(sequence);
+    }
+    Ok(sequences)
+}
+
 
 #[derive(Clone, Debug)]
 struct PositionWiseFeedForward {
