@@ -25,7 +25,12 @@ pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result
         Some(temperature), // temperature scaling
         None,              // top_p (nucleus sampling), we don't need this
     );
+
     let idx = logits_processor.sample(probs)?;
+    println!("Selected index: {}", idx);
+    if idx >= 21 {
+        println!("WARNING: Invalid index {} selected", idx);
+    }
     Tensor::new(&[idx], probs.device())
 }
 // Primary Return Object from the ProtMPNN Model
@@ -41,13 +46,23 @@ impl ScoreOutput {
     // S dims are [Batch, seqlength]
     pub fn get_sequences(&self) -> Result<Vec<String>> {
         let (b, l) = self.s.dims2()?;
+
+        println!(
+            "Output tensor shape: {:?}, dtype: {:?}",
+            self.s.dims(),
+            self.s.dtype()
+        );
+        println!("Full tensor values: {:?}", self.s.to_vec2::<u32>()?);
+
         let mut sequences = Vec::with_capacity(b);
         for batch_idx in 0..b {
             let mut sequence = String::with_capacity(l);
             for pos in 0..l {
                 let aa_idx = self.s.get(batch_idx)?.get(pos)?.to_vec0::<u32>()?;
-                println!("AA_IDX: {:?}", aa_idx);
-                sequence.push(int_to_aa1(aa_idx));
+                println!("Position {}, Raw index: {}", pos, aa_idx);
+                let aa = int_to_aa1(aa_idx);
+                println!("Converted to: {}", aa);
+                sequence.push(aa);
             }
             sequences.push(sequence);
         }
@@ -709,11 +724,23 @@ impl ProteinMPNN {
                         .squeeze(1)?;
                     // Generate logits and probabilities
                     let logits = self.w_out.forward(&h_v_t)?;
+                    println!("Logits shape: {:?}", logits.dims());
+                    println!(
+                        "Logits max/min: {:?}, {:?}",
+                        logits.max(D::Minus1)?,
+                        logits.min(D::Minus1)?
+                    );
+
                     let log_probs = log_softmax(&logits, D::Minus1)?;
                     let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
+
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
+
+                    // let (values, indices) = probs.topk(3, D::Minus1, true, true)?;
+                    // println!("Top 3 probs: {:?} at indices: {:?}", values, indices);
+
                     // Sample new token
                     let probs_sample_1d = {
                         let sum = probs_sample.sum(1)?;
@@ -725,6 +752,8 @@ impl ProteinMPNN {
                         normalized
                     };
                     let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
+                    println!("Sampled index: {:?}", s_t.to_vec0::<u32>()?);
+
                     // todo: move this upstream
                     let s_t = s_t.to_dtype(sample_dtype)?;
                     let s_true = s_true.to_dtype(sample_dtype)?;
@@ -749,8 +778,29 @@ impl ProteinMPNN {
                     )?;
                     h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
                     let zero_mask = t_gather.zeros_like()?.to_dtype(DType::U32)?;
+
+                    // Before scatter operations
+                    println!(
+                        "Before scatter - s shape: {:?}, dtype: {:?}",
+                        s.dims(),
+                        s.dtype()
+                    );
+                    println!(
+                        "zero_mask shape: {:?}, values: {:?}",
+                        zero_mask.dims(),
+                        zero_mask.to_vec2::<u32>()?
+                    );
+                    println!(
+                        "s_t shape: {:?}, values: {:?}",
+                        s_t.dims(),
+                        s_t.to_vec0::<u32>()?
+                    );
+
                     s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
                     s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
+
+                    println!("After scatter - s values: {:?}", s.to_vec2::<u32>()?);
+
                     let probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
