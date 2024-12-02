@@ -25,21 +25,22 @@ candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", pack
 
 [dependencies]
 anyhow.workspace = true
-candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
 candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core" }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
 candle-hf-hub = "0.3.3"
+candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
 clap = "4.5.21"
 ferritin-core = { path = "../ferritin-core" }
+ferritin-test-data = { path = "../ferritin-test-data" }
 itertools.workspace = true
 pdbtbx.workspace = true
 rand = "0.8.5"
 safetensors = "0.4.5"
 strum = { version = "0.26", features = ["derive"] }
 tokenizers = "0.21.0"
-ferritin-test-data = { path = "../ferritin-test-data" }
 
 [dev-dependencies]
+candle-examples = { git = "https://github.com/huggingface/candle.git", package = "candle-examples" }
 ferritin-test-data = { path = "../ferritin-test-data" }
 assert_cmd = "2.0.16"
 tempfile = "3.14.0"

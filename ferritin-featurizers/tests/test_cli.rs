@@ -1,11 +1,12 @@
 //
 // cargo flamegraph --bin ferritin-featurizers -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
 // cargo instruments -t time --bin ferritin-featurizers -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
-use assert_cmd::Command;
-use candle_examples::device;
-use ferritin_test_data::TestFile;
-use std::path::Path;
-use tempfile;
+
+#[cfg(test)]
+use {
+    assert_cmd::Command, candle_examples::device, ferritin_test_data::TestFile, std::path::Path,
+    tempfile,
+};
 
 #[test]
 fn test_cli_command_featurize() {
