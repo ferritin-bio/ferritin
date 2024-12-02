@@ -38,5 +38,5 @@ debug = 0
 [workspace.features]
 metal = []
 
-[target.'cfg(target_os = "macos")'.workspace.features]
+[target.cfg(target_os = "macos")'.workspace.features]
 default = ["metal"]
