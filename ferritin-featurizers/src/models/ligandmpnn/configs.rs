@@ -260,6 +260,7 @@ impl MPNNExecConfig {
         //     [restype_int_to_str[AA] for AA in S_stack[ix].cpu().numpy()]
         // )
         //
+        println!("In the Config....");
         println!("S: {:?}", score.s);
         println!("log_probs: {:?}", score.log_probs);
         println!("logits: {:?}", score.logits);

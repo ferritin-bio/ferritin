@@ -1173,7 +1173,6 @@ impl ProteinMPNN {
                 (mask_fw, mask_bw, e_idx, decoding_order)
             }
         };
-        println!("Hello 03");
         let b_decoder = b_decoder;
         let s_true = s_true.repeat(&[b_decoder, 1])?;
         let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
