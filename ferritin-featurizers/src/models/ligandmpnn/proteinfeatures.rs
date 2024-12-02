@@ -60,8 +60,6 @@ impl ProteinFeaturesModel {
     /// This function calculates the nearest Ca coordinates and returns the distances and indices.
     // Todo: potential refactor
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
-        // println!("in _dist: ");
-        // println!("Tensor dims: x, mask: {:?}, {:?}", x.dims(), mask.dims());
         compute_nearest_neighbors(x, mask, self.top_k, eps as f32)
     }
     fn _rbf(&self, d: &Tensor, device: &Device) -> Result<Tensor> {

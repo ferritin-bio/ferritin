@@ -16,6 +16,7 @@
 use super::featurizer::ProteinFeatures;
 use super::model::ProteinMPNN;
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
+use crate::models::ligandmpnn::model::ScoreOutput;
 use anyhow::Error;
 use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device, Tensor};

@@ -11,7 +11,7 @@
 use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::featurizer::ProteinFeatures;
 use super::proteinfeatures::ProteinFeaturesModel;
-use super::utilities::{cat_neighbors_nodes, gather_nodes};
+use super::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
 use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
@@ -26,21 +26,52 @@ pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result
         None,              // top_p (nucleus sampling), we don't need this
     );
 
-    // Sample from the probabilities
     let idx = logits_processor.sample(probs)?;
-
-    // Convert to tensor
+    println!("Selected index: {}", idx);
+    if idx >= 21 {
+        println!("WARNING: Invalid index {} selected", idx);
+    }
     Tensor::new(&[idx], probs.device())
 }
-
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
 pub struct ScoreOutput {
     // Sequence
-    s: Tensor,
-    log_probs: Tensor,
-    logits: Tensor,
-    decoding_order: Tensor,
+    pub(crate) s: Tensor,
+    pub(crate) log_probs: Tensor,
+    pub(crate) logits: Tensor,
+    pub(crate) decoding_order: Tensor,
+}
+impl ScoreOutput {
+    // S dims are [Batch, seqlength]
+    pub fn get_sequences(&self) -> Result<Vec<String>> {
+        let (b, l) = self.s.dims2()?;
+
+        println!(
+            "Output tensor shape: {:?}, dtype: {:?}",
+            self.s.dims(),
+            self.s.dtype()
+        );
+        println!("Full tensor values: {:?}", self.s.to_vec2::<u32>()?);
+
+        let mut sequences = Vec::with_capacity(b);
+        for batch_idx in 0..b {
+            let mut sequence = String::with_capacity(l);
+            for pos in 0..l {
+                let aa_idx = self.s.get(batch_idx)?.get(pos)?.to_vec0::<u32>()?;
+                println!("Position {}, Raw index: {}", pos, aa_idx);
+                let aa = int_to_aa1(aa_idx);
+                println!("Converted to: {}", aa);
+                sequence.push(aa);
+            }
+            sequences.push(sequence);
+        }
+        Ok(sequences)
+    }
+    pub fn get_decoding_order(&self) -> Result<Vec<u32>> {
+        let values = self.decoding_order.flatten_all()?.to_vec1::<u32>()?;
+        Ok(values)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -525,7 +556,7 @@ impl ProteinMPNN {
 
         // Todo! Fix this hack.
         println!("todo: move temp and seed upstream");
-        let temperature = 1.0f64;
+        let temperature = 0.05f64;
         let seed = 111;
         let symmetry_residues: Option<Vec<i32>> = None;
         match symmetry_residues {
@@ -564,10 +595,11 @@ impl ProteinMPNN {
                 let mut all_probs = Tensor::zeros((b, l, 20), sample_dtype, device)?;
                 let mut all_log_probs = Tensor::zeros((b, l, 21), sample_dtype, device)?; // why is this one 21 and the others are 20?
                 let mut h_s = Tensor::zeros_like(&h_v)?;
-                let s = (Tensor::ones((b, l), DType::U32, device)? * 20.)?;
+                // let mut s = (Tensor::ones((b, l), DType::U32, device)? * 20.)?;
+                let mut s = Tensor::ones((b, l), DType::U32, device)?;
                 let mut h_v_stack = vec![h_v.clone()];
 
-                for i in 0..self.decoder_layers.len() {
+                for _ in 0..self.decoder_layers.len() {
                     let zeros = Tensor::zeros_like(&h_v)?;
                     h_v_stack.push(zeros);
                 }
@@ -607,8 +639,6 @@ impl ProteinMPNN {
                             .contiguous()?,
                         1,
                     )?;
-                    let b = h_s.dim(0)?; // batch size
-                    let l = h_s.dim(1)?; // sequence length
                     let n = e_idx_t.dim(2)?; // number of neighbors
                     let c = h_s.dim(2)?; // channels/features
                     let h_e_t = h_e_t
@@ -695,15 +725,26 @@ impl ProteinMPNN {
                         .squeeze(1)?;
                     // Generate logits and probabilities
                     let logits = self.w_out.forward(&h_v_t)?;
+                    println!("Logits shape: {:?}", logits.dims());
+                    println!(
+                        "Logits max/min: {:?}, {:?}",
+                        logits.max(D::Minus1)?,
+                        logits.min(D::Minus1)?
+                    );
+
                     let log_probs = log_softmax(&logits, D::Minus1)?;
                     let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
+
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
+
+                    // let (values, indices) = probs.topk(3, D::Minus1, true, true)?;
+                    // println!("Top 3 probs: {:?} at indices: {:?}", values, indices);
+
                     // Sample new token
                     let probs_sample_1d = {
-                        // Get sum first
-                        let sum = probs_sample.sum(1)?; // Sum across probabilities dimension
+                        let sum = probs_sample.sum(1)?;
                         let normalized = probs_sample
                             .squeeze(0)? // Remove batch dimension -> [20]
                             .clamp(1e-10, 1.0)?;
@@ -712,13 +753,16 @@ impl ProteinMPNN {
                         normalized
                     };
                     let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
+                    // println!("Sampled index: {:?}", s_t.to_vec0::<u32>()?);
+
                     // todo: move this upstream
                     let s_t = s_t.to_dtype(sample_dtype)?;
                     let s_true = s_true.to_dtype(sample_dtype)?;
                     let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
                     let s_t = s_t
                         .mul(&chain_mask_t)?
-                        .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?;
+                        .add(&s_true_t.mul(&(&chain_mask_t.neg()? + 1.0)?)?)?
+                        .to_dtype(DType::U32)?;
                     let s_t_idx = s_t.to_dtype(DType::U32)?;
                     // Ensure s_t_idx is 1D before passing to w_s
                     let s_t_idx = s_t_idx.reshape(&[s_t_idx.dim(0)?])?;
@@ -735,9 +779,29 @@ impl ProteinMPNN {
                     )?;
                     h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
                     let zero_mask = t_gather.zeros_like()?.to_dtype(DType::U32)?;
-                    let s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                    let s_t = s_t.to_dtype(DType::U32)?;
-                    let s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
+
+                    // Before scatter operations
+                    println!(
+                        "Before scatter - s shape: {:?}, dtype: {:?}",
+                        s.dims(),
+                        s.dtype()
+                    );
+                    println!(
+                        "zero_mask shape: {:?}, values: {:?}",
+                        zero_mask.dims(),
+                        zero_mask.to_vec2::<u32>()?
+                    );
+                    println!(
+                        "s_t shape: {:?}, values: ",
+                        s_t.dims(),
+                        // s_t.to_vec0::<u32>()?
+                    );
+
+                    s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
+
+                    println!("After scatter - s values: {:?}", s.to_vec2::<u32>()?);
+
                     let probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
@@ -1084,8 +1148,7 @@ impl ProteinMPNN {
 
         // encode ...
         let (h_v, h_e, e_idx) = self.encode(features)?;
-        let rand_tensor = Tensor::randn(0., 1., (b, l), device)?.to_dtype(sample_dtype)?;
-
+        let rand_tensor = Tensor::randn(0f32, 1f32, (b, l), device)?.to_dtype(sample_dtype)?;
         // Compute decoding order
         let decoding_order = (chain_mask + 0.001)?
             .mul(&rand_tensor.abs()?)?
@@ -1154,12 +1217,17 @@ impl ProteinMPNN {
             }
             None => {
                 let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
-                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
+                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1f32, 0f32)?
+                    .to_dtype(sample_dtype)?
+                    .contiguous()?;
                 let tril = Tensor::tril2(l, sample_dtype, device)?;
                 let tril = tril.unsqueeze(0)?;
-                let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, i, q)
-                let order_mask_backward =
-                    temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, q, p)
+                let temp = tril
+                    .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
+                    .contiguous()?; // shape (b, i, q)
+                let order_mask_backward = temp
+                    .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
+                    .contiguous()?; // shape (b, q, p)
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;

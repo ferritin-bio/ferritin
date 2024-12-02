@@ -57,10 +57,8 @@ pub fn execute(
         Some(multi_pdb_config),
     )?;
 
-    println!("About to Load the model!");
     let model = exec.load_model()?;
     println!("Model Loaded!");
-    println!("Model Loaded on the {:?}", model.device);
 
     println!("Generating Protein Features");
     let prot_features = exec.generate_protein_features()?;
@@ -72,16 +70,37 @@ pub fn execute(
     std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
     std::fs::create_dir_all(format!("{}/packed", out_folder))?;
 
-    // Score a Protein!
+    println!("Sampling from the Model...");
+    let model_sample = model.sample(&prot_features)?;
+    println!("{:?}", model_sample);
+
+    // // Score a Protein!
     // println!("Scoring the Protein...");
-    // let model_score = model.score(&prot_features, false);
-    // println!("{:?}", model_score);
+    // let model_score = model.score(&prot_features, false)?;
+    // println!("Protein Score: {:?}", model_score);
+    std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
+    let sequences = model_sample.get_sequences()?;
+    println!("OUTPUT FASTA: {:?}", sequences);
+    println!("DECODING ORDER: {:?}", model_sample.get_decoding_order()?);
+
+    let fasta_path = format!("{}/seqs/output.fasta", out_folder);
+
+    let mut fasta_content = String::new();
+    for (i, seq) in sequences.iter().enumerate() {
+        fasta_content.push_str(&format!(">sequence_{}\n{}\n", i + 1, seq));
+    }
+    std::fs::write(fasta_path, fasta_content)?;
 
     // Sample from the Model!
     // Note: sampling from the model
-    println!("Sampling from the Model...");
-    let model_sample = model.sample(&prot_features);
-    println!("{:?}", model_sample);
+    // println!("Sampling from the Model...");
+    // let model_sample = model.sample(&prot_features);
+    // println!("{:?}", model_sample);
+
+    // assert_eq!(true, false);
+
+    // prot_features
+    // generate_protein_features()
 
     // model.score() -> Result<ScoreOutput>
 

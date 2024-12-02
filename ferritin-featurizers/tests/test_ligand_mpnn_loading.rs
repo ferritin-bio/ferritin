@@ -20,7 +20,7 @@ mod tests {
                 tensor_info.dtype,
             );
 
-            println!("    {:?}", tensor_info);
+            println!("   {:?}", tensor_info);
         }
         Ok(())
     }

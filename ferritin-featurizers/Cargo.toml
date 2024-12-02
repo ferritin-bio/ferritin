@@ -6,26 +6,18 @@ authors.workspace = true
 license.workspace = true
 description.workspace = true
 
-[target.'cfg(target_os = "macos")'.features]
-default = ["metal"]
-
-
-# Metal-enabled dependencies when feature is active
-[target.'cfg(feature = "metal")'.dependencies]
-candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", features = [
-    "metal",
-] }
-candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
-    "metal",
-] }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", features = [
-    "metal",
-] }
-candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels" }
+[features]
+metal = [
+    "candle-core/metal",
+    "candle-nn/metal",
+    "candle-transformers/metal",
+    "candle-metal-kernels",
+]
 
 [dependencies]
 anyhow.workspace = true
-candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core" }
+candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
+] }
 candle-hf-hub = "0.3.3"
 candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
 candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
@@ -39,9 +31,14 @@ safetensors = "0.4.5"
 strum = { version = "0.26", features = ["derive"] }
 tokenizers = "0.21.0"
 
+[target.'cfg(target_os = "macos")'.features]
+metal = []
+
+[target.'cfg(target_os = "macos")'.dependencies]
+candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels", optional = true }
+
 [dev-dependencies]
 candle-examples = { git = "https://github.com/huggingface/candle.git", package = "candle-examples" }
 ferritin-test-data = { path = "../ferritin-test-data" }
 assert_cmd = "2.0.16"
 tempfile = "3.14.0"
-candle-hf-hub = "0.3.3"
