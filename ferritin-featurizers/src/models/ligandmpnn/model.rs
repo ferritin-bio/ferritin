@@ -580,10 +580,10 @@ impl ProteinMPNN {
                 let mut all_probs = Tensor::zeros((b, l, 20), sample_dtype, device)?;
                 let mut all_log_probs = Tensor::zeros((b, l, 21), sample_dtype, device)?; // why is this one 21 and the others are 20?
                 let mut h_s = Tensor::zeros_like(&h_v)?;
-                let s = (Tensor::ones((b, l), DType::U32, device)? * 20.)?;
+                let mut s = (Tensor::ones((b, l), DType::U32, device)? * 20.)?;
                 let mut h_v_stack = vec![h_v.clone()];
 
-                for i in 0..self.decoder_layers.len() {
+                for _ in 0..self.decoder_layers.len() {
                     let zeros = Tensor::zeros_like(&h_v)?;
                     h_v_stack.push(zeros);
                 }
@@ -729,7 +729,7 @@ impl ProteinMPNN {
                     };
                     let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
                     // todo: move this upstream
-                    let s_t = s_t.to_dtype(sample_dtype)?;
+                    let s_t = s_t.to_dtype(DType::U32)?;
                     let s_true = s_true.to_dtype(sample_dtype)?;
                     let s_true_t = s_true.gather(&t_gather, 1)?.squeeze(1)?;
                     let s_t = s_t
@@ -751,9 +751,8 @@ impl ProteinMPNN {
                     )?;
                     h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
                     let zero_mask = t_gather.zeros_like()?.to_dtype(DType::U32)?;
-                    let s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                    let s_t = s_t.to_dtype(DType::U32)?;
-                    let s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
+                    s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
+                    s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
                     let probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
@@ -1100,7 +1099,7 @@ impl ProteinMPNN {
 
         // encode ...
         let (h_v, h_e, e_idx) = self.encode(features)?;
-        let rand_tensor = Tensor::randn(0., 1., (b, l), device)?.to_dtype(sample_dtype)?;
+        let rand_tensor = Tensor::randn(0f32, 1f32, (b, l), device)?.to_dtype(sample_dtype)?;
 
         // Compute decoding order
         let decoding_order = (chain_mask + 0.001)?
