@@ -9,17 +9,19 @@ description.workspace = true
 [dependencies]
 anyhow.workspace = true
 
+candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
 candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels" }
-candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
-    "metal",
-] }
-candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", features = [
-    "metal",
-] }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", features = [
-    "metal",
-] }
-
+candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
+# candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
+#     "metal",
+# ] }
+# candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", features = [
+#     "metal",
+# ] }
+# candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", features = [
+#     "metal",
+# ] }
 # candle-core = { version = "0.8", features = ["metal"] }
 # # candle-nn = { version = "0.8", features = ["metal"] }
 candle-hf-hub = "0.3.3"
