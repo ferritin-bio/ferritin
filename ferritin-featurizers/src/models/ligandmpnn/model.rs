@@ -1079,8 +1079,7 @@ impl ProteinMPNN {
 
         // encode ...
         let (h_v, h_e, e_idx) = self.encode(features)?;
-        let rand_tensor = Tensor::randn(0., 1., (b, l), device)?.to_dtype(sample_dtype)?;
-
+        let rand_tensor = Tensor::randn(0f32, 1f32, (b, l), device)?.to_dtype(sample_dtype)?;
         // Compute decoding order
         let decoding_order = (chain_mask + 0.001)?
             .mul(&rand_tensor.abs()?)?
@@ -1149,12 +1148,18 @@ impl ProteinMPNN {
             }
             None => {
                 let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
-                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1., 0.)?;
+                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1f32, 0f32)?
+                    .to_dtype(sample_dtype)?
+                    .contiguous()?;
                 let tril = Tensor::tril2(l, sample_dtype, device)?;
                 let tril = tril.unsqueeze(0)?;
-                let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, i, q)
-                let order_mask_backward =
-                    temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, q, p)
+                let temp = tril
+                    .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
+                    .contiguous()?; // shape (b, i, q)
+                let order_mask_backward = temp
+                    .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
+                    .contiguous()?; // shape (b, q, p)
+                println!("Hello 02");
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
@@ -1168,6 +1173,7 @@ impl ProteinMPNN {
                 (mask_fw, mask_bw, e_idx, decoding_order)
             }
         };
+        println!("Hello 03");
         let b_decoder = b_decoder;
         let s_true = s_true.repeat(&[b_decoder, 1])?;
         let h_v = h_v.repeat(&[b_decoder, 1, 1])?;

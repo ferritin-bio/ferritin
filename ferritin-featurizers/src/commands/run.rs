@@ -85,7 +85,8 @@ pub fn execute(
     // let fasta_string = exec.create_fasta_string(model_score);
     // println!("OUTPUT FASTA: {:?}", fasta_string);
 
-    assert_eq!(true, false);
+    // assert_eq!(true, false);
+
     // prot_features
     // generate_protein_features()
 
