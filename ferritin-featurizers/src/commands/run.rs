@@ -81,7 +81,6 @@ pub fn execute(
     std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
     let sequences = model_sample.get_sequences()?;
     println!("OUTPUT FASTA: {:?}", sequences);
-
     println!("DECODING ORDER: {:?}", model_sample.get_decoding_order()?);
 
     let fasta_path = format!("{}/seqs/output.fasta", out_folder);

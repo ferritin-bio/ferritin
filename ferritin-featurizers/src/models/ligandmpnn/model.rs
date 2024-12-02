@@ -541,7 +541,7 @@ impl ProteinMPNN {
 
         // Todo! Fix this hack.
         println!("todo: move temp and seed upstream");
-        let temperature = 1.0f64;
+        let temperature = 0.05f64;
         let seed = 111;
         let symmetry_residues: Option<Vec<i32>> = None;
         match symmetry_residues {
