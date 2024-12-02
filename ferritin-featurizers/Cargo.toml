@@ -9,23 +9,20 @@ description.workspace = true
 [dependencies]
 anyhow.workspace = true
 
-candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
-#candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels" }
-candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core" }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
-# candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
-#     "metal",
-# ] }
-# candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", features = [
-#     "metal",
-# ] }
-# candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", features = [
-#     "metal",
-# ] }
-# candle-core = { version = "0.8", features = ["metal"] }
-# # candle-nn = { version = "0.8", features = ["metal"] }
+# Use conditional features instead of separate dependency blocks
+candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", features = [
+    "metal",
+] }
+candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
+    "metal",
+] }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", features = [
+    "metal",
+] }
+candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels", optional = true }
+
+# Rest of your dependencies
 candle-hf-hub = "0.3.3"
-# candle-transformers = "0.8.0"
 clap = "4.5.21"
 ferritin-core = { path = "../ferritin-core" }
 itertools.workspace = true
@@ -35,8 +32,6 @@ safetensors = "0.4.5"
 strum = { version = "0.26", features = ["derive"] }
 tokenizers = "0.21.0"
 ferritin-test-data = { path = "../ferritin-test-data" }
-candle-examples = "0.8.0"
-
 
 [dev-dependencies]
 ferritin-test-data = { path = "../ferritin-test-data" }
