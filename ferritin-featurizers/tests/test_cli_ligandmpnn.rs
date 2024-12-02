@@ -4,17 +4,15 @@ mod tests {
     // cargo instruments -t time --bin ferritin-featurizers -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
     use assert_cmd::Command;
     use ferritin_test_data::TestFile;
-    use std::path::Path;
     use tempfile;
 
     #[test]
-    #[cfg(feature = "metal")]
     fn test_cli_command_run_example_01() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
 
         // delete outdir if  present
-        if Path::new("./outputs/default").exists() {
+        if std::path::Path::new("./outputs/default").exists() {
             std::fs::remove_dir_all("./outputs/default").unwrap();
         }
 
