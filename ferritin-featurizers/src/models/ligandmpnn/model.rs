@@ -744,10 +744,10 @@ impl ProteinMPNN {
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
                     // Sample new token
                     let probs_sample_1d = {
-                        let sum = probs_sample.sum(1)?;
                         let normalized = probs_sample
                             .squeeze(0)? // Remove batch dimension -> [20]
                             .clamp(1e-10, 1.0)?;
+                        let sum = probs_sample.sum(1)?;
                         let normalized = normalized.broadcast_div(&sum)?;
                         let normalized = normalized.contiguous()?;
                         normalized
@@ -770,15 +770,8 @@ impl ProteinMPNN {
                         h_s.index_add(&t_gather_expanded, &Tensor::zeros_like(&h_s_update)?, 1)?;
                     h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
 
-                    let zero_mask = t_gather.zeros_like()?.to_dtype(DType::U32)?;
-
                     println!("Here Before S:");
                     s = {
-                        // let t_idx = t_gather.to_vec0::<i64>()?; // Get the position to update
-                        // println!("t_gather shape: {:?}", t_gather.dims());
-                        // let start = t_gather.to_vec0::<u32>()? as usize;
-                        // s = s.scatter_add(&t_gather, &zero_mask, 1)?; // Zero out
-                        // s = s.scatter_add(&t_gather, &s_t.unsqueeze(1)?, 1)?;
                         let dim = 1;
                         let start = t_gather.squeeze(0)?.squeeze(0)?.to_scalar::<u32>()? as usize;
                         let s_t_expanded = s_t.unsqueeze(1)?;
@@ -791,55 +784,25 @@ impl ProteinMPNN {
                         .unsqueeze(2)?
                         .expand((b, 1, 20))?
                         .mul(&probs_sample.unsqueeze(1)?)?;
-                    println!("probs_update shape after mul: {:?}", probs_update.dims());
-
-                    println!("Hello 00");
-                    println!("Initial probs_update shape: {:?}", probs_update.dims());
-                    let probs_update = chain_mask_t
-                        .unsqueeze(1)?
-                        .unsqueeze(2)?
-                        .expand((b, 1, 20))?
-                        .mul(&probs_sample.unsqueeze(1)?)?;
                     let t_expanded = t_gather.reshape(&[b])?;
-
-                    // let t_expanded = t_gather
-                    //     .reshape(&[b])?
-                    //     .unsqueeze(1)?
-                    //     .unsqueeze(2)?
-                    //     .expand((b, 1, 20))?;
-
-                    // let t_expanded = t_expanded.to_dtype(DType::I64)?;
-                    // let max_dim = all_probs.dim(1)? as i64 - 1;
-                    // println!("max_dim: {}", max_dim);
-
-                    // let t_expanded = t_expanded.clamp(0_i64, max_dim)?;
-
                     let probs_update = probs_update
                         .squeeze(1)? // Remove extra dimension
                         .unsqueeze(1)?;
                     all_probs =
                         all_probs.index_add(&t_expanded, &Tensor::zeros_like(&probs_update)?, 1)?;
-                    println!("Hello 00 02 ");
                     all_probs = all_probs.index_add(&t_expanded, &probs_update, 1)?;
-
-                    println!("Hello 00 03");
                     let log_probs_update = chain_mask_t
                         .unsqueeze(1)?
                         .unsqueeze(2)?
                         .expand((b, 1, 21))?
                         .mul(&log_probs.unsqueeze(1)?)?;
 
-                    println!("Hello 01");
-                    // Reshape log_probs_update to match all_log_probs rank
                     let log_probs_update = log_probs_update.squeeze(1)?.unsqueeze(1)?;
-
-                    println!("Hello 02");
                     all_log_probs = all_log_probs.index_add(
                         &t_expanded,
                         &Tensor::zeros_like(&log_probs_update)?,
                         1,
                     )?;
-                    println!("Hello 03");
                     all_log_probs = all_log_probs.index_add(&t_expanded, &log_probs_update, 1)?;
                 }
 
