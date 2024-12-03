@@ -107,18 +107,20 @@ impl MPNNExecConfig {
         let res_idx_tensor = Tensor::from_vec(res_idx, (1, res_idx_len), &device)?;
 
         // chain residues
-
-        // output_dict["chain_letters"] = CA_chain_ids
-        // chain_list = list(set(output_dict["chain_letters"]))
-        // CA_atoms = protein_atoms.select("name CA")
-        //  CA_resnums = CA_atoms.getResnums()
-        //  CA_chain_ids = CA_atoms.getChids()
         let chain_letters: Vec<String> = ac
             .iter_residues_aminoacid()
             .map(|res| res.chain_id)
             .collect();
 
-        // assert_eq!(true, false);
+        // unique Chains
+        let chain_list: Vec<String> = chain_letters
+            .clone()
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        // assert_eq!(trul, false);
 
         // update residue info
         // residue_config: Option<ResidueControl>,
@@ -174,7 +176,7 @@ impl MPNNExecConfig {
             chain_labels: None,                 //  # protein chain letters shape=[length]
             chain_letters: Some(chain_letters), // chain_letters: shape=[length]
             mask_c: None,                       // mask_c:  shape=[length]
-            chain_list: None,
+            chain_list: Some(chain_list),
         })
     }
 }
