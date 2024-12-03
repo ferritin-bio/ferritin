@@ -115,6 +115,7 @@ pub fn execute(
     println!("Scoring the Protein...");
     let model_score = model.score(&prot_features, false)?;
     println!("Protein Score: {:?}", model_score);
+
     // Sample from the Model!
     // Note: sampling from the model
     // println!("Sampling from the Model...");
