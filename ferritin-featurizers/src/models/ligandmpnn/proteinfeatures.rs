@@ -110,12 +110,10 @@ impl ProteinFeaturesModel {
     // RBF_A_B = self._rbf(D_A_B_neighbors)
     // return RBF_A_B
     fn _get_rbf(&self, a: &Tensor, b: &Tensor, e_idx: &Tensor, device: &Device) -> Result<Tensor> {
-        // Get original dimensions
-        let dims = a.dims();
-        let target_shape = (dims[0], dims[1], dims[1], dims[2]); // [1, 93, 93, 3]
+        let (batch, seq_len, pos) = a.dims3()?;
+        let target_shape = (batch, seq_len, seq_len, pos); // [1, 93, 93, 3]
         let a_expanded = a.unsqueeze(2)?.broadcast_as(target_shape)?;
         let b_expanded = b.unsqueeze(1)?.broadcast_as(target_shape)?;
-        // Now both tensors should be [1, 93, 93, 3]
         let diff = (a_expanded - b_expanded)?;
         let squared_diff = diff.powf(2.0)?;
         let sum_squared_diff = squared_diff.sum(3)?;

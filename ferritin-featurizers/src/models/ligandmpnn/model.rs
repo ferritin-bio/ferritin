@@ -453,11 +453,12 @@ impl ProteinMPNN {
         }
     }
     pub fn sample(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
-        // "global" dtype
+        // Todo: move temp and seed upstream
+        // let temperature = 0.5f64;
+        let temperature = 0.5f64;
+        let seed = 11111;
         let sample_dtype = DType::F32;
-        // how come I am not using `x` at all?
         let ProteinFeatures {
-            x,
             s,
             x_mask,
             // symmetry_residues,
@@ -472,7 +473,6 @@ impl ProteinMPNN {
         // let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?;
         let chain_mask = x_mask.as_ref().unwrap().to_dtype(sample_dtype)?;
         let (h_v, h_e, e_idx) = self.encode(features)?;
-        // this might be  a bad rand implementation
         let rand_tensor = Tensor::randn(0f32, 0.25f32, (b, l), device)?.to_dtype(sample_dtype)?;
         let decoding_order = (&chain_mask + 0.0001)?
             .mul(&rand_tensor.abs()?)?
@@ -482,11 +482,6 @@ impl ProteinMPNN {
         //  bias = feature_dict["bias"]
         let bias = Tensor::ones((b, l, 21), sample_dtype, device)?;
         println!("todo: We need to add the bias!");
-        // Todo! Fix this hack.
-        println!("todo: move temp and seed upstream");
-        // let temperature = 0.5f64;
-        let temperature = 0.5f64;
-        let seed = 111;
         let symmetry_residues: Option<Vec<i32>> = None;
         match symmetry_residues {
             None => {
