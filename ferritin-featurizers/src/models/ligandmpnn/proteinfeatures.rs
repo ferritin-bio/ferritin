@@ -61,15 +61,15 @@ impl ProteinFeaturesModel {
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
         compute_nearest_neighbors(x, mask, self.top_k, eps as f32)
     }
+    /// 1. It takes a tensor `d` as input and creates a set of RBF features
+    /// 2. Sets up parameters:
+    ///    - `d_min` = 2.0 (minimum distance)
+    ///    - `d_max` = 22.0 (maximum distance)
+    ///    - `d_count` = number of RBF centers
+    /// 3. Creates evenly spaced centers (μ) between d_min and d_max
+    /// 4. Calculates the width (σ) of the Gaussian functions
+    /// 5. Applies the RBF formula: exp(-(x-μ)²/σ²)
     fn _rbf(&self, d: &Tensor, device: &Device) -> Result<Tensor> {
-        // 1. It takes a tensor `d` as input and creates a set of RBF features
-        // 2. Sets up parameters:
-        //    - `d_min` = 2.0 (minimum distance)
-        //    - `d_max` = 22.0 (maximum distance)
-        //    - `d_count` = number of RBF centers
-        // 3. Creates evenly spaced centers (μ) between d_min and d_max
-        // 4. Calculates the width (σ) of the Gaussian functions
-        // 5. Applies the RBF formula: exp(-(x-μ)²/σ²)
         const D_MIN: f64 = 2.0;
         const D_MAX: f64 = 22.0;
         // Create centers (μ)
@@ -77,8 +77,7 @@ impl ProteinFeaturesModel {
             .to_dtype(DType::F32)? // Convert to F32 on CPU
             .reshape((1, 1, 1, self.num_rbf))?
             .to_device(device)?; // Move to Metal device after conversion
-
-        // Calculate width (σ)
+                                 // Calculate width (σ)
         let d_sigma = (D_MAX - D_MIN) / self.num_rbf as f64;
         let dims = d.dims();
         let d_expanded = d.unsqueeze(D::Minus1)?; // [N, N, C, 1]
@@ -87,7 +86,6 @@ impl ProteinFeaturesModel {
             d_expanded.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
         let d_sigma_tensor =
             Tensor::new(&[d_sigma as f32], &device)?.broadcast_as(d_expanded_broadcast.shape())?;
-        // let d_expanded = d_expanded.to_dtype(DType::F32)?.contiguous()?;
         let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma_tensor)?;
         let rbf = diff.powf(2.0)?.neg()?.exp()?;
         Ok(rbf)
@@ -127,25 +125,22 @@ impl ProteinFeaturesModel {
         let rbf_a_b = self._rbf(&d_a_b_neighbors, device)?;
         Ok(rbf_a_b)
     }
-
+    /// Euclidean distance calculation
     fn compute_pairwise_distances(&self, a: &Tensor, b: &Tensor) -> Result<Tensor> {
         const EPSILON: f64 = 1e-6; // Numerical stability constant
         let a_expanded = a.unsqueeze(2)?;
         let b_expanded = b.unsqueeze(1)?;
-        // Euclidean distance calculation
         let diff = (a_expanded - b_expanded)?;
         let squared_distances = diff.powf(2.0)?.sum(3)?;
         let distances = (squared_distances + EPSILON)?.sqrt()?;
         Ok(distances)
     }
-
     fn gather_edge_distances(&self, distances: &Tensor, edge_indices: &Tensor) -> Result<Tensor> {
         distances
             .unsqueeze(D::Minus1)?
             .gather(edge_indices, 2)?
             .squeeze(D::Minus1)
     }
-
     pub fn forward(
         &self,
         input_features: &ProteinFeatures,
@@ -286,7 +281,7 @@ impl PositionalEncodings {
         let d = d.clamp(0f64, 2.0 * max_rel)?;
         // Second part: d * mask + (1-mask)*(2*max_rel + 1)
         let masked_d = d.mul(mask)?;
-        let inverse_mask = (mask * -1.0)? + 1.0; // (1-mask)
+        let inverse_mask = (mask * -1.0)? + 1.0;
         let extra_term = inverse_mask? * ((2.0 * max_rel) + 1.0);
         let d = (masked_d + extra_term?)?;
 

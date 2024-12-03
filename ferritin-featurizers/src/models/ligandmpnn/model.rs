@@ -164,27 +164,31 @@ impl EncLayer {
         println!("EncoderLayer: Starting forward pass");
         let h_v = h_v.to_dtype(DType::F32)?;
         let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
+
         let h_v_expand = h_v.unsqueeze(D::Minus2)?;
         // Explicitly specify the expansion dimensions
         let expand_shape = [
-            h_ev.dims()[0],       // batch size
-            h_ev.dims()[1],       // sequence length
-            h_ev.dims()[2],       // number of neighbors
+            h_ev.dims()[0], // batch size
+            h_ev.dims()[1], // sequence length
+            h_ev.dims()[2], // number of neighbors
             h_v_expand.dims()[3], // hidden dimension
+                            // h_v.dims()[3], // hidden dimension
         ];
 
         let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
+
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?.contiguous()?;
-        let h_message = self.w1.forward(&h_ev)?;
-        let h_message = h_message.gelu()?;
-        let h_message = h_message.apply(&self.w2)?;
-        let h_message = h_message.gelu()?;
-        let h_message = h_message.apply(&self.w3)?;
+
+        let h_message = self
+            .w1
+            .forward(&h_ev)?
+            .gelu()?
+            .apply(&self.w2)?
+            .gelu()?
+            .apply(&self.w3)?;
 
         let h_message = if let Some(mask) = mask_attend {
-            let mask = mask.unsqueeze(D::Minus1)?;
-            let result = mask.broadcast_mul(&h_message)?;
-            result
+            mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
         } else {
             h_message
         };
