@@ -12,7 +12,7 @@ use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::featurizer::ProteinFeatures;
 use super::proteinfeatures::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
-use candle_core::{DType, Device, Error, IndexOp, Module, Result, Tensor, D};
+use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, LayerNorm, Linear, VarBuilder};
@@ -196,6 +196,7 @@ impl EncLayer {
             .apply(&self.w2)?
             .gelu()?
             .apply(&self.w3)?;
+
         let h_message = if let Some(mask) = mask_attend {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
         } else {
