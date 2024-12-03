@@ -74,7 +74,7 @@ pub fn execute(
     let temperature = exec.run_config.temperature.unwrap_or(0.5);
 
     println!("Sampling from the Model...");
-    println!("Temp and Seed are: temp {:}, seed {:}", temperature, seed);
+    println!("Temp and Seed are: temp: {:}, seed: {:}", temperature, seed);
     let model_sample = model.sample(&prot_features, temperature as f64, seed as u64)?;
     println!("{:?}", model_sample);
 
