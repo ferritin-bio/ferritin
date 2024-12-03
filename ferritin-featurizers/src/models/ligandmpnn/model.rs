@@ -416,16 +416,12 @@ impl ProteinMPNN {
     //     todo!()
     // }
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
-        println!("encoded device! {:?}", self.device);
         let s_true = &features.get_sequence();
         let base_dtype = DType::F32;
-
-        // needed for the MaskAttend
         let mask = match features.get_sequence_mask() {
             Some(m) => m,
             None => &Tensor::ones_like(&s_true)?,
         };
-
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
                 let (e, e_idx) = self.features.forward(features, &self.device)?;
@@ -435,35 +431,27 @@ impl ProteinMPNN {
                     &self.device,
                 )?;
                 let mut h_e = self.w_e.forward(&e)?;
-
                 let mask_attend = if let Some(mask) = features.get_sequence_mask() {
                     let mask_expanded = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
-
-                    // Gather using E_idx
                     let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?;
                     let mask_gathered = mask_gathered.squeeze(D::Minus1)?;
-                    // Multiply original mask with gathered mask
                     let mask_attend = {
                         let mask_unsqueezed = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
-
-                        // Explicitly expand mask_unsqueezed to match mask_gathered dimensions
                         let mask_expanded = mask_unsqueezed.expand((
                             mask_gathered.dim(0)?, // batch
                             mask_gathered.dim(1)?, // sequence length
                             mask_gathered.dim(2)?, // number of neighbors
                         ))?;
-                        // Now do the multiplication with explicit shapes
                         mask_expanded.mul(&mask_gathered)?
                     };
                     mask_attend
                 } else {
                     let (b, l) = mask.dims2()?;
                     let ones = Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, &self.device)?;
-                    println!("Created default ones mask dims: {:?}", ones.dims());
                     ones
                 };
                 println!("Beginning the Encoding...");
-                for (i, layer) in self.encoder_layers.iter().enumerate() {
+                for (_, layer) in self.encoder_layers.iter().enumerate() {
                     let (new_h_v, new_h_e) = layer.forward(
                         &h_v,
                         &h_e,
@@ -475,7 +463,6 @@ impl ProteinMPNN {
                     h_v = new_h_v;
                     h_e = new_h_e;
                 }
-
                 Ok((h_v, h_e, e_idx))
             }
             ModelTypes::LigandMPNN => {
