@@ -316,8 +316,8 @@ impl ProteinFeatures {
     pub fn get_sequence(&self) -> &Tensor {
         &self.s
     }
-    pub fn get_sequence_mask(&self) -> Option<&Tensor> {
-        self.x_mask
+    pub fn get_sequence_mask(&self) -> &Tensor {
+        &self.x_mask
     }
     pub fn get_residue_index(&self) -> &Tensor {
         &self.r_idx
