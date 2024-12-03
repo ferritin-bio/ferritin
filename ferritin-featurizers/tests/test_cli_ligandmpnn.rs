@@ -86,11 +86,10 @@ mod tests {
     #[test]
     #[ignore]
     fn test_cli_command_run_example_04() {
-        let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
-        let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
-
-        cmd.arg("run")
+        let (pdbfile, _tmp, out_folder) = setup("./outputs/verbose".to_string());
+        let assert = Command::cargo_bin("ferritin-featurizers")
+            .unwrap()
+            .arg("run")
             .arg("--seed")
             .arg("111")
             .arg("--verbose")
@@ -98,21 +97,22 @@ mod tests {
             .arg("--pdb-path")
             .arg(pdbfile)
             .arg("--out-folder")
-            .arg(&out_folder);
+            .arg(&out_folder)
+            .assert()
+            .success();
 
-        let assert = cmd.assert().success();
         println!("Successful command....");
         assert!(out_folder.exists());
         println!("Output: {:?}", assert.get_output());
     }
+
     #[test]
     #[ignore]
     fn test_cli_command_run_example_05() {
-        let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
-        let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
-
-        cmd.arg("run")
+        let (pdbfile, _tmp, out_folder) = setup("./outputs/save_stats".to_string());
+        let assert = Command::cargo_bin("ferritin-featurizers")
+            .unwrap()
+            .arg("run")
             .arg("--seed")
             .arg("111")
             .arg("--pdb-path")
@@ -120,9 +120,10 @@ mod tests {
             .arg("--out-folder")
             .arg(&out_folder)
             .arg("--save-stats")
-            .arg("1");
+            .arg("1")
+            .assert()
+            .success();
 
-        let assert = cmd.assert().success();
         println!("Successful command....");
         assert!(out_folder.exists());
         println!("Output: {:?}", assert.get_output());

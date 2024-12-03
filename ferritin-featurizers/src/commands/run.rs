@@ -81,6 +81,19 @@ pub fn execute(
 
     let temperature = exec.run_config.temperature.unwrap_or(0.1);
 
+    // out_dict = {}
+    // out_dict["generated_sequences"] = S_stack.cpu()
+    // out_dict["sampling_probs"] = sampling_probs_stack.cpu()
+    // out_dict["log_probs"] = log_probs_stack.cpu()
+    // out_dict["decoding_order"] = decoding_order_stack.cpu()
+    // out_dict["native_sequence"] = feature_dict["S"][0].cpu()
+    // out_dict["mask"] = feature_dict["mask"][0].cpu()
+    // out_dict["chain_mask"] = feature_dict["chain_mask"][0].cpu()
+    // out_dict["seed"] = seed
+    // out_dict["temperature"] = args.temperature
+    // if args.save_stats:
+    //     torch.save(out_dict, output_stats_path)
+
     println!("Sampling from the Model...");
     println!("Temp and Seed are: temp: {:}, seed: {:}", temperature, seed);
     let model_sample = model.sample(&prot_features, temperature as f64, seed as u64)?;

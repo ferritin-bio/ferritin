@@ -33,7 +33,7 @@ upgrade:
 
 
 test2:
-    cargo test --features metal -p ferritin-featurizers test_cli_command_run_example_03 -- --nocapture
+    cargo test --features metal -p ferritin-featurizers test_cli_command_run_example_04 -- --nocapture
 
 test:
     cargo test
