@@ -23,7 +23,6 @@ use candle_nn::VarBuilder;
 use clap::ValueEnum;
 use ferritin_core::AtomCollection;
 use ferritin_test_data::TestFile;
-use itertools::chain;
 
 /// Responsible for taking CLI args and returning the Features and Model
 ///
@@ -172,7 +171,7 @@ impl MPNNExecConfig {
             y,                                  // ligand coords
             y_t,                                // encoded ligand atom names
             y_m: Some(y_m),                     // ligand mask
-            r_idx: Some(res_idx_tensor),        // protein residue indices shape=[length]
+            r_idx: res_idx_tensor,              // protein residue indices shape=[length]
             chain_labels: None,                 //  # protein chain letters shape=[length]
             chain_letters: Some(chain_letters), // chain_letters: shape=[length]
             mask_c: None,                       // mask_c:  shape=[length]

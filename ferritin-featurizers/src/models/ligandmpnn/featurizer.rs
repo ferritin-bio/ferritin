@@ -49,45 +49,46 @@ impl LMPNNFeatures for AtomCollection {
     }
     // equivalent to protien MPNN's parse_PDB
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
-        let x_37 = self.to_numeric_atom37(device)?;
-        let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
-        let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
+        todo!();
+        // let x_37 = self.to_numeric_atom37(device)?;
+        // let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
+        // let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
 
-        // get CB locations...
-        // although we have these already for our full set...
-        let cb = calculate_cb(&x_37);
+        // // get CB locations...
+        // // although we have these already for our full set...
+        // let cb = calculate_cb(&x_37);
 
-        // chain_labels = np.array(CA_atoms.getChindices(), dtype=np.int32)
-        let chain_labels = self.get_resids(); //  <-- need to double-check shape. I think this is all-atom
+        // // chain_labels = np.array(CA_atoms.getChindices(), dtype=np.int32)
+        // let chain_labels = self.get_resids(); //  <-- need to double-check shape. I think this is all-atom
 
-        // R_idx = np.array(CA_resnums, dtype=np.int32)
-        // let _r_idx = self.get_resids(); // todo()!
+        // // R_idx = np.array(CA_resnums, dtype=np.int32)
+        // // let _r_idx = self.get_resids(); // todo()!
 
-        // amino acid names as int....
-        let s = self.encode_amino_acids(device)?;
+        // // amino acid names as int....
+        // let s = self.encode_amino_acids(device)?;
 
-        // coordinates of the backbone atoms
-        let indices = Tensor::from_slice(
-            &[0i64, 1i64, 2i64, 4i64], // index of N/CA/C/O as integers
-            (4,),
-            &device,
-        )?;
+        // // coordinates of the backbone atoms
+        // let indices = Tensor::from_slice(
+        //     &[0i64, 1i64, 2i64, 4i64], // index of N/CA/C/O as integers
+        //     (4,),
+        //     &device,
+        // )?;
 
-        let x = x_37.index_select(&indices, 1)?;
+        // let x = x_37.index_select(&indices, 1)?;
 
-        Ok(ProteinFeatures {
-            s,
-            x,
-            x_mask: Some(x_37_m),
-            y,
-            y_t,
-            y_m: Some(y_m),
-            r_idx: None,
-            chain_labels: None,
-            chain_letters: None,
-            mask_c: None,
-            chain_list: None,
-        })
+        // Ok(ProteinFeatures {
+        //     s,
+        //     x,
+        //     x_mask: Some(x_37_m),
+        //     y,
+        //     y_t,
+        //     y_m: Some(y_m),
+        //     r_idx: None,
+        //     chain_labels: None,
+        //     chain_letters: None,
+        //     mask_c: None,
+        //     chain_list: None,
+        // })
     }
     /// create numeric Tensor of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
@@ -287,14 +288,14 @@ pub struct ProteinFeatures {
     /// ligand mask
     pub(crate) y_m: Option<Tensor>,
     /// R_idx:         Tensor dimensions: torch.Size([93])          # protein residue indices shape=[length]
-    pub(crate) r_idx: Option<Tensor>,
+    pub(crate) r_idx: Tensor,
     /// chain_labels:  Tensor dimensions: torch.Size([93])          # protein chain letters shape=[length]
     pub(crate) chain_labels: Option<Vec<f64>>,
     /// chain_letters: NumPy array dimensions: (93,)
-    pub(crate) chain_letters: Option<Vec<String>>,
+    pub(crate) chain_letters: Vec<String>,
     /// mask_c:        Tensor dimensions: torch.Size([93])
     pub(crate) mask_c: Option<Tensor>,
-    pub(crate) chain_list: Option<Vec<String>>,
+    pub(crate) chain_list: Vec<String>,
     // CA_icodes:     NumPy array dimensions: (93)
     // put these here temporarily
     // bias_AA: Option<Tensor>,
@@ -321,8 +322,8 @@ impl ProteinFeatures {
     pub fn get_sequence_mask(&self) -> Option<&Tensor> {
         self.x_mask.as_ref()
     }
-    pub fn get_residue_index(&self) -> Option<&Tensor> {
-        self.r_idx.as_ref()
+    pub fn get_residue_index(&self) -> &Tensor {
+        &self.r_idx
     }
     pub fn save_to_safetensor(&self, path: &str) -> Result<()> {
         let mut tensors: HashMap<String, Tensor> = HashMap::new();
@@ -337,17 +338,10 @@ impl ProteinFeatures {
     }
 
     pub fn get_encoded(&self) -> Result<(HashMap<String, usize>, HashMap<usize, String>)> {
-        let r_idx_list = self
-            .r_idx
-            .as_ref()
-            .expect("Missing r_idx")
-            .flatten_all()?
-            .to_vec1::<u32>()?;
-
-        let chain_letters_list = self.chain_letters.as_ref().expect("Missing chain letters");
+        let r_idx_list = &self.r_idx.flatten_all()?.to_vec1::<u32>()?;
+        let chain_letters_list = &self.chain_list;
 
         let mut encoded_residues = Vec::new();
-
         for (i, r_idx_item) in r_idx_list.iter().enumerate() {
             let tmp = format!("{}{}", chain_letters_list[i], r_idx_item);
             encoded_residues.push(tmp);
