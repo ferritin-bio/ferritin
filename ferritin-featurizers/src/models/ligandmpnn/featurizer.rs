@@ -381,4 +381,17 @@ impl ProteinFeatures {
             device,
         )
     }
+    pub fn get_chain_mask_tensor(
+        &self,
+        chains_to_design: Vec<String>,
+        device: &Device,
+    ) -> Result<Tensor> {
+        let mask_values: Vec<u32> = self
+            .chain_letters
+            .iter()
+            .map(|chain| u32::from(chains_to_design.contains(chain)))
+            .collect();
+
+        Tensor::from_iter(mask_values, device)
+    }
 }

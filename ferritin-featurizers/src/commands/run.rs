@@ -78,7 +78,28 @@ pub fn execute(
 
     println!("Generating Protein Features");
     let prot_features = exec.generate_protein_features()?;
-    println!("Protein Features Loaded!");
+
+    // Calculate Masks  ------------------------------------------------------------
+
+    println!("Generating Chains to Design. Tensor of [B,L]");
+    let chains_to_design: Vec<String> = match &exec.residue_control_config {
+        None => prot_features.chain_letters.clone(),
+        Some(config) => match &config.chains_to_design {
+            None => prot_features.chain_letters.clone(),
+            Some(chains) => chains.split(' ').map(String::from).collect(),
+        },
+    };
+
+    // Chain tensor is the base. Additional Tensors can be added on top.
+    let mut chain_mask_tensor = prot_features.get_chain_mask_tensor(chains_to_design, &device)?;
+
+    // Residues -------------------------------------------
+    if let Some(res) = exec.residue_control_config {
+        let fixed_residues = res.fixed_residues.unwrap();
+        let fixed_positions_tensor = prot_features.get_encoded_tensor(fixed_residues, &device)?;
+        // multiply the fixed positions to the chain tensor
+        chain_mask_tensor = chain_mask_tensor.mul(&fixed_positions_tensor)?;
+    }
 
     // Create the output folders
     println!("Creating the Outputs");
@@ -94,7 +115,6 @@ pub fn execute(
 
     std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
     let sequences = model_sample.get_sequences()?;
-
     let fasta_path = format!("{}/seqs/output.fasta", out_folder);
     let mut fasta_content = String::new();
     for (i, seq) in sequences.iter().enumerate() {
@@ -102,10 +122,10 @@ pub fn execute(
     }
     std::fs::write(fasta_path, fasta_content)?;
 
-    // Score a Protein!
-    println!("Scoring the Protein...");
-    let model_score = model.score(&prot_features, false)?;
-    println!("Protein Score: {:?}", model_score);
+    // // Score a Protein!
+    // println!("Scoring the Protein...");
+    // let model_score = model.score(&prot_features, false)?;
+    // println!("Protein Score: {:?}", model_score);
 
     if save_stats {
         // out_dict = {}
@@ -127,16 +147,6 @@ pub fn execute(
         // note this is only the  Score outputs.
         // It doesn't have the other fields in the pytorch implmentation
         model_sample.save_as_safetensors(outfile);
-    }
-
-    // Residues -------------------------------------------
-    println!("Fixed Residues!");
-    if let Some(res) = exec.residue_control_config {
-        let fixed_residues = res.fixed_residues.unwrap();
-        let fixed_positions_tensor = &prot_features.get_encoded_tensor(fixed_residues, &device)?;
-        println!("Fixed_pos_tensor: {:?}", fixed_positions_tensor);
-        // todo:multiply this vector by the chain mask...
-        // protein_dict["chain_mask"] = chain_mask * fixed_positions
     }
 
     Ok(())
