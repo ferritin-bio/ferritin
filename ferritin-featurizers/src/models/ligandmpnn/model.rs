@@ -332,24 +332,17 @@ impl DecLayer {
             .gelu()?
             .apply(&self.w3)?;
 
+        let h_message = self.dropout1.forward(&h_message, training_bool)?;
         let h_message = if let Some(mask) = mask_attend {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
         } else {
             h_message
         };
-
-        // let dh = (h_message.sum(D::Minus2)? / self.scale)?;
         let dh = (h_message.sum(D::Minus2)? / self.scale)?;
-
-        let h_v = {
-            let dh_dropout = self.dropout1.forward(&dh, training_bool)?;
-            self.norm1.forward(&(h_v + dh_dropout)?)?
-        };
+        let h_v = self.norm1.forward(&(h_v + dh)?)?;
         let dh = self.dense.forward(&h_v)?;
-        let h_v = {
-            let dh_dropout = self.dropout2.forward(&dh, training_bool)?;
-            self.norm2.forward(&(h_v + dh_dropout)?)?
-        };
+        let dh_dropout = self.dropout2.forward(&dh, training_bool)?;
+        let h_v = self.norm2.forward(&(h_v + dh_dropout)?)?;
         let h_v = if let Some(mask) = mask_v {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_v)?
         } else {
