@@ -37,7 +37,6 @@ pub struct MPNNExecConfig {
     pub(crate) multi_pdb_config: Option<MultiPDBConfig>,
     pub(crate) residue_control_config: Option<ResidueControl>,
     pub(crate) device: Device,
-    pub(crate) seed: i32,
 }
 
 impl MPNNExecConfig {
@@ -61,7 +60,6 @@ impl MPNNExecConfig {
             membrane_mpnn_config: membrane_mpnn_specific,
             residue_control_config: residue_config,
             multi_pdb_config: multi_pdb_specific,
-            seed,
             device: device,
         })
     }

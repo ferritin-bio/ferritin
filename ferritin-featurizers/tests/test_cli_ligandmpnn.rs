@@ -78,7 +78,6 @@ mod tests {
             .assert()
             .success();
 
-        let assert = cmd.assert().success();
         println!("Successful command....");
         assert!(out_folder.exists());
         println!("Output: {:?}", assert.get_output());

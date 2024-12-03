@@ -29,7 +29,6 @@ pub fn device(cpu: bool) -> Result<Device> {
 }
 
 pub fn execute(
-    seed: i32,
     pdb_path: String,
     out_folder: String,
     model_type: Option<ModelTypes>,
