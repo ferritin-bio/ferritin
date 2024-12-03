@@ -32,7 +32,6 @@ impl ProteinFeaturesModel {
         let embeddings = PositionalEncodings::new(
             num_positional_embeddings, // num embeddings.
             32usize,                   // max_relative_feature
-            vb.device(),               // device this should be passed in as param,
             vb.pp("embeddings"),       // VarBuilder,
         )?;
         let edge_embedding =
@@ -245,10 +244,8 @@ impl ProteinFeaturesModel {
         let e_positional = self
             .embeddings
             .forward(&offset.to_dtype(DType::U32)?, &e_chains)?;
-        // println!("About to cat the pos embeddings...");
         let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
         let e = self.edge_embedding.forward(&e)?;
-        // println!("About to start the normalization...");
         let e = self.norm_edges.forward(&e)?;
         Ok((e, e_idx))
     }
@@ -256,37 +253,31 @@ impl ProteinFeaturesModel {
 
 #[derive(Clone, Debug)]
 pub struct PositionalEncodings {
-    num_embeddings: usize,
     max_relative_feature: usize,
     linear: Linear,
 }
-
 impl PositionalEncodings {
-    pub fn new(
-        num_embeddings: usize,
-        max_relative_feature: usize,
-        device: &Device,
-        vb: VarBuilder,
-    ) -> Result<Self> {
+    pub fn new(num_embeddings: usize, max_relative_feature: usize, vb: VarBuilder) -> Result<Self> {
         let linear = linear(
             2 * max_relative_feature + 2,
             num_embeddings,
             vb.pp("linear"),
         )?;
         Ok(Self {
-            num_embeddings,
             max_relative_feature,
             linear,
         })
     }
-    // def forward(self, offset, mask):
-    //     d = torch.clip(
-    //         offset + self.max_relative_feature, 0, 2 * self.max_relative_feature
-    //     ) * mask + (1 - mask) * (2 * self.max_relative_feature + 1)
-    //     d_onehot = torch.nn.functional.one_hot(d, 2 * self.max_relative_feature + 1 + 1)
-    //     E = self.linear(d_onehot.float())
-    //     return E
+    /// - [pytorch](https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L1645)
     fn forward(&self, offset: &Tensor, mask: &Tensor) -> Result<Tensor> {
+        // def forward(self, offset, mask):
+        //     d = torch.clip(
+        //         offset + self.max_relative_feature, 0, 2 * self.max_relative_feature
+        //     ) * mask + (1 - mask) * (2 * self.max_relative_feature + 1)
+        //     d_onehot = torch.nn.functional.one_hot(d, 2 * self.max_relative_feature + 1 + 1)
+        //     E = self.linear(d_onehot.float())
+        //     return E
+        //
         // println!("In positional Embedding: forward");
         // Offset: Tensor[dims 1, 93, 24; u32, metal:4294969325]
         let max_rel = self.max_relative_feature as f64;

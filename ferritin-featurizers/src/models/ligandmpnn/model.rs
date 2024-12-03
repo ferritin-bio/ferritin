@@ -19,13 +19,12 @@ use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, Linear, VarBu
 use candle_transformers::generation::LogitsProcessor;
 
 pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result<Tensor> {
-    // Create the logits processor with its required arguments
     let mut logits_processor = LogitsProcessor::new(
         seed,              // seed for reproducibility
         Some(temperature), // temperature scaling
-        None,              // top_p (nucleus sampling), we don't need this
+        // None,              // top_p (nucleus sampling), we don't need this
+        Some(0.95), // top_p (nucleus sampling), we don't need this
     );
-
     let idx = logits_processor.sample(probs)?;
     println!("Selected index: {}", idx);
     if idx >= 21 {
@@ -33,6 +32,7 @@ pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result
     }
     Tensor::new(&[idx], probs.device())
 }
+
 // Primary Return Object from the ProtMPNN Model
 #[derive(Clone, Debug)]
 pub struct ScoreOutput {
@@ -46,14 +46,6 @@ impl ScoreOutput {
     // S dims are [Batch, seqlength]
     pub fn get_sequences(&self) -> Result<Vec<String>> {
         let (b, l) = self.s.dims2()?;
-
-        println!(
-            "Output tensor shape: {:?}, dtype: {:?}",
-            self.s.dims(),
-            self.s.dtype()
-        );
-        println!("Full tensor values: {:?}", self.s.to_vec2::<u32>()?);
-
         let mut sequences = Vec::with_capacity(b);
         for batch_idx in 0..b {
             let mut sequence = String::with_capacity(l);
@@ -184,13 +176,10 @@ impl EncLayer {
         let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?.contiguous()?;
         let h_message = self.w1.forward(&h_ev)?;
-        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w1
         let h_message = h_message.gelu()?;
         let h_message = h_message.apply(&self.w2)?;
-        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w2
         let h_message = h_message.gelu()?;
         let h_message = h_message.apply(&self.w3)?;
-        let h_message = h_message.clamp(-20.0, 20.0)?; // Clip after w3
 
         let h_message = if let Some(mask) = mask_attend {
             let mask = mask.unsqueeze(D::Minus1)?;
@@ -340,7 +329,10 @@ impl DecLayer {
         } else {
             h_message
         };
+
+        // let dh = (h_message.sum(D::Minus2)? / self.scale)?;
         let dh = (h_message.sum(D::Minus2)? / self.scale)?;
+
         let h_v = {
             let dh_dropout = self.dropout1.forward(&dh, training_bool)?;
             self.norm1.forward(&(h_v + dh_dropout)?)?
@@ -525,6 +517,7 @@ impl ProteinMPNN {
         // "global" dtype
         let sample_dtype = DType::F32;
 
+        // how come I am not using `x` at all?
         let ProteinFeatures {
             x,
             s,
@@ -553,11 +546,10 @@ impl ProteinMPNN {
         //  bias = feature_dict["bias"]
         let bias = Tensor::ones((b, l, 21), sample_dtype, device)?;
         println!("todo: We need to add the bias!");
-
         // Todo! Fix this hack.
         println!("todo: move temp and seed upstream");
         // let temperature = 0.5f64;
-        let temperature = 0.05f64;
+        let temperature = 0.5f64;
         let seed = 111;
         let symmetry_residues: Option<Vec<i32>> = None;
         match symmetry_residues {
@@ -741,6 +733,7 @@ impl ProteinMPNN {
                         .clamp(1e-10, 1.0)?
                         .broadcast_div(&sum)?
                         .contiguous()?;
+
                     let s_t = multinomial_sample(&probs_sample_1d, temperature, seed)?;
                     let s_t = s_t.to_dtype(sample_dtype)?;
                     let s_true = s_true.to_dtype(sample_dtype)?;
