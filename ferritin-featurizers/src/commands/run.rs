@@ -71,7 +71,9 @@ pub fn execute(
     std::fs::create_dir_all(format!("{}/packed", out_folder))?;
 
     println!("Sampling from the Model...");
-    let model_sample = model.sample(&prot_features)?;
+
+    //
+    let model_sample = model.sample(&prot_features, 0.5, 111)?;
     println!("{:?}", model_sample);
 
     std::fs::create_dir_all(format!("{}/seqs", out_folder))?;

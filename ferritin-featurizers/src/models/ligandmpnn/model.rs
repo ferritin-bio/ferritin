@@ -452,11 +452,16 @@ impl ProteinMPNN {
             }
         }
     }
-    pub fn sample(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
+    pub fn sample(
+        &self,
+        features: &ProteinFeatures,
+        temperature: f64,
+        seed: u64,
+    ) -> Result<ScoreOutput> {
         // Todo: move temp and seed upstream
         // let temperature = 0.5f64;
-        let temperature = 0.5f64;
-        let seed = 11111;
+        // let temperature = 05f64;
+        // let seed = 11111;
         let sample_dtype = DType::F32;
         let ProteinFeatures {
             s,

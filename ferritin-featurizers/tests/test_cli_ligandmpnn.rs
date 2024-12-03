@@ -4,18 +4,22 @@ mod tests {
     // cargo instruments -t time --bin ferritin-featurizers -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
     use assert_cmd::Command;
     use ferritin_test_data::TestFile;
-    use tempfile;
+    use std::path::{Path, PathBuf};
+    use tempfile::NamedTempFile;
+
+    fn setup(folder: String) -> (String, NamedTempFile, PathBuf) {
+        let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
+        let out_folder = std::path::PathBuf::from(folder);
+        if out_folder.exists() {
+            std::fs::remove_dir_all(&out_folder).expect("Failed to remove output directory");
+        }
+        std::fs::create_dir_all(&out_folder).expect("Failed to create output directory");
+        (pdbfile, _tmp, out_folder)
+    }
 
     #[test]
     fn test_cli_command_run_example_01() {
-        let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
-        let out_folder = tempfile::tempdir().unwrap().into_path();
-
-        // delete outdir if  present
-        if std::path::Path::new("./outputs/default").exists() {
-            std::fs::remove_dir_all("./outputs/default").unwrap();
-        }
-
+        let (pdbfile, _tmp, out_folder) = setup("./outputs/default".to_string());
         let assert = Command::cargo_bin("ferritin-featurizers")
             .unwrap()
             .arg("run")
@@ -36,24 +40,30 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-
     fn test_cli_command_run_example_02() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
-        let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let out_folder = std::path::Path::new("./outputs/temperature");
+        if out_folder.exists() {
+            std::fs::remove_dir_all(out_folder).expect("Failed to remove output directory");
+        }
+        std::fs::create_dir_all(out_folder).expect("Failed to create output directory");
 
-        cmd.arg("run")
+        let assert = Command::cargo_bin("ferritin-featurizers")
+            .unwrap()
+            .arg("run")
             .arg("--seed")
             .arg("111")
             .arg("--pdb-path")
             .arg(pdbfile)
+            .arg("--model-type")
+            .arg("protein_mpnn")
             .arg("--temperature")
             .arg("0.05")
             .arg("--out-folder")
-            .arg(&out_folder);
+            .arg(&out_folder)
+            .assert()
+            .success();
 
-        let assert = cmd.assert().success();
         println!("Successful command....");
         assert!(out_folder.exists());
         println!("Output: {:?}", assert.get_output());
