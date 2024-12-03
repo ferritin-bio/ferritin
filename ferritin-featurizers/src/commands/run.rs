@@ -70,10 +70,11 @@ pub fn execute(
     std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
     std::fs::create_dir_all(format!("{}/packed", out_folder))?;
 
-    println!("Sampling from the Model...");
+    // Loading Dependent Factors
+    let temperature = exec.run_config.temperature.unwrap_or(0.5);
 
-    //
-    let model_sample = model.sample(&prot_features, 0.5, 111)?;
+    println!("Sampling from the Model...");
+    let model_sample = model.sample(&prot_features, temperature as f64, seed as i32)?;
     println!("{:?}", model_sample);
 
     std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
