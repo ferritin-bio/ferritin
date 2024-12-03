@@ -515,13 +515,14 @@ impl ProteinMPNN {
             ..
         } = features;
 
-        let s_true = s.clone();
+        let s_true = s.to_dtype(sample_dtype)?;
         let device = s.device();
         let (b, l) = s.dims2()?;
 
         // Todo: This is a hack. we should be passing in encoded chains.
-        let chain_mask = Tensor::ones_like(&x_mask.as_ref().unwrap())?.to_dtype(sample_dtype)?;
-        let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?;
+        // let chain_mask = Tensor::ones_like(&x_mask.as_ref().unwrap())?.to_dtype(sample_dtype)?;
+        // let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?;
+        let chain_mask = x_mask.as_ref().unwrap().to_dtype(sample_dtype)?;
         let (h_v, h_e, e_idx) = self.encode(features)?;
 
         // this might be  a bad rand implementation
@@ -578,7 +579,6 @@ impl ProteinMPNN {
                 // why is this one 21 and the others are 20?
                 let mut all_log_probs = Tensor::zeros((b, l, 21), sample_dtype, device)?;
                 let mut h_s = Tensor::zeros_like(&h_v)?;
-
                 // note: we this value of 20 is `X`. We will need to replace the values below, not add them
                 let mut s = Tensor::full(20u32, (b, l), device)?;
                 let mut h_v_stack = vec![h_v.clone()];
@@ -693,8 +693,8 @@ impl ProteinMPNN {
                             .unsqueeze(1)?; // Now [1, 1, 128] - same rank as target
                         h_v_stack[l + 1] =
                             h_v_stack[l + 1].index_add(&t_expanded, &decoder_output, 1)?;
-                        h_v_stack[l + 1] =
-                            h_v_stack[l + 1].index_add(&t_expanded, &decoder_output, 1)?;
+                        // h_v_stack[l + 1] =
+                        //     h_v_stack[l + 1].index_add(&t_expanded, &decoder_output, 1)?;
                     }
                     let h_v_t = h_v_stack
                         .last()
@@ -765,9 +765,10 @@ impl ProteinMPNN {
                         .unsqueeze(1)?
                         .unsqueeze(2)?
                         .expand((b, 1, 21))?
-                        .mul(&log_probs.unsqueeze(1)?)?;
+                        .mul(&log_probs.unsqueeze(1)?)?
+                        .squeeze(1)?
+                        .unsqueeze(1)?;
 
-                    let log_probs_update = log_probs_update.squeeze(1)?.unsqueeze(1)?;
                     all_log_probs = all_log_probs.index_add(
                         &t_expanded,
                         &Tensor::zeros_like(&log_probs_update)?,
