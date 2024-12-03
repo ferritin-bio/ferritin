@@ -132,34 +132,11 @@ pub fn execute(
     // Residues -------------------------------------------
     println!("Fixed Residues!");
     if let Some(res) = exec.residue_control_config {
-        // fixed residues will create a tensor that will be used to process a mask
-        // for Decoding
-        //
-        // string -> list -> tensor -> mask_tensor
-        //
-        // else:
-        //     fixed_residues = [item for item in args.fixed_residues.split()]
-        //     fixed_residues_multi = {}
-        //     for pdb in pdb_paths:
-        //         fixed_residues_multi[pdb] = fixed_residues
-        //
-        //       fixed_positions = torch.tensor(
-        //     [int(item not in fixed_residues) for item in encoded_residues],
-        //     device=device,
-        // )
-        // redes
-        //
-        //         elif fixed_residues:
-        // protein_dict["chain_mask"] = chain_mask * fixed_positions
-        //
         let fixed_residues = res.fixed_residues.unwrap();
         let fixed_positions_tensor = &prot_features.get_encoded_tensor(fixed_residues, &device)?;
-
-        println!("fixed_positions_tensor: {:?}", fixed_positions_tensor);
-        println!(
-            "fixed_positions_tensor: {:?}",
-            fixed_positions_tensor.to_vec1::<u32>()?
-        );
+        println!("Fixed_pos_tensor: {:?}", fixed_positions_tensor);
+        // todo:multiply this vector by the chain mask...
+        // protein_dict["chain_mask"] = chain_mask * fixed_positions
     }
 
     Ok(())
