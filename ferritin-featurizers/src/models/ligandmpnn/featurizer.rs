@@ -336,7 +336,6 @@ impl ProteinFeatures {
         candle_core::safetensors::save(&tensors, path)?;
         Ok(())
     }
-
     pub fn get_encoded(
         &self,
     ) -> Result<(Vec<String>, HashMap<String, usize>, HashMap<usize, String>)> {
@@ -393,5 +392,12 @@ impl ProteinFeatures {
             .collect();
 
         Tensor::from_iter(mask_values, device)
+    }
+    pub fn update_mask(&mut self, tensor: Tensor) -> Result<()> {
+        self.x_mask = match &self.x_mask {
+            Some(mask) => Some(mask.mul(&tensor)?),
+            None => Some(tensor),
+        };
+        Ok(())
     }
 }

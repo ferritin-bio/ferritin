@@ -77,7 +77,7 @@ pub fn execute(
     println!("Model Loaded!");
 
     println!("Generating Protein Features");
-    let prot_features = exec.generate_protein_features()?;
+    let mut prot_features = exec.generate_protein_features()?;
 
     // Calculate Masks  ------------------------------------------------------------
 
@@ -101,31 +101,31 @@ pub fn execute(
         chain_mask_tensor = chain_mask_tensor.mul(&fixed_positions_tensor)?;
     }
 
-    // Create the output folders
-    println!("Creating the Outputs");
-    std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
-    std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
-    std::fs::create_dir_all(format!("{}/packed", out_folder))?;
-    std::fs::create_dir_all(format!("{}/stats", out_folder))?;
+    // Update the Mask Here
+    prot_features.update_mask(chain_mask_tensor)?;
 
     println!("Sampling from the Model...");
     println!("Temp and Seed are: temp: {:}, seed: {:}", temperature, seed);
     let model_sample = model.sample(&prot_features, temperature as f64, seed as u64)?;
+
     println!("{:?}", model_sample);
 
-    std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
-    let sequences = model_sample.get_sequences()?;
-    let fasta_path = format!("{}/seqs/output.fasta", out_folder);
-    let mut fasta_content = String::new();
-    for (i, seq) in sequences.iter().enumerate() {
-        fasta_content.push_str(&format!(">sequence_{}\n{}\n", i + 1, seq));
-    }
-    std::fs::write(fasta_path, fasta_content)?;
-
-    // // Score a Protein!
-    // println!("Scoring the Protein...");
-    // let model_score = model.score(&prot_features, false)?;
-    // println!("Protein Score: {:?}", model_score);
+    let _ = {
+        // Create the output folders
+        println!("Creating the Outputs");
+        std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
+        std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
+        std::fs::create_dir_all(format!("{}/packed", out_folder))?;
+        std::fs::create_dir_all(format!("{}/stats", out_folder))?;
+        std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
+        let sequences = model_sample.get_sequences()?;
+        let fasta_path = format!("{}/seqs/output.fasta", out_folder);
+        let mut fasta_content = String::new();
+        for (i, seq) in sequences.iter().enumerate() {
+            fasta_content.push_str(&format!(">sequence_{}\n{}\n", i + 1, seq));
+        }
+        std::fs::write(fasta_path, fasta_content)?;
+    };
 
     if save_stats {
         // out_dict = {}
