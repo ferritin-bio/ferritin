@@ -1,12 +1,7 @@
 //! A message passing protein design neural network
 //! that samples sequences diffusing conditional probabilities.
 //!
-//!
-//! Consider factoring out model creation of the DEC
-//! and ENC layers using a function.
-//!
-//! here is an example of paramaterizable network creation:
-//! https://github.com/huggingface/candle/blob/main/candle-transformers/src/models/resnet.rs
+//! - See the [LigandMPNN Repo](https://github.com/dauparas/LigandMPNN)
 //!
 use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::featurizer::ProteinFeatures;
@@ -657,7 +652,14 @@ impl ProteinMPNN {
                     // Generate logits and probabilities
                     let logits = self.w_out.forward(&h_v_t)?;
                     let log_probs = log_softmax(&logits, D::Minus1)?;
-                    let probs = softmax(&(logits.add(&bias_t)? / temperature)?, D::Minus1)?;
+
+                    // explicit for OoO
+                    let probs = {
+                        let biased_logits = logits.add(&bias_t)?; // (logits + bias_t)
+                        let scaled_logits = (biased_logits / temperature)?; // (logits + bias_t) / temperature
+                        softmax(&scaled_logits, D::Minus1)? // softmax((logits + bias_t) / temperature)
+                    };
+
                     let probs_sample = probs
                         .narrow(1, 0, 20)?
                         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?.expand((b, 20))?)?;
