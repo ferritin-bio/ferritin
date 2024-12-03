@@ -64,17 +64,19 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_cli_command_run_example_03() {
-        let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
-        let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
-
-        cmd.arg("run")
+        let (pdbfile, _tmp, out_folder) = setup("./outputs/random_seed".to_string());
+        let assert = Command::cargo_bin("ferritin-featurizers")
+            .unwrap()
+            .arg("run")
             .arg("--pdb-path")
             .arg(pdbfile)
+            .arg("--model-type")
+            .arg("protein_mpnn")
             .arg("--out-folder")
-            .arg(&out_folder);
+            .arg("./outputs/default")
+            .assert()
+            .success();
 
         let assert = cmd.assert().success();
         println!("Successful command....");
