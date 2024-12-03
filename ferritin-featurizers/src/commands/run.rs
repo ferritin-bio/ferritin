@@ -2,6 +2,7 @@ use crate::models::ligandmpnn::configs::{
     AABiasConfig, LigandMPNNConfig, MPNNExecConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig,
     ResidueControl, RunConfig,
 };
+use crate::models::ligandmpnn::model::ScoreOutput;
 use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{Device, Result};
 use rand::Rng;
@@ -84,6 +85,7 @@ pub fn execute(
     std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
     std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
     std::fs::create_dir_all(format!("{}/packed", out_folder))?;
+    std::fs::create_dir_all(format!("{}/stats", out_folder))?;
 
     println!("Sampling from the Model...");
     println!("Temp and Seed are: temp: {:}, seed: {:}", temperature, seed);
@@ -106,7 +108,7 @@ pub fn execute(
     let model_score = model.score(&prot_features, false)?;
     println!("Protein Score: {:?}", model_score);
 
-    fn write_stats(outpath: String) {
+    if save_stats {
         // out_dict = {}
         // out_dict["generated_sequences"] = S_stack.cpu()
         // out_dict["sampling_probs"] = sampling_probs_stack.cpu()
@@ -122,12 +124,10 @@ pub fn execute(
         //
         // model_score.get_decoding_order()
         // model_score.get_sequences()
-        // model_score.get_log_probs()
-        println!("Gathering Stats");
-    }
-
-    if save_stats {
-        write_stats("hello".to_string())
+        let outfile = format!("{}/stats/stats.safetensors", out_folder);
+        // note this is only the  Score outputs.
+        // It doesn't have the  other fields in teh pytoch implmentaiton
+        model_sample.save_as_safetensors(outfile);
     }
 
     Ok(())

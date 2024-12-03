@@ -3,10 +3,13 @@
 //!
 //! - See the [LigandMPNN Repo](https://github.com/dauparas/LigandMPNN)
 //!
+use std::collections::HashMap;
+
 use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::featurizer::ProteinFeatures;
 use super::proteinfeatures::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
+use candle_core::safetensors;
 use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
@@ -86,6 +89,21 @@ impl ScoreOutput {
     }
     pub fn get_log_probs(&self) -> &Tensor {
         &self.log_probs
+    }
+    pub fn save_as_safetensors(&self, filename: String) -> Result<()> {
+        let mut tensors = HashMap::new();
+        tensors.insert("S".to_string(), self.s.clone());
+        tensors.insert("log_probs".to_string(), self.log_probs.clone());
+        tensors.insert("logits".to_string(), self.logits.clone());
+        tensors.insert("decoding_order".to_string(), self.decoding_order.clone());
+
+        // Create directory if it doesn't exist
+        if let Some(parent) = std::path::Path::new(&filename).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        safetensors::save(&tensors, &filename);
+        Ok(())
     }
 }
 
