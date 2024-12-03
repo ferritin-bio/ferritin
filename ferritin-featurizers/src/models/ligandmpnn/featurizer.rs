@@ -338,6 +338,8 @@ impl ProteinFeatures {
     }
 
     pub fn get_encoded(&self) -> Result<(HashMap<String, usize>, HashMap<usize, String>)> {
+        // Creates a set of mappings from
+
         let r_idx_list = &self.r_idx.flatten_all()?.to_vec1::<u32>()?;
         let chain_letters_list = &self.chain_letters;
 
