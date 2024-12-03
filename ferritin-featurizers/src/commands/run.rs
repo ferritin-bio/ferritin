@@ -94,7 +94,6 @@ pub fn execute(
 
     std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
     let sequences = model_sample.get_sequences()?;
-    // println!("DECODING ORDER: {:?}", model_sample.get_decoding_order()?);
 
     let fasta_path = format!("{}/seqs/output.fasta", out_folder);
     let mut fasta_content = String::new();
@@ -126,8 +125,51 @@ pub fn execute(
         // model_score.get_sequences()
         let outfile = format!("{}/stats/stats.safetensors", out_folder);
         // note this is only the  Score outputs.
-        // It doesn't have the  other fields in teh pytoch implmentaiton
+        // It doesn't have the  other fields in teh pytoch implmentation
         model_sample.save_as_safetensors(outfile);
+    }
+
+    // Residues -------------------------------------------
+    println!("Fixed Residues!");
+    if let Some(res) = exec.residue_control_config {
+        // fixed residues will create a tensor that will be used to process a mask
+        // for Decoding
+        //
+        // string -> list -> tensor -> mask_tensor
+        //
+        // else:
+        //     fixed_residues = [item for item in args.fixed_residues.split()]
+        //     fixed_residues_multi = {}
+        //     for pdb in pdb_paths:
+        //         fixed_residues_multi[pdb] = fixed_residues
+        //
+        //       fixed_positions = torch.tensor(
+        //     [int(item not in fixed_residues) for item in encoded_residues],
+        //     device=device,
+        // )
+        // redes
+        //
+        //         elif fixed_residues:
+        // protein_dict["chain_mask"] = chain_mask * fixed_positions
+        //
+        let fixed_residues = res.fixed_residues.unwrap();
+        println!("Fixed Residues! {:?}", fixed_residues);
+
+        println!(
+            "R_IDX values: {:?}",
+            prot_features.r_idx.unwrap().to_vec2::<u32>()?
+        );
+
+        // need to compare this to the Encoded residues...
+        // encoded_residues = []
+        // R_idx_list = list(protein_dict["R_idx"].cpu().numpy())  # residue indices
+        // for i, R_idx_item in enumerate(R_idx_list):
+        //     tmp = str(chain_letters_list[i]) + str(R_idx_item) + icodes[i]
+        //     encoded_residues.append(tmp)
+        // encoded_residue_dict = dict(zip(encoded_residues, range(len(encoded_residues))))
+        // encoded_residue_dict_rev = dict(
+        //     zip(list(range(len(encoded_residues))), encoded_residues)
+        // ).
     }
 
     Ok(())
