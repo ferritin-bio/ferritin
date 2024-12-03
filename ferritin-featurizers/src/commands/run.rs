@@ -155,10 +155,11 @@ pub fn execute(
         let fixed_residues = res.fixed_residues.unwrap();
         println!("Fixed Residues! {:?}", fixed_residues);
 
-        println!(
-            "R_IDX values: {:?}",
-            prot_features.r_idx.unwrap().to_vec2::<u32>()?
-        );
+        // println!(
+        //     "R_IDX values: {:?}",
+        //     &prot_features.r_idx.unwrap().to_vec2::<u32>()?
+        // );
+        println!("Prot_Feature_Encoding: {:?}", &prot_features.get_encoded()?);
 
         // need to compare this to the Encoded residues...
         // encoded_residues = []

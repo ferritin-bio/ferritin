@@ -335,4 +335,36 @@ impl ProteinFeatures {
         candle_core::safetensors::save(&tensors, path)?;
         Ok(())
     }
+
+    pub fn get_encoded(&self) -> Result<(HashMap<String, usize>, HashMap<usize, String>)> {
+        let r_idx_list = self
+            .r_idx
+            .as_ref()
+            .expect("Missing r_idx")
+            .flatten_all()?
+            .to_vec1::<u32>()?;
+
+        let chain_letters_list = self.chain_letters.as_ref().expect("Missing chain letters");
+
+        let mut encoded_residues = Vec::new();
+
+        for (i, r_idx_item) in r_idx_list.iter().enumerate() {
+            let tmp = format!("{}{}", chain_letters_list[i], r_idx_item);
+            encoded_residues.push(tmp);
+        }
+
+        let encoded_residue_dict: HashMap<String, usize> = encoded_residues
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.clone(), i))
+            .collect();
+
+        let encoded_residue_dict_rev: HashMap<usize, String> = encoded_residues
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (i, s.clone()))
+            .collect();
+
+        Ok((encoded_residue_dict, encoded_residue_dict_rev))
+    }
 }
