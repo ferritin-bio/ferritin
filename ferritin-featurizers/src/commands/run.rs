@@ -43,7 +43,7 @@ pub fn execute(
     let device = device(false)?;
 
     let exec = MPNNExecConfig::new(
-        device,
+        device.clone(),
         pdb_path, // will need to omdify this for multiple
         run_config,
         Some(residue_control_config),
@@ -125,7 +125,7 @@ pub fn execute(
         // model_score.get_sequences()
         let outfile = format!("{}/stats/stats.safetensors", out_folder);
         // note this is only the  Score outputs.
-        // It doesn't have the  other fields in teh pytoch implmentation
+        // It doesn't have the other fields in the pytorch implmentation
         model_sample.save_as_safetensors(outfile);
     }
 
@@ -153,24 +153,13 @@ pub fn execute(
         // protein_dict["chain_mask"] = chain_mask * fixed_positions
         //
         let fixed_residues = res.fixed_residues.unwrap();
-        println!("Fixed Residues! {:?}", fixed_residues);
+        let fixed_positions_tensor = &prot_features.get_encoded_tensor(fixed_residues, &device)?;
 
-        // println!(
-        //     "R_IDX values: {:?}",
-        //     &prot_features.r_idx.unwrap().to_vec2::<u32>()?
-        // );
-        println!("Prot_Feature_Encoding: {:?}", &prot_features.get_encoded()?);
-
-        // need to compare this to the Encoded residues...
-        // encoded_residues = []
-        // R_idx_list = list(protein_dict["R_idx"].cpu().numpy())  # residue indices
-        // for i, R_idx_item in enumerate(R_idx_list):
-        //     tmp = str(chain_letters_list[i]) + str(R_idx_item) + icodes[i]
-        //     encoded_residues.append(tmp)
-        // encoded_residue_dict = dict(zip(encoded_residues, range(len(encoded_residues))))
-        // encoded_residue_dict_rev = dict(
-        //     zip(list(range(len(encoded_residues))), encoded_residues)
-        // ).
+        println!("fixed_positions_tensor: {:?}", fixed_positions_tensor);
+        println!(
+            "fixed_positions_tensor: {:?}",
+            fixed_positions_tensor.to_vec1::<u32>()?
+        );
     }
 
     Ok(())

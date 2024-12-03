@@ -14,7 +14,7 @@ use candle_core::{DType, Device, Result, Tensor};
 use ferritin_core::AtomCollection;
 use itertools::MultiUnzip;
 use pdbtbx::Element;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use strum::IntoEnumIterator;
 
 // Helper Fns --------------------------------------
@@ -337,7 +337,9 @@ impl ProteinFeatures {
         Ok(())
     }
 
-    pub fn get_encoded(&self) -> Result<(HashMap<String, usize>, HashMap<usize, String>)> {
+    pub fn get_encoded(
+        &self,
+    ) -> Result<(Vec<String>, HashMap<String, usize>, HashMap<usize, String>)> {
         // Creates a set of mappings from
 
         let r_idx_list = &self.r_idx.flatten_all()?.to_vec1::<u32>()?;
@@ -361,6 +363,22 @@ impl ProteinFeatures {
             .map(|(i, s)| (i, s.clone()))
             .collect();
 
-        Ok((encoded_residue_dict, encoded_residue_dict_rev))
+        Ok((
+            encoded_residues,
+            encoded_residue_dict,
+            encoded_residue_dict_rev,
+        ))
+    }
+    // Fixed Residue List --> Tensor of 1/0
+    // Inputs: `"C1 C2 C3 C4 C5 C6 C7 C8 C9 C10`
+    pub fn get_encoded_tensor(&self, fixed_residues: String, device: &Device) -> Result<Tensor> {
+        let res_set: HashSet<String> = fixed_residues.split(' ').map(String::from).collect();
+        let (encoded_res, _, _) = &self.get_encoded()?;
+        candle_core::Tensor::from_iter(
+            encoded_res
+                .iter()
+                .map(|item| u32::from(!res_set.contains(item))),
+            device,
+        )
     }
 }
