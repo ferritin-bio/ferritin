@@ -145,7 +145,7 @@ impl ProteinFeaturesModel {
         device: &Device,
     ) -> Result<(Tensor, Tensor)> {
         let x = input_features.get_coords();
-        let mask = input_features.x_mask.as_ref().unwrap();
+        let mask = input_features.x_mask.as_ref();
         let r_idx = input_features.get_residue_index();
         // let chain_labels = input_features.chain_labels.as_ref();
         //

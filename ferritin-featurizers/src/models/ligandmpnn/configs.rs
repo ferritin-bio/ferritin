@@ -165,16 +165,16 @@ impl MPNNExecConfig {
         // println!("Returning Protein Features....");
         // return ligand MPNN.
         Ok(ProteinFeatures {
-            s,                       // protein amino acids sequences as 1D Tensor of u32
-            x: x_37,                 // protein co-oords by residue [1, 37, 4]
-            x_mask: Some(x_37_mask), // protein mask by residue
-            y,                       // ligand coords
-            y_t,                     // encoded ligand atom names
-            y_m: Some(y_m),          // ligand mask
-            r_idx: res_idx_tensor,   // protein residue indices shape=[length]
-            chain_labels: None,      //  # protein chain letters shape=[length]
-            chain_letters,           // chain_letters: shape=[length]
-            mask_c: None,            // mask_c:  shape=[length]
+            s,                     // protein amino acids sequences as 1D Tensor of u32
+            x: x_37,               // protein co-oords by residue [1, 37, 4]
+            x_mask: x_37_mask,     // protein mask by residue
+            y,                     // ligand coords
+            y_t,                   // encoded ligand atom names
+            y_m: Some(y_m),        // ligand mask
+            r_idx: res_idx_tensor, // protein residue indices shape=[length]
+            chain_labels: None,    //  # protein chain letters shape=[length]
+            chain_letters,         // chain_letters: shape=[length]
+            mask_c: None,          // mask_c:  shape=[length]
             chain_list,
         })
     }
