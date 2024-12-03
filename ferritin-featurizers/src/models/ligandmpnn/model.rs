@@ -352,7 +352,8 @@ impl DecLayer {
     }
 }
 
-// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L10C7-L10C18
+/// ProteinMPNN Model
+/// - [link](https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L10C7-L10C18)
 pub struct ProteinMPNN {
     pub(crate) config: ProteinMPNNConfig,
     pub(crate) decoder_layers: Vec<DecLayer>,
@@ -366,32 +367,24 @@ pub struct ProteinMPNN {
 
 impl ProteinMPNN {
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig) -> Result<Self> {
-        // Encoder
-        let mut encoder_layers = Vec::with_capacity(config.num_encoder_layers as usize);
-        for i in 0..config.num_encoder_layers {
-            encoder_layers.push(EncLayer::load(vb.pp("encoder_layers"), config, i as i32)?);
-        }
-        // Decoder
-        let mut decoder_layers = Vec::with_capacity(config.num_decoder_layers as usize);
-        for i in 0..config.num_decoder_layers {
-            decoder_layers.push(DecLayer::load(vb.pp("decoder_layers"), config, i as i32)?);
-        }
-        // Weights
-        let w_e = linear::linear(
-            config.edge_features as usize,
-            config.hidden_dim as usize,
-            vb.pp("W_e"),
-        )?;
-        let w_out = linear::linear(
-            config.hidden_dim as usize,
-            config.num_letters as usize,
-            vb.pp("W_out"),
-        )?;
-        let w_s = embedding(
-            config.vocab as usize,
-            config.hidden_dim as usize,
-            vb.pp("W_s"),
-        )?;
+        let hidden_dim = config.hidden_dim as usize;
+        let edge_features = config.edge_features as usize;
+        let num_letters = config.num_letters as usize;
+        let vocab_size = config.vocab as usize;
+
+        // Create encoder and decoder layers using iterators
+        let encoder_layers = (0..config.num_encoder_layers)
+            .map(|i| EncLayer::load(vb.pp("encoder_layers"), config, i as i32))
+            .collect::<Result<Vec<_>>>()?;
+
+        let decoder_layers = (0..config.num_decoder_layers)
+            .map(|i| DecLayer::load(vb.pp("decoder_layers"), config, i as i32))
+            .collect::<Result<Vec<_>>>()?;
+
+        // Initialize weights
+        let w_e = linear::linear(edge_features, hidden_dim, vb.pp("W_e"))?;
+        let w_out = linear::linear(hidden_dim, num_letters, vb.pp("W_out"))?;
+        let w_s = embedding(vocab_size, hidden_dim, vb.pp("W_s"))?;
         // Features
         let features = ProteinFeaturesModel::load(vb.pp("features"), config.clone())?;
 
@@ -406,15 +399,6 @@ impl ProteinMPNN {
             w_s,
         })
     }
-    // fn predict(&self) {
-    //     // Implement prediction logic
-    //     todo!()
-    // }
-    // fn train(&mut self) {
-    //     // Implement training logic
-    //     // .forward()?
-    //     todo!()
-    // }
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
         let s_true = &features.get_sequence();
         let base_dtype = DType::F32;
