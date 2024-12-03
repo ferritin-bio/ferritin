@@ -4,6 +4,7 @@ use crate::models::ligandmpnn::configs::{
 };
 use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{Device, Result};
+use rand::Rng;
 
 pub fn device(cpu: bool) -> Result<Device> {
     if cpu {
@@ -45,7 +46,6 @@ pub fn execute(
     let model_type = model_type.unwrap_or(ModelTypes::ProteinMPNN);
 
     let exec = MPNNExecConfig::new(
-        seed,
         device,
         pdb_path, // will need to omdify this for multiple
         model_type,
@@ -70,13 +70,17 @@ pub fn execute(
     std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
     std::fs::create_dir_all(format!("{}/packed", out_folder))?;
 
-    // Loading Dependent Factors
-    let temperature = exec.run_config.temperature.unwrap_or(0.5);
+    // Loading Dependent Factors ------------------------------
 
-    // if args.seed:
-    //      seed = args.seed
-    //  else:
-    //      seed = int(np.random.randint(0, high=99999, size=1, dtype=int)[0])
+    let seed = match exec.run_config.seed {
+        Some(s) => s,
+        None => {
+            let mut rng = rand::thread_rng();
+            rng.gen_range(0..99999) as i32
+        }
+    };
+
+    let temperature = exec.run_config.temperature.unwrap_or(0.1);
 
     println!("Sampling from the Model...");
     println!("Temp and Seed are: temp: {:}, seed: {:}", temperature, seed);
