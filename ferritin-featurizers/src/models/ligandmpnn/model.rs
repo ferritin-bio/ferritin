@@ -12,10 +12,10 @@ use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::featurizer::ProteinFeatures;
 use super::proteinfeatures::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
-use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
+use candle_core::{DType, Device, Error, IndexOp, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
-use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, Linear, VarBuilder};
+use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, LayerNorm, Linear, VarBuilder};
 use candle_transformers::generation::LogitsProcessor;
 
 pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result<Tensor> {
@@ -152,6 +152,37 @@ impl EncLayer {
             dense,
         })
     }
+    // refactoring common fn
+    fn concat_node_tensors(
+        &self,
+        h_v: &Tensor,
+        h_e: &Tensor,
+        e_idx: &Tensor,
+        h_ev: &Tensor,
+    ) -> Result<Tensor> {
+        let h_v_expand = h_v.unsqueeze(D::Minus2)?;
+        let expand_shape = [
+            h_ev.dims()[0],
+            h_ev.dims()[1],
+            h_ev.dims()[2],
+            h_v_expand.dims()[3],
+        ];
+        let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
+        Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?.contiguous()
+    }
+    // refactoring common fn
+    fn apply_dropout_and_norm(
+        &self,
+        input: &Tensor,
+        delta: &Tensor,
+        dropout: &Dropout,
+        norm: &LayerNorm,
+        training: bool,
+    ) -> Result<Tensor> {
+        let delta_dropout = dropout.forward(delta, training)?;
+        norm.forward(&(input + delta_dropout)?)
+    }
+
     fn forward(
         &self,
         h_v: &Tensor,
@@ -161,24 +192,10 @@ impl EncLayer {
         mask_attend: Option<&Tensor>,
         training: Option<bool>,
     ) -> Result<(Tensor, Tensor)> {
-        println!("EncoderLayer: Starting forward pass");
+        let training = training.unwrap_or(false);
         let h_v = h_v.to_dtype(DType::F32)?;
         let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
-
-        let h_v_expand = h_v.unsqueeze(D::Minus2)?;
-        // Explicitly specify the expansion dimensions
-        let expand_shape = [
-            h_ev.dims()[0], // batch size
-            h_ev.dims()[1], // sequence length
-            h_ev.dims()[2], // number of neighbors
-            h_v_expand.dims()[3], // hidden dimension
-                            // h_v.dims()[3], // hidden dimension
-        ];
-
-        let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
-
-        let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?.contiguous()?;
-
+        let h_ev = self.concat_node_tensors(&h_v, h_e, e_idx, &h_ev)?;
         let h_message = self
             .w1
             .forward(&h_ev)?
@@ -194,27 +211,21 @@ impl EncLayer {
         };
 
         // Safe division with scale
-        let dh = {
-            let sum = h_message.sum(D::Minus2)?;
-            let scale = if self.scale == 0.0 { 1.0 } else { self.scale };
-            (sum / scale)?
-        };
+        let sum = h_message.sum(D::Minus2)?;
+        let scale = if self.scale == 0.0 { 1.0 } else { self.scale };
+        let dh = (sum / scale)?;
 
-        let h_v = {
-            let dh_dropout = self
-                .dropout1
-                .forward(&dh, training.expect("Training must be specified"))?
-                .to_dtype(DType::F32)?;
-            self.norm1.forward(&(h_v + dh_dropout)?)?
-        };
-        let dh = self.dense.forward(&h_v)?;
+        let h_v = self.apply_dropout_and_norm(&h_v, &dh, &self.dropout1, &self.norm1, training)?;
 
-        let h_v = {
-            let dh_dropout = self
-                .dropout2
-                .forward(&dh, training.expect("Training Must be specified"))?;
-            self.norm2.forward(&(&h_v + &dh_dropout)?)?
-        };
+        let dense_output = self.dense.forward(&h_v)?;
+
+        let h_v = self.apply_dropout_and_norm(
+            &h_v,
+            &dense_output,
+            &self.dropout2,
+            &self.norm2,
+            training,
+        )?;
 
         let h_v = if let Some(mask) = mask_v {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_v)?
@@ -222,18 +233,7 @@ impl EncLayer {
             h_v
         };
         let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
-        let h_v_expand = h_v.unsqueeze(D::Minus2)?;
-
-        // Explicitly specify the expansion dimensions
-        let expand_shape = [
-            h_ev.dims()[0],       // batch size
-            h_ev.dims()[1],       // sequence length
-            h_ev.dims()[2],       // number of neighbors
-            h_v_expand.dims()[3], // hidden dimension
-        ];
-
-        let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
-        let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?.contiguous()?;
+        let h_ev = self.concat_node_tensors(&h_v, h_e, e_idx, &h_ev)?;
 
         let h_message = self
             .w11
@@ -243,12 +243,8 @@ impl EncLayer {
             .gelu()?
             .apply(&self.w13)?;
 
-        let h_e = {
-            let h_message_dropout = self
-                .dropout3
-                .forward(&h_message, training.expect("Training Must be specified"))?;
-            self.norm3.forward(&(h_e + h_message_dropout)?)?
-        };
+        let h_e =
+            self.apply_dropout_and_norm(h_e, &h_message, &self.dropout3, &self.norm3, training)?;
         Ok((h_v, h_e))
     }
 }
@@ -1055,7 +1051,7 @@ impl ProteinMPNN {
 
     pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
         let sample_dtype = DType::F32;
-        let ProteinFeatures { s, x, x_mask, .. } = &features;
+        let ProteinFeatures { s, x_mask, .. } = &features;
 
         let s_true = &s.clone();
         let device = s_true.device();
