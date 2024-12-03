@@ -32,7 +32,6 @@ impl ProteinFeaturesModel {
         let embeddings = PositionalEncodings::new(
             num_positional_embeddings, // num embeddings.
             32usize,                   // max_relative_feature
-            vb.device(),               // device this should be passed in as param,
             vb.pp("embeddings"),       // VarBuilder,
         )?;
         let edge_embedding =
@@ -62,15 +61,15 @@ impl ProteinFeaturesModel {
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
         compute_nearest_neighbors(x, mask, self.top_k, eps as f32)
     }
+    /// 1. It takes a tensor `d` as input and creates a set of RBF features
+    /// 2. Sets up parameters:
+    ///    - `d_min` = 2.0 (minimum distance)
+    ///    - `d_max` = 22.0 (maximum distance)
+    ///    - `d_count` = number of RBF centers
+    /// 3. Creates evenly spaced centers (μ) between d_min and d_max
+    /// 4. Calculates the width (σ) of the Gaussian functions
+    /// 5. Applies the RBF formula: exp(-(x-μ)²/σ²)
     fn _rbf(&self, d: &Tensor, device: &Device) -> Result<Tensor> {
-        // 1. It takes a tensor `d` as input and creates a set of RBF features
-        // 2. Sets up parameters:
-        //    - `d_min` = 2.0 (minimum distance)
-        //    - `d_max` = 22.0 (maximum distance)
-        //    - `d_count` = number of RBF centers
-        // 3. Creates evenly spaced centers (μ) between d_min and d_max
-        // 4. Calculates the width (σ) of the Gaussian functions
-        // 5. Applies the RBF formula: exp(-(x-μ)²/σ²)
         const D_MIN: f64 = 2.0;
         const D_MAX: f64 = 22.0;
         // Create centers (μ)
@@ -78,8 +77,7 @@ impl ProteinFeaturesModel {
             .to_dtype(DType::F32)? // Convert to F32 on CPU
             .reshape((1, 1, 1, self.num_rbf))?
             .to_device(device)?; // Move to Metal device after conversion
-
-        // Calculate width (σ)
+                                 // Calculate width (σ)
         let d_sigma = (D_MAX - D_MIN) / self.num_rbf as f64;
         let dims = d.dims();
         let d_expanded = d.unsqueeze(D::Minus1)?; // [N, N, C, 1]
@@ -88,7 +86,6 @@ impl ProteinFeaturesModel {
             d_expanded.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
         let d_sigma_tensor =
             Tensor::new(&[d_sigma as f32], &device)?.broadcast_as(d_expanded_broadcast.shape())?;
-        // let d_expanded = d_expanded.to_dtype(DType::F32)?.contiguous()?;
         let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma_tensor)?;
         let rbf = diff.powf(2.0)?.neg()?.exp()?;
         Ok(rbf)
@@ -113,12 +110,10 @@ impl ProteinFeaturesModel {
     // RBF_A_B = self._rbf(D_A_B_neighbors)
     // return RBF_A_B
     fn _get_rbf(&self, a: &Tensor, b: &Tensor, e_idx: &Tensor, device: &Device) -> Result<Tensor> {
-        // Get original dimensions
-        let dims = a.dims();
-        let target_shape = (dims[0], dims[1], dims[1], dims[2]); // [1, 93, 93, 3]
+        let (batch, seq_len, pos) = a.dims3()?;
+        let target_shape = (batch, seq_len, seq_len, pos); // [1, 93, 93, 3]
         let a_expanded = a.unsqueeze(2)?.broadcast_as(target_shape)?;
         let b_expanded = b.unsqueeze(1)?.broadcast_as(target_shape)?;
-        // Now both tensors should be [1, 93, 93, 3]
         let diff = (a_expanded - b_expanded)?;
         let squared_diff = diff.powf(2.0)?;
         let sum_squared_diff = squared_diff.sum(3)?;
@@ -128,25 +123,22 @@ impl ProteinFeaturesModel {
         let rbf_a_b = self._rbf(&d_a_b_neighbors, device)?;
         Ok(rbf_a_b)
     }
-
+    /// Euclidean distance calculation
     fn compute_pairwise_distances(&self, a: &Tensor, b: &Tensor) -> Result<Tensor> {
         const EPSILON: f64 = 1e-6; // Numerical stability constant
         let a_expanded = a.unsqueeze(2)?;
         let b_expanded = b.unsqueeze(1)?;
-        // Euclidean distance calculation
         let diff = (a_expanded - b_expanded)?;
         let squared_distances = diff.powf(2.0)?.sum(3)?;
         let distances = (squared_distances + EPSILON)?.sqrt()?;
         Ok(distances)
     }
-
     fn gather_edge_distances(&self, distances: &Tensor, edge_indices: &Tensor) -> Result<Tensor> {
         distances
             .unsqueeze(D::Minus1)?
             .gather(edge_indices, 2)?
             .squeeze(D::Minus1)
     }
-
     pub fn forward(
         &self,
         input_features: &ProteinFeatures,
@@ -245,10 +237,8 @@ impl ProteinFeaturesModel {
         let e_positional = self
             .embeddings
             .forward(&offset.to_dtype(DType::U32)?, &e_chains)?;
-        // println!("About to cat the pos embeddings...");
         let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
         let e = self.edge_embedding.forward(&e)?;
-        // println!("About to start the normalization...");
         let e = self.norm_edges.forward(&e)?;
         Ok((e, e_idx))
     }
@@ -256,37 +246,31 @@ impl ProteinFeaturesModel {
 
 #[derive(Clone, Debug)]
 pub struct PositionalEncodings {
-    num_embeddings: usize,
     max_relative_feature: usize,
     linear: Linear,
 }
-
 impl PositionalEncodings {
-    pub fn new(
-        num_embeddings: usize,
-        max_relative_feature: usize,
-        device: &Device,
-        vb: VarBuilder,
-    ) -> Result<Self> {
+    pub fn new(num_embeddings: usize, max_relative_feature: usize, vb: VarBuilder) -> Result<Self> {
         let linear = linear(
             2 * max_relative_feature + 2,
             num_embeddings,
             vb.pp("linear"),
         )?;
         Ok(Self {
-            num_embeddings,
             max_relative_feature,
             linear,
         })
     }
-    // def forward(self, offset, mask):
-    //     d = torch.clip(
-    //         offset + self.max_relative_feature, 0, 2 * self.max_relative_feature
-    //     ) * mask + (1 - mask) * (2 * self.max_relative_feature + 1)
-    //     d_onehot = torch.nn.functional.one_hot(d, 2 * self.max_relative_feature + 1 + 1)
-    //     E = self.linear(d_onehot.float())
-    //     return E
+    /// - [pytorch](https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L1645)
     fn forward(&self, offset: &Tensor, mask: &Tensor) -> Result<Tensor> {
+        // def forward(self, offset, mask):
+        //     d = torch.clip(
+        //         offset + self.max_relative_feature, 0, 2 * self.max_relative_feature
+        //     ) * mask + (1 - mask) * (2 * self.max_relative_feature + 1)
+        //     d_onehot = torch.nn.functional.one_hot(d, 2 * self.max_relative_feature + 1 + 1)
+        //     E = self.linear(d_onehot.float())
+        //     return E
+        //
         // println!("In positional Embedding: forward");
         // Offset: Tensor[dims 1, 93, 24; u32, metal:4294969325]
         let max_rel = self.max_relative_feature as f64;
@@ -295,7 +279,7 @@ impl PositionalEncodings {
         let d = d.clamp(0f64, 2.0 * max_rel)?;
         // Second part: d * mask + (1-mask)*(2*max_rel + 1)
         let masked_d = d.mul(mask)?;
-        let inverse_mask = (mask * -1.0)? + 1.0; // (1-mask)
+        let inverse_mask = (mask * -1.0)? + 1.0;
         let extra_term = inverse_mask? * ((2.0 * max_rel) + 1.0);
         let d = (masked_d + extra_term?)?;
 

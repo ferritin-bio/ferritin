@@ -27,21 +27,21 @@ enum Commands {
     Run {
         // Required Basic Arguments
         #[arg(long, required = true)]
-        seed: i32,
-        #[arg(long, required = true)]
         pdb_path: String,
         #[arg(long, required = true)]
         out_folder: String,
-        #[arg(long, required = true, value_enum)]
-        model_type: ModelTypes, // Use the enum type
 
         // Configuration Arguments
+        #[arg(long, value_enum)]
+        model_type: Option<ModelTypes>, // Use the enum type
+        #[arg(long)]
+        seed: Option<i32>,
         #[arg(long)]
         temperature: Option<f32>,
         #[arg(long)]
         verbose: Option<i32>,
         #[arg(long)]
-        save_stats: Option<i32>,
+        save_stats: Option<bool>,
         #[arg(long)]
         batch_size: Option<i32>,
         #[arg(long)]
@@ -153,6 +153,8 @@ impl Cli {
                 transmembrane_interface,
             } => {
                 let run_config = RunConfig {
+                    model_type,
+                    seed,
                     temperature,
                     verbose,
                     save_stats,
@@ -202,10 +204,8 @@ impl Cli {
                 };
 
                 let _ = commands::run::execute(
-                    seed,
                     pdb_path,
                     out_folder,
-                    Some(model_type),
                     run_config,
                     residue_control,
                     aa_bias,
