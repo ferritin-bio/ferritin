@@ -19,12 +19,8 @@ use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, LayerNorm, Li
 use candle_transformers::generation::LogitsProcessor;
 
 // refactoring common fn
-fn concat_node_tensors(
-    h_v: &Tensor,
-    h_e: &Tensor,
-    e_idx: &Tensor,
-    h_ev: &Tensor,
-) -> Result<Tensor> {
+fn concat_node_tensors(h_v: &Tensor, h_e: &Tensor, e_idx: &Tensor) -> Result<Tensor> {
+    let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
     let h_v_expand = h_v.unsqueeze(D::Minus2)?;
     let expand_shape = [
         h_ev.dims()[0],
@@ -192,8 +188,7 @@ impl EncLayer {
     ) -> Result<(Tensor, Tensor)> {
         let training = training.unwrap_or(false);
         let h_v = h_v.to_dtype(DType::F32)?;
-        let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
-        let h_ev = concat_node_tensors(&h_v, h_e, e_idx, &h_ev)?;
+        let h_ev = concat_node_tensors(&h_v, h_e, e_idx)?;
         let h_message = self
             .w1
             .forward(&h_ev)?
@@ -219,8 +214,8 @@ impl EncLayer {
         } else {
             h_v
         };
-        let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
-        let h_ev = concat_node_tensors(&h_v, h_e, e_idx, &h_ev)?;
+
+        let h_ev = concat_node_tensors(&h_v, h_e, e_idx)?;
         let h_message = self
             .w11
             .forward(&h_ev)?
