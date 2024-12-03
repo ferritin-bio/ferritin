@@ -147,7 +147,7 @@ impl ProteinFeaturesModel {
         println!("In the Features Forward!");
         let x = input_features.get_coords();
         let mask = input_features.x_mask.as_ref().unwrap();
-        let r_idx = input_features.get_residue_index().unwrap();
+        let r_idx = input_features.get_residue_index();
         // let chain_labels = input_features.chain_labels.as_ref();
 
         // todo: fix

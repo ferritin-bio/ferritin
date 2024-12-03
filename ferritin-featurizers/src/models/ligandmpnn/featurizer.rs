@@ -339,13 +339,13 @@ impl ProteinFeatures {
 
     pub fn get_encoded(&self) -> Result<(HashMap<String, usize>, HashMap<usize, String>)> {
         let r_idx_list = &self.r_idx.flatten_all()?.to_vec1::<u32>()?;
-        let chain_letters_list = &self.chain_list;
+        let chain_letters_list = &self.chain_letters;
 
-        let mut encoded_residues = Vec::new();
-        for (i, r_idx_item) in r_idx_list.iter().enumerate() {
-            let tmp = format!("{}{}", chain_letters_list[i], r_idx_item);
-            encoded_residues.push(tmp);
-        }
+        let encoded_residues: Vec<String> = r_idx_list
+            .iter()
+            .enumerate()
+            .map(|(i, r_idx)| format!("{}{}", chain_letters_list[i], r_idx))
+            .collect();
 
         let encoded_residue_dict: HashMap<String, usize> = encoded_residues
             .iter()
