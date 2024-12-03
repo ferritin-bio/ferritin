@@ -41,13 +41,7 @@ mod tests {
 
     #[test]
     fn test_cli_command_run_example_02() {
-        let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
-        let out_folder = std::path::Path::new("./outputs/temperature");
-        if out_folder.exists() {
-            std::fs::remove_dir_all(out_folder).expect("Failed to remove output directory");
-        }
-        std::fs::create_dir_all(out_folder).expect("Failed to create output directory");
-
+        let (pdbfile, _tmp, out_folder) = setup("./outputs/temperature".to_string());
         let assert = Command::cargo_bin("ferritin-featurizers")
             .unwrap()
             .arg("run")

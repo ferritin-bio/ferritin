@@ -46,7 +46,7 @@ pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result
         Some(0.95), // top_p (nucleus sampling), we don't need this
     );
     let idx = logits_processor.sample(probs)?;
-    println!("Selected index: {}", idx);
+    // println!("Selected index: {}", idx);
     if idx >= 21 {
         println!("WARNING: Invalid index {} selected", idx);
     }
@@ -71,9 +71,9 @@ impl ScoreOutput {
             let mut sequence = String::with_capacity(l);
             for pos in 0..l {
                 let aa_idx = self.s.get(batch_idx)?.get(pos)?.to_vec0::<u32>()?;
-                println!("Position {}, Raw index: {}", pos, aa_idx);
+                // println!("Position {}, Raw index: {}", pos, aa_idx);
                 let aa = int_to_aa1(aa_idx);
-                println!("Converted to: {}", aa);
+                // println!("Converted to: {}", aa);
                 sequence.push(aa);
             }
             sequences.push(sequence);
@@ -685,14 +685,12 @@ impl ProteinMPNN {
                         h_s.index_add(&t_gather_expanded, &Tensor::zeros_like(&h_s_update)?, 1)?;
                     h_s = h_s.index_add(&t_gather_expanded, &h_s_update, 1)?;
 
-                    println!("Here Before S:");
                     s = {
                         let dim = 1;
                         let start = t_gather.squeeze(0)?.squeeze(0)?.to_scalar::<u32>()? as usize;
                         let s_t_expanded = s_t.unsqueeze(1)?;
                         s.slice_scatter(&s_t_expanded, dim, start)?
                     };
-                    println!("Here After S:");
 
                     let probs_update = chain_mask_t
                         .unsqueeze(1)?

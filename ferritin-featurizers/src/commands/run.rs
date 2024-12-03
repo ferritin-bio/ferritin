@@ -74,7 +74,8 @@ pub fn execute(
     let temperature = exec.run_config.temperature.unwrap_or(0.5);
 
     println!("Sampling from the Model...");
-    let model_sample = model.sample(&prot_features, temperature as f64, seed as i32)?;
+    println!("Temp and Seed are: temp {:}, seed {:}", temperature, seed);
+    let model_sample = model.sample(&prot_features, temperature as f64, seed as u64)?;
     println!("{:?}", model_sample);
 
     std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
