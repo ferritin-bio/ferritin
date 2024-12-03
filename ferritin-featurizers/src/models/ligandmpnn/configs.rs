@@ -42,7 +42,6 @@ pub struct MPNNExecConfig {
 
 impl MPNNExecConfig {
     pub fn new(
-        seed: i32,
         device: Device,
         pdb_path: String,
         model_type: ModelTypes,
@@ -265,6 +264,7 @@ pub struct ResidueControl {
 
 #[derive(Debug)]
 pub struct RunConfig {
+    pub seed: Option<i32>,
     pub temperature: Option<f32>,
     pub verbose: Option<i32>,
     pub save_stats: Option<i32>,

@@ -73,6 +73,11 @@ pub fn execute(
     // Loading Dependent Factors
     let temperature = exec.run_config.temperature.unwrap_or(0.5);
 
+    // if args.seed:
+    //      seed = args.seed
+    //  else:
+    //      seed = int(np.random.randint(0, high=99999, size=1, dtype=int)[0])
+
     println!("Sampling from the Model...");
     println!("Temp and Seed are: temp: {:}, seed: {:}", temperature, seed);
     let model_sample = model.sample(&prot_features, temperature as f64, seed as u64)?;

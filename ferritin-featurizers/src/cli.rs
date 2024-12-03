@@ -27,8 +27,6 @@ enum Commands {
     Run {
         // Required Basic Arguments
         #[arg(long, required = true)]
-        seed: i32,
-        #[arg(long, required = true)]
         pdb_path: String,
         #[arg(long, required = true)]
         out_folder: String,
@@ -36,6 +34,8 @@ enum Commands {
         model_type: ModelTypes, // Use the enum type
 
         // Configuration Arguments
+        #[arg(long)]
+        seed: Option<i32>,
         #[arg(long)]
         temperature: Option<f32>,
         #[arg(long)]
@@ -153,6 +153,7 @@ impl Cli {
                 transmembrane_interface,
             } => {
                 let run_config = RunConfig {
+                    seed,
                     temperature,
                     verbose,
                     save_stats,
@@ -202,7 +203,6 @@ impl Cli {
                 };
 
                 let _ = commands::run::execute(
-                    seed,
                     pdb_path,
                     out_folder,
                     Some(model_type),
