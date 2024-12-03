@@ -1145,10 +1145,10 @@ impl ProteinMPNN {
         // Build encoder embeddings
         let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
         let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
-        let mask_fw = mask_fw
+        let h_exv_encoder_fw = mask_fw
             .broadcast_as(h_exv_encoder.shape())?
-            .to_dtype(h_exv_encoder.dtype())?;
-        let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
+            .to_dtype(h_exv_encoder.dtype())?
+            .mul(&h_exv_encoder)?;
         let mut h_v = h_v;
         if !use_sequence {
             for layer in &self.decoder_layers {
