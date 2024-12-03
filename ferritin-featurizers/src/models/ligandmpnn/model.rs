@@ -199,21 +199,23 @@ impl EncLayer {
             let scale = if self.scale == 0.0 { 1.0 } else { self.scale };
             (sum / scale)?
         };
+
         let h_v = {
             let dh_dropout = self
                 .dropout1
-                .forward(&dh, training.expect("Training must be specified"))?;
-            let dh_dropout = dh_dropout.to_dtype(DType::F32)?;
-            let h_v = h_v.to_dtype(DType::F32)?;
+                .forward(&dh, training.expect("Training must be specified"))?
+                .to_dtype(DType::F32)?;
             self.norm1.forward(&(h_v + dh_dropout)?)?
         };
         let dh = self.dense.forward(&h_v)?;
+
         let h_v = {
             let dh_dropout = self
                 .dropout2
                 .forward(&dh, training.expect("Training Must be specified"))?;
             self.norm2.forward(&(&h_v + &dh_dropout)?)?
         };
+
         let h_v = if let Some(mask) = mask_v {
             mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_v)?
         } else {
@@ -229,9 +231,10 @@ impl EncLayer {
             h_ev.dims()[2],       // number of neighbors
             h_v_expand.dims()[3], // hidden dimension
         ];
-        let h_v_expand = h_v_expand.expand(&expand_shape)?;
-        let h_v_expand = h_v_expand.to_dtype(h_ev.dtype())?;
+
+        let h_v_expand = h_v_expand.expand(&expand_shape)?.to_dtype(h_ev.dtype())?;
         let h_ev = Tensor::cat(&[&h_v_expand, &h_ev], D::Minus1)?.contiguous()?;
+
         let h_message = self
             .w11
             .forward(&h_ev)?
@@ -239,6 +242,7 @@ impl EncLayer {
             .apply(&self.w12)?
             .gelu()?
             .apply(&self.w13)?;
+
         let h_e = {
             let h_message_dropout = self
                 .dropout3
