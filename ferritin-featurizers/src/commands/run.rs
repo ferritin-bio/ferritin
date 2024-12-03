@@ -31,7 +31,6 @@ pub fn device(cpu: bool) -> Result<Device> {
 pub fn execute(
     pdb_path: String,
     out_folder: String,
-    model_type: Option<ModelTypes>,
     run_config: RunConfig,
     residue_control_config: ResidueControl,
     aa_bias_config: AABiasConfig,
@@ -42,12 +41,9 @@ pub fn execute(
     // todo - whats the best way to handle device?
     let device = device(false)?;
 
-    let model_type = model_type.unwrap_or(ModelTypes::ProteinMPNN);
-
     let exec = MPNNExecConfig::new(
         device,
         pdb_path, // will need to omdify this for multiple
-        model_type,
         run_config,
         Some(residue_control_config),
         Some(aa_bias_config),
@@ -56,7 +52,27 @@ pub fn execute(
         Some(multi_pdb_config),
     )?;
 
-    let model = exec.load_model()?;
+    // Crete Default Values ------------------------------------------------------------
+    //
+    let model_type = exec
+        .run_config
+        .model_type
+        .unwrap_or(ModelTypes::ProteinMPNN);
+
+    let seed = match exec.run_config.seed {
+        Some(s) => s,
+        None => {
+            let mut rng = rand::thread_rng();
+            rng.gen_range(0..99999) as i32
+        }
+    };
+
+    let temperature = exec.run_config.temperature.unwrap_or(0.1);
+    let save_stats = exec.run_config.save_stats.unwrap_or(false);
+
+    // Load The model ------------------------------------------------------------
+
+    let model = exec.load_model(model_type)?;
     println!("Model Loaded!");
 
     println!("Generating Protein Features");
@@ -69,31 +85,6 @@ pub fn execute(
     std::fs::create_dir_all(format!("{}/backbones", out_folder))?;
     std::fs::create_dir_all(format!("{}/packed", out_folder))?;
 
-    // Loading Dependent Factors ------------------------------
-
-    let seed = match exec.run_config.seed {
-        Some(s) => s,
-        None => {
-            let mut rng = rand::thread_rng();
-            rng.gen_range(0..99999) as i32
-        }
-    };
-
-    let temperature = exec.run_config.temperature.unwrap_or(0.1);
-
-    // out_dict = {}
-    // out_dict["generated_sequences"] = S_stack.cpu()
-    // out_dict["sampling_probs"] = sampling_probs_stack.cpu()
-    // out_dict["log_probs"] = log_probs_stack.cpu()
-    // out_dict["decoding_order"] = decoding_order_stack.cpu()
-    // out_dict["native_sequence"] = feature_dict["S"][0].cpu()
-    // out_dict["mask"] = feature_dict["mask"][0].cpu()
-    // out_dict["chain_mask"] = feature_dict["chain_mask"][0].cpu()
-    // out_dict["seed"] = seed
-    // out_dict["temperature"] = args.temperature
-    // if args.save_stats:
-    //     torch.save(out_dict, output_stats_path)
-
     println!("Sampling from the Model...");
     println!("Temp and Seed are: temp: {:}, seed: {:}", temperature, seed);
     let model_sample = model.sample(&prot_features, temperature as f64, seed as u64)?;
@@ -101,7 +92,6 @@ pub fn execute(
 
     std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
     let sequences = model_sample.get_sequences()?;
-    // println!("OUTPUT FASTA: {:?}", sequences);
     // println!("DECODING ORDER: {:?}", model_sample.get_decoding_order()?);
 
     let fasta_path = format!("{}/seqs/output.fasta", out_folder);
@@ -116,21 +106,29 @@ pub fn execute(
     let model_score = model.score(&prot_features, false)?;
     println!("Protein Score: {:?}", model_score);
 
-    // Sample from the Model!
-    // Note: sampling from the model
-    // println!("Sampling from the Model...");
-    // let model_sample = model.sample(&prot_features);
-    // println!("{:?}", model_sample);
+    fn write_stats(outpath: String) {
+        // out_dict = {}
+        // out_dict["generated_sequences"] = S_stack.cpu()
+        // out_dict["sampling_probs"] = sampling_probs_stack.cpu()
+        // out_dict["log_probs"] = log_probs_stack.cpu()
+        // out_dict["decoding_order"] = decoding_order_stack.cpu()
+        // out_dict["native_sequence"] = feature_dict["S"][0].cpu()
+        // out_dict["mask"] = feature_dict["mask"][0].cpu()
+        // out_dict["chain_mask"] = feature_dict["chain_mask"][0].cpu()
+        // out_dict["seed"] = seed
+        // out_dict["temperature"] = args.temperature
+        // if args.save_stats:
+        //     torch.save(out_dict, output_stats_path)
+        //
+        // model_score.get_decoding_order()
+        // model_score.get_sequences()
+        // model_score.get_log_probs()
+        println!("Gathering Stats");
+    }
 
-    // assert_eq!(true, false);
-
-    // prot_features
-    // generate_protein_features()
-
-    // model.score() -> Result<ScoreOutput>
-
-    // Sample
-    // model.sample() -> Result<ScoreOutput>
+    if save_stats {
+        write_stats("hello".to_string())
+    }
 
     Ok(())
 }

@@ -84,6 +84,9 @@ impl ScoreOutput {
         let values = self.decoding_order.flatten_all()?.to_vec1::<u32>()?;
         Ok(values)
     }
+    pub fn get_log_probs(&self) -> &Tensor {
+        &self.log_probs
+    }
 }
 
 #[derive(Clone, Debug)]

@@ -16,7 +16,6 @@
 use super::featurizer::ProteinFeatures;
 use super::model::ProteinMPNN;
 use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
-use crate::models::ligandmpnn::model::ScoreOutput;
 use anyhow::Error;
 use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device, Tensor};
@@ -30,7 +29,6 @@ use ferritin_test_data::TestFile;
 pub struct MPNNExecConfig {
     pub(crate) protein_inputs: String, // Todo: make this optionally plural
     pub(crate) run_config: RunConfig,
-    pub(crate) model_type: ModelTypes,
     pub(crate) aabias_config: Option<AABiasConfig>,
     pub(crate) ligand_mpnn_config: Option<LigandMPNNConfig>,
     pub(crate) membrane_mpnn_config: Option<MembraneMPNNConfig>,
@@ -43,7 +41,6 @@ impl MPNNExecConfig {
     pub fn new(
         device: Device,
         pdb_path: String,
-        model_type: ModelTypes,
         run_config: RunConfig,
         residue_config: Option<ResidueControl>,
         aa_bias: Option<AABiasConfig>,
@@ -53,7 +50,6 @@ impl MPNNExecConfig {
     ) -> Result<Self, Error> {
         Ok(MPNNExecConfig {
             protein_inputs: pdb_path,
-            model_type: model_type,
             run_config,
             aabias_config: aa_bias,
             ligand_mpnn_config: lig_mpnn_specific,
@@ -64,16 +60,21 @@ impl MPNNExecConfig {
         })
     }
     // Todo: refactor this to use loader.
-    pub fn load_model(&self) -> Result<ProteinMPNN, Error> {
+    pub fn load_model(&self, model_type: ModelTypes) -> Result<ProteinMPNN, Error> {
         let default_dtype = DType::F32;
-
-        // this is a hidden dep....
-        // todo: use hf_hub
-        let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
-        let pth = PthTensors::new(mpnn_file, Some("model_state_dict"))?;
-        let vb = VarBuilder::from_backend(Box::new(pth), default_dtype, self.device.clone());
-        let pconf = ProteinMPNNConfig::proteinmpnn();
-        Ok(ProteinMPNN::load(vb, &pconf).expect("Unable to load the PMPNN Model"))
+        match model_type {
+            ModelTypes::ProteinMPNN => {
+                // this is a hidden dep....
+                // todo: use hf_hub
+                let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
+                let pth = PthTensors::new(mpnn_file, Some("model_state_dict"))?;
+                let vb =
+                    VarBuilder::from_backend(Box::new(pth), default_dtype, self.device.clone());
+                let pconf = ProteinMPNNConfig::proteinmpnn();
+                Ok(ProteinMPNN::load(vb, &pconf).expect("Unable to load the PMPNN Model"))
+            }
+            _ => panic!("not implented!"),
+        }
     }
     pub fn generate_model(self) {
         todo!()
@@ -163,7 +164,7 @@ impl MPNNExecConfig {
     }
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, Copy)]
 pub enum ModelTypes {
     #[value(name = "protein_mpnn")]
     ProteinMPNN,
@@ -262,10 +263,11 @@ pub struct ResidueControl {
 
 #[derive(Debug)]
 pub struct RunConfig {
+    pub model_type: Option<ModelTypes>,
     pub seed: Option<i32>,
     pub temperature: Option<f32>,
     pub verbose: Option<i32>,
-    pub save_stats: Option<i32>,
+    pub save_stats: Option<bool>,
     pub batch_size: Option<i32>,
     pub number_of_batches: Option<i32>,
     pub file_ending: Option<String>,

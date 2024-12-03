@@ -107,7 +107,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_cli_command_run_example_05() {
         let (pdbfile, _tmp, out_folder) = setup("./outputs/save_stats".to_string());
         let assert = Command::cargo_bin("ferritin-featurizers")
@@ -120,7 +119,7 @@ mod tests {
             .arg("--out-folder")
             .arg(&out_folder)
             .arg("--save-stats")
-            .arg("1")
+            .arg("true")
             .assert()
             .success();
 
