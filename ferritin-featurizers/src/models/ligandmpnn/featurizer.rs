@@ -44,9 +44,10 @@ impl LMPNNFeatures for AtomCollection {
             .map(|res| res.res_name)
             .map(|res| aa3to1(&res))
             .map(|res| aa1to_int(res));
+
         Ok(Tensor::from_iter(s, device)?.reshape((1, n))?)
     }
-    // equivalent to protein MPNN's parse_PDB
+    // equivalent to protien MPNN's parse_PDB
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
         todo!();
         // let x_37 = self.to_numeric_atom37(device)?;
@@ -177,6 +178,7 @@ impl LMPNNFeatures for AtomCollection {
 
         Ok((y, y_t, y_m))
     }
+
     fn to_pdb(&self) {
         // Todo: finish this. will require somethign like prody....
         // pub fn write_full_pdb(
@@ -264,6 +266,7 @@ impl LMPNNFeatures for AtomCollection {
         // }
         unimplemented!()
     }
+
     fn get_res_index(&self) -> Vec<u32> {
         self.iter_residues_aminoacid()
             .map(|res| res.res_id as u32)
@@ -277,7 +280,7 @@ pub struct ProteinFeatures {
     /// protein co-oords by residue [batch, seqlength, 37, 3]
     pub(crate) x: Tensor,
     /// protein mask by residue
-    pub(crate) x_mask: Tensor,
+    pub(crate) x_mask: Option<Tensor>,
     /// ligand coords
     pub(crate) y: Tensor,
     /// encoded ligand atom names
@@ -316,8 +319,8 @@ impl ProteinFeatures {
     pub fn get_sequence(&self) -> &Tensor {
         &self.s
     }
-    pub fn get_sequence_mask(&self) -> &Tensor {
-        &self.x_mask
+    pub fn get_sequence_mask(&self) -> Option<&Tensor> {
+        self.x_mask.as_ref()
     }
     pub fn get_residue_index(&self) -> &Tensor {
         &self.r_idx
@@ -391,7 +394,11 @@ impl ProteinFeatures {
         Tensor::from_iter(mask_values, device)
     }
     pub fn update_mask(&mut self, tensor: Tensor) -> Result<()> {
-        self.x_mask = self.x_mask.mul(&tensor)?;
+        if let Some(ref mask) = self.x_mask {
+            self.x_mask = Some(mask.mul(&tensor)?);
+        } else {
+            self.x_mask = Some(tensor);
+        }
         Ok(())
     }
 }
