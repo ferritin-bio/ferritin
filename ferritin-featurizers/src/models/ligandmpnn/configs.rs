@@ -23,6 +23,7 @@ use candle_nn::VarBuilder;
 use clap::ValueEnum;
 use ferritin_core::AtomCollection;
 use ferritin_test_data::TestFile;
+use itertools::chain;
 
 /// Responsible for taking CLI args and returning the Features and Model
 ///
@@ -105,6 +106,20 @@ impl MPNNExecConfig {
         let res_idx_len = res_idx.len();
         let res_idx_tensor = Tensor::from_vec(res_idx, (1, res_idx_len), &device)?;
 
+        // chain residues
+
+        // output_dict["chain_letters"] = CA_chain_ids
+        // chain_list = list(set(output_dict["chain_letters"]))
+        // CA_atoms = protein_atoms.select("name CA")
+        //  CA_resnums = CA_atoms.getResnums()
+        //  CA_chain_ids = CA_atoms.getChids()
+        let chain_letters: Vec<String> = ac
+            .iter_residues_aminoacid()
+            .map(|res| res.chain_id)
+            .collect();
+
+        // assert_eq!(true, false);
+
         // update residue info
         // residue_config: Option<ResidueControl>,
         // handle these:
@@ -149,16 +164,16 @@ impl MPNNExecConfig {
         // println!("Returning Protein Features....");
         // return ligand MPNN.
         Ok(ProteinFeatures {
-            s,                           // protein amino acids sequences as 1D Tensor of u32
-            x: x_37,                     // protein co-oords by residue [1, 37, 4]
-            x_mask: Some(x_37_mask),     // protein mask by residue
-            y,                           // ligand coords
-            y_t,                         // encoded ligand atom names
-            y_m: Some(y_m),              // ligand mask
-            r_idx: Some(res_idx_tensor), // protein residue indices shape=[length]
-            chain_labels: None,          //  # protein chain letters shape=[length]
-            chain_letters: None,         // chain_letters: shape=[length]
-            mask_c: None,                // mask_c:  shape=[length]
+            s,                                  // protein amino acids sequences as 1D Tensor of u32
+            x: x_37,                            // protein co-oords by residue [1, 37, 4]
+            x_mask: Some(x_37_mask),            // protein mask by residue
+            y,                                  // ligand coords
+            y_t,                                // encoded ligand atom names
+            y_m: Some(y_m),                     // ligand mask
+            r_idx: Some(res_idx_tensor),        // protein residue indices shape=[length]
+            chain_labels: None,                 //  # protein chain letters shape=[length]
+            chain_letters: Some(chain_letters), // chain_letters: shape=[length]
+            mask_c: None,                       // mask_c:  shape=[length]
             chain_list: None,
         })
     }
