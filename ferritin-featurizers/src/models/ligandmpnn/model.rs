@@ -504,7 +504,6 @@ impl ProteinMPNN {
     pub fn sample(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
         // "global" dtype
         let sample_dtype = DType::F32;
-
         // how come I am not using `x` at all?
         let ProteinFeatures {
             x,
@@ -514,17 +513,14 @@ impl ProteinMPNN {
             // symmetry_weights,
             ..
         } = features;
-
         let s_true = s.to_dtype(sample_dtype)?;
         let device = s.device();
         let (b, l) = s.dims2()?;
-
         // Todo: This is a hack. we should be passing in encoded chains.
         // let chain_mask = Tensor::ones_like(&x_mask.as_ref().unwrap())?.to_dtype(sample_dtype)?;
         // let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?;
         let chain_mask = x_mask.as_ref().unwrap().to_dtype(sample_dtype)?;
         let (h_v, h_e, e_idx) = self.encode(features)?;
-
         // this might be  a bad rand implementation
         let rand_tensor = Tensor::randn(0f32, 0.25f32, (b, l), device)?.to_dtype(sample_dtype)?;
         let decoding_order = (&chain_mask + 0.0001)?
@@ -565,7 +561,6 @@ impl ProteinMPNN {
                     .to_dtype(sample_dtype)?;
                 let mask_bw = mask_1d.mul(&mask_attend)?;
                 let mask_fw = mask_1d.mul(&(Tensor::ones_like(&mask_attend)? - mask_attend)?)?;
-
                 // Note: `sample` begins to diverge from the `score` here.
                 // repeat for decoding
                 let s_true = s_true.repeat((b, 1))?;
@@ -575,7 +570,6 @@ impl ProteinMPNN {
                 let chain_mask = &chain_mask.repeat((b, 1))?;
                 let bias = bias.repeat((b, 1, 1))?;
                 let mut all_probs = Tensor::zeros((b, l, 20), sample_dtype, device)?;
-
                 // why is this one 21 and the others are 20?
                 let mut all_log_probs = Tensor::zeros((b, l, 21), sample_dtype, device)?;
                 let mut h_s = Tensor::zeros_like(&h_v)?;
@@ -593,18 +587,15 @@ impl ProteinMPNN {
                     .broadcast_as(h_exv_encoder.shape())?
                     .to_dtype(h_exv_encoder.dtype())?;
                 let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
-
                 for t_ in 0..l {
                     let t = decoding_order.i((.., t_))?;
                     let t_gather = t.unsqueeze(1)?; // Shape [B, 1]
-
-                    // Gather masks and bias
+                                                    // Gather masks and bias
                     let chain_mask_t = chain_mask.gather(&t_gather, 1)?.squeeze(1)?;
                     let mask_t = mask.gather(&t_gather, 1)?.squeeze(1)?.contiguous()?;
                     let bias_t = bias
                         .gather(&t_gather.unsqueeze(2)?.expand((b, 1, 21))?.contiguous()?, 1)?
                         .squeeze(1)?;
-
                     // Gather edge and node indices/features
                     let e_idx_t = e_idx
                         .gather(
