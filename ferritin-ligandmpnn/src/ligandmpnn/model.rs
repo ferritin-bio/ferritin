@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 
 use super::configs::{ModelTypes, ProteinMPNNConfig};
-use super::featurizer::ProteinFeatures;
-use super::proteinfeatures::ProteinFeaturesModel;
+use super::protinfeatures::ProteinFeatures;
+use super::proteinfeaturesmodel::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
 use candle_core::safetensors;
 use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};

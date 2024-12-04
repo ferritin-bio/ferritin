@@ -1,4 +1,4 @@
-use crate::models::ligandmpnn::featurizer::LMPNNFeatures;
+use crate::ligandmpnn::protinfeatures::LMPNNFeatures;
 use candle_core;
 use ferritin_core::AtomCollection;
 use pdbtbx;

@@ -3,7 +3,7 @@
 use clap::Parser;
 mod cli;
 mod commands;
-mod models;
+mod ligandmpnt;
 
 // use models::ligandmpnn::featurizer::LMPNNFeatures;
 

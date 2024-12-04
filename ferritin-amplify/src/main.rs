@@ -1,8 +1,7 @@
 //! Entrypoint for CLI
 
 use clap::Parser;
-mod cli;
-mod models;
+
 pub mod amplify;
 // use models::ligandmpnn::featurizer::LMPNNFeatures;
 

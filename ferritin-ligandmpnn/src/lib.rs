@@ -5,13 +5,8 @@
 //!
 mod cli;
 mod commands;
-mod models;
+pub mod ligandmpnn;
 
-pub use models::amplify::amplify::{AMPLIFYConfig, ModelOutput, AMPLIFY};
-pub use models::amplify::tokenizer::ProteinTokenizer;
-pub use models::ligandmpnn::{
-    configs::ProteinMPNNConfig, featurizer::LMPNNFeatures, model::ProteinMPNN,
-};
-// pub use models::ligandmpnn::featurizer::LMPNNFeatures;
-// use ferritin_featurizers::models::ligandmpnn::model::ProteinMPNN;
-// use ferritin_featurizers::models::ligandmpnn::configs::ProteinMPNNConfig;
+pub use ligandmpnn::protinfeatures::LMPNNFeatures;
+pub use ligandmpnn::model::ProteinMPNN;
+pub use ligandmpnn::configs::ProteinMPNNConfig;

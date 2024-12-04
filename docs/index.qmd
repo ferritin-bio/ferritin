@@ -39,6 +39,10 @@ Native Rust access to pymol `pse` binary files.  [rust-docs](https://zachcp.gith
 
 Utilities for consuming and creating [molviewspec files](https://molstar.org/mol-view-spec/).  [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_molviewspec/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-molviewspec).
 
-### Ferritin-Featurizer
+### Ferritin-Amplify
 
-Utilities for converting proteins into tensors. [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_featurizers/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-featurizers).
+Inference using amplify. [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_amplify/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-amplify).
+
+### Ferritin-LigandMPNN
+
+Inference using proteinmpnn/ligandmpnn. [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_ligandmpnn/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-ligandmpnn).
