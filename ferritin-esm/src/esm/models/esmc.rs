@@ -1,3 +1,5 @@
+use super::layers.regression_head import RegressionHead;
+use super::layers.transformer_stack import TransformerStack;
 use candle_core::{DType, Device, Module, Result, Tensor};
 
 #[derive(Debug)]
@@ -19,13 +21,13 @@ impl ESMC {
         n_heads: usize,
         n_layers: usize,
         tokenizer: EsmSequenceTokenizer,
-    ) -> Result<Self> {
-        Ok(Self {
+    ) -> Self {
+        Self {
             embed: candle_nn::embedding(64, d_model, Default::default())?,
             transformer: TransformerStack::new(d_model, n_heads, None, n_layers, 0)?,
             sequence_head: RegressionHead::new(d_model, 64)?,
             tokenizer,
-        })
+        }
     }
 
     pub fn from_pretrained(model_name: impl Into<String>, device: Option<Device>) -> Result<Self> {
