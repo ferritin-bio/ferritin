@@ -2483,15 +2483,9 @@ dependencies = [
  "candle-hf-hub",
  "candle-metal-kernels",
  "candle-nn",
- "candle-transformers",
- "clap",
- "ferritin-core",
  "ferritin-test-data",
- "itertools 0.13.0",
- "pdbtbx",
  "rand",
  "safetensors",
- "strum",
  "tempfile",
  "tokenizers 0.21.0",
 ]
@@ -2535,7 +2529,6 @@ dependencies = [
  "assert_cmd",
  "candle-core",
  "candle-examples",
- "candle-hf-hub",
  "candle-metal-kernels",
  "candle-nn",
  "candle-transformers",
@@ -2548,7 +2541,6 @@ dependencies = [
  "safetensors",
  "strum",
  "tempfile",
- "tokenizers 0.21.0",
 ]
 
 [[package]]

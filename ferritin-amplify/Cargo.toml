@@ -7,12 +7,7 @@ license.workspace = true
 description.workspace = true
 
 [features]
-metal = [
-    "candle-core/metal",
-    "candle-nn/metal",
-    "candle-transformers/metal",
-    "candle-metal-kernels",
-]
+metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 
 [dependencies]
 anyhow.workspace = true
