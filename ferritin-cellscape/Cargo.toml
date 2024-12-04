@@ -9,5 +9,5 @@ description.workspace = true
 [dependencies]
 ferritin-core = { path = "../ferritin-core" }
 pdbtbx = { workspace = true }
-geo = "0.29.2"
+geo = "0.29.3"
 svg = "0.18.0"

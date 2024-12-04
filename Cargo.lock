@@ -1555,7 +1555,7 @@ dependencies = [
 [[package]]
 name = "candle-core"
 version = "0.8.0"
-source = "git+https://github.com/huggingface/candle.git#6f715f92564c10426c5565cd30ece25aee8d72ac"
+source = "git+https://github.com/huggingface/candle.git#145aa7193c4e658b184f52706574cc9f115e4674"
 dependencies = [
  "byteorder",
  "candle-metal-kernels",
@@ -1579,7 +1579,7 @@ dependencies = [
 [[package]]
 name = "candle-examples"
 version = "0.8.0"
-source = "git+https://github.com/huggingface/candle.git#6f715f92564c10426c5565cd30ece25aee8d72ac"
+source = "git+https://github.com/huggingface/candle.git#145aa7193c4e658b184f52706574cc9f115e4674"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -1620,7 +1620,7 @@ dependencies = [
 [[package]]
 name = "candle-metal-kernels"
 version = "0.8.0"
-source = "git+https://github.com/huggingface/candle.git#6f715f92564c10426c5565cd30ece25aee8d72ac"
+source = "git+https://github.com/huggingface/candle.git#145aa7193c4e658b184f52706574cc9f115e4674"
 dependencies = [
  "metal 0.27.0",
  "once_cell",
@@ -1631,7 +1631,7 @@ dependencies = [
 [[package]]
 name = "candle-nn"
 version = "0.8.0"
-source = "git+https://github.com/huggingface/candle.git#6f715f92564c10426c5565cd30ece25aee8d72ac"
+source = "git+https://github.com/huggingface/candle.git#145aa7193c4e658b184f52706574cc9f115e4674"
 dependencies = [
  "candle-core",
  "candle-metal-kernels",
@@ -1647,7 +1647,7 @@ dependencies = [
 [[package]]
 name = "candle-transformers"
 version = "0.8.0"
-source = "git+https://github.com/huggingface/candle.git#6f715f92564c10426c5565cd30ece25aee8d72ac"
+source = "git+https://github.com/huggingface/candle.git#145aa7193c4e658b184f52706574cc9f115e4674"
 dependencies = [
  "byteorder",
  "candle-core",
@@ -1733,9 +1733,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.21"
+version = "4.5.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb3b4b9e5a7c7514dfa52869339ee98b3156b0bfb4e8a77c4ff4babb64b1604f"
+checksum = "69371e34337c4c984bbe322360c2547210bf632eb2814bbe78a6e87a2935bd2b"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1743,9 +1743,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.21"
+version = "4.5.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b17a95aa67cc7b5ebd32aa5370189aa0d79069ef1c64ce893bd30fb24bff20ec"
+checksum = "6e24c1b4099818523236a8ca881d2b45db98dadfb4625cf6608c12069fcbbde1"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2398,7 +2398,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2473,6 +2473,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferritin-amplify"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "candle-core",
+ "candle-examples",
+ "candle-hf-hub",
+ "candle-metal-kernels",
+ "candle-nn",
+ "ferritin-test-data",
+ "rand",
+ "safetensors",
+ "tempfile",
+ "tokenizers 0.21.0",
+]
+
+[[package]]
 name = "ferritin-bevy"
 version = "0.1.0"
 dependencies = [
@@ -2504,14 +2522,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferritin-featurizers"
+name = "ferritin-ligandmpnn"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
  "candle-core",
  "candle-examples",
- "candle-hf-hub",
  "candle-metal-kernels",
  "candle-nn",
  "candle-transformers",
@@ -2524,7 +2541,6 @@ dependencies = [
  "safetensors",
  "strum",
  "tempfile",
- "tokenizers 0.21.0",
 ]
 
 [[package]]
@@ -2908,9 +2924,9 @@ dependencies = [
 
 [[package]]
 name = "geo"
-version = "0.29.2"
+version = "0.29.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "009245d261b86621c38d1c4e5a6578d52294e3e5445401d713584dfe42f8ae9c"
+checksum = "34f0e6e028c581e82e6822a68869514e94c25e7f8ea669a2d8595bdf7461ccc5"
 dependencies = [
  "earcutr",
  "float_next_after",
@@ -3381,9 +3397,9 @@ dependencies = [
 
 [[package]]
 name = "i_float"
-version = "1.3.1"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5fe043aae28ce70bd2f78b2f5f82a3654d63607c82594da4dabb8b6cb81f2b2"
+checksum = "775f9961a8d2f879725da8aff789bb20a3ddf297473e0c90af75e69313919490"
 dependencies = [
  "serde",
 ]
@@ -3396,9 +3412,9 @@ checksum = "347c253b4748a1a28baf94c9ce133b6b166f08573157e05afe718812bc599fcd"
 
 [[package]]
 name = "i_overlay"
-version = "1.7.4"
+version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1d5024b4346ff4699e2db65674bbcb3a7cb8c5a820e9745ec777a7cb2bb5f42"
+checksum = "06740cd31c1f963823e007d8e6edcd2db634b2856f4f613e3df01737fd852482"
 dependencies = [
  "i_float",
  "i_key_sort",
@@ -3409,9 +3425,9 @@ dependencies = [
 
 [[package]]
 name = "i_shape"
-version = "1.3.1"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b44852d57a991c7dedaf76c55bc44f677f547ff899a430d29e13efd6133d7d8"
+checksum = "27dbe9e5238d6b9c694c08415bf00fb370b089949bd818ab01f41f8927b8774c"
 dependencies = [
  "i_float",
  "serde",
@@ -3821,7 +3837,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -5856,7 +5872,7 @@ dependencies = [
  "fastrand",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6704,7 +6720,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
