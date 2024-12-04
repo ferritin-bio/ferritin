@@ -3,10 +3,7 @@
 // cargo instruments -t time --bin ferritin-amplify -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
 
 #[cfg(test)]
-use {
-    assert_cmd::Command, candle_examples::device, ferritin_test_data::TestFile, std::path::Path,
-    tempfile,
-};
+use {assert_cmd::Command, ferritin_test_data::TestFile, std::path::Path, tempfile};
 
 #[test]
 fn test_cli_command_featurize() {
