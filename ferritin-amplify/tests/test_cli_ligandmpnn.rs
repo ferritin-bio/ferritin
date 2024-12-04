@@ -1,7 +1,7 @@
 //! These tests recreate the LigandMPNN Test Suite[found here](https://github.com/dauparas/LigandMPNN/blob/main/run_examples.sh)
 mod tests {
-    // cargo flamegraph --bin ferritin-featurizers -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
-    // cargo instruments -t time --bin ferritin-featurizers -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
+    // cargo flamegraph --bin ferritin-amplify -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
+    // cargo instruments -t time --bin ferritin-amplify -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
     use assert_cmd::Command;
     use ferritin_test_data::TestFile;
     use std::path::{Path, PathBuf};
@@ -20,7 +20,7 @@ mod tests {
     #[test]
     fn test_cli_command_run_example_01() {
         let (pdbfile, _tmp, out_folder) = setup("./outputs/default".to_string());
-        let assert = Command::cargo_bin("ferritin-featurizers")
+        let assert = Command::cargo_bin("ferritin-amplify")
             .unwrap()
             .arg("run")
             .arg("--seed")
@@ -40,7 +40,7 @@ mod tests {
     #[test]
     fn test_cli_command_run_example_02() {
         let (pdbfile, _tmp, out_folder) = setup("./outputs/temperature".to_string());
-        let assert = Command::cargo_bin("ferritin-featurizers")
+        let assert = Command::cargo_bin("ferritin-amplify")
             .unwrap()
             .arg("run")
             .arg("--seed")
@@ -62,7 +62,7 @@ mod tests {
     #[test]
     fn test_cli_command_run_example_03() {
         let (pdbfile, _tmp, out_folder) = setup("./outputs/random_seed".to_string());
-        let assert = Command::cargo_bin("ferritin-featurizers")
+        let assert = Command::cargo_bin("ferritin-amplify")
             .unwrap()
             .arg("run")
             .arg("--pdb-path")
@@ -81,7 +81,7 @@ mod tests {
     #[ignore]
     fn test_cli_command_run_example_04() {
         let (pdbfile, _tmp, out_folder) = setup("./outputs/verbose".to_string());
-        let assert = Command::cargo_bin("ferritin-featurizers")
+        let assert = Command::cargo_bin("ferritin-amplify")
             .unwrap()
             .arg("run")
             .arg("--seed")
@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn test_cli_command_run_example_05() {
         let (pdbfile, _tmp, out_folder) = setup("./outputs/save_stats".to_string());
-        let assert = Command::cargo_bin("ferritin-featurizers")
+        let assert = Command::cargo_bin("ferritin-amplify")
             .unwrap()
             .arg("run")
             .arg("--seed")
@@ -126,7 +126,7 @@ mod tests {
     fn test_cli_command_run_example_06() {
         let (pdbfile, _tmp, out_folder) = setup("./outputs/fix_residues".to_string());
 
-        let assert = Command::cargo_bin("ferritin-featurizers")
+        let assert = Command::cargo_bin("ferritin-amplify")
             .unwrap()
             .arg("run")
             .arg("--seed")
@@ -152,7 +152,7 @@ mod tests {
     fn test_cli_command_run_example_07() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--seed")
@@ -177,7 +177,7 @@ mod tests {
     fn test_cli_command_run_example_08() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--seed")
@@ -202,7 +202,7 @@ mod tests {
     fn test_cli_command_run_example_09() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--seed")
@@ -225,7 +225,7 @@ mod tests {
     fn test_cli_command_run_example_10() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--seed")
@@ -248,7 +248,7 @@ mod tests {
     fn test_cli_command_run_example_11() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--seed")
@@ -271,7 +271,7 @@ mod tests {
     fn test_cli_command_run_example_12() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--seed")
@@ -294,7 +294,7 @@ mod tests {
     fn test_cli_command_run_example_13() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--seed")
@@ -319,7 +319,7 @@ mod tests {
     fn test_cli_command_run_example_14() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--model-type")
@@ -345,7 +345,7 @@ mod tests {
     fn test_cli_command_run_example_15() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--seed")
@@ -368,7 +368,7 @@ mod tests {
     fn test_cli_command_run_example_16() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--seed")
@@ -393,7 +393,7 @@ mod tests {
     fn test_cli_command_run_example_17() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--model-type")
@@ -418,7 +418,7 @@ mod tests {
     fn test_cli_command_run_example_18() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--model-type")
@@ -443,7 +443,7 @@ mod tests {
     fn test_cli_command_run_example_19() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--model-type")
@@ -466,7 +466,7 @@ mod tests {
     fn test_cli_command_run_example_20() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--checkpoint-ligand-mpnn")
@@ -491,7 +491,7 @@ mod tests {
     fn test_cli_command_run_example_21() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--model-type")
@@ -516,7 +516,7 @@ mod tests {
     fn test_cli_command_run_example_22() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--model-type")
@@ -543,7 +543,7 @@ mod tests {
     fn test_cli_command_run_example_23() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--model-type")
@@ -566,7 +566,7 @@ mod tests {
     fn test_cli_command_run_example_24() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--model-type")
@@ -591,7 +591,7 @@ mod tests {
     fn test_cli_command_run_example_25() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--model-type")
@@ -618,7 +618,7 @@ mod tests {
     fn test_cli_command_run_example_26() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--pdb-path")
@@ -639,7 +639,7 @@ mod tests {
     fn test_cli_command_run_example_27() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--pdb-path-multi")
@@ -660,7 +660,7 @@ mod tests {
     fn test_cli_command_run_example_28() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--pdb-path-multi")
@@ -683,7 +683,7 @@ mod tests {
     fn test_cli_command_run_example_29() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--pdb-path-multi")
@@ -706,7 +706,7 @@ mod tests {
     fn test_cli_command_run_example_30() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--pdb-path-multi")
@@ -729,7 +729,7 @@ mod tests {
     fn test_cli_command_run_example_31() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--pdb-path-multi")
@@ -752,7 +752,7 @@ mod tests {
     fn test_cli_command_run_example_32() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--model-type")
@@ -777,7 +777,7 @@ mod tests {
     fn test_cli_command_run_example_33() {
         let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
         cmd.arg("run")
             .arg("--seed")

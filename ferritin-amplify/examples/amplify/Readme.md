@@ -6,7 +6,7 @@
 
 ```sh
 RUST_BACKTRACE=1 cargo run --example amplify
-cargo test -p ferritin-featurizers test_amplify_round_trip -- --nocapture
+cargo test -p ferritin-amplify test_amplify_round_trip -- --nocapture
 ```
 
 ## Model Tensors

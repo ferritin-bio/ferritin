@@ -1,5 +1,5 @@
 [package]
-name = "ferritin-featurizers"
+name = "ferritin-ligandmpnn"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -21,7 +21,7 @@ candle-core = { git = "https://github.com/huggingface/candle.git", package = "ca
 candle-hf-hub = "0.3.3"
 candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
 candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
-clap = "4.5.21"
+clap = "4.5.22"
 ferritin-core = { path = "../ferritin-core" }
 ferritin-test-data = { path = "../ferritin-test-data" }
 itertools.workspace = true

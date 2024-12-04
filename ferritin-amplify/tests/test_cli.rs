@@ -1,6 +1,6 @@
 //
-// cargo flamegraph --bin ferritin-featurizers -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
-// cargo instruments -t time --bin ferritin-featurizers -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
+// cargo flamegraph --bin ferritin-amplify -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
+// cargo instruments -t time --bin ferritin-amplify -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
 
 #[cfg(test)]
 use {
@@ -16,7 +16,7 @@ fn test_cli_command_featurize() {
     let outpath = Path::new(&outfile);
 
     // let outfile = "test.safetensors".to_string();
-    let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+    let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
     cmd.arg("featurize")
         .arg("--input")
@@ -38,7 +38,7 @@ fn test_cli_command_run_example_01() {
     // see: https://github.com/dauparas/LigandMPNN/blob/main/run_examples.sh
     let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
     let out_folder = tempfile::tempdir().unwrap().into_path();
-    let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+    let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
 
     cmd.arg("run")
         .arg("--seed")
