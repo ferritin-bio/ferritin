@@ -123,13 +123,12 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_cli_command_run_example_06() {
-        let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
-        let out_folder = tempfile::tempdir().unwrap().into_path();
-        let mut cmd = Command::cargo_bin("ferritin-featurizers").unwrap();
+        let (pdbfile, _tmp, out_folder) = setup("./outputs/fix_residues".to_string());
 
-        cmd.arg("run")
+        let assert = Command::cargo_bin("ferritin-featurizers")
+            .unwrap()
+            .arg("run")
             .arg("--seed")
             .arg("111")
             .arg("--pdb-path")
@@ -138,10 +137,11 @@ mod tests {
             .arg(&out_folder)
             .arg("--fixed-residues")
             .arg("C1 C2 C3 C4 C5 C6 C7 C8 C9 C10")
-            .arg("--bias-AA")
-            .arg("A:10.0");
+            .arg("--bias-aa")
+            .arg("A:10.0")
+            .assert()
+            .success();
 
-        let assert = cmd.assert().success();
         println!("Successful command....");
         assert!(out_folder.exists());
         println!("Output: {:?}", assert.get_output());

@@ -144,12 +144,10 @@ impl ProteinFeaturesModel {
         input_features: &ProteinFeatures,
         device: &Device,
     ) -> Result<(Tensor, Tensor)> {
-        println!("In the Features Forward!");
         let x = input_features.get_coords();
         let mask = input_features.x_mask.as_ref().unwrap();
-        let r_idx = input_features.get_residue_index().unwrap();
+        let r_idx = input_features.get_residue_index();
         // let chain_labels = input_features.chain_labels.as_ref();
-
         // todo: fix
         // let chain_labels = input_features.get_chain_labels();
         let chain_labels = Tensor::zeros_like(r_idx)?;
@@ -222,7 +220,6 @@ impl ProteinFeaturesModel {
             .broadcast_as(target_shape)?
             .to_dtype(DType::F32)?; // [1, 93, 93]
 
-        println!("Prepraring the Offset Tensor...");
         let offset = (r_idx_expanded1 - r_idx_expanded2)?;
         let offset = gather_edges(&offset.unsqueeze(D::Minus1)?, &e_idx)?;
         let offset = offset.squeeze(D::Minus1)?;
