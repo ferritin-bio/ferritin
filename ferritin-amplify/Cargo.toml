@@ -20,15 +20,9 @@ candle-core = { git = "https://github.com/huggingface/candle.git", package = "ca
 ] }
 candle-hf-hub = "0.3.3"
 candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
-clap = "4.5.22"
-ferritin-core = { path = "../ferritin-core" }
 ferritin-test-data = { path = "../ferritin-test-data" }
-itertools.workspace = true
-pdbtbx.workspace = true
 rand = "0.8.5"
 safetensors = "0.4.5"
-strum = { version = "0.26", features = ["derive"] }
 tokenizers = "0.21.0"
 
 [target.'cfg(target_os = "macos")'.features]
