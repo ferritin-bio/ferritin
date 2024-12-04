@@ -1,5 +1,5 @@
 pub mod configs;
-pub mod protinfeatures;
+pub mod proteinfeatures;
 pub mod model;
 mod proteinfeaturesmodel;
 mod utilities;

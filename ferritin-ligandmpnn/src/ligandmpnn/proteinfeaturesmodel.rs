@@ -1,5 +1,5 @@
 use super::configs::ProteinMPNNConfig;
-use super::protinfeatures::ProteinFeatures;
+use super::proteinfeatures::ProteinFeatures;
 use super::utilities::{compute_nearest_neighbors, cross_product, gather_edges, linspace};
 use candle_core::{DType, Device, Module, Result, Tensor, D};
 use candle_nn::encoding::one_hot;

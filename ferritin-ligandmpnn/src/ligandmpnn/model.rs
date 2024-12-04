@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use super::configs::{ModelTypes, ProteinMPNNConfig};
-use super::protinfeatures::ProteinFeatures;
+use super::proteinfeatures::ProteinFeatures;
 use super::proteinfeaturesmodel::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
 use candle_core::safetensors;
