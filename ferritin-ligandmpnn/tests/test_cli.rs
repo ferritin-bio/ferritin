@@ -13,7 +13,7 @@ fn test_cli_command_featurize() {
     let outpath = Path::new(&outfile);
 
     // let outfile = "test.safetensors".to_string();
-    let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
+    let mut cmd = Command::cargo_bin("ferritin-ligandmpnn").unwrap();
 
     cmd.arg("featurize")
         .arg("--input")
@@ -35,7 +35,7 @@ fn test_cli_command_run_example_01() {
     // see: https://github.com/dauparas/LigandMPNN/blob/main/run_examples.sh
     let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
     let out_folder = tempfile::tempdir().unwrap().into_path();
-    let mut cmd = Command::cargo_bin("ferritin-amplify").unwrap();
+    let mut cmd = Command::cargo_bin("ferritin-ligandmpnn").unwrap();
 
     cmd.arg("run")
         .arg("--seed")
