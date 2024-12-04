@@ -1,7 +1,7 @@
 use anyhow::Result;
 use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{Device, D};
-use ferritin_featurizers::AMPLIFY;
+use ferritin_amplify::AMPLIFY;
 
 pub fn device(cpu: bool) -> Result<Device> {
     if cpu {

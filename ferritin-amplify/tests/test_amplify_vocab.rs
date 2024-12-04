@@ -1,5 +1,5 @@
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
-use ferritin_featurizers::ProteinTokenizer;
+use ferritin_amplify::ProteinTokenizer;
 
 #[test]
 #[ignore]
