@@ -401,4 +401,28 @@ impl ProteinFeatures {
         }
         Ok(())
     }
+    // Fixed Residue List --> Tensor of length 21
+    // Inputs: `A:10.0"`
+    pub fn create_bias_tensor(&self, bias_aa: Option<String>) -> Result<Tensor> {
+        let device = self.s.device();
+        let dtype = self.s.dtype();
+        match bias_aa {
+            None => Tensor::zeros((21), dtype, device),
+            Some(bias_aa) => {
+                let mut bias_values = vec![0.0f32; 21];
+                for pair in bias_aa.split(',') {
+                    if let Some((aa, value_str)) = pair.split_once(':') {
+                        if let Ok(value) = value_str.parse::<f32>() {
+                            // Get first char from aa str and convert u32 to usize for indexing
+                            if let Some(aa_char) = aa.chars().next() {
+                                let idx = aa1to_int(aa_char) as usize;
+                                bias_values[idx] = value;
+                            }
+                        }
+                    }
+                }
+                Tensor::from_slice(&bias_values, (21), device)
+            }
+        }
+    }
 }

@@ -493,7 +493,7 @@ impl ProteinMPNN {
         // Todo: This is a hack. we should be passing in encoded chains.
         // let chain_mask = Tensor::ones_like(&x_mask.as_ref().unwrap())?.to_dtype(sample_dtype)?;
         // let chain_mask = x_mask.as_ref().unwrap().mul(&chain_mask)?;
-        let chain_mask = x_mask.as_ref().to_dtype(sample_dtype)?;
+        let chain_mask = x_mask.as_ref().unwrap().to_dtype(sample_dtype)?;
         let (h_v, h_e, e_idx) = self.encode(features)?;
         let rand_tensor = Tensor::randn(0f32, 0.25f32, (b, l), device)?.to_dtype(sample_dtype)?;
         let decoding_order = (&chain_mask + 0.0001)?
@@ -522,7 +522,7 @@ impl ProteinMPNN {
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
-                let mask_1d = x_mask.as_ref().reshape((b, l, 1, 1))?;
+                let mask_1d = x_mask.as_ref().unwrap().reshape((b, l, 1, 1))?;
                 // Broadcast mask_1d to match mask_attend's shape
                 let mask_1d = mask_1d
                     .broadcast_as(mask_attend.shape())?
@@ -534,7 +534,7 @@ impl ProteinMPNN {
                 let s_true = s_true.repeat((b, 1))?;
                 let h_v = h_v.repeat((b, 1, 1))?;
                 let h_e = h_e.repeat((b, 1, 1, 1))?;
-                let mask = x_mask.as_ref().repeat((b, 1))?.contiguous()?;
+                let mask = x_mask.as_ref().unwrap().repeat((b, 1))?.contiguous()?;
                 let chain_mask = &chain_mask.repeat((b, 1))?;
                 let bias = bias.repeat((b, 1, 1))?;
                 let mut all_probs = Tensor::zeros((b, l, 20), sample_dtype, device)?;
@@ -942,8 +942,8 @@ impl ProteinMPNN {
 
         // Todo: This is a hack. we should be passing in encoded chains.
         // Update chain_mask to include missing regions
-        let chain_mask = Tensor::zeros_like(mask)?.to_dtype(sample_dtype)?;
-        let chain_mask = mask.mul(&chain_mask)?;
+        let chain_mask = Tensor::zeros_like(mask.unwrap())?.to_dtype(sample_dtype)?;
+        let chain_mask = mask.unwrap().mul(&chain_mask)?;
 
         // encode ...
         let (h_v, h_e, e_idx) = self.encode(features)?;
@@ -975,7 +975,7 @@ impl ProteinMPNN {
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
-                let mask_1d = mask.reshape((b, l, 1, 1))?;
+                let mask_1d = mask.unwrap().reshape((b, l, 1, 1))?;
                 // Broadcast mask_1d to match mask_attend's shape
                 let mask_1d = mask_1d
                     .broadcast_as(mask_attend.shape())?
@@ -989,7 +989,7 @@ impl ProteinMPNN {
         let s_true = s_true.repeat(&[b_decoder, 1])?;
         let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
         let h_e = h_e.repeat(&[b_decoder, 1, 1, 1])?;
-        let mask = x_mask.as_ref().repeat(&[b_decoder, 1])?;
+        let mask = x_mask.as_ref().unwrap().repeat(&[b_decoder, 1])?;
         let h_s = self.w_s.forward(&s_true)?; // embedding layer
         let h_es = cat_neighbors_nodes(&h_s, &h_e, &e_idx)?;
         // Build encoder embeddings
