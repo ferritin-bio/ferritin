@@ -92,10 +92,10 @@ pub fn execute(
     // Residue-Related -------------------------------------------
     if let Some(res) = exec.residue_control_config {
         // Residues
-        let fixed_residues = res.fixed_residues.unwrap();
-        let fixed_positions_tensor = prot_features.get_encoded_tensor(fixed_residues, &device)?;
-        // multiply the fixed positions to the chain tensor
-        chain_mask_tensor = chain_mask_tensor.mul(&fixed_positions_tensor)?;
+        // let fixed_residues = res.fixed_residues;
+        // let fixed_positions_tensor = prot_features.get_encoded_tensor(fixed_residues, &device)?;
+        // // multiply the fixed positions to the chain tensor
+        // chain_mask_tensor = chain_mask_tensor.mul(&fixed_positions_tensor)?;
     }
 
     // bias-Related -------------------------------------------
