@@ -1,9 +1,22 @@
 use anyhow::Result;
+use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device, D};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
-use ferritin_esm::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
+// use ferritin_esm::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
 use safetensors::SafeTensors;
+
+// pub fn esmc_300m_202412(device: &Device) -> Result<Box<dyn Model>> {
+//     let tokenizer = get_model_tokenizers(ESM3_OPEN_SMALL)?.sequence;
+//     let model = ESMC::new(960, 15, 30, tokenizer)?;
+//     model.eval();
+//     let state_dict = Tensor::load(
+//         data_root("esmc-300").join("data/weights/esmc_300m_2024_12_v0.safetensors"),
+//         device,
+//     )?;
+//     model.load_state_dict(&state_dict)?;
+//     Ok(Box::new(model))
+// }
 
 fn main() -> Result<()> {
     // https://huggingface.co/EvolutionaryScale/esmc-300m-2024-12
@@ -17,25 +30,9 @@ fn main() -> Result<()> {
     ));
     let weights_path = repo.get("data/weights/esmc_300m_2024_12_v0.pth")?;
 
-    // // Available for printing Tensor data....
-    // let print_tensor_info = false;
-    // if print_tensor_info {
-    //     println!("Model tensors:");
-    //     let weights = std::fs::read(&weights_path)?;
-    //     let tensors = SafeTensors::deserialize(&weights)?;
-    //     tensors.names().iter().for_each(|tensor_name| {
-    //         if let Ok(tensor_info) = tensors.tensor(tensor_name) {
-    //             println!(
-    //                 "Tensor: {:<44}  ||  Shape: {:?}",
-    //                 tensor_name,
-    //                 tensor_info.shape(),
-    //             );
-    //         }
-    //     });
-    // }
+    let pth = PthTensors::new(weights_path, Some("model_state_dict"))?;
+    let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, Device::Cpu);
+    // println!("VarBuilder for ESMC: {:?}", vb)
 
-    let pth = PthTensors::new(mpnn_file, Some("model_state_dict"))?;
-    let vb = VarBuilder::from_backend(Box::new(pth), default_dtype, self.device.clone());
-
-    println!("VarBuilder for ESMC: {:?}", vb)
+    Ok(())
 }

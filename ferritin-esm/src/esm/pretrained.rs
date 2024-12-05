@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use crate::esm::models::esmc::ESMC;
 use crate::esm::tokenization::get_model_tokenizers;
 use crate::esm::utils::constants::models::{ESM3_OPEN_SMALL, ESMC_300M};
-
 use candle_hf_hub::{api::sync::Api, Repo, RepoType}
 
 // use huggingface_hub::snapshot_download;
