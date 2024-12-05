@@ -1,10 +1,9 @@
+use super::attention::MultiHeadAttention;
+use super::geom_attention::GeometricReasoningOriginalImpl;
+use crate::esm::utils::structure::affine3d::Affine3D;
 use candle_core::{Module, Result, Tensor};
 use candle_nn as nn;
 use candle_nn::ops::silu;
-
-use super::geom_attention::GeometricReasoningOriginalImpl;
-use super::attention::MultiHeadAttention;
-use crate::esm::utils::structure::affine3d::Affine3D;
 
 fn swiglu_correction_fn(expansion_ratio: f64, d_model: i64) -> i64 {
     // set hidden dimension to nearest multiple of 256 after expansion ratio
