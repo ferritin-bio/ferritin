@@ -4,7 +4,6 @@ use candle_nn::VarBuilder;
 use crate::esm::models::esmc::ESMCConfig;
 
 // NOTE: This implementation is based on LLaMA 2's rotary embeddings
-
 fn rotate_half(x: &Tensor, interleaved: bool) -> Result<Tensor> {
     if !interleaved {
         let (x1, x2) = x.chunk(2, -1)?;

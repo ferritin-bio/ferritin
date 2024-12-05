@@ -1,10 +1,10 @@
 pub mod sequence_tokenizer;
 use crate::esm::utils::constants::models::{normalize_model_name, ESM3_OPEN_SMALL};
 use anyhow::{anyhow, Result};
-use sequence_tokenizer::EsmTokenizerBase;
+use sequence_tokenizer::{EsmSequenceTokenizer, EsmTokenizerBase};
 
 pub struct TokenizerCollection {
-    pub sequence: sequence_tokenizer::EsmSequenceTokenizer,
+    pub sequence: EsmSequenceTokenizer,
     // pub structure: structure_tokenizer::StructureTokenizer,
     // pub secondary_structure: ss_tokenizer::SecondaryStructureTokenizer,
     // pub sasa: sasa_tokenizer::SASADiscretizingTokenizer,
@@ -15,7 +15,7 @@ pub struct TokenizerCollection {
 pub fn get_model_tokenizers(model: &str) -> Result<TokenizerCollection> {
     if normalize_model_name(model) == ESM3_OPEN_SMALL {
         Ok(TokenizerCollection {
-            sequence: sequence_tokenizer::EsmSequenceTokenizer::new()?,
+            sequence: EsmSequenceTokenizer::default(),
             // structure: structure_tokenizer::StructureTokenizer::new()?,
             // secondary_structure: ss_tokenizer::SecondaryStructureTokenizer::new("ss8")?,
             // sasa: sasa_tokenizer::SASADiscretizingTokenizer::new()?,

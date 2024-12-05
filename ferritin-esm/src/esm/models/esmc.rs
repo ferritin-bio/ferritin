@@ -38,7 +38,7 @@ impl ESMTokenizer {
 
 pub enum Ffn_Type {
     SWIGLU,
-    GLU
+    GLU,
 }
 
 pub struct ESMCConfig {
@@ -46,7 +46,7 @@ pub struct ESMCConfig {
     pub n_heads: usize,
     pub n_layers: usize,
     pub v_head_transformer: Option<usize>,
-    pub ffn_type: Ffn_Type;
+    pub ffn_type: Ffn_Type,
     pub tokenizer: ESMTokenizer,
     // oringal above.
     pub use_plain_attn: bool,
@@ -60,7 +60,6 @@ pub struct ESMCConfig {
 }
 
 impl ESMCConfig {
-
     pub fn esmc_300m() -> Self {
         //
         //    residue_scaling_factor=  if scale_residue {
@@ -82,8 +81,8 @@ impl ESMCConfig {
             residue_scaling_factor: (30f64 / 36.).sqrt(),
             mask_and_zero_frameless: false,
             bias: false,
-            qk_layernorm: true ,
-            expansion_ratio: 8.0 / 3.0
+            qk_layernorm: true,
+            expansion_ratio: 8.0 / 3.0,
         }
     }
 }
@@ -110,7 +109,7 @@ impl ESMC {
     //     }
     // }
 
-    pub fn load(vb: VarBuilder, config: ESMCConfig) -> Self {
+    pub fn load(vb: VarBuilder, config: ESMCConfig) -> Result<Self> {
         let ESMCConfig {
             d_model,
             n_heads,
@@ -130,12 +129,12 @@ impl ESMC {
 
         let tokenizer_collection = tokenizer.get_model_tokenizers();
 
-        Self {
+        Ok(Self {
             embed: nn::embedding(64, d_model as usize, vb)?,
             transformer: TransformerStack::load(vb, config)?,
             sequence_head: RegressionHead::load(vb, config)?,
             tokenizer: tokenizer_collection.sequence,
-        }
+        })
     }
 
     // pub fn from_pretrained(model_name: impl Into<String>, device: Option<Device>) -> Result<Self> {

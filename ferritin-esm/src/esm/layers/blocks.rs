@@ -128,7 +128,7 @@ impl UnifiedTransformerBlock {
     //         scaling_factor: residue_scaling_factor,
     //     })
     // }
-    pub fn load(vb: VarBuilder, config: ESMCConfig, layer: usize) -> Self {
+    pub fn load(vb: VarBuilder, config: ESMCConfig, layer: usize) -> Result<Self> {
         let ESMCConfig {
             d_model,
             n_heads,
@@ -150,27 +150,30 @@ impl UnifiedTransformerBlock {
 
         let attn = match use_plain_attn {
             false => None,
-            true => Some(MultiHeadAttention::load(vb, config)),
+            true => Some(MultiHeadAttention::load(vb.pp("attention"), config)?),
         };
 
         let geom_attn = match use_geom_attn {
             false => None,
-            true => Some(GeometricReasoningOriginalImpl::load(vb, config)?),
+            true => Some(GeometricReasoningOriginalImpl::load(
+                vb.pp("geometric"),
+                config,
+            )?),
         };
 
         let ffn = match ffn_type {
-            Ffn_Type::SWIGLU => SwiGLU::load(vb, config),
+            Ffn_Type::SWIGLU => SwiGLU::load(vb.pp("swiglue"), config),
             _ => unimplemented!(), // Ffn_Type::GLU => unimplemented!(),
         };
 
-        Self {
+        Ok(Self {
             use_plain_attn,
             attn,
             use_geom_attn,
             geom_attn,
             ffn: ffn.unwrap(),
             scaling_factor: residue_scaling_factor,
-        }
+        })
     }
 }
 

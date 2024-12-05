@@ -1,5 +1,5 @@
 use crate::esm::utils::constants::esm3::SEQUENCE_VOCAB;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokenizers::models::bpe::{BpeBuilder, BPE};
@@ -42,7 +42,11 @@ impl EsmSequenceTokenizer {
             token_to_id.insert(tok.to_string(), i);
         }
         let bpe_builder = BpeBuilder::new();
-        let bpe: BPE = bpe_builder.unk_token(unk_token.to_string()).build()?;
+        let bpe: BPE = bpe_builder
+            .unk_token(unk_token.to_string())
+            .build()
+            .map_err(|e| anyhow::anyhow!("Failed to build BPE tokenizer: {}", e))?;
+
         let mut tokenizer = Tokenizer::new(bpe);
         let special_tokens = vec![
             AddedToken::from(cls_token, true),
@@ -95,11 +99,13 @@ impl EsmTokenizerBase for EsmSequenceTokenizer {
     }
 
     fn bos_token(&self) -> &str {
-        self.cls_token()
+        unimplemented!()
+        // self.cls_token()
     }
 
     fn bos_token_id(&self) -> u32 {
-        self.cls_token_id()
+        unimplemented!()
+        // self.cls_token_id()
     }
 
     fn eos_token(&self) -> &str {
@@ -127,10 +133,12 @@ impl EsmTokenizerBase for EsmSequenceTokenizer {
     }
 
     fn all_token_ids(&self) -> Vec<u32> {
-        (0..self.vocab_size()).collect()
+        unimplemented!()
+        // (0..self.vocab_size()).collect()
     }
 
     fn special_token_ids(&self) -> Vec<u32> {
-        self.tokenizer.get_special_token_ids()
+        unimplemented!()
+        // self.tokenizer.get_special_token_ids()
     }
 }
