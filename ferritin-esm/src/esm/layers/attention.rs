@@ -1,3 +1,4 @@
+use super::rotary::RotaryEmbedding;
 use candle_core::{Module, Result, Tensor};
 use candle_nn as nn;
 

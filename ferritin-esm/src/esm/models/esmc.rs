@@ -1,4 +1,4 @@
-use super::layers.regression_head import RegressionHead;
+use super::layers::regression_head::RegressionHead;
 use super::layers.transformer_stack import TransformerStack;
 use candle_core::{DType, Device, Module, Result, Tensor};
 

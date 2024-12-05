@@ -2522,6 +2522,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferritin-esm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "candle-core",
+ "candle-examples",
+ "candle-hf-hub",
+ "candle-metal-kernels",
+ "candle-nn",
+ "ferritin-test-data",
+ "rand",
+ "safetensors",
+ "tempfile",
+ "tokenizers 0.21.0",
+]
+
+[[package]]
 name = "ferritin-ligandmpnn"
 version = "0.1.0"
 dependencies = [
