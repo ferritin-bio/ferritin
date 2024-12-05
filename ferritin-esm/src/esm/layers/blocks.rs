@@ -53,7 +53,7 @@ pub struct UnifiedTransformerBlock {
     attn: Option<MultiHeadAttention>,
     use_geom_attn: bool,
     geom_attn: Option<GeometricReasoningOriginalImpl>,
-    ffn: nn::Sequential,
+    ffn: SwiGLU,
     scaling_factor: f64,
 }
 
@@ -170,8 +170,8 @@ impl UnifiedTransformerBlock {
         };
 
         let ffn = match ffn_type {
-            Ffn_Type::GLU => unimplemented!(),
-            Ffn_Type::SWIGLU => Swiglu::load(vb, config),
+            Ffn_Type::SWIGLU => SwiGLU::load(vb, config),
+            _ => unimplemented!(), // Ffn_Type::GLU => unimplemented!(),
         };
 
         Self {
@@ -179,7 +179,7 @@ impl UnifiedTransformerBlock {
             attn,
             use_geom_attn,
             geom_attn,
-            ffn,
+            ffn: ffn.unwrap(),
             scaling_factor: residue_scaling_factor,
         }
     }
