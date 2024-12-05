@@ -68,30 +68,62 @@ impl EsmSequenceTokenizer {
             cb_token: chain_break_token.to_string(),
         })
     }
+}
 
-    pub fn bos_token(&self) -> &str {
+impl EsmTokenizerBase for EsmSequenceTokenizer {
+    fn encode(&self) -> Result<()> {
+        todo!()
+    }
+
+    fn decode(&self) -> Result<()> {
+        todo!()
+    }
+
+    fn mask_token(&self) -> &str {
+        "mask"
+    }
+
+    fn mask_token_id(&self) -> u32 {
+        self.tokenizer.token_to_id("mask").unwrap_or(0)
+    }
+
+    fn bos_token(&self) -> &str {
         self.cls_token()
     }
 
-    pub fn bos_token_id(&self) -> u32 {
+    fn bos_token_id(&self) -> u32 {
         self.cls_token_id()
     }
 
-    pub fn chain_break_token(&self) -> &str {
+    fn eos_token(&self) -> &str {
+        "eos"
+    }
+
+    fn eos_token_id(&self) -> u32 {
+        self.tokenizer.token_to_id("eos").unwrap_or(0)
+    }
+
+    fn pad_token(&self) -> &str {
+        "pad"
+    }
+
+    fn pad_token_id(&self) -> u32 {
+        self.tokenizer.token_to_id("pad").unwrap_or(0)
+    }
+
+    fn chain_break_token(&self) -> &str {
         &self.cb_token
     }
 
-    pub fn chain_break_token_id(&self) -> u32 {
+    fn chain_break_token_id(&self) -> u32 {
         self.tokenizer.token_to_id(&self.cb_token).unwrap_or(0)
     }
 
-    pub fn all_token_ids(&self) -> Vec<u32> {
+    fn all_token_ids(&self) -> Vec<u32> {
         (0..self.vocab_size()).collect()
     }
 
-    pub fn special_token_ids(&self) -> Vec<u32> {
+    fn special_token_ids(&self) -> Vec<u32> {
         self.tokenizer.get_special_token_ids()
     }
 }
-
-impl EsmTokenizerBase for EsmSequenceTokenizer {}
