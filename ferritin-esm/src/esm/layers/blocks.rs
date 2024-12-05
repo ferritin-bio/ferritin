@@ -129,17 +129,6 @@ impl UnifiedTransformerBlock {
     //     })
     // }
     pub fn load(vb: VarBuilder, config: ESMCConfig, layer: usize) -> Self {
-        // d_model: i64,
-        // n_heads: i64,
-        // use_geom_attn: bool,
-        // use_plain_attn: bool,
-        // v_heads: Option<i64>,
-        // bias: bool,
-        // expansion_ratio: f64,
-        // residue_scaling_factor: f64,
-        // mask_and_zero_frameless: bool,
-        // qk_layernorm: bool,
-        // ffn_type: &str,
         let ESMCConfig {
             d_model,
             n_heads,
@@ -161,12 +150,12 @@ impl UnifiedTransformerBlock {
 
         let attn = match use_plain_attn {
             false => None,
-            true => Some(GeometricReasoningOriginalImpl::load(vb, config)),
+            true => Some(MultiHeadAttention::load(vb, config)),
         };
 
         let geom_attn = match use_geom_attn {
             false => None,
-            true => Some(GeometricReasoningOriginalImpl::load(vb, config)),
+            true => Some(GeometricReasoningOriginalImpl::load(vb, config)?),
         };
 
         let ffn = match ffn_type {

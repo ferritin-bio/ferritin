@@ -1,4 +1,7 @@
 use candle_core::{Device, Result, Tensor};
+use candle_nn::VarBuilder;
+
+use crate::esm::models::esmc::ESMCConfig;
 
 // NOTE: This implementation is based on LLaMA 2's rotary embeddings
 
@@ -85,7 +88,9 @@ impl RotaryEmbedding {
             scale,
         })
     }
-
+    pub fn load(vb: VarBuilder, config: ESMCConfig) {
+        todo!()
+    }
     fn compute_inv_freq(dim: usize, base: f64, device: &Device) -> Result<Tensor> {
         let arange = Tensor::arange(0., dim as f64, 2., device)?;
         let inv_freq = (base.powf(arange / dim as f64)).recip();
@@ -122,33 +127,33 @@ impl RotaryEmbedding {
         Ok(())
     }
 
-    pub fn forward(
-        &mut self,
-        q: &Tensor,
-        k: &Tensor,
-        seqlen_offset: usize,
-    ) -> Result<(Tensor, Tensor)> {
-        let seqlen = q.dim(1)? + seqlen_offset;
-        self.update_cos_sin_cache(seqlen)?;
+    // pub fn forward(
+    //     &mut self,
+    //     q: &Tensor,
+    //     k: &Tensor,
+    //     seqlen_offset: usize,
+    // ) -> Result<(Tensor, Tensor)> {
+    //     let seqlen = q.dim(1)? + seqlen_offset;
+    //     self.update_cos_sin_cache(seqlen)?;
 
-        if self.scale.is_none() {
-            let cos = self
-                .cos_cached
-                .as_ref()
-                .unwrap()
-                .narrow(0, seqlen_offset, q.dim(1)?)?;
-            let sin = self
-                .sin_cached
-                .as_ref()
-                .unwrap()
-                .narrow(0, seqlen_offset, q.dim(1)?)?;
+    //     if self.scale.is_none() {
+    //         let cos = self
+    //             .cos_cached
+    //             .as_ref()
+    //             .unwrap()
+    //             .narrow(0, seqlen_offset, q.dim(1)?)?;
+    //         let sin = self
+    //             .sin_cached
+    //             .as_ref()
+    //             .unwrap()
+    //             .narrow(0, seqlen_offset, q.dim(1)?)?;
 
-            let q_out = apply_rotary_emb(q, &cos, &sin, self.interleaved)?;
-            let k_out = apply_rotary_emb(k, &cos, &sin, self.interleaved)?;
+    //         let q_out = apply_rotary_emb(q, &cos, &sin, self.interleaved)?;
+    //         let k_out = apply_rotary_emb(k, &cos, &sin, self.interleaved)?;
 
-            Ok((q_out, k_out))
-        } else {
-            panic!("Scaled rotary embeddings not implemented");
-        }
-    }
+    //         Ok((q_out, k_out))
+    //     } else {
+    //         panic!("Scaled rotary embeddings not implemented");
+    //     }
+    // }
 }

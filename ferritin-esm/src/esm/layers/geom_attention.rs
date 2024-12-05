@@ -43,8 +43,8 @@ impl GeometricReasoningOriginalImpl {
         let ESMCConfig {
             d_model,
             v_head_transformer,
-            // num_vector_messages,
             mask_and_zero_frameless,
+            ..
         } = config;
 
         let num_vector_messages = 1usize;
