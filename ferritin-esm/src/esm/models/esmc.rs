@@ -1,5 +1,6 @@
-use super::layers::regression_head::RegressionHead;
-use super::layers.transformer_stack import TransformerStack;
+use crate::esm::layers::regression_head::RegressionHead;
+use crate::esm::layers::transformer_stack::TransformerStack;
+
 use candle_core::{DType, Device, Module, Result, Tensor};
 
 #[derive(Debug)]
