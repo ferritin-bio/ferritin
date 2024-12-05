@@ -26,17 +26,20 @@ pub enum ESMTokenizer {
 impl ESMTokenizer {
     pub fn get_model_tokenizers(&self) -> TokenizerCollection {
         match self {
-            Esm3OpenSmall => TokenizerCollection {
-                sequence: EsmSequenceTokenizer,
-            },
+            Esm3OpenSmall => {
+                let esm_tokenizer = EsmSequenceTokenizer();
+                TokenizerCollection {
+                    sequence: esm_tokenizer,
+                }
+            }
         }
     }
 }
 
 pub struct ESMCConfig {
-    d_model: u32,
-    n_heads: u32,
-    n_layers: u32,
+    d_model: usize,
+    n_heads: usize,
+    n_layers: usize,
     tokenizer: ESMTokenizer,
 }
 
@@ -84,7 +87,7 @@ impl ESMC {
         let tokenizer_collection = tokenizer.get_model_tokenizers();
 
         Self {
-            embed: nn::embedding(64, d_model, vb)?,
+            embed: nn::embedding(64, d_model as usize, vb)?,
             transformer: TransformerStack::new(d_model, n_heads, None, n_layers, 0)?,
             sequence_head: RegressionHead::new(d_model, 64)?,
             tokenizer: tokenizer_collection.sequence,
