@@ -2,53 +2,29 @@ use candle_core::{Device, Result, Tensor};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::models::{
-    esm3::ESM3,
-    esmc::ESMC,
-    function_decoder::FunctionTokenDecoder,
-    tokenization::get_model_tokenizers,
-    vqvae::{StructureTokenDecoder, StructureTokenEncoder},
-};
+use crate::esm::models::{esmc::ESMC, tokenization::get_model_tokenizers};
 
-use crate::constants::{
-    ESM3_FUNCTION_DECODER_V0, ESM3_OPEN_SMALL, ESM3_STRUCTURE_DECODER_V0,
-    ESM3_STRUCTURE_ENCODER_V0, ESMC_300M, ESMC_600M,
-};
+use crate::esm::utils::constants::models::{ESM3_OPEN_SMALL, ESMC_300M};
+
+// from huggingface_hub import snapshot_download
+
+// @staticmethod
+// @cache
+// def data_root(model: str):
+//     if "INFRA_PROVIDER" in os.environ:
+//         return Path("")
+//     # Try to download from hugginface if it doesn't exist
+//     if model.startswith("esm3"):
+//         path = Path(snapshot_download(repo_id="EvolutionaryScale/esm3-sm-open-v1"))
+//     elif model.startswith("esmc-300"):
+//         path = Path(snapshot_download(repo_id="EvolutionaryScale/esmc-300m-2024-12"))
+//     elif model.startswith("esmc-600"):
+//         path = Path(snapshot_download(repo_id="EvolutionaryScale/esmc-600m-2024-12"))
+//     else:
+//         raise ValueError(f"{model=} is an invalid model name.")
+//     return path
 
 type ModelBuilder = Box<dyn Fn(&Device) -> Result<Box<dyn Model>>>;
-
-pub fn esm3_structure_encoder_v0(device: &Device) -> Result<Box<dyn Model>> {
-    let model = StructureTokenEncoder::new(1024, 1, 128, 2, 128, 4096)?;
-    model.eval();
-    let state_dict = Tensor::load(
-        data_root("esm3").join("data/weights/esm3_structure_encoder_v0.safetensors"),
-        device,
-    )?;
-    model.load_state_dict(&state_dict)?;
-    Ok(Box::new(model))
-}
-
-pub fn esm3_structure_decoder_v0(device: &Device) -> Result<Box<dyn Model>> {
-    let model = StructureTokenDecoder::new(1280, 20, 30)?;
-    model.eval();
-    let state_dict = Tensor::load(
-        data_root("esm3").join("data/weights/esm3_structure_decoder_v0.safetensors"),
-        device,
-    )?;
-    model.load_state_dict(&state_dict)?;
-    Ok(Box::new(model))
-}
-
-pub fn esm3_function_decoder_v0(device: &Device) -> Result<Box<dyn Model>> {
-    let model = FunctionTokenDecoder::new()?;
-    model.eval();
-    let state_dict = Tensor::load(
-        data_root("esm3").join("data/weights/esm3_function_decoder_v0.safetensors"),
-        device,
-    )?;
-    model.load_state_dict(&state_dict)?;
-    Ok(Box::new(model))
-}
 
 pub fn esmc_300m_202412(device: &Device) -> Result<Box<dyn Model>> {
     let tokenizer = get_model_tokenizers(ESM3_OPEN_SMALL)?.sequence;
@@ -56,39 +32,6 @@ pub fn esmc_300m_202412(device: &Device) -> Result<Box<dyn Model>> {
     model.eval();
     let state_dict = Tensor::load(
         data_root("esmc-300").join("data/weights/esmc_300m_2024_12_v0.safetensors"),
-        device,
-    )?;
-    model.load_state_dict(&state_dict)?;
-    Ok(Box::new(model))
-}
-
-pub fn esmc_600m_202412(device: &Device) -> Result<Box<dyn Model>> {
-    let tokenizer = get_model_tokenizers(ESM3_OPEN_SMALL)?.sequence;
-    let model = ESMC::new(1152, 18, 36, tokenizer)?;
-    model.eval();
-    let state_dict = Tensor::load(
-        data_root("esmc-600").join("data/weights/esmc_600m_2024_12_v0.safetensors"),
-        device,
-    )?;
-    model.load_state_dict(&state_dict)?;
-    Ok(Box::new(model))
-}
-
-pub fn esm3_sm_open_v0(device: &Device) -> Result<Box<dyn Model>> {
-    let tokenizers = get_model_tokenizers(ESM3_OPEN_SMALL)?;
-    let model = ESM3::new(
-        1536,
-        24,
-        256,
-        48,
-        esm3_structure_encoder_v0,
-        esm3_structure_decoder_v0,
-        esm3_function_decoder_v0,
-        tokenizers,
-    )?;
-    model.eval();
-    let state_dict = Tensor::load(
-        data_root("esm3").join("data/weights/esm3_sm_open_v1.safetensors"),
         device,
     )?;
     model.load_state_dict(&state_dict)?;

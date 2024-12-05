@@ -3,14 +3,14 @@ use candle_core::{DType, Device, Result, Tensor};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-use esm::tokenization::{get_model_tokenizers, TokenizerCollectionProtocol};
-use esm::utils::constants::api as C;
-use esm::utils::constants::models::ESM3_OPEN_SMALL;
-use esm::utils::encoding;
-use esm::utils::misc::get_chainbreak_boundaries_from_sequence;
-use esm::utils::structure::protein_chain::ProteinChain;
-use esm::utils::structure::protein_complex::ProteinComplex;
-use esm::utils::types::{FunctionAnnotation, PathOrBuffer};
+use crate::esm::tokenization::{get_model_tokenizers, TokenizerCollectionProtocol};
+use crate::esm::utils::constants::api as C;
+use crate::esm::utils::constants::models::ESM3_OPEN_SMALL;
+use crate::esm::utils::encoding;
+use crate::esm::utils::misc::get_chainbreak_boundaries_from_sequence;
+use crate::esm::utils::structure::protein_chain::ProteinChain;
+use crate::esm::utils::structure::protein_complex::ProteinComplex;
+use crate::esm::utils::types::{FunctionAnnotation, PathOrBuffer};
 
 pub trait ProteinType {}
 

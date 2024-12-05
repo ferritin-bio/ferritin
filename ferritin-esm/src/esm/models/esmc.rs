@@ -19,7 +19,7 @@ struct ESMCOutput {
     embeddings: Option<Tensor>,
 }
 
-struct ESMC {
+pub struct ESMC {
     embed: candle_nn::Embedding,
     transformer: TransformerStack,
     sequence_head: RegressionHead,
@@ -70,7 +70,7 @@ impl ESMC {
 
     pub fn encode(&self, input: &ESMProtein) -> Result<ESMProteinTensor> {
         let sequence_tokens = if let Some(seq) = &input.sequence {
-            Some(encoding::tokenize_sequence(seq, &self.tokenizer, true)?)
+            Some(tokenize_sequence(seq, &self.tokenizer, true)?)
         } else {
             None
         };

@@ -1,29 +1,49 @@
-import torch.nn as nn
-import torch.nn.functional as F
-from torch import Tensor
+use candle_core::{Module, Result, Tensor};
+use candle_nn as nn;
 
-# NOT CURRENTLY USED
+// NOT CURRENTLY USED
 
+pub struct SwiGLU {}
 
-class SwiGLU(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
+impl SwiGLU {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
-    def forward(self, x: Tensor) -> Tensor:
-        x1, x2 = x.chunk(2, dim=-1)
-        hidden = F.silu(x1) * x2
-        return hidden
+impl Module for SwiGLU {
+    fn forward(&self, x: &Tensor) -> Result<Tensor> {
+        let (x1, x2) = x.chunk(2, -1)?;
+        let hidden = x1.silu()?.mul(&x2)?;
+        Ok(hidden)
+    }
+}
 
+pub struct FFN {
+    in_proj: Box<dyn Module>,
+    activation: Box<dyn Module>,
+    out_proj: Box<dyn Module>,
+}
 
-class FFN(nn.Module):
-    def __init__(self, in_proj, activation, out_proj) -> None:
-        super().__init__()
-        self.in_proj = in_proj
-        self.activation = activation
-        self.out_proj = out_proj
+impl FFN {
+    pub fn new(
+        in_proj: Box<dyn Module>,
+        activation: Box<dyn Module>,
+        out_proj: Box<dyn Module>,
+    ) -> Self {
+        Self {
+            in_proj,
+            activation,
+            out_proj,
+        }
+    }
+}
 
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.in_proj(x)
-        x = self.activation(x)
-        x = self.out_proj(x)
-        return x
+impl Module for FFN {
+    fn forward(&self, x: &Tensor) -> Result<Tensor> {
+        let x = self.in_proj.forward(x)?;
+        let x = self.activation.forward(&x)?;
+        let x = self.out_proj.forward(&x)?;
+        Ok(x)
+    }
+}

@@ -43,3 +43,6 @@ amplify:
 
 test-ligandmpnn:
     cargo test --features metal -p ferritin-ligandmpnn test_cli_command_run_example_06 -- --nocapture
+
+esmc:
+    cargo run --example esmc
