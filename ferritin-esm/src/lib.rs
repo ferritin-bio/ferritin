@@ -1,4 +1,4 @@
 //! ferritin-esm
 //!
 
-// mod esm;
+pub mod esm;

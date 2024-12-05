@@ -1,17 +1,18 @@
+use candle_nn::{self as nn, Embedding, VarBuilder};
+use candle_core::{DType, Device, Module, Result, Tensor};
 use crate::esm::layers::regression_head::RegressionHead;
 use crate::esm::layers::transformer_stack::TransformerStack;
-use crate::esm::pretrained::load_local_model;
-use crate::esm::sdk::api::ESMProtein;
-use crate::esm::sdk::api::ESMProteinTensor;
-use crate::esm::sdk::api::ForwardTrackData;
-use crate::esm::sdk::api::LogitsConfig;
-use crate::esm::sdk::api::LogitsOutput;
+// use crate::esm::pretrained::load_local_model;
+// use crate::esm::sdk::api::ESMProtein;
+// use crate::esm::sdk::api::ESMProteinTensor;
+// use crate::esm::sdk::api::ForwardTrackData;
+// use crate::esm::sdk::api::LogitsConfig;
+// use crate::esm::sdk::api::LogitsOutput;
 use crate::esm::tokenization::sequence_tokenizer::EsmSequenceTokenizer;
-use crate::esm::utils::decoding::decode_sequence;
-use crate::esm::utils::encoding::tokenize_sequence;
-use crate::esm::utils::sampling::BatchedESMProteinTensor;
+// use crate::esm::utils::decoding::decode_sequence;
+// use crate::esm::utils::encoding::tokenize_sequence;
+// use crate::esm::utils::sampling::BatchedESMProteinTensor;
 
-use candle_core::{DType, Device, Module, Result, Tensor};
 
 #[derive(Debug)]
 struct ESMCOutput {
@@ -34,80 +35,85 @@ impl ESMC {
         tokenizer: EsmSequenceTokenizer,
     ) -> Self {
         Self {
-            embed: candle_nn::embedding(64, d_model, Default::default())?,
+            embed: nn::embedding(64, d_model, Default::default())?,
             transformer: TransformerStack::new(d_model, n_heads, None, n_layers, 0)?,
             sequence_head: RegressionHead::new(d_model, 64)?,
             tokenizer,
         }
     }
 
-    pub fn from_pretrained(model_name: impl Into<String>, device: Option<Device>) -> Result<Self> {
-        let device = device.unwrap_or(Device::cuda_if_available()?);
-        let model = load_local_model(&model_name.into(), &device)?;
-        if device.is_cuda() {
-            model.to_dtype(DType::BF16)?;
-        }
-        Ok(model)
-    }
+    pub fn load(vb: VarBuilder) {
+        println!();
+    };
 
-    pub fn forward(
-        &self,
-        sequence_tokens: Option<&Tensor>,
-        sequence_id: Option<&Tensor>,
-    ) -> Result<ESMCOutput> {
-        let sequence_id = sequence_id
-            .unwrap_or({ &(sequence_tokens.unwrap().eq(self.tokenizer.pad_token_id)?)? });
 
-        let x = self.embed.forward(sequence_tokens.unwrap())?;
-        let (x, _) = self.transformer.forward(&x, Some(sequence_id))?;
-        let sequence_logits = self.sequence_head.forward(&x)?;
+    // pub fn from_pretrained(model_name: impl Into<String>, device: Option<Device>) -> Result<Self> {
+    //     let device = device.unwrap_or(Device::cuda_if_available()?);
+    //     let model = load_local_model(&model_name.into(), &device)?;
+    //     if device.is_cuda() {
+    //         model.to_dtype(DType::BF16)?;
+    //     }
+    //     Ok(model)
+    // }
 
-        Ok(ESMCOutput {
-            sequence_logits,
-            embeddings: Some(x),
-        })
-    }
+    // pub fn forward(
+    //     &self,
+    //     sequence_tokens: Option<&Tensor>,
+    //     sequence_id: Option<&Tensor>,
+    // ) -> Result<ESMCOutput> {
+    //     let sequence_id = sequence_id
+    //         .unwrap_or({ &(sequence_tokens.unwrap().eq(self.tokenizer.pad_token_id)?)? });
 
-    pub fn encode(&self, input: &ESMProtein) -> Result<ESMProteinTensor> {
-        let sequence_tokens = if let Some(seq) = &input.sequence {
-            Some(tokenize_sequence(seq, &self.tokenizer, true)?)
-        } else {
-            None
-        };
+    //     let x = self.embed.forward(sequence_tokens.unwrap())?;
+    //     let (x, _) = self.transformer.forward(&x, Some(sequence_id))?;
+    //     let sequence_logits = self.sequence_head.forward(&x)?;
 
-        Ok(ESMProteinTensor::new(sequence_tokens)?.to_device(&self.device())?)
-    }
+    //     Ok(ESMCOutput {
+    //         sequence_logits,
+    //         embeddings: Some(x),
+    //     })
+    // }
 
-    pub fn decode(&self, input: &ESMProteinTensor) -> Result<ESMProtein> {
-        let sequence = input.sequence.as_ref().ok_or("Missing sequence")?;
-        let sequence = decode_sequence(&sequence.slice(1..-1)?, &self.tokenizer)?;
-        Ok(ESMProtein::new(Some(sequence)))
-    }
+    // pub fn encode(&self, input: &ESMProtein) -> Result<ESMProteinTensor> {
+    //     let sequence_tokens = if let Some(seq) = &input.sequence {
+    //         Some(tokenize_sequence(seq, &self.tokenizer, true)?)
+    //     } else {
+    //         None
+    //     };
 
-    pub fn logits(&self, input: &ESMProteinTensor, config: &LogitsConfig) -> Result<LogitsOutput> {
-        let input = if !input.is_batched() {
-            BatchedESMProteinTensor::from_protein_tensor(input)?
-        } else {
-            input.clone()
-        };
+    //     Ok(ESMProteinTensor::new(sequence_tokens)?.to_device(&self.device())?)
+    // }
 
-        candle_core::no_grad(|| {
-            let output = self.forward(Some(&input.sequence), None)?;
+    // pub fn decode(&self, input: &ESMProteinTensor) -> Result<ESMProtein> {
+    //     let sequence = input.sequence.as_ref().ok_or("Missing sequence")?;
+    //     let sequence = decode_sequence(&sequence.slice(1..-1)?, &self.tokenizer)?;
+    //     Ok(ESMProtein::new(Some(sequence)))
+    // }
 
-            Ok(LogitsOutput {
-                logits: ForwardTrackData {
-                    sequence: if config.sequence {
-                        Some(output.sequence_logits)
-                    } else {
-                        None
-                    },
-                },
-                embeddings: if config.return_embeddings {
-                    output.embeddings
-                } else {
-                    None
-                },
-            })
-        })
-    }
+    // pub fn logits(&self, input: &ESMProteinTensor, config: &LogitsConfig) -> Result<LogitsOutput> {
+    //     let input = if !input.is_batched() {
+    //         BatchedESMProteinTensor::from_protein_tensor(input)?
+    //     } else {
+    //         input.clone()
+    //     };
+
+    //     candle_core::no_grad(|| {
+    //         let output = self.forward(Some(&input.sequence), None)?;
+
+    //         Ok(LogitsOutput {
+    //             logits: ForwardTrackData {
+    //                 sequence: if config.sequence {
+    //                     Some(output.sequence_logits)
+    //                 } else {
+    //                     None
+    //                 },
+    //             },
+    //             embeddings: if config.return_embeddings {
+    //                 output.embeddings
+    //             } else {
+    //                 None
+    //             },
+    //         })
+    //     })
+    // }
 }
