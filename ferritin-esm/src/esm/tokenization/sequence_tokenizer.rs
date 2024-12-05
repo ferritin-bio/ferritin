@@ -2,9 +2,9 @@ use crate::esm::utils::constants::esm3::SEQUENCE_VOCAB;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokenizers::models::bpe::BPE;
+use tokenizers::models::bpe::{BpeBuilder, BPE};
 use tokenizers::processors::template::TemplateProcessing;
-use tokenizers::Tokenizer;
+use tokenizers::{AddedToken, Tokenizer};
 
 pub trait EsmTokenizerBase {
     fn encode(&self) -> Result<()>;
@@ -41,7 +41,9 @@ impl EsmSequenceTokenizer {
             token_to_id.insert(tok.to_string(), i);
         }
 
-        let bpe = BPE::new(token_to_id, vec![], unk_token.to_string());
+        let bpe_builder = BpeBuilder::new();
+        let bpe: BPE = bpe_builder.unk_token(unk_token.to_string()).build()?;
+
         let mut tokenizer = Tokenizer::new(bpe);
 
         let special_tokens = vec![
@@ -68,6 +70,54 @@ impl EsmSequenceTokenizer {
             tokenizer: Arc::new(tokenizer),
             cb_token: chain_break_token.to_string(),
         })
+    }
+}
+impl EsmSequenceTokenizer {
+    pub fn new(
+        unk_token: &str,
+        cls_token: &str,
+        pad_token: &str,
+        mask_token: &str,
+        eos_token: &str,
+        chain_break_token: &str,
+    ) -> Result<Self> {
+        let mut token_to_id = HashMap::new();
+        for (i, tok) in SEQUENCE_VOCAB.iter().enumerate() {
+            token_to_id.insert(tok.to_string(), i);
+        }
+        let bpe_builder = BpeBuilder::new();
+        let bpe: BPE = bpe_builder.unk_token(unk_token.to_string()).build()?;
+        let mut tokenizer = Tokenizer::new(bpe);
+        let special_tokens = vec![
+            AddedToken::from(cls_token, true),
+            AddedToken::from(pad_token, true),
+            AddedToken::from(mask_token, true),
+            AddedToken::from(eos_token, true),
+            AddedToken::from(chain_break_token, true),
+        ];
+
+        tokenizer.add_special_tokens(&special_tokens);
+
+        let post_processor = TemplateProcessing::new(
+            format!("{} $A {}", cls_token, eos_token),
+            vec![
+                (cls_token.to_string(), tokenizer.token_to_id(cls_token)?),
+                (eos_token.to_string(), tokenizer.token_to_id(eos_token)?),
+            ],
+        )?;
+
+        tokenizer.set_post_processor(Arc::new(post_processor));
+
+        Ok(Self {
+            tokenizer: Arc::new(tokenizer),
+            cb_token: chain_break_token.to_string(),
+        })
+    }
+}
+impl Default for EsmSequenceTokenizer {
+    fn default() -> Self {
+        Self::new("<unk>", "<cls>", "<pad>", "<mask>", "<eos>", "|")
+            .expect("Failed to create default tokenizer")
     }
 }
 
