@@ -26,8 +26,8 @@ pub enum ESMTokenizer {
 impl ESMTokenizer {
     pub fn get_model_tokenizers(&self) -> TokenizerCollection {
         match self {
-            Esm3OpenSmall => {
-                let esm_tokenizer = EsmSequenceTokenizer();
+            ESMTokenizer::Esm3OpenSmall => {
+                let esm_tokenizer = EsmSequenceTokenizer::default();
                 TokenizerCollection {
                     sequence: esm_tokenizer,
                 }

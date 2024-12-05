@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokenizers::models::bpe::{BpeBuilder, BPE};
 use tokenizers::processors::template::TemplateProcessing;
+use tokenizers::processors::PostProcessorWrapper;
 use tokenizers::{AddedToken, Tokenizer};
 
 pub trait EsmTokenizerBase {
@@ -40,51 +41,6 @@ impl EsmSequenceTokenizer {
         for (i, tok) in SEQUENCE_VOCAB.iter().enumerate() {
             token_to_id.insert(tok.to_string(), i);
         }
-
-        let bpe_builder = BpeBuilder::new();
-        let bpe: BPE = bpe_builder.unk_token(unk_token.to_string()).build()?;
-
-        let mut tokenizer = Tokenizer::new(bpe);
-
-        let special_tokens = vec![
-            cls_token,
-            pad_token,
-            mask_token,
-            eos_token,
-            chain_break_token,
-        ];
-
-        tokenizer.add_special_tokens(&special_tokens)?;
-
-        let post_processor = TemplateProcessing::new(
-            format!("{} $A {}", cls_token, eos_token),
-            vec![
-                (cls_token.to_string(), tokenizer.token_to_id(cls_token)?),
-                (eos_token.to_string(), tokenizer.token_to_id(eos_token)?),
-            ],
-        )?;
-
-        tokenizer.set_post_processor(Arc::new(post_processor));
-
-        Ok(Self {
-            tokenizer: Arc::new(tokenizer),
-            cb_token: chain_break_token.to_string(),
-        })
-    }
-}
-impl EsmSequenceTokenizer {
-    pub fn new(
-        unk_token: &str,
-        cls_token: &str,
-        pad_token: &str,
-        mask_token: &str,
-        eos_token: &str,
-        chain_break_token: &str,
-    ) -> Result<Self> {
-        let mut token_to_id = HashMap::new();
-        for (i, tok) in SEQUENCE_VOCAB.iter().enumerate() {
-            token_to_id.insert(tok.to_string(), i);
-        }
         let bpe_builder = BpeBuilder::new();
         let bpe: BPE = bpe_builder.unk_token(unk_token.to_string()).build()?;
         let mut tokenizer = Tokenizer::new(bpe);
@@ -98,15 +54,15 @@ impl EsmSequenceTokenizer {
 
         tokenizer.add_special_tokens(&special_tokens);
 
-        let post_processor = TemplateProcessing::new(
-            format!("{} $A {}", cls_token, eos_token),
-            vec![
-                (cls_token.to_string(), tokenizer.token_to_id(cls_token)?),
-                (eos_token.to_string(), tokenizer.token_to_id(eos_token)?),
-            ],
-        )?;
+        let post_processor = TemplateProcessing::builder()
+            .try_single(format!("{} $A {}", cls_token, eos_token))?
+            .special_tokens(vec![
+                (cls_token, tokenizer.token_to_id(cls_token).unwrap()),
+                (eos_token, tokenizer.token_to_id(eos_token).unwrap()),
+            ])
+            .build()?;
 
-        tokenizer.set_post_processor(Arc::new(post_processor));
+        tokenizer.with_post_processor(Some(PostProcessorWrapper::Template(post_processor)));
 
         Ok(Self {
             tokenizer: Arc::new(tokenizer),
