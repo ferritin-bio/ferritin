@@ -1,6 +1,5 @@
-use candle_core::{DType, Device, Result, Shape, Tensor};
+use candle_core::{DType, Device, Error, Result, Shape, Tensor};
 use std::fmt;
-use thiserror::Error;
 
 // Enhanced Rotation trait with additional functionality
 pub trait Rotation: Sized + Clone {
@@ -85,7 +84,7 @@ impl Affine3D {
     pub fn identity(shape: &[usize], device: &Device, dtype: DType) -> Result<Self> {
         let mut trans_shape = shape.to_vec();
         trans_shape.push(3);
-        let trans = Tensor::zeros(trans_shape.as_slice(), device)?.to_dtype(dtype)?;
+        let trans = Tensor::zeros(trans_shape.as_slice(), dtype, device)?;
         let rot = Box::new(RotationMatrix::identity(shape, device, dtype)?);
         Ok(Self { trans, rot })
     }
