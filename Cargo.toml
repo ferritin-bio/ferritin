@@ -3,6 +3,7 @@ members = [
     "ferritin-bevy",
     "ferritin-cellscape",
     "ferritin-core",
+    "ferritin-esm",
     "ferritin-amplify",
     "ferritin-ligandmpnn",
     "ferritin-molviewspec",
