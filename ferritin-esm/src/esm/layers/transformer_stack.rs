@@ -1,4 +1,5 @@
 use crate::esm::layers::blocks::UnifiedTransformerBlock;
+use crate::esm::models::esmc::ESMCConfig;
 use crate::esm::utils::structure::affine3d::Affine3D;
 use candle_core::{Module, Result, Tensor, D};
 use candle_nn as nn;
@@ -23,66 +24,109 @@ pub struct TransformerStack {
 }
 
 impl TransformerStack {
-    pub fn new(
-        d_model: i64,
-        n_heads: i64,
-        v_heads: Option<i64>,
-        n_layers: i64,
-        n_layers_geom: i64,
-        scale_residue: bool,
-        mask_and_zero_frameless: bool,
-        bias: bool,
-        qk_layernorm: bool,
-        ffn_type: &str,
-        expansion_ratio: f64,
-    ) -> Result<Self> {
+    pub fn load(vb: nn::VarBuilder, config: ESMCConfig) -> Result<Self> {
+        let ESMCConfig {
+            d_model,
+            n_heads,
+            n_layers,
+            ffn_type,
+            v_head_transformer,
+        } = config;
+
+        let n_layers_geom = 1u32;
+        let scale_residue = true;
+        let mask_and_zero_frameless = false;
+        let bias = false;
+        let qk_layernorm = true;
+        let expansion_ratio: f64 = 8.0 / 3.0;
+
         let mut blocks = Vec::with_capacity(n_layers as usize);
         for i in 0..n_layers {
-            blocks.push(UnifiedTransformerBlock::new(
-                d_model,
-                n_heads,
-                v_heads,
-                i < n_layers_geom,
-                if scale_residue {
-                    (n_layers as f64 / 36.0).sqrt()
-                } else {
-                    1.0
-                },
-                expansion_ratio,
-                mask_and_zero_frameless,
-                bias,
-                qk_layernorm,
-                ffn_type,
-            )?);
+            blocks.push(
+                //     UnifiedTransformerBlock::new(
+                //     d_model,
+                //     n_heads,
+                //     v_heads,
+                //     i < n_layers_geom as i64,
+                //     if scale_residue {
+                //         (n_layers as f64 / 36.0).sqrt()
+                //     } else {
+                //         1.0
+                //     },
+                //     expansion_ratio,
+                //     mask_and_zero_frameless,
+                //     bias,
+                //     qk_layernorm,
+                //     ffn_type,
+                // )?
+                UnifiedTransformerBlock::load(vb, config);
+            );
         }
 
         let norm = nn::LayerNorm::new(d_model, 1e-5, false)?;
 
         Ok(Self { blocks, norm })
     }
+    // pub fn new(
+    //     d_model: i64,
+    //     n_heads: i64,
+    //     v_heads: Option<i64>,
+    //     n_layers: i64,
+    //     n_layers_geom: i64,
+    //     scale_residue: bool,
+    //     mask_and_zero_frameless: bool,
+    //     bias: bool,
+    //     qk_layernorm: bool,
+    //     ffn_type: &str,
+    //     expansion_ratio: f64,
+    // ) -> Result<Self> {
+    //     let mut blocks = Vec::with_capacity(n_layers as usize);
+    //     for i in 0..n_layers {
+    //         blocks.push(UnifiedTransformerBlock::new(
+    //             d_model,
+    //             n_heads,
+    //             v_heads,
+    //             i < n_layers_geom,
+    //             if scale_residue {
+    //                 (n_layers as f64 / 36.0).sqrt()
+    //             } else {
+    //                 1.0
+    //             },
+    //             expansion_ratio,
+    //             mask_and_zero_frameless,
+    //             bias,
+    //             qk_layernorm,
+    //             ffn_type,
+    //         )?);
+    //     }
 
-    pub fn forward(
-        &self,
-        x: &Tensor,
-        sequence_id: Option<&Tensor>,
-        affine: Option<&Affine3D>,
-        affine_mask: Option<&Tensor>,
-        chain_id: Option<&Tensor>,
-    ) -> Result<(Tensor, Tensor)> {
-        let mut x = x.clone();
+    //     let norm = nn::LayerNorm::new(d_model, 1e-5, false)?;
 
-        let chain_id = if chain_id.is_none() {
-            let batch_dims = x.shape().split_last().unwrap().1;
-            Tensor::ones(batch_dims, (x.device(), DType::I64))?
-        } else {
-            chain_id.unwrap().clone()
-        };
+    //     Ok(Self { blocks, norm })
+    // }
 
-        for block in self.blocks.iter() {
-            x = block.forward(&x, sequence_id, affine, affine_mask, &chain_id)?;
-        }
+    // pub fn forward(
+    //     &self,
+    //     x: &Tensor,
+    //     sequence_id: Option<&Tensor>,
+    //     affine: Option<&Affine3D>,
+    //     affine_mask: Option<&Tensor>,
+    //     chain_id: Option<&Tensor>,
+    // ) -> Result<(Tensor, Tensor)> {
+    //     let mut x = x.clone();
 
-        let normalized = self.norm.forward(&x)?;
-        Ok((normalized, x))
-    }
+    //     let chain_id = if chain_id.is_none() {
+    //         let batch_dims = x.shape().split_last().unwrap().1;
+    //         Tensor::ones(batch_dims, (x.device(), DType::I64))?
+    //     } else {
+    //         chain_id.unwrap().clone()
+    //     };
+
+    //     for block in self.blocks.iter() {
+    //         x = block.forward(&x, sequence_id, affine, affine_mask, &chain_id)?;
+    //     }
+
+    //     let normalized = self.norm.forward(&x)?;
+    //     Ok((normalized, x))
+    // }
 }

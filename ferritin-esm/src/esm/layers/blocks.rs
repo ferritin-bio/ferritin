@@ -1,9 +1,10 @@
 use super::attention::MultiHeadAttention;
 use super::geom_attention::GeometricReasoningOriginalImpl;
+use crate::esm::models::esmc::ESMCConfig;
 use crate::esm::utils::structure::affine3d::Affine3D;
 use candle_core::{Module, Result, Tensor};
-use candle_nn as nn;
 use candle_nn::ops::silu;
+use candle_nn::{self as nn, VarBuilder};
 
 fn swiglu_correction_fn(expansion_ratio: f64, d_model: i64) -> i64 {
     // set hidden dimension to nearest multiple of 256 after expansion ratio
@@ -125,28 +126,29 @@ impl UnifiedTransformerBlock {
             scaling_factor: residue_scaling_factor,
         })
     }
+    pub fn load(vb: VarBuilder, config: ESMCConfig) -> Self {}
 }
 
-impl Module for UnifiedTransformerBlock {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let mut x = x.clone();
+// impl Module for UnifiedTransformerBlock {
+//     fn forward(&self, x: &Tensor) -> Result<Tensor> {
+//         let mut x = x.clone();
 
-        if self.use_plain_attn {
-            if let Some(attn) = &self.attn {
-                let r1 = attn.forward(&x)?;
-                x = &x + &(&r1 / self.scaling_factor)?;
-            }
-        }
+//         if self.use_plain_attn {
+//             if let Some(attn) = &self.attn {
+//                 let r1 = attn.forward(&x)?;
+//                 x = &x + &(&r1 / self.scaling_factor)?;
+//             }
+//         }
 
-        if self.use_geom_attn {
-            if let Some(geom_attn) = &self.geom_attn {
-                let r2 = geom_attn.forward(&x)?;
-                x = &x + &(&r2 / self.scaling_factor)?;
-            }
-        }
+//         if self.use_geom_attn {
+//             if let Some(geom_attn) = &self.geom_attn {
+//                 let r2 = geom_attn.forward(&x)?;
+//                 x = &x + &(&r2 / self.scaling_factor)?;
+//             }
+//         }
 
-        let r3 = self.ffn.forward(&x)?;
-        let r3 = &r3 / self.scaling_factor;
-        Ok(&x + &r3)
-    }
-}
+//         let r3 = self.ffn.forward(&x)?;
+//         let r3 = &r3 / self.scaling_factor;
+//         Ok(&x + &r3)
+//     }
+// }

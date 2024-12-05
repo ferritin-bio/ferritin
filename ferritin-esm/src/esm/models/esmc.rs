@@ -36,11 +36,25 @@ impl ESMTokenizer {
     }
 }
 
+enum Ffn_Type {
+    SWIGLU,
+    GLU
+}
+
 pub struct ESMCConfig {
-    d_model: usize,
-    n_heads: usize,
-    n_layers: usize,
-    tokenizer: ESMTokenizer,
+    pub d_model: usize,
+    pub n_heads: usize,
+    pub n_layers: usize,
+    pub v_head_transformer: Option<usize>,
+    pub ffn_type: Ffn_Type;
+    pub tokenizer: ESMTokenizer,
+    //
+    pub  n_layers_geom: usize,
+    pub scale_residue: bool,
+    pub mask_and_zero_frameless: bool,
+    pub bias: bool,
+    pub qk_layernorm: bool,
+    pub expansion_ratio: f64,
 }
 
 impl ESMCConfig {
@@ -49,7 +63,15 @@ impl ESMCConfig {
             d_model: 960,
             n_heads: 15,
             n_layers: 30,
+            v_head_transformer: None,
+            ffn_type: Ffn_Type::SWIGLU,
             tokenizer: ESMTokenizer::Esm3OpenSmall,
+            n_layers_geom: 1,
+            scale_residue: true,
+            mask_and_zero_frameless: false,
+            bias: false,
+            qk_layernorm: true,
+            expansion_ratio: 8.0 / 3.0
         }
     }
 }
@@ -81,6 +103,8 @@ impl ESMC {
             d_model,
             n_heads,
             n_layers,
+            v_head_transformer,
+            ffn_type,
             tokenizer,
         } = config;
 
@@ -88,8 +112,8 @@ impl ESMC {
 
         Self {
             embed: nn::embedding(64, d_model as usize, vb)?,
-            transformer: TransformerStack::new(d_model, n_heads, None, n_layers, 0)?,
-            sequence_head: RegressionHead::new(d_model, 64)?,
+            transformer: TransformerStack::load(vb, config)?,
+            sequence_head: RegressionHead::load(vb, config)?,
             tokenizer: tokenizer_collection.sequence,
         }
     }
