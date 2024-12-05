@@ -31,14 +31,15 @@ impl TransformerStack {
             n_layers,
             ffn_type,
             v_head_transformer,
+            n_layers_geom,
+            scale_residue,
+            mask_and_zero_frameless,
+            bias,
+            qk_layernorm,
+            expansion_ratio,
+            tokenizer
         } = config;
 
-        let n_layers_geom = 1u32;
-        let scale_residue = true;
-        let mask_and_zero_frameless = false;
-        let bias = false;
-        let qk_layernorm = true;
-        let expansion_ratio: f64 = 8.0 / 3.0;
 
         let mut blocks = Vec::with_capacity(n_layers as usize);
         for i in 0..n_layers {
