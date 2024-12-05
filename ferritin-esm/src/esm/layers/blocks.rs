@@ -6,16 +6,14 @@ use candle_core::{Module, Result, Tensor};
 use candle_nn::ops::silu;
 use candle_nn::{self as nn, VarBuilder};
 
-pub struct SwiGLU {
+pub struct Swiglu {
     hidden_dim: usize,
 }
-
-impl SwiGLU {
+impl Swiglu {
     pub fn load() -> Self {
         Self {}
     }
 }
-
 impl Module for SwiGLU {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
         let (x1, x2) = x.chunk(2, -1)?;
@@ -38,16 +36,6 @@ fn swiglu_ln_ffn(d_model: i64, expansion_ratio: f64, bias: bool) -> Result<nn::S
     Ok(seq)
 }
 
-// fn gelu_ln_ffn(d_model: i64, expansion_ratio: f64, bias: bool) -> Result<nn::Sequential> {
-//     let hidden_dim = (expansion_ratio * d_model as f64) as i64;
-//     let seq = nn::seq()
-//         .add(nn::LayerNorm::new(d_model)?)
-//         .add(nn::linear(d_model, hidden_dim, bias)?)
-//         .add_fn(|x| x.gelu())
-//         .add(nn::linear(hidden_dim, d_model, bias)?);
-//     Ok(seq)
-// }
-
 pub struct UnifiedTransformerBlock {
     use_plain_attn: bool,
     attn: Option<MultiHeadAttention>,
@@ -66,68 +54,68 @@ impl UnifiedTransformerBlock {
     /// - use_geom_attn: Whether to use geometric attention
     /// - use_plain_attn: Whether to use plain attention
     /// - v_heads: Number of heads for geometric attention
-    pub fn new(
-        d_model: i64,
-        n_heads: i64,
-        use_geom_attn: bool,
-        use_plain_attn: bool,
-        v_heads: Option<i64>,
-        bias: bool,
-        expansion_ratio: f64,
-        residue_scaling_factor: f64,
-        mask_and_zero_frameless: bool,
-        qk_layernorm: bool,
-        ffn_type: &str,
-    ) -> Result<Self> {
-        let attn = if use_plain_attn {
-            Some(MultiHeadAttention::new(
-                d_model,
-                n_heads,
-                bias,
-                qk_layernorm,
-            )?)
-        } else {
-            None
-        };
+    // pub fn new(
+    //     d_model: i64,
+    //     n_heads: i64,
+    //     use_geom_attn: bool,
+    //     use_plain_attn: bool,
+    //     v_heads: Option<i64>,
+    //     bias: bool,
+    //     expansion_ratio: f64,
+    //     residue_scaling_factor: f64,
+    //     mask_and_zero_frameless: bool,
+    //     qk_layernorm: bool,
+    //     ffn_type: &str,
+    // ) -> Result<Self> {
+    //     let attn = if use_plain_attn {
+    //         Some(MultiHeadAttention::new(
+    //             d_model,
+    //             n_heads,
+    //             bias,
+    //             qk_layernorm,
+    //         )?)
+    //     } else {
+    //         None
+    //     };
 
-        let geom_attn = if use_geom_attn {
-            match v_heads {
-                Some(vh) => Some(GeometricReasoningOriginalImpl::new(
-                    d_model,
-                    vh,
-                    bias,
-                    mask_and_zero_frameless,
-                )?),
-                None => {
-                    return Err(candle_core::Error::Msg(
-                        "v_heads must be specified when use_geom_attn is True".into(),
-                    ))
-                }
-            }
-        } else {
-            None
-        };
+    //     let geom_attn = if use_geom_attn {
+    //         match v_heads {
+    //             Some(vh) => Some(GeometricReasoningOriginalImpl::new(
+    //                 d_model,
+    //                 vh,
+    //                 bias,
+    //                 mask_and_zero_frameless,
+    //             )?),
+    //             None => {
+    //                 return Err(candle_core::Error::Msg(
+    //                     "v_heads must be specified when use_geom_attn is True".into(),
+    //                 ))
+    //             }
+    //         }
+    //     } else {
+    //         None
+    //     };
 
-        let ffn = match ffn_type {
-            "swiglu" => swiglu_ln_ffn(d_model, expansion_ratio, bias)?,
-            "gelu" => gelu_ln_ffn(d_model, expansion_ratio, bias)?,
-            _ => {
-                return Err(candle_core::Error::Msg(format!(
-                    "Unknown ffn_type: {}",
-                    ffn_type
-                )))
-            }
-        };
+    //     let ffn = match ffn_type {
+    //         "swiglu" => swiglu_ln_ffn(d_model, expansion_ratio, bias)?,
+    //         "gelu" => gelu_ln_ffn(d_model, expansion_ratio, bias)?,
+    //         _ => {
+    //             return Err(candle_core::Error::Msg(format!(
+    //                 "Unknown ffn_type: {}",
+    //                 ffn_type
+    //             )))
+    //         }
+    //     };
 
-        Ok(Self {
-            use_plain_attn,
-            attn,
-            use_geom_attn,
-            geom_attn,
-            ffn,
-            scaling_factor: residue_scaling_factor,
-        })
-    }
+    //     Ok(Self {
+    //         use_plain_attn,
+    //         attn,
+    //         use_geom_attn,
+    //         geom_attn,
+    //         ffn,
+    //         scaling_factor: residue_scaling_factor,
+    //     })
+    // }
     pub fn load(vb: VarBuilder, config: ESMCConfig, layer: usize) -> Self {
         // d_model: i64,
         // n_heads: i64,
@@ -171,7 +159,7 @@ impl UnifiedTransformerBlock {
 
         let ffn = match ffn_type {
             Ffn_Type::GLU => unimplemented!(),
-            Ffn_Type::SWIGLU => {}
+            Ffn_Type::SWIGLU => Swiglu::load(vb, config),
         };
 
         Self {
