@@ -29,10 +29,29 @@ fn main() -> Result<()> {
         revision.to_string(),
     ));
     let weights_path = repo.get("data/weights/esmc_300m_2024_12_v0.pth")?;
+    let pth = PthTensors::new(weights_path, None)?;
 
-    let pth = PthTensors::new(weights_path, Some("model_state_dict"))?;
-    let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, Device::Cpu);
-    // println!("VarBuilder for ESMC: {:?}", vb)
+    // print the names
+    for (name, tensor) in pth.tensor_infos() {
+        println!("{}: {:?}", name, tensor);
+    }
+    // let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, Device::Cpu);
+
+    // def ESMC_300M_202412(device: torch.device | str = "cpu"):
+    //     with torch.device(device):
+    //         model = ESMC(
+    //             d_model=960,
+    //             n_heads=15,
+    //             n_layers=30,
+    //             tokenizer=get_model_tokenizers(ESM3_OPEN_SMALL).sequence,
+    //         ).eval()
+    //     state_dict = torch.load(
+    //         data_root("esmc-300") / "data/weights/esmc_300m_2024_12_v0.pth",
+    //         map_location=device,
+    //     )
+    //     model.load_state_dict(state_dict)
+
+    //     return model
 
     Ok(())
 }
