@@ -133,7 +133,10 @@ fn bos_eos_warn(msg: &str, tensor: &Tensor, tok: &EsmTokenizerBase) {
     }
 }
 
-fn decode_sequence(sequence_tokens: &Tensor, sequence_tokenizer: &EsmSequenceTokenizer) -> String {
+pub fn decode_sequence(
+    sequence_tokens: &Tensor,
+    sequence_tokenizer: &EsmSequenceTokenizer,
+) -> String {
     bos_eos_warn("Sequence", sequence_tokens, sequence_tokenizer);
     let mut sequence = sequence_tokenizer.decode(sequence_tokens);
     sequence = sequence.replace(" ", "");
