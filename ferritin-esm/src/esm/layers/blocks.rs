@@ -6,9 +6,6 @@ use candle_core::{Module, Result, Tensor, D};
 use candle_nn::ops::silu;
 use candle_nn::{self as nn, VarBuilder};
 
-use candle_core::{Module, Result, Tensor, D};
-use candle_nn as nn;
-
 pub struct SwiGLU {
     layer_norm: nn::LayerNorm,
     linear1: nn::Linear,
@@ -43,9 +40,11 @@ impl Module for SwiGLU {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
         let x = self.layer_norm.forward(x)?;
         let x = self.linear1.forward(&x)?;
-        let (x1, x2) = x.chunk(2, D::Minus1)?;
-        let x = &x1.silu()? * &x2;
-        self.linear2.forward(&x)
+        let chunks = x.chunk(2, D::Minus1)?;
+        let x1 = &chunks[0];
+        let x2 = &chunks[1];
+        let x = x1.silu()? * x2;
+        self.linear2.forward(&x?)
     }
 }
 
