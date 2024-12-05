@@ -9,6 +9,7 @@ use candle_nn::{self as nn, VarBuilder};
 // use crate::esm::sdk::api::LogitsConfig;
 // use crate::esm::sdk::api::LogitsOutput;
 use crate::esm::tokenization::sequence_tokenizer::EsmSequenceTokenizer;
+use crate::esm::tokenization::TokenizerCollection;
 // use crate::esm::utils::decoding::decode_sequence;
 // use crate::esm::utils::encoding::tokenize_sequence;
 // use crate::esm::utils::sampling::BatchedESMProteinTensor;
@@ -20,23 +21,32 @@ struct ESMCOutput {
 }
 
 pub enum ESMTokenizer {
-    ESM3_OPEN_SMALL
+    Esm3OpenSmall,
 }
-
+impl ESMTokenizer {
+    pub fn get_model_tokenizers(&self) -> TokenizerCollection {
+        match self {
+            Esm3OpenSmall => TokenizerCollection {
+                sequence: EsmSequenceTokenizer,
+            },
+        }
+    }
+}
 
 pub struct ESMCConfig {
     d_model: u32,
     n_heads: u32,
     n_layers: u32,
-    tokenizer: ESMTokenizer
+    tokenizer: ESMTokenizer,
 }
+
 impl ESMCConfig {
     pub fn esmc_300m() -> Self {
         Self {
             d_model: 960,
             n_heads: 15,
-            n_layers:30,
-            tokenizer: ESMTokenizer::ESM3_OPEN_SMALL,
+            n_layers: 30,
+            tokenizer: ESMTokenizer::Esm3OpenSmall,
         }
     }
 }
@@ -47,7 +57,6 @@ pub struct ESMC {
     sequence_head: RegressionHead,
     tokenizer: EsmSequenceTokenizer,
 }
-
 
 impl ESMC {
     // pub fn new(
@@ -64,18 +73,21 @@ impl ESMC {
     //     }
     // }
 
-    pub fn load(vb: VarBuilder, config: ) {
-        let d_model: usize;
-        let n_heads: usize;
-        let n_layers: usize;
-        let tokenizer: EsmSequenceTokenizer;
+    pub fn load(vb: VarBuilder, config: ESMCConfig) -> Self {
+        let ESMCConfig {
+            d_model,
+            n_heads,
+            n_layers,
+            tokenizer,
+        } = config;
 
-        // println!();
+        let tokenizer_collection = tokenizer.get_model_tokenizers();
+
         Self {
             embed: nn::embedding(64, d_model, vb)?,
             transformer: TransformerStack::new(d_model, n_heads, None, n_layers, 0)?,
             sequence_head: RegressionHead::new(d_model, 64)?,
-            tokenizer,
+            tokenizer: tokenizer_collection.sequence,
         }
     }
 
