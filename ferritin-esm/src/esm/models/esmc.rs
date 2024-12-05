@@ -36,7 +36,7 @@ impl ESMTokenizer {
     }
 }
 
-enum Ffn_Type {
+pub enum Ffn_Type {
     SWIGLU,
     GLU
 }
