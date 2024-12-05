@@ -1,8 +1,8 @@
 use crate::esm::layers::regression_head::RegressionHead;
 use crate::esm::layers::transformer_stack::TransformerStack;
+use crate::esm::pretrained::load_local_model;
 use crate::esm::utils::decoding::decode_sequence;
 use crate::esm::utils::encoding::tokenize_sequence;
-use load_local_model;
 use BatchedESMProteinTensor;
 use ESMProtein;
 use ESMProteinTensor;
