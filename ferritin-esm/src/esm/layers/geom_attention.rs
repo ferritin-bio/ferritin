@@ -1,11 +1,11 @@
-use crate::esm::utils::constants::SQRT_3;
+use crate::esm::{models::esmc::ESMCConfig, utils::constants::SQRT_3};
 use candle_core::{Device, Module, Result, Tensor};
-use candle_nn::{LayerNorm, Linear};
+use candle_nn::{self as nn, layer_norm, LayerNorm, LayerNormConfig, Linear, VarBuilder};
 
 pub struct GeometricReasoningOriginalImpl {
-    c_s: i64,
-    v_heads: i64,
-    num_vector_messages: i64,
+    c_s: usize,
+    v_heads: usize,
+    num_vector_messages: usize,
     mask_and_zero_frameless: bool,
     s_norm: LayerNorm,
     proj: Linear,
@@ -15,28 +15,62 @@ pub struct GeometricReasoningOriginalImpl {
 }
 
 impl GeometricReasoningOriginalImpl {
-    pub fn new(
-        c_s: i64,
-        v_heads: i64,
-        num_vector_messages: i64,
-        mask_and_zero_frameless: bool,
-        _divide_residual_by_depth: bool,
-        bias: bool,
-        device: &Device,
-    ) -> Result<Self> {
+    // pub fn new(
+    //     c_s: i64,
+    //     v_heads: i64,
+    //     num_vector_messages: i64,
+    //     mask_and_zero_frameless: bool,
+    //     _divide_residual_by_depth: bool,
+    //     bias: bool,
+    //     device: &Device,
+    // ) -> Result<Self> {
+    //     let dim_proj = 4 * v_heads * 3 + v_heads * 3 * num_vector_messages;
+    //     let channels_out = v_heads * 3 * num_vector_messages;
+
+    //     Ok(Self {
+    //         c_s,
+    //         v_heads,
+    //         num_vector_messages,
+    //         mask_and_zero_frameless,
+    //         s_norm: LayerNorm::new(c_s, bias)?,
+    //         proj: Linear::new(c_s, dim_proj, bias)?,
+    //         out_proj: Linear::new(channels_out, c_s, bias)?,
+    //         distance_scale_per_head: Tensor::zeros((v_heads,), device)?,
+    //         rotation_scale_per_head: Tensor::zeros((v_heads,), device)?,
+    //     })
+    // }
+    pub fn load(vb: VarBuilder, config: ESMCConfig) -> Result<Self> {
+        let ESMCConfig {
+            d_model,
+            v_head_transformer,
+            // num_vector_messages,
+            mask_and_zero_frameless,
+        } = config;
+
+        let num_vector_messages = 1usize;
+        let v_heads = v_head_transformer.unwrap();
+
         let dim_proj = 4 * v_heads * 3 + v_heads * 3 * num_vector_messages;
         let channels_out = v_heads * 3 * num_vector_messages;
 
+        let ln_conf = LayerNormConfig::from(1e-5);
+        let s_norm = nn::layer_norm(d_model, ln_conf, vb.pp("layer_norm"))?;
+
+        let proj = nn::linear(d_model, dim_proj, vb.pp("linear1"))?;
+        let out_proj = nn::linear(channels_out, d_model, vb.pp("outproj"))?;
+        let distance_scale_per_head = Tensor::zeros((v_heads,), vb.dtype(), vb.device())?;
+        let rotation_scale_per_head = Tensor::zeros((v_heads,), vb.dtype(), vb.device())?;
+
         Ok(Self {
-            c_s,
-            v_heads,
+            c_s: d_model as usize,
+            v_heads: v_heads as usize,
             num_vector_messages,
             mask_and_zero_frameless,
-            s_norm: LayerNorm::new(c_s, bias)?,
-            proj: Linear::new(c_s, dim_proj, bias)?,
-            out_proj: Linear::new(channels_out, c_s, bias)?,
-            distance_scale_per_head: Tensor::zeros((v_heads,), device)?,
-            rotation_scale_per_head: Tensor::zeros((v_heads,), device)?,
+            s_norm,
+            proj,
+            out_proj,
+            distance_scale_per_head,
+            rotation_scale_per_head,
         })
     }
 

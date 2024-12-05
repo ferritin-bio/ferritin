@@ -31,7 +31,7 @@ impl SwiGLU {
         Ok(Self {
             layer_norm: nn::layer_norm(d_model, 1e-5, vb.pp("layer_norm"))?,
             linear1: nn::linear(d_model, hidden_dim * 2, vb.pp("linear1"))?,
-            linear2: nn::linear(hidden_dim, d_model, b.pp("linear2"))?,
+            linear2: nn::linear(hidden_dim, d_model, vb.pp("linear2"))?,
         })
     }
 }
