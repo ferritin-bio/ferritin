@@ -49,10 +49,10 @@ pub struct ESMCConfig {
     pub v_head_transformer: Option<usize>,
     pub ffn_type: Ffn_Type;
     pub tokenizer: ESMTokenizer,
-    //
-    pub  n_layers_geom: usize,
+    // oringal above.
+    pub n_layers_geom: usize,
     pub scale_residue: bool,
-    pub scale_residue_scale: f64,
+    pub residue_scaling_factor: f64,
     pub mask_and_zero_frameless: bool,
     pub bias: bool,
     pub qk_layernorm: bool,
@@ -62,7 +62,8 @@ pub struct ESMCConfig {
 impl ESMCConfig {
 
     pub fn esmc_300m() -> Self {
-        //     if scale_residue {
+        //
+        //    residue_scaling_factor=  if scale_residue {
         //         (n_layers as f64 / 36.0).sqrt()
         //     } else {
         //         1.0
@@ -77,7 +78,7 @@ impl ESMCConfig {
             tokenizer: ESMTokenizer::Esm3OpenSmall,
             n_layers_geom: 1,
             scale_residue: true,
-            scale_residue_scale: (30f64 / 36.).sqrt(),
+            residue_scaling_factor: (30f64 / 36.).sqrt(),
             mask_and_zero_frameless: false,
             bias: false,
             qk_layernorm: true ,
@@ -116,6 +117,13 @@ impl ESMC {
             v_head_transformer,
             ffn_type,
             tokenizer,
+            n_layers_geom,
+            scale_residue,
+            residue_scaling_factor,
+            mask_and_zero_frameless,
+            bias,
+            qk_layernorm,
+            expansion_ratio,
         } = config;
 
         let tokenizer_collection = tokenizer.get_model_tokenizers();

@@ -126,7 +126,31 @@ impl UnifiedTransformerBlock {
             scaling_factor: residue_scaling_factor,
         })
     }
-    pub fn load(vb: VarBuilder, config: ESMCConfig) -> Self {}
+    pub fn load(vb: VarBuilder, config: ESMCConfig, layer: usize) -> Self {
+        // d_model: i64,
+        // n_heads: i64,
+        // use_geom_attn: bool,
+        // use_plain_attn: bool,
+        // v_heads: Option<i64>,
+        // bias: bool,
+        // expansion_ratio: f64,
+        // residue_scaling_factor: f64,
+        // mask_and_zero_frameless: bool,
+        // qk_layernorm: bool,
+        // ffn_type: &str,
+        let ESMCConfig { n_layers_geom, .. } = config;
+        let use_geom = i < n_layers_geom;
+
+
+        Self {
+            use_plain_attn: bool,
+            attn: Option<MultiHeadAttention>,
+            use_geom_attn: bool,
+            geom_attn: Option<GeometricReasoningOriginalImpl>,
+            ffn: nn::Sequential,
+            scaling_factor: f64,
+        }
+    }
 }
 
 // impl Module for UnifiedTransformerBlock {

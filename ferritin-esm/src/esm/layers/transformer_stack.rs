@@ -33,7 +33,6 @@ impl TransformerStack {
             v_head_transformer,
             n_layers_geom,
             scale_residue,
-            scale_residue_scale,
             mask_and_zero_frameless,
             bias,
             qk_layernorm,
@@ -42,7 +41,7 @@ impl TransformerStack {
         } = config;
         let mut blocks = Vec::with_capacity(n_layers as usize);
         for i in 0..n_layers {
-            blocks.push(UnifiedTransformerBlock::load(vb.pp("layer"), config));
+            blocks.push(UnifiedTransformerBlock::load(vb.pp("layer"), config), i);
         }
 
         let ln_conf = LayerNormConfig::from(1e-5);
