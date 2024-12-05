@@ -1,9 +1,9 @@
-mod attention;
-mod blocks;
-mod codebook;
-mod ffn;
-mod geom_attention;
-mod regression_head;
-mod rotary;
-mod structure_proj;
-mod transformer_stack;
+pub mod attention;
+pub mod blocks;
+pub mod codebook;
+pub mod ffn;
+pub mod geom_attention;
+pub mod regression_head;
+pub mod rotary;
+pub mod structure_proj;
+pub mod transformer_stack;

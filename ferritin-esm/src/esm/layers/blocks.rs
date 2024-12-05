@@ -2,9 +2,9 @@ use candle_core::{Module, Result, Tensor};
 use candle_nn as nn;
 use candle_nn::ops::silu;
 
-use crate::layers::attention::MultiHeadAttention;
-use crate::layers::geom_attention::GeometricReasoningOriginalImpl;
-use crate::utils::structure::affine3d::Affine3D;
+use super::geom_attention::GeometricReasoningOriginalImpl;
+use super::attention::MultiHeadAttention;
+use crate::esm::utils::structure::affine3d::Affine3D;
 
 fn swiglu_correction_fn(expansion_ratio: f64, d_model: i64) -> i64 {
     // set hidden dimension to nearest multiple of 256 after expansion ratio
@@ -78,7 +78,12 @@ impl UnifiedTransformerBlock {
         ffn_type: &str,
     ) -> Result<Self> {
         let attn = if use_plain_attn {
-            Some(MultiHeadAttention::new(d_model, n_heads, bias, qk_layernorm)?)
+            Some(MultiHeadAttention::new(
+                d_model,
+                n_heads,
+                bias,
+                qk_layernorm,
+            )?)
         } else {
             None
         };
@@ -91,7 +96,11 @@ impl UnifiedTransformerBlock {
                     bias,
                     mask_and_zero_frameless,
                 )?),
-                None => return Err(candle_core::Error::Msg("v_heads must be specified when use_geom_attn is True".into())),
+                None => {
+                    return Err(candle_core::Error::Msg(
+                        "v_heads must be specified when use_geom_attn is True".into(),
+                    ))
+                }
             }
         } else {
             None
@@ -100,7 +109,12 @@ impl UnifiedTransformerBlock {
         let ffn = match ffn_type {
             "swiglu" => swiglu_ln_ffn(d_model, expansion_ratio, bias)?,
             "gelu" => gelu_ln_ffn(d_model, expansion_ratio, bias)?,
-            _ => return Err(candle_core::Error::Msg(format!("Unknown ffn_type: {}", ffn_type))),
+            _ => {
+                return Err(candle_core::Error::Msg(format!(
+                    "Unknown ffn_type: {}",
+                    ffn_type
+                )))
+            }
         };
 
         Ok(Self {

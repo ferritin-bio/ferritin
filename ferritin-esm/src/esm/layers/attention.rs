@@ -1,6 +1,7 @@
 use super::rotary::RotaryEmbedding;
 use candle_core::{Module, Result, Tensor};
 use candle_nn as nn;
+use scaled_dot_product_attention;
 
 pub struct MultiHeadAttention {
     d_model: usize,

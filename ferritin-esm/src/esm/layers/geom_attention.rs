@@ -1,4 +1,4 @@
-use candle_core::{Module, Result, Tensor};
+use candle_core::{Device, Module, Result, Tensor};
 use candle_nn::{LayerNorm, Linear};
 use std::f32::consts::SQRT_3;
 

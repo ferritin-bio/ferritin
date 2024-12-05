@@ -1,5 +1,15 @@
 use crate::esm::layers::regression_head::RegressionHead;
 use crate::esm::layers::transformer_stack::TransformerStack;
+use decode_sequence;
+use encoding::tokenize_sequence;
+use load_local_model;
+use BatchedESMProteinTensor;
+use ESMProtein;
+use ESMProteinTensor;
+use EsmSequenceTokenizer;
+use ForwardTrackData;
+use LogitsConfig;
+use LogitsOutput;
 
 use candle_core::{DType, Device, Module, Result, Tensor};
 
