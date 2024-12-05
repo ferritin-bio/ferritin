@@ -2,38 +2,51 @@ use super::attention::MultiHeadAttention;
 use super::geom_attention::GeometricReasoningOriginalImpl;
 use crate::esm::models::esmc::{ESMCConfig, Ffn_Type};
 use crate::esm::utils::structure::affine3d::Affine3D;
-use candle_core::{Module, Result, Tensor};
+use candle_core::{Module, Result, Tensor, D};
 use candle_nn::ops::silu;
 use candle_nn::{self as nn, VarBuilder};
 
-pub struct Swiglu {
-    hidden_dim: usize,
+use candle_core::{Module, Result, Tensor, D};
+use candle_nn as nn;
+
+pub struct SwiGLU {
+    layer_norm: nn::LayerNorm,
+    linear1: nn::Linear,
+    linear2: nn::Linear,
 }
-impl Swiglu {
-    pub fn load() -> Self {
-        Self {}
+
+impl SwiGLU {
+    fn swiglu_correction_fn(expansion_ratio: f64, d_model: usize) -> usize {
+        // set hidden dimension to nearest multiple of 256 after expansion ratio
+        ((expansion_ratio * d_model as f64 + 255.0) / 256.0).floor() as usize * 256
+    }
+
+    pub fn load(vb: VarBuilder, config: ESMCConfig) -> Result<Self> {
+        let ESMCConfig {
+            d_model,
+            expansion_ratio,
+            bias,
+            ..
+        } = config;
+
+        let hidden_dim = Self::swiglu_correction_fn(expansion_ratio, d_model);
+
+        Ok(Self {
+            layer_norm: nn::layer_norm(d_model, 1e-5, vb.pp("layer_norm"))?,
+            linear1: nn::linear(d_model, hidden_dim * 2, vb.pp("linear1"))?,
+            linear2: nn::linear(hidden_dim, d_model, b.pp("linear2"))?,
+        })
     }
 }
+
 impl Module for SwiGLU {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let (x1, x2) = x.chunk(2, -1)?;
-        Ok(&silu(&x1)? * &x2)
+        let x = self.layer_norm.forward(x)?;
+        let x = self.linear1.forward(&x)?;
+        let (x1, x2) = x.chunk(2, D::Minus1)?;
+        let x = &x1.silu()? * &x2;
+        self.linear2.forward(&x)
     }
-}
-
-fn swiglu_correction_fn(expansion_ratio: f64, d_model: i64) -> i64 {
-    // set hidden dimension to nearest multiple of 256 after expansion ratio
-    ((expansion_ratio * d_model as f64 + 255.0) / 256.0).floor() as i64 * 256
-}
-
-fn swiglu_ln_ffn(d_model: i64, expansion_ratio: f64, bias: bool) -> Result<nn::Sequential> {
-    let hidden_dim = swiglu_correction_fn(expansion_ratio, d_model);
-    let seq = nn::seq()
-        .add(nn::LayerNorm::new(d_model)?)
-        .add(nn::linear(d_model, hidden_dim * 2, bias)?)
-        .add(SwiGLU::new())
-        .add(nn::linear(hidden_dim, d_model, bias)?);
-    Ok(seq)
 }
 
 pub struct UnifiedTransformerBlock {
