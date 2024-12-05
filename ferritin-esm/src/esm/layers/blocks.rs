@@ -130,20 +130,11 @@ impl UnifiedTransformerBlock {
     // }
     pub fn load(vb: VarBuilder, config: &ESMCConfig, layer: usize) -> Result<Self> {
         let ESMCConfig {
-            d_model,
-            n_heads,
-            n_layers,
-            v_head_transformer,
             ffn_type,
-            tokenizer,
             use_plain_attn,
             n_layers_geom,
-            scale_residue,
             residue_scaling_factor,
-            mask_and_zero_frameless,
-            bias,
-            qk_layernorm,
-            expansion_ratio,
+            ..
         } = config;
 
         let use_geom_attn: bool = layer < *n_layers_geom;
