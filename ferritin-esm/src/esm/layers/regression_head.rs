@@ -1,7 +1,6 @@
-use candle_core::Tensor;
-use candle_nn::{self as nn, LayerNormConfig, Linear, Module, Sequential, VarBuilder};
-
 use crate::esm::models::esmc::ESMCConfig;
+use candle_core::Tensor;
+use candle_nn::{self as nn, LayerNormConfig, Module, Sequential, VarBuilder};
 
 pub struct RegressionHead {
     model: Sequential,
@@ -23,6 +22,7 @@ impl RegressionHead {
     pub fn load(vb: VarBuilder, config: &ESMCConfig) -> candle_core::Result<Self> {
         let ESMCConfig {
             d_model,
+            regression_head_output_dim,
             regression_head_hidden_dim,
             ..
         } = config;
@@ -32,17 +32,16 @@ impl RegressionHead {
             *regression_head_hidden_dim,
             vb.pp("regression_linear"),
         )?;
-        let gelu = candle_nn::Activation::Gelu.into();
+        let gelu = candle_nn::Activation::Gelu;
         let ln_conf = LayerNormConfig::from(1e-5);
         let norm = nn::layer_norm(*regression_head_hidden_dim, ln_conf, vb.pp("layer_norm"))?;
+        let linear2 = nn::linear(
+            *regression_head_hidden_dim,
+            *regression_head_output_dim,
+            vb.pp("linear2"),
+        )?;
 
-        let linear2 = nn::linear(*regression_head_hidden_dim, *output_dim, vb.pp("linear2"))?;
-
-        let mut model = nn::seq();
-        model.add(linear1);
-        model.add(gelu);
-        model.add(norm);
-        model.add(linear2);
+        let model = nn::seq().add(linear1).add(gelu).add(norm).add(linear2);
 
         Ok(Self { model })
     }

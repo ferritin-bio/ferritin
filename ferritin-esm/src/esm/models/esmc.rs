@@ -61,6 +61,7 @@ pub struct ESMCConfig {
     pub qk_layernorm: bool,
     pub expansion_ratio: f64,
     // reg
+    pub regression_head_output_dim: usize,
     pub regression_head_hidden_dim: usize,
     pub embedding_dim: usize,
 }
@@ -89,6 +90,7 @@ impl ESMCConfig {
             bias: false,
             qk_layernorm: true,
             expansion_ratio: 8.0 / 3.0,
+            regression_head_output_dim: 64,
             regression_head_hidden_dim: 960, // d_model
             embedding_dim: 64,
         }
@@ -133,6 +135,7 @@ impl ESMC {
             bias,
             qk_layernorm,
             expansion_ratio,
+            regression_head_output_dim
             regression_head_hidden_dim,
             embedding_dim,
         } = config;
