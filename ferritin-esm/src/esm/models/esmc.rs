@@ -20,6 +20,7 @@ struct ESMCOutput {
     embeddings: Option<Tensor>,
 }
 
+#[derive(Clone, Copy)]
 pub enum ESMTokenizer {
     Esm3OpenSmall,
 }
@@ -36,7 +37,7 @@ impl ESMTokenizer {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum Ffn_Type {
     SWIGLU,
     GLU,
@@ -59,6 +60,9 @@ pub struct ESMCConfig {
     pub bias: bool,
     pub qk_layernorm: bool,
     pub expansion_ratio: f64,
+    // reg
+    pub regression_head_hidden_dim: usize,
+    pub embedding_dim: usize,
 }
 
 impl ESMCConfig {
@@ -85,6 +89,8 @@ impl ESMCConfig {
             bias: false,
             qk_layernorm: true,
             expansion_ratio: 8.0 / 3.0,
+            regression_head_hidden_dim: 960, // d_model
+            embedding_dim: 64,
         }
     }
 }
@@ -127,14 +133,16 @@ impl ESMC {
             bias,
             qk_layernorm,
             expansion_ratio,
+            regression_head_hidden_dim,
+            embedding_dim,
         } = config;
 
         let tokenizer_collection = tokenizer.get_model_tokenizers();
 
         Ok(Self {
-            embed: nn::embedding(64, d_model as usize, vb)?,
-            transformer: TransformerStack::load(vb, config)?,
-            sequence_head: RegressionHead::load(vb, config)?,
+            embed: nn::embedding(embedding_dim, d_model as usize, vb.pp("embedding"))?,
+            transformer: TransformerStack::load(vb.pp("transformer"), &config)?,
+            sequence_head: RegressionHead::load(vb.pp("regression"), &config)?,
             tokenizer: tokenizer_collection.sequence,
         })
     }

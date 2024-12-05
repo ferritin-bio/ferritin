@@ -39,7 +39,7 @@ impl GeometricReasoningOriginalImpl {
     //         rotation_scale_per_head: Tensor::zeros((v_heads,), device)?,
     //     })
     // }
-    pub fn load(vb: VarBuilder, config: ESMCConfig) -> Result<Self> {
+    pub fn load(vb: VarBuilder, config: &ESMCConfig) -> Result<Self> {
         let ESMCConfig {
             d_model,
             v_head_transformer,
@@ -54,18 +54,18 @@ impl GeometricReasoningOriginalImpl {
         let channels_out = v_heads * 3 * num_vector_messages;
 
         let ln_conf = LayerNormConfig::from(1e-5);
-        let s_norm = nn::layer_norm(d_model, ln_conf, vb.pp("layer_norm"))?;
+        let s_norm = nn::layer_norm(*d_model, ln_conf, vb.pp("layer_norm"))?;
 
-        let proj = nn::linear(d_model, dim_proj, vb.pp("linear1"))?;
-        let out_proj = nn::linear(channels_out, d_model, vb.pp("outproj"))?;
+        let proj = nn::linear(*d_model, dim_proj, vb.pp("linear1"))?;
+        let out_proj = nn::linear(channels_out, *d_model, vb.pp("outproj"))?;
         let distance_scale_per_head = Tensor::zeros((v_heads,), vb.dtype(), vb.device())?;
         let rotation_scale_per_head = Tensor::zeros((v_heads,), vb.dtype(), vb.device())?;
 
         Ok(Self {
-            c_s: d_model as usize,
+            c_s: *d_model as usize,
             v_heads: v_heads as usize,
             num_vector_messages,
-            mask_and_zero_frameless,
+            mask_and_zero_frameless: *mask_and_zero_frameless,
             s_norm,
             proj,
             out_proj,

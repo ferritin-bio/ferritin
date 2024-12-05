@@ -45,7 +45,7 @@ impl MultiHeadAttention {
     //         rotary: RotaryEmbedding::new(d_model / n_heads)?,
     //     })
     // }
-    pub fn load(vb: VarBuilder, config: ESMCConfig) -> Result<Self> {
+    pub fn load(vb: VarBuilder, config: &ESMCConfig) -> Result<Self> {
         let ESMCConfig {
             d_model,
             expansion_ratio,
@@ -56,20 +56,20 @@ impl MultiHeadAttention {
 
         let d_head = d_model / n_heads;
         let ln_conf = LayerNormConfig::from(1e-5);
-        let layernorm = nn::layer_norm(d_model, ln_conf, vb.pp("layer_norm"))?;
-        let linear = nn::linear(d_model, d_model * 3, vb.pp("linear1"))?;
+        let layernorm = nn::layer_norm(*d_model, ln_conf, vb.pp("layer_norm"))?;
+        let linear = nn::linear(*d_model, d_model * 3, vb.pp("linear1"))?;
         let layernorm_qkv = nn::seq().add(layernorm).add(linear);
-        let out_proj = nn::linear(d_model, d_model, vb.pp("out_proj"))?;
+        let out_proj = nn::linear(*d_model, *d_model, vb.pp("out_proj"))?;
 
         // note: only handling the True case for the moment
         // let  qk_layernorm = true
-        let q_ln = Box::new(nn::layer_norm(d_model, ln_conf, vb.pp("q_ln"))?);
-        let k_ln = Box::new(nn::layer_norm(d_model, ln_conf, vb.pp("k_ln"))?);
+        let q_ln = Box::new(nn::layer_norm(*d_model, ln_conf, vb.pp("q_ln"))?);
+        let k_ln = Box::new(nn::layer_norm(*d_model, ln_conf, vb.pp("k_ln"))?);
         let rotary: RotaryEmbedding::load(vb.pp("rotary"), config)?;
 
         Ok(Self {
-            d_model,
-            n_heads,
+            *d_model,
+            *n_heads,
             d_head,
             layernorm_qkv,
             out_proj,

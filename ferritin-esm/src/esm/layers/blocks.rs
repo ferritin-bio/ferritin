@@ -18,7 +18,7 @@ impl SwiGLU {
         ((expansion_ratio * d_model as f64 + 255.0) / 256.0).floor() as usize * 256
     }
 
-    pub fn load(vb: VarBuilder, config: ESMCConfig) -> Result<Self> {
+    pub fn load(vb: VarBuilder, config: &ESMCConfig) -> Result<Self> {
         let ESMCConfig {
             d_model,
             expansion_ratio,
@@ -26,12 +26,12 @@ impl SwiGLU {
             ..
         } = config;
 
-        let hidden_dim = Self::swiglu_correction_fn(expansion_ratio, d_model);
+        let hidden_dim = Self::swiglu_correction_fn(*expansion_ratio, *d_model);
 
         Ok(Self {
-            layer_norm: nn::layer_norm(d_model, 1e-5, vb.pp("layer_norm"))?,
-            linear1: nn::linear(d_model, hidden_dim * 2, vb.pp("linear1"))?,
-            linear2: nn::linear(hidden_dim, d_model, vb.pp("linear2"))?,
+            layer_norm: nn::layer_norm(*d_model, 1e-5, vb.pp("layer_norm"))?,
+            linear1: nn::linear(*d_model, hidden_dim * 2, vb.pp("linear1"))?,
+            linear2: nn::linear(hidden_dim, *d_model, vb.pp("linear2"))?,
         })
     }
 }
@@ -128,7 +128,7 @@ impl UnifiedTransformerBlock {
     //         scaling_factor: residue_scaling_factor,
     //     })
     // }
-    pub fn load(vb: VarBuilder, config: ESMCConfig, layer: usize) -> Result<Self> {
+    pub fn load(vb: VarBuilder, config: &ESMCConfig, layer: usize) -> Result<Self> {
         let ESMCConfig {
             d_model,
             n_heads,
@@ -146,7 +146,7 @@ impl UnifiedTransformerBlock {
             expansion_ratio,
         } = config;
 
-        let use_geom_attn: bool = layer < n_layers_geom;
+        let use_geom_attn: bool = layer < *n_layers_geom;
 
         let attn = match use_plain_attn {
             false => None,
@@ -162,17 +162,17 @@ impl UnifiedTransformerBlock {
         };
 
         let ffn = match ffn_type {
-            Ffn_Type::SWIGLU => SwiGLU::load(vb.pp("swiglue"), config),
+            Ffn_Type::SWIGLU => SwiGLU::load(vb.pp("swiglue"), config)?,
             _ => unimplemented!(), // Ffn_Type::GLU => unimplemented!(),
         };
 
         Ok(Self {
-            use_plain_attn,
+            use_plain_attn: *use_plain_attn,
             attn,
             use_geom_attn,
             geom_attn,
-            ffn: ffn.unwrap(),
-            scaling_factor: residue_scaling_factor,
+            ffn,
+            scaling_factor: *residue_scaling_factor,
         })
     }
 }

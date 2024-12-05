@@ -87,7 +87,7 @@ impl RotaryEmbedding {
             scale,
         })
     }
-    pub fn load(vb: VarBuilder, config: ESMCConfig) {
+    pub fn load(vb: VarBuilder, config: &ESMCConfig) {
         todo!()
     }
     fn compute_inv_freq(dim: usize, base: f64, device: &Device) -> Result<Tensor> {

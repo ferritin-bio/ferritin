@@ -24,7 +24,6 @@ pub trait EsmTokenizerBase {
     fn special_token_ids(&self) -> Vec<u32>;
 }
 
-#[derive(Clone)]
 pub struct EsmSequenceTokenizer {
     tokenizer: Arc<Tokenizer>,
     cb_token: String,
