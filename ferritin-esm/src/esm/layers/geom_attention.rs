@@ -1,6 +1,6 @@
+use crate::esm::utils::constants::SQRT_3;
 use candle_core::{Device, Module, Result, Tensor};
 use candle_nn::{LayerNorm, Linear};
-use std::f32::consts::SQRT_3;
 
 pub struct GeometricReasoningOriginalImpl {
     c_s: i64,
