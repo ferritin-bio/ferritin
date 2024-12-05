@@ -2,7 +2,7 @@ use crate::esm::layers::blocks::UnifiedTransformerBlock;
 use crate::esm::models::esmc::ESMCConfig;
 use crate::esm::utils::structure::affine3d::Affine3D;
 use candle_core::{Module, Result, Tensor, D};
-use candle_nn as nn;
+use candle_nn::{self as nn, LayerNorm, LayerNormConfig};
 
 pub struct TransformerStack {
     /*
@@ -20,7 +20,7 @@ pub struct TransformerStack {
             Only applies in the geometric attention blocks, which is conditioned on the structure
     */
     blocks: Vec<UnifiedTransformerBlock>,
-    norm: nn::LayerNorm,
+    norm: LayerNorm,
 }
 
 impl TransformerStack {
@@ -33,38 +33,20 @@ impl TransformerStack {
             v_head_transformer,
             n_layers_geom,
             scale_residue,
+            scale_residue_scale,
             mask_and_zero_frameless,
             bias,
             qk_layernorm,
             expansion_ratio,
-            tokenizer
+            tokenizer,
         } = config;
-
-
         let mut blocks = Vec::with_capacity(n_layers as usize);
         for i in 0..n_layers {
-            blocks.push(
-                //     UnifiedTransformerBlock::new(
-                //     d_model,
-                //     n_heads,
-                //     v_heads,
-                //     i < n_layers_geom as i64,
-                //     if scale_residue {
-                //         (n_layers as f64 / 36.0).sqrt()
-                //     } else {
-                //         1.0
-                //     },
-                //     expansion_ratio,
-                //     mask_and_zero_frameless,
-                //     bias,
-                //     qk_layernorm,
-                //     ffn_type,
-                // )?
-                UnifiedTransformerBlock::load(vb, config);
-            );
+            blocks.push(UnifiedTransformerBlock::load(vb.pp("layer"), config));
         }
 
-        let norm = nn::LayerNorm::new(d_model, 1e-5, false)?;
+        let ln_conf = LayerNormConfig::from(1e-5);
+        let norm = nn::layer_norm(d_model, ln_conf, vb.pp("layer_norm"))?;
 
         Ok(Self { blocks, norm })
     }

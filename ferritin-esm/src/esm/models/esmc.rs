@@ -1,3 +1,4 @@
+use std::intrinsics::sqrtf64;
 use crate::esm::layers::regression_head::RegressionHead;
 use crate::esm::layers::transformer_stack::TransformerStack;
 use candle_core::{DType, Device, Module, Result, Tensor};
@@ -51,6 +52,7 @@ pub struct ESMCConfig {
     //
     pub  n_layers_geom: usize,
     pub scale_residue: bool,
+    pub scale_residue_scale: f64,
     pub mask_and_zero_frameless: bool,
     pub bias: bool,
     pub qk_layernorm: bool,
@@ -58,7 +60,14 @@ pub struct ESMCConfig {
 }
 
 impl ESMCConfig {
+
     pub fn esmc_300m() -> Self {
+        //     if scale_residue {
+        //         (n_layers as f64 / 36.0).sqrt()
+        //     } else {
+        //         1.0
+        //     },
+
         Self {
             d_model: 960,
             n_heads: 15,
@@ -68,9 +77,10 @@ impl ESMCConfig {
             tokenizer: ESMTokenizer::Esm3OpenSmall,
             n_layers_geom: 1,
             scale_residue: true,
+            scale_residue_scale: (30f64 / 36.).sqrt(),
             mask_and_zero_frameless: false,
             bias: false,
-            qk_layernorm: true,
+            qk_layernorm: true ,
             expansion_ratio: 8.0 / 3.0
         }
     }
