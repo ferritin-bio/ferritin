@@ -1,7 +1,7 @@
-use candle_nn::{self as nn, Embedding, VarBuilder};
-use candle_core::{DType, Device, Module, Result, Tensor};
 use crate::esm::layers::regression_head::RegressionHead;
 use crate::esm::layers::transformer_stack::TransformerStack;
+use candle_core::{DType, Device, Module, Result, Tensor};
+use candle_nn::{self as nn, VarBuilder};
 // use crate::esm::pretrained::load_local_model;
 // use crate::esm::sdk::api::ESMProtein;
 // use crate::esm::sdk::api::ESMProteinTensor;
@@ -12,7 +12,6 @@ use crate::esm::tokenization::sequence_tokenizer::EsmSequenceTokenizer;
 // use crate::esm::utils::decoding::decode_sequence;
 // use crate::esm::utils::encoding::tokenize_sequence;
 // use crate::esm::utils::sampling::BatchedESMProteinTensor;
-
 
 #[derive(Debug)]
 struct ESMCOutput {
@@ -28,12 +27,27 @@ pub struct ESMC {
 }
 
 impl ESMC {
-    pub fn new(
-        d_model: usize,
-        n_heads: usize,
-        n_layers: usize,
-        tokenizer: EsmSequenceTokenizer,
-    ) -> Self {
+    // pub fn new(
+    //     d_model: usize,
+    //     n_heads: usize,
+    //     n_layers: usize,
+    //     tokenizer: EsmSequenceTokenizer,
+    // ) -> Self {
+    //     Self {
+    //         embed: nn::embedding(64, d_model, Default::default())?,
+    //         transformer: TransformerStack::new(d_model, n_heads, None, n_layers, 0)?,
+    //         sequence_head: RegressionHead::new(d_model, 64)?,
+    //         tokenizer,
+    //     }
+    // }
+
+    pub fn load(vb: VarBuilder) {
+        let d_model: usize;
+        let n_heads: usize;
+        let n_layers: usize;
+        let tokenizer: EsmSequenceTokenizer;
+
+        // println!();
         Self {
             embed: nn::embedding(64, d_model, Default::default())?,
             transformer: TransformerStack::new(d_model, n_heads, None, n_layers, 0)?,
@@ -41,11 +55,6 @@ impl ESMC {
             tokenizer,
         }
     }
-
-    pub fn load(vb: VarBuilder) {
-        println!();
-    };
-
 
     // pub fn from_pretrained(model_name: impl Into<String>, device: Option<Device>) -> Result<Self> {
     //     let device = device.unwrap_or(Device::cuda_if_available()?);
