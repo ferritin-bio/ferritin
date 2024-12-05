@@ -19,12 +19,35 @@ struct ESMCOutput {
     embeddings: Option<Tensor>,
 }
 
+pub enum ESMTokenizer {
+    ESM3_OPEN_SMALL
+}
+
+
+pub struct ESMCConfig {
+    d_model: u32,
+    n_heads: u32,
+    n_layers: u32,
+    tokenizer: ESMTokenizer
+}
+impl ESMCConfig {
+    pub fn esmc_300m() -> Self {
+        Self {
+            d_model: 960,
+            n_heads: 15,
+            n_layers:30,
+            tokenizer: ESMTokenizer::ESM3_OPEN_SMALL,
+        }
+    }
+}
+
 pub struct ESMC {
     embed: candle_nn::Embedding,
     transformer: TransformerStack,
     sequence_head: RegressionHead,
     tokenizer: EsmSequenceTokenizer,
 }
+
 
 impl ESMC {
     // pub fn new(
@@ -41,7 +64,7 @@ impl ESMC {
     //     }
     // }
 
-    pub fn load(vb: VarBuilder) {
+    pub fn load(vb: VarBuilder, config: ) {
         let d_model: usize;
         let n_heads: usize;
         let n_layers: usize;
@@ -49,7 +72,7 @@ impl ESMC {
 
         // println!();
         Self {
-            embed: nn::embedding(64, d_model, Default::default())?,
+            embed: nn::embedding(64, d_model, vb)?,
             transformer: TransformerStack::new(d_model, n_heads, None, n_layers, 0)?,
             sequence_head: RegressionHead::new(d_model, 64)?,
             tokenizer,
