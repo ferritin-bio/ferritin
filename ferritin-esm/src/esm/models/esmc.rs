@@ -36,11 +36,13 @@ impl ESMTokenizer {
     }
 }
 
+#[derive(Clone)]
 pub enum Ffn_Type {
     SWIGLU,
     GLU,
 }
 
+#[derive(Clone)]
 pub struct ESMCConfig {
     pub d_model: usize,
     pub n_heads: usize,

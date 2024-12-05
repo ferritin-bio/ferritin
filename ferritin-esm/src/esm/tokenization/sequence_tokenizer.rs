@@ -1,5 +1,5 @@
 use crate::esm::utils::constants::esm3::SEQUENCE_VOCAB;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokenizers::models::bpe::{BpeBuilder, BPE};
@@ -23,6 +23,8 @@ pub trait EsmTokenizerBase {
     fn all_token_ids(&self) -> Vec<u32>;
     fn special_token_ids(&self) -> Vec<u32>;
 }
+
+#[derive(Clone)]
 pub struct EsmSequenceTokenizer {
     tokenizer: Arc<Tokenizer>,
     cb_token: String,

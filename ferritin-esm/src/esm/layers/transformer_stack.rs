@@ -43,7 +43,11 @@ impl TransformerStack {
         } = config;
         let mut blocks = Vec::with_capacity(n_layers as usize);
         for i in 0..n_layers {
-            blocks.push(UnifiedTransformerBlock::load(vb.pp("layer"), config), i);
+            blocks.push(UnifiedTransformerBlock::load(
+                vb.pp("layer"),
+                config.clone(),
+                i,
+            )?);
         }
 
         let ln_conf = LayerNormConfig::from(1e-5);
