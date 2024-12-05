@@ -1,4 +1,3 @@
-use std::intrinsics::sqrtf64;
 use crate::esm::layers::regression_head::RegressionHead;
 use crate::esm::layers::transformer_stack::TransformerStack;
 use candle_core::{DType, Device, Module, Result, Tensor};
@@ -50,6 +49,7 @@ pub struct ESMCConfig {
     pub ffn_type: Ffn_Type;
     pub tokenizer: ESMTokenizer,
     // oringal above.
+    pub use_plain_attn: bool,
     pub n_layers_geom: usize,
     pub scale_residue: bool,
     pub residue_scaling_factor: f64,
@@ -76,6 +76,7 @@ impl ESMCConfig {
             v_head_transformer: None,
             ffn_type: Ffn_Type::SWIGLU,
             tokenizer: ESMTokenizer::Esm3OpenSmall,
+            use_plain_attn: true,
             n_layers_geom: 1,
             scale_residue: true,
             residue_scaling_factor: (30f64 / 36.).sqrt(),
@@ -117,6 +118,7 @@ impl ESMC {
             v_head_transformer,
             ffn_type,
             tokenizer,
+            use_plain_attn,
             n_layers_geom,
             scale_residue,
             residue_scaling_factor,
