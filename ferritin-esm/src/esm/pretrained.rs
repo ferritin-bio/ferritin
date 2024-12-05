@@ -1,28 +1,28 @@
 use candle_core::{Device, Result, Tensor};
 use std::collections::HashMap;
 use std::path::PathBuf;
-
-use crate::esm::models::{esmc::ESMC, tokenization::get_model_tokenizers};
-
+use crate::esm::models::esmc::ESMC;
+use crate::esm::tokenization::get_model_tokenizers;
 use crate::esm::utils::constants::models::{ESM3_OPEN_SMALL, ESMC_300M};
 
-// from huggingface_hub import snapshot_download
+use candle_hf_hub::{api::sync::Api, Repo, RepoType}
 
-// @staticmethod
-// @cache
-// def data_root(model: str):
-//     if "INFRA_PROVIDER" in os.environ:
-//         return Path("")
-//     # Try to download from hugginface if it doesn't exist
-//     if model.startswith("esm3"):
-//         path = Path(snapshot_download(repo_id="EvolutionaryScale/esm3-sm-open-v1"))
-//     elif model.startswith("esmc-300"):
-//         path = Path(snapshot_download(repo_id="EvolutionaryScale/esmc-300m-2024-12"))
-//     elif model.startswith("esmc-600"):
-//         path = Path(snapshot_download(repo_id="EvolutionaryScale/esmc-600m-2024-12"))
-//     else:
-//         raise ValueError(f"{model=} is an invalid model name.")
-//     return path
+// use huggingface_hub::snapshot_download;
+
+pub fn data_root(model: &str) -> PathBuf {
+    if std::env::var("INFRA_PROVIDER").is_ok() {
+        return PathBuf::new();
+    }
+    if model.starts_with("esm3") {
+        PathBuf::from(snapshot_download("EvolutionaryScale/esm3-sm-open-v1"))
+    } else if model.starts_with("esmc-300") {
+        PathBuf::from(snapshot_download("EvolutionaryScale/esmc-300m-2024-12"))
+    } else if model.starts_with("esmc-600") {
+        PathBuf::from(snapshot_download("EvolutionaryScale/esmc-600m-2024-12"))
+    } else {
+        panic!("{model} is an invalid model name")
+    }
+}
 
 type ModelBuilder = Box<dyn Fn(&Device) -> Result<Box<dyn Model>>>;
 
