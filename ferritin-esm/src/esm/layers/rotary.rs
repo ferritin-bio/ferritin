@@ -112,9 +112,9 @@ impl RotaryEmbedding {
         // pos_idx_in_fp32=True,
 
         let inv_freq = Self::compute_inv_freq(rotary_dims, base, device)?;
-        let arange = Tensor::arange(0., rotary_dims as f64, device)?;
+        let arange = Tensor::arange(0., (rotary_dims as f64) / 2., device)? * 2.;
         let scale = {
-            let numerator = (&arange + (0.4 * rotary_dims as f64))?;
+            let numerator = (&arange? + (0.4 * rotary_dims as f64))?;
             let denominator = 1.4 * rotary_dims as f64;
             numerator / denominator
         };
@@ -134,10 +134,15 @@ impl RotaryEmbedding {
             scale: Some(scale?),
         })
     }
-    fn compute_inv_freq(dim: usize, base: f64, device: &Device) -> Result<Tensor> {
-        let arange = Tensor::arange(0., dim as f64, 2., device)?;
-        let inv_freq = (base.powf(arange / dim as f64)).recip();
-        Ok(inv_freq)
+
+    fn compute_inv_freq(rotary_dims: usize, base: f64, device: &Device) -> Result<Tensor> {
+        Tensor::from_iter(
+            (0..rotary_dims)
+                .step_by(2)
+                .map(|i| i as f32 / rotary_dims as f32)
+                .map(|theta| base.powf(-theta as f64)),
+            device,
+        )
     }
 
     fn update_cos_sin_cache(&mut self, seqlen: usize) -> Result<()> {
