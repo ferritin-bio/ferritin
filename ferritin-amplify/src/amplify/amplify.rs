@@ -487,7 +487,6 @@ impl AMPLIFY {
     /// Retreive the model and make it available for usage.
     /// hardcode the 120M for the moment...
     pub fn load_from_huggingface(device: Device) -> Result<(ProteinTokenizer, Self)> {
-        let ampconfig = AMPLIFYConfig::amp_120m();
         let model_id = "chandar-lab/AMPLIFY_120M";
         let revision = "main";
         let api = Api::new().map_err(|e| candle_core::Error::Msg(e.to_string()))?;
