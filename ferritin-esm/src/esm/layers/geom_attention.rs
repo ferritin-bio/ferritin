@@ -48,7 +48,9 @@ impl GeometricReasoningOriginalImpl {
         } = config;
 
         let num_vector_messages = 1usize;
-        let v_heads = v_head_transformer.unwrap();
+
+        // todo: this is a hidden param. Needs to be fixed
+        let v_heads = v_head_transformer.unwrap_or(128);
 
         let dim_proj = 4 * v_heads * 3 + v_heads * 3 * num_vector_messages;
         let channels_out = v_heads * 3 * num_vector_messages;

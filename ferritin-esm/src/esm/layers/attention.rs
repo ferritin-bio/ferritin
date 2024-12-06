@@ -55,16 +55,21 @@ impl MultiHeadAttention {
         } = config;
 
         let d_head = d_model / n_heads;
-        let ln_conf = LayerNormConfig::from(1e-5);
-        let layernorm = nn::layer_norm(*d_model, ln_conf, vb.pp("layer_norm"))?;
-        let linear = nn::linear(*d_model, d_model * 3, vb.pp("linear1"))?;
+        // let ln_conf = LayerNormConfig::from(1e-5);
+        let ln_conf = LayerNormConfig {
+            eps: 1e-5,
+            remove_mean: true,
+            affine: false,
+        };
+        let layernorm = nn::layer_norm(*d_model, ln_conf, vb.pp("layernorm_qkv.0"))?;
+        let linear = nn::linear_no_bias(*d_model, d_model * 3, vb.pp("layernorm_qkv.1"))?;
         let layernorm_qkv = nn::seq().add(layernorm).add(linear);
-        let out_proj = nn::linear(*d_model, *d_model, vb.pp("out_proj"))?;
-
+        let out_proj = nn::linear_no_bias(*d_model, *d_model, vb.pp("out_proj"))?;
         // note: only handling the True case for the moment
         // let  qk_layernorm = true
         let q_ln = Box::new(nn::layer_norm(*d_model, ln_conf, vb.pp("q_ln"))?);
         let k_ln = Box::new(nn::layer_norm(*d_model, ln_conf, vb.pp("k_ln"))?);
+
         let rotary = RotaryEmbedding::load(vb.pp("rotary"), config)?;
 
         Ok(Self {

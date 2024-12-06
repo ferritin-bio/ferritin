@@ -4,7 +4,6 @@ use candle_core::{DType, Device, D};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use ferritin_esm::{ESMCConfig, ESMC};
-use safetensors::SafeTensors;
 
 // pub fn esmc_300m_202412(device: &Device) -> Result<Box<dyn Model>> {
 //     let tokenizer = get_model_tokenizers(ESM3_OPEN_SMALL)?.sequence;
@@ -38,8 +37,15 @@ fn main() -> Result<()> {
 
     let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, Device::Cpu);
     let config = ESMCConfig::esmc_300m();
-    let esmc = ESMC::load(vb, config);
+    let esmc = ESMC::load(vb.clone(), config)?;
+    // println!("ESMC Loaded: {}", esmc);
 
-    println!("ESMC Loaded");
+    // Error: cannot find tensor transformer.layer.attention.layer_norm.weight
+
+    println!(
+        "VB: {}",
+        vb.contains_tensor("transformer.blocks.6.attn.layernorm_qkv.1.weight")
+    );
+
     Ok(())
 }

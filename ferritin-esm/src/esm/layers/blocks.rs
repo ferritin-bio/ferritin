@@ -1,7 +1,7 @@
 use super::attention::MultiHeadAttention;
 use super::geom_attention::GeometricReasoningOriginalImpl;
 use crate::esm::models::esmc::{ESMCConfig, Ffn_Type};
-use crate::esm::utils::structure::affine3d::Affine3D;
+// use crate::esm::utils::structure::affine3d::Affine3D;
 use candle_core::{Module, Result, Tensor, D};
 use candle_nn::ops::silu;
 use candle_nn::{self as nn, VarBuilder};
@@ -29,9 +29,9 @@ impl SwiGLU {
         let hidden_dim = Self::swiglu_correction_fn(*expansion_ratio, *d_model);
 
         Ok(Self {
-            layer_norm: nn::layer_norm(*d_model, 1e-5, vb.pp("layer_norm"))?,
-            linear1: nn::linear(*d_model, hidden_dim * 2, vb.pp("linear1"))?,
-            linear2: nn::linear(hidden_dim, *d_model, vb.pp("linear2"))?,
+            layer_norm: nn::layer_norm(*d_model, 1e-5, vb.pp("0"))?,
+            linear1: nn::linear_no_bias(*d_model, hidden_dim * 2, vb.pp("1"))?,
+            linear2: nn::linear_no_bias(hidden_dim, *d_model, vb.pp("3"))?,
         })
     }
 }
@@ -131,29 +131,33 @@ impl UnifiedTransformerBlock {
     pub fn load(vb: VarBuilder, config: &ESMCConfig, layer: usize) -> Result<Self> {
         let ESMCConfig {
             ffn_type,
+            v_head_transformer,
             use_plain_attn,
             n_layers_geom,
             residue_scaling_factor,
             ..
         } = config;
 
-        let use_geom_attn: bool = layer < *n_layers_geom;
-
         let attn = match use_plain_attn {
             false => None,
-            true => Some(MultiHeadAttention::load(vb.pp("attention"), config)?),
+            true => Some(MultiHeadAttention::load(vb.pp("attn"), config)?),
         };
 
-        let geom_attn = match use_geom_attn {
-            false => None,
-            true => Some(GeometricReasoningOriginalImpl::load(
-                vb.pp("geometric"),
-                config,
-            )?),
-        };
+        // println!("LAYER; GEOM: {}, {}", layer, n_layers_geom);
+        let use_geom_attn: bool = layer < *n_layers_geom;
+        // println!("Geom ATTN {}", use_geom_attn);
+        // let geom_attn = match use_geom_attn {
+        //     false => None,
+        //     true => Some(GeometricReasoningOriginalImpl::load(
+        //         vb.pp("geometric"),
+        //         config,
+        //     )?),
+        // };
+
+        let geom_attn = None;
 
         let ffn = match ffn_type {
-            Ffn_Type::SWIGLU => SwiGLU::load(vb.pp("swiglue"), config)?,
+            Ffn_Type::SWIGLU => SwiGLU::load(vb.pp("ffn"), config)?,
             _ => unimplemented!(), // Ffn_Type::GLU => unimplemented!(),
         };
 

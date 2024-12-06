@@ -27,18 +27,14 @@ impl RegressionHead {
             ..
         } = config;
 
-        let linear1 = nn::linear(
-            *d_model,
-            *regression_head_hidden_dim,
-            vb.pp("regression_linear"),
-        )?;
+        let linear1 = nn::linear(*d_model, *regression_head_hidden_dim, vb.pp("0"))?;
         let gelu = candle_nn::Activation::Gelu;
         let ln_conf = LayerNormConfig::from(1e-5);
-        let norm = nn::layer_norm(*regression_head_hidden_dim, ln_conf, vb.pp("layer_norm"))?;
+        let norm = nn::layer_norm(*regression_head_hidden_dim, ln_conf, vb.pp("2"))?;
         let linear2 = nn::linear(
             *regression_head_hidden_dim,
             *regression_head_output_dim,
-            vb.pp("linear2"),
+            vb.pp("3"),
         )?;
 
         let model = nn::seq().add(linear1).add(gelu).add(norm).add(linear2);

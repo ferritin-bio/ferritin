@@ -24,7 +24,8 @@ pub trait Rotation: Sized + Clone {
     }
 
     fn requires_grad(&self) -> bool {
-        self.tensor().requires_grad()
+        // self.tensor().requires_grad()
+        unimplemented!()
     }
 
     fn to_dtype(&self, dtype: DType) -> Result<Self>;

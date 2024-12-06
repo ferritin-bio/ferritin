@@ -122,30 +122,17 @@ impl ESMC {
     pub fn load(vb: VarBuilder, config: ESMCConfig) -> Result<Self> {
         let ESMCConfig {
             d_model,
-            n_heads,
-            n_layers,
-            v_head_transformer,
-            ffn_type,
             tokenizer,
-            use_plain_attn,
-            n_layers_geom,
-            scale_residue,
-            residue_scaling_factor,
-            mask_and_zero_frameless,
-            bias,
-            qk_layernorm,
-            expansion_ratio,
-            regression_head_output_dim
-            regression_head_hidden_dim,
             embedding_dim,
+            ..
         } = config;
 
         let tokenizer_collection = tokenizer.get_model_tokenizers();
 
         Ok(Self {
-            embed: nn::embedding(embedding_dim, d_model as usize, vb.pp("embedding"))?,
+            embed: nn::embedding(embedding_dim, d_model as usize, vb.pp("embed"))?,
             transformer: TransformerStack::load(vb.pp("transformer"), &config)?,
-            sequence_head: RegressionHead::load(vb.pp("regression"), &config)?,
+            sequence_head: RegressionHead::load(vb.pp("sequence_head"), &config)?,
             tokenizer: tokenizer_collection.sequence,
         })
     }
