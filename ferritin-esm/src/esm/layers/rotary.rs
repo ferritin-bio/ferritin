@@ -3,19 +3,19 @@ use candle_core::{Device, Result, Tensor};
 use candle_nn::VarBuilder;
 
 // NOTE: This implementation is based on LLaMA 2's rotary embeddings
-fn rotate_half(x: &Tensor, interleaved: bool) -> Result<Tensor> {
-    if !interleaved {
-        let (x1, x2) = x.chunk(2, -1)?;
-        let neg_x2 = x2.neg();
-        Tensor::cat(&[&neg_x2, &x1], -1)
-    } else {
-        let x1 = x.index_select_along_dim(x.ndim() - 1, 0, 2)?;
-        let x2 = x.index_select_along_dim(x.ndim() - 1, 1, 2)?;
-        let neg_x2 = x2.neg();
-        let stacked = Tensor::stack(&[&neg_x2, &x1], -1)?;
-        stacked.flatten_from(-2)
-    }
-}
+// fn rotate_half(x: &Tensor, interleaved: bool) -> Result<Tensor> {
+//     if !interleaved {
+//         let (x1, x2) = x.chunk(2, -1)?;
+//         let neg_x2 = x2.neg();
+//         Tensor::cat(&[&neg_x2, &x1], -1)
+//     } else {
+//         let x1 = x.index_select_along_dim(x.ndim() - 1, 0, 2)?;
+//         let x2 = x.index_select_along_dim(x.ndim() - 1, 1, 2)?;
+//         let neg_x2 = x2.neg();
+//         let stacked = Tensor::stack(&[&neg_x2, &x1], -1)?;
+//         stacked.flatten_from(-2)
+//     }
+// }
 
 // fn apply_rotary_emb(x: &Tensor, cos: &Tensor, sin: &Tensor, interleaved: bool) -> Result<Tensor> {
 //     let ro_dim = cos.dim(1)? * 2;
