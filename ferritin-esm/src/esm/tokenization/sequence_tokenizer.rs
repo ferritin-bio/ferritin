@@ -3,7 +3,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokenizers::models::bpe::{BpeBuilder, BPE};
-use tokenizers::processors::template::TemplateProcessing;
+use tokenizers::processors::template::{Template, TemplateProcessing};
 use tokenizers::processors::PostProcessorWrapper;
 use tokenizers::{AddedToken, Tokenizer};
 
@@ -23,6 +23,7 @@ pub trait EsmTokenizerBase {
     fn all_token_ids(&self) -> Vec<u32>;
     fn special_token_ids(&self) -> Vec<u32>;
 }
+
 pub struct EsmSequenceTokenizer {
     tokenizer: Arc<Tokenizer>,
     cb_token: String,
@@ -42,7 +43,11 @@ impl EsmSequenceTokenizer {
             token_to_id.insert(tok.to_string(), i);
         }
         let bpe_builder = BpeBuilder::new();
-        let bpe: BPE = bpe_builder.unk_token(unk_token.to_string()).build()?;
+        let bpe: BPE = bpe_builder
+            .unk_token(unk_token.to_string())
+            .build()
+            .map_err(|e| anyhow::anyhow!("Failed to build BPE tokenizer: {}", e))?;
+
         let mut tokenizer = Tokenizer::new(bpe);
         let special_tokens = vec![
             AddedToken::from(cls_token, true),
@@ -55,7 +60,7 @@ impl EsmSequenceTokenizer {
         tokenizer.add_special_tokens(&special_tokens);
 
         let post_processor = TemplateProcessing::builder()
-            .try_single(format!("{} $A {}", cls_token, eos_token))?
+            .try_single(Template::try_from(format!("{} $A {}", cls_token, eos_token)).unwrap())?
             .special_tokens(vec![
                 (cls_token, tokenizer.token_to_id(cls_token).unwrap()),
                 (eos_token, tokenizer.token_to_id(eos_token).unwrap()),
@@ -95,11 +100,13 @@ impl EsmTokenizerBase for EsmSequenceTokenizer {
     }
 
     fn bos_token(&self) -> &str {
-        self.cls_token()
+        unimplemented!()
+        // self.cls_token()
     }
 
     fn bos_token_id(&self) -> u32 {
-        self.cls_token_id()
+        unimplemented!()
+        // self.cls_token_id()
     }
 
     fn eos_token(&self) -> &str {
@@ -127,10 +134,12 @@ impl EsmTokenizerBase for EsmSequenceTokenizer {
     }
 
     fn all_token_ids(&self) -> Vec<u32> {
-        (0..self.vocab_size()).collect()
+        unimplemented!()
+        // (0..self.vocab_size()).collect()
     }
 
     fn special_token_ids(&self) -> Vec<u32> {
-        self.tokenizer.get_special_token_ids()
+        unimplemented!()
+        // self.tokenizer.get_special_token_ids()
     }
 }

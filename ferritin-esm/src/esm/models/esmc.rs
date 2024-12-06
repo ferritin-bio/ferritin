@@ -20,6 +20,7 @@ struct ESMCOutput {
     embeddings: Option<Tensor>,
 }
 
+#[derive(Clone, Copy)]
 pub enum ESMTokenizer {
     Esm3OpenSmall,
 }
@@ -36,17 +37,19 @@ impl ESMTokenizer {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum Ffn_Type {
     SWIGLU,
-    GLU
+    GLU,
 }
 
+#[derive(Clone)]
 pub struct ESMCConfig {
     pub d_model: usize,
     pub n_heads: usize,
     pub n_layers: usize,
     pub v_head_transformer: Option<usize>,
-    pub ffn_type: Ffn_Type;
+    pub ffn_type: Ffn_Type,
     pub tokenizer: ESMTokenizer,
     // oringal above.
     pub use_plain_attn: bool,
@@ -57,10 +60,13 @@ pub struct ESMCConfig {
     pub bias: bool,
     pub qk_layernorm: bool,
     pub expansion_ratio: f64,
+    // reg
+    pub regression_head_output_dim: usize,
+    pub regression_head_hidden_dim: usize,
+    pub embedding_dim: usize,
 }
 
 impl ESMCConfig {
-
     pub fn esmc_300m() -> Self {
         //
         //    residue_scaling_factor=  if scale_residue {
@@ -82,8 +88,11 @@ impl ESMCConfig {
             residue_scaling_factor: (30f64 / 36.).sqrt(),
             mask_and_zero_frameless: false,
             bias: false,
-            qk_layernorm: true ,
-            expansion_ratio: 8.0 / 3.0
+            qk_layernorm: true,
+            expansion_ratio: 8.0 / 3.0,
+            regression_head_output_dim: 64,
+            regression_head_hidden_dim: 960, // d_model
+            embedding_dim: 64,
         }
     }
 }
@@ -110,32 +119,22 @@ impl ESMC {
     //     }
     // }
 
-    pub fn load(vb: VarBuilder, config: ESMCConfig) -> Self {
+    pub fn load(vb: VarBuilder, config: ESMCConfig) -> Result<Self> {
         let ESMCConfig {
             d_model,
-            n_heads,
-            n_layers,
-            v_head_transformer,
-            ffn_type,
             tokenizer,
-            use_plain_attn,
-            n_layers_geom,
-            scale_residue,
-            residue_scaling_factor,
-            mask_and_zero_frameless,
-            bias,
-            qk_layernorm,
-            expansion_ratio,
+            embedding_dim,
+            ..
         } = config;
 
         let tokenizer_collection = tokenizer.get_model_tokenizers();
 
-        Self {
-            embed: nn::embedding(64, d_model as usize, vb)?,
-            transformer: TransformerStack::load(vb, config)?,
-            sequence_head: RegressionHead::load(vb, config)?,
+        Ok(Self {
+            embed: nn::embedding(embedding_dim, d_model as usize, vb.pp("embed"))?,
+            transformer: TransformerStack::load(vb.pp("transformer"), &config)?,
+            sequence_head: RegressionHead::load(vb.pp("sequence_head"), &config)?,
             tokenizer: tokenizer_collection.sequence,
-        }
+        })
     }
 
     // pub fn from_pretrained(model_name: impl Into<String>, device: Option<Device>) -> Result<Self> {

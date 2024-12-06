@@ -1,6 +1,6 @@
 use crate::esm::layers::blocks::UnifiedTransformerBlock;
 use crate::esm::models::esmc::ESMCConfig;
-use crate::esm::utils::structure::affine3d::Affine3D;
+// use crate::esm::utils::structure::affine3d::Affine3D;
 use candle_core::{Module, Result, Tensor, D};
 use candle_nn::{self as nn, LayerNorm, LayerNormConfig};
 
@@ -24,30 +24,27 @@ pub struct TransformerStack {
 }
 
 impl TransformerStack {
-    pub fn load(vb: nn::VarBuilder, config: ESMCConfig) -> Result<Self> {
+    pub fn load(vb: nn::VarBuilder, config: &ESMCConfig) -> Result<Self> {
         let ESMCConfig {
-            d_model,
-            n_heads,
-            n_layers,
-            ffn_type,
-            v_head_transformer,
-            use_plain_attn,
-            n_layers_geom,
-            scale_residue,
-            residue_scaling_factor,
-            mask_and_zero_frameless,
-            bias,
-            qk_layernorm,
-            expansion_ratio,
-            tokenizer,
+            d_model, n_layers, ..
         } = config;
-        let mut blocks = Vec::with_capacity(n_layers as usize);
-        for i in 0..n_layers {
-            blocks.push(UnifiedTransformerBlock::load(vb.pp("layer"), config), i);
+
+        let mut blocks = Vec::with_capacity(*n_layers as usize);
+        for i in 0..*n_layers {
+            blocks.push(UnifiedTransformerBlock::load(
+                vb.pp(format!("blocks.{}", i)),
+                &config,
+                i,
+            )?);
         }
 
-        let ln_conf = LayerNormConfig::from(1e-5);
-        let norm = nn::layer_norm(d_model, ln_conf, vb.pp("layer_norm"))?;
+        // let ln_conf = LayerNormConfig::from(1e-5);
+        let ln_conf = LayerNormConfig {
+            eps: 1e-5,
+            remove_mean: true,
+            affine: false,
+        };
+        let norm = nn::layer_norm(*d_model, ln_conf, vb.pp("norm"))?;
 
         Ok(Self { blocks, norm })
     }
