@@ -13,7 +13,8 @@ async function fetchArrayBuffer(url) {
   cache.put(url, res.clone());
   return new Uint8Array(await res.arrayBuffer());
 }
-class Bert {
+
+class Amplify {
   static instance = {};
 
   static async getInstance(weightsURL, tokenizerURL, configURL, modelID) {
@@ -21,6 +22,7 @@ class Bert {
       await init();
 
       self.postMessage({ status: "loading", message: "Loading Model" });
+
       const [weightsArrayU8, tokenizerArrayU8, mel_filtersArrayU8] =
         await Promise.all([
           fetchArrayBuffer(weightsURL),
@@ -46,12 +48,12 @@ self.addEventListener("message", async (event) => {
     tokenizerURL,
     configURL,
     modelID,
-    sentences,
+    // sentences,
     normalize = true,
   } = event.data;
   try {
     self.postMessage({ status: "ready", message: "Starting Bert Model" });
-    const model = await Bert.getInstance(
+    const model = await Amplify.getInstance(
       weightsURL,
       tokenizerURL,
       configURL,

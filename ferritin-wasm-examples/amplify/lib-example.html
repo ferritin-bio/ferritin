@@ -19,7 +19,7 @@
       }
     </style>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script type="module" src="./code.js"></script>
+    <!-- <script type="module" src="./code.js"></script> -->
     <script type="module">
       import { hcl } from "https://cdn.skypack.dev/d3-color@3";
       import { interpolateReds } from "https://cdn.skypack.dev/d3-scale-chromatic@3";
@@ -30,6 +30,9 @@
         // getWikiText,
         // cosineSimilarity,
       } from "./utils.js";
+
+      window.getModelInfo = getModelInfo;
+      window.getEmbeddings = getEmbeddings;
 
       const amplifyWorker = new Worker("./amplifyWorker.js", {
         type: "module",
@@ -74,6 +77,9 @@
       });
 
       modelSelectEl.addEventListener("change", (e) => {
+        console.log(e);
+        console.log(textAreaEl.value);
+
         if (currInputText === "" || isCalculating) return;
         populateOutputArea(textAreaEl.value);
         calculateEmbeddings(textAreaEl.value);
@@ -92,26 +98,41 @@
         }
       }
       formEl.addEventListener("submit", async (e) => {
+        console.log("Okay I'm in the formEl.addEventListener");
         e.preventDefault();
-        if (isCalculating || currInputText === "") return;
-        toggleInputs(true);
+        console.log("02");
+        console.log(`Current input text: ${currInputText}`);
+        console.log(`Search Input input text: ${searchInputEl.value}`);
+        console.log(`Model ID: ${modelSelectEl.value}`);
+        // if (isCalculating || currInputText === "") return;
+        if (isCalculating) return;
+        console.log("02");
+        // toggleInputs(true);
         const modelID = modelSelectEl.value;
-        const { modelURL, tokenizerURL, configURL, search_prefix } =
+        console.log("03");
+        const { modelURL, tokenizerURL, configURL } =
           getModelInfo(modelID);
 
-        const text = searchInputEl.value;
-        const query = search_prefix + searchInputEl.value;
-        outputStatusEl.classList.remove("invisible");
-        outputStatusEl.innerText = "Calculating embeddings for query...";
+        console.log("04");
+
+        // const text = searchInputEl.value;
+        // const query = search_prefix + searchInputEl.value;
+        // outputStatusEl.classList.remove("invisible");
+        // outputStatusEl.innerText = "Calculating embeddings for query...";
         isCalculating = true;
+        console.log("05");
         const out = await getEmbeddings(
-          bertWorker,
+          amplifyWorker,
           modelURL,
           tokenizerURL,
           configURL,
           modelID,
-          [query]
+          // [query]
         );
+        console.log("06");
+
+        console.log("Model Loading Here: ${out}");
+
         outputStatusEl.classList.add("invisible");
         const queryEmbeddings = out.output[0];
         // calculate cosine similarity with all sentences given the query
@@ -170,7 +191,7 @@
             id + 1
           } of ${sentences.length}`;
           const embeddings = await getEmbeddings(
-            bertWorker,
+            amplifyWorker,
             modelURL,
             tokenizerURL,
             configURL,
@@ -185,6 +206,8 @@
         isCalculating = false;
         toggleInputs(false);
       }
+
+      window.calculateEmbeddings = calculateEmbeddings;
 
       function updateStatus(data) {
         if ("status" in data) {
@@ -266,6 +289,9 @@
         >
           <option value="amplify_120M" selected>
             chandar-lab/AMPLIFY_120M (473 MB)
+          </option>
+          <option value="amplify_300M">
+            chandar-lab/AMPLIFY_1300M (473 MB)
           </option>
         </select>
       </div>

@@ -4,7 +4,7 @@ export async function getEmbeddings(
   tokenizerURL,
   configURL,
   modelID,
-  sentences,
+  // sentences,
   updateStatus = null
 ) {
   return new Promise((resolve, reject) => {
@@ -13,7 +13,7 @@ export async function getEmbeddings(
       tokenizerURL,
       configURL,
       modelID,
-      sentences,
+      // sentences,
     });
     function messageHandler(event) {
       if ("error" in event.data) {
@@ -31,11 +31,13 @@ export async function getEmbeddings(
 }
 
 const MODELS = {
-  amplify_120M: {
+  "amplify_120M": {
     base_url: "https://huggingface.co/chandar-lab/AMPLIFY_120M/resolve/main/",
   },
 };
 export function getModelInfo(id) {
+  console.log(id);
+  console.log(MODELS);
   return {
     modelURL: MODELS[id].base_url + "model.safetensors",
     configURL: MODELS[id].base_url + "config.json",
