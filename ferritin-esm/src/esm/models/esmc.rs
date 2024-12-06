@@ -162,15 +162,15 @@ impl ESMC {
     //     })
     // }
 
-    pub fn encode(&self, input: &ESMProtein) -> Result<ESMProteinTensor> {
-        let sequence_tokens = if let Some(seq) = &input.sequence {
-            Some(tokenize_sequence(seq, &self.tokenizer, true)?)
-        } else {
-            None
-        };
+    // pub fn encode(&self, input: &ESMProtein) -> Result<ESMProteinTensor> {
+    //     let sequence_tokens = if let Some(seq) = &input.sequence {
+    //         Some(tokenize_sequence(seq, &self.tokenizer, true)?)
+    //     } else {
+    //         None
+    //     };
 
-        Ok(ESMProteinTensor::new(sequence_tokens)?.to_device(&self.device())?)
-    }
+    //     Ok(ESMProteinTensor::new(sequence_tokens)?.to_device(&self.device())?)
+    // }
 
     // pub fn decode(&self, input: &ESMProteinTensor) -> Result<ESMProtein> {
     //     let sequence = input.sequence.as_ref().ok_or("Missing sequence")?;
