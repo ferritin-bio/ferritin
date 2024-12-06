@@ -1,5 +1,6 @@
 use anyhow::Result;
 use candle_core::{DType, Device, D};
+use candle_examples::device;
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use ferritin_amplify::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
@@ -33,11 +34,16 @@ fn main() -> Result<()> {
         });
     }
 
-    println!("Loading the Amplify Model ......");
     // https://github.com/huggingface/candle/blob/main/candle-examples/examples/clip/main.rs#L91C1-L92C101
-    let vb = unsafe {
-        VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &Device::Cpu)?
-    };
+    println!("Loading the Amplify Model ......");
+    #[cfg(target_os = "macos")]
+    let use_gpu = false;
+    #[cfg(not(target_os = "macos"))]
+    let use_gpu = true;
+
+    let dev = device(use_gpu)?;
+    let vb =
+        unsafe { VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &dev)? };
     let config = AMPLIFYConfig::amp_120m();
     let model = AMPLIFY::load(vb, &config)?;
 
@@ -46,6 +52,9 @@ fn main() -> Result<()> {
     let protein_tokenizer = ProteinTokenizer::new(tokenizer)?;
     let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
     let pmatrix = protein_tokenizer.encode(&[sprot_01.to_string()], None, false, false)?;
+    println!("Pmatrix Device: {:?}", pmatrix.device());
+    let pmatrix = pmatrix.to_device(&dev)?;
+    println!("Pmatrix Device: {:?}", pmatrix.device());
     let pmatrix = pmatrix.unsqueeze(0)?; // [batch, length] <- add batch of 1 in this case
     let encoded = model.forward(&pmatrix, None, false, false)?;
 
