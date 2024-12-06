@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 pub struct Model {
     amplify: AMPLIFY,
-    // tokenizer: ProteinTokenizer,
+    tokenizer: ProteinTokenizer,
 }
 
 #[wasm_bindgen]
@@ -16,27 +16,16 @@ impl Model {
     #[wasm_bindgen(constructor)]
     pub fn load(weights: Vec<u8>, tokenizer: Vec<u8>, config: Vec<u8>) -> Result<Model, JsError> {
         console_error_panic_hook::set_once();
-
-        console_log!("loading model");
-        let ampconfig = AMPLIFYConfig::amp_120m();
         let device = &Device::Cpu;
         let vb = VarBuilder::from_buffered_safetensors(weights, DType::F32, device)?;
-
-        // looks like the config is passed in here...
-        // let config: Config = serde_json::from_slice(&config)?;
-        let config = AMPLIFYConfig::amp_120m();
-
+        let config: AMPLIFYConfig = serde_json::from_slice(&config)?;
+        let amplify = AMPLIFY::load(vb, &config)?;
         // currently tokenizer fetches from HuggingFace
-        //
         let tokenizer =
             Tokenizer::from_bytes(&tokenizer).map_err(|m| JsError::new(&m.to_string()))?;
 
-        // let ptoken = ProteinTokenizer::new(tokenizer);
-
-        let amplify = AMPLIFY::load(vb, &config)?;
-
-        // Ok(Self { amplify, tokenizer })
-        Ok(Self { amplify })
+        Ok(Self { amplify, tokenizer })
+        // Ok(Self { amplify })
     }
 
     // pub fn get_embeddings(&mut self, input: JsValue) -> Result<JsValue, JsError> {
@@ -44,7 +33,6 @@ impl Model {
     //         serde_wasm_bindgen::from_value(input).map_err(|m| JsError::new(&m.to_string()))?;
     //     let sentences = input.sentences;
     //     let normalize_embeddings = input.normalize_embeddings;
-
     //     let device = &Device::Cpu;
     //     if let Some(pp) = self.tokenizer.get_padding_mut() {
     //         pp.strategy = tokenizers::PaddingStrategy::BatchLongest
@@ -74,7 +62,6 @@ impl Model {
     //             Tensor::new(tokens.as_slice(), device)
     //         })
     //         .collect::<Result<Vec<_>, _>>()?;
-
     //     let token_ids = Tensor::stack(&token_ids, 0)?;
     //     let attention_mask = Tensor::stack(&attention_mask, 0)?;
     //     let token_type_ids = token_ids.zeros_like()?;

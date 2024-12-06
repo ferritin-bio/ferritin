@@ -21,7 +21,7 @@ class Amplify {
     if (!this.instance[modelID]) {
       await init();
 
-      self.postMessage({ status: "loading", message: "Loading Model" });
+      self.postMessage({ status: "downloaded", message: "Downloaded Model" });
 
       const [weightsArrayU8, tokenizerArrayU8, mel_filtersArrayU8] =
         await Promise.all([
@@ -29,6 +29,8 @@ class Amplify {
           fetchArrayBuffer(tokenizerURL),
           fetchArrayBuffer(configURL),
         ]);
+
+      self.postMessage({ status: "loading", message: "Loading Model" });
 
       this.instance[modelID] = new Model(
         weightsArrayU8,
