@@ -47,11 +47,7 @@ impl MultiHeadAttention {
     // }
     pub fn load(vb: VarBuilder, config: &ESMCConfig) -> Result<Self> {
         let ESMCConfig {
-            d_model,
-            expansion_ratio,
-            n_heads,
-            bias,
-            ..
+            d_model, n_heads, ..
         } = config;
 
         let d_head = d_model / n_heads;

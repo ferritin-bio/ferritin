@@ -22,7 +22,6 @@ impl SwiGLU {
         let ESMCConfig {
             d_model,
             expansion_ratio,
-            bias,
             ..
         } = config;
 
