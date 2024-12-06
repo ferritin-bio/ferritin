@@ -1,7 +1,6 @@
+use crate::esm::models::esmc::ESMCConfig;
 use candle_core::{Device, Result, Tensor};
 use candle_nn::VarBuilder;
-
-use crate::esm::models::esmc::ESMCConfig;
 
 // NOTE: This implementation is based on LLaMA 2's rotary embeddings
 fn rotate_half(x: &Tensor, interleaved: bool) -> Result<Tensor> {
@@ -18,26 +17,26 @@ fn rotate_half(x: &Tensor, interleaved: bool) -> Result<Tensor> {
     }
 }
 
-fn apply_rotary_emb(x: &Tensor, cos: &Tensor, sin: &Tensor, interleaved: bool) -> Result<Tensor> {
-    let ro_dim = cos.dim(1)? * 2;
-    let (d1, d2, d3, d4) = x.dims4()?;
-    assert!(ro_dim <= d4);
+// fn apply_rotary_emb(x: &Tensor, cos: &Tensor, sin: &Tensor, interleaved: bool) -> Result<Tensor> {
+//     let ro_dim = cos.dim(1)? * 2;
+//     let (d1, d2, d3, d4) = x.dims4()?;
+//     assert!(ro_dim <= d4);
 
-    let seqlen = d2;
-    let cos = cos.narrow(0, 0, seqlen)?;
-    let sin = sin.narrow(0, 0, seqlen)?;
+//     let seqlen = d2;
+//     let cos = cos.narrow(0, 0, seqlen)?;
+//     let sin = sin.narrow(0, 0, seqlen)?;
 
-    let cos = cos.unsqueeze(1)?.repeat((1, 1, 2))?;
-    let sin = sin.unsqueeze(1)?.repeat((1, 1, 2))?;
+//     let cos = cos.unsqueeze(1)?.repeat((1, 1, 2))?;
+//     let sin = sin.unsqueeze(1)?.repeat((1, 1, 2))?;
 
-    let x_rot = x.narrow(-1, 0, ro_dim)?;
-    let x_pass = x.narrow(-1, ro_dim, d4 - ro_dim)?;
+//     let x_rot = x.narrow(-1, 0, ro_dim)?;
+//     let x_pass = x.narrow(-1, ro_dim, d4 - ro_dim)?;
 
-    let x_rotated = rotate_half(&x_rot, interleaved)?;
-    let x_rot_out = (x_rot * &cos)? + (x_rotated * &sin)?;
+//     let x_rotated = rotate_half(&x_rot, interleaved)?;
+//     let x_rot_out = (x_rot * &cos)? + (x_rotated * &sin)?;
 
-    Tensor::cat(&[&x_rot_out, &x_pass], -1)
-}
+//     Tensor::cat(&[&x_rot_out, &x_pass], -1)
+// }
 
 pub struct RotaryEmbedding {
     dim: usize,
@@ -145,35 +144,35 @@ impl RotaryEmbedding {
         )
     }
 
-    fn update_cos_sin_cache(&mut self, seqlen: usize) -> Result<()> {
-        if seqlen > self.seq_len_cached || self.cos_cached.is_none() {
-            self.seq_len_cached = seqlen;
+    // fn update_cos_sin_cache(&mut self, seqlen: usize) -> Result<()> {
+    //     if seqlen > self.seq_len_cached || self.cos_cached.is_none() {
+    //         self.seq_len_cached = seqlen;
 
-            let t = (Tensor::arange(0., seqlen as f64, 1., self.inv_freq.device())?)
-                / self.scaling_factor;
-            let freqs = t.outer(&self.inv_freq)?;
+    //         let t = (Tensor::arange(0., seqlen as f64, 1., self.inv_freq.device())?)
+    //             / self.scaling_factor;
+    //         let freqs = t.outer(&self.inv_freq)?;
 
-            if self.scale.is_none() {
-                self.cos_cached = Some(freqs.cos()?);
-                self.sin_cached = Some(freqs.sin()?);
-            } else {
-                let scale = self.scale.as_ref().unwrap();
-                let power = ((Tensor::arange(0., seqlen as f64, 1., scale.device())?
-                    - (seqlen / 2) as f64)
-                    / self.scale_base.unwrap())?;
-                let scale = scale.pow(&power.unsqueeze(-1)?)?;
+    //         if self.scale.is_none() {
+    //             self.cos_cached = Some(freqs.cos()?);
+    //             self.sin_cached = Some(freqs.sin()?);
+    //         } else {
+    //             let scale = self.scale.as_ref().unwrap();
+    //             let power = ((Tensor::arange(0., seqlen as f64, 1., scale.device())?
+    //                 - (seqlen / 2) as f64)
+    //                 / self.scale_base.unwrap())?;
+    //             let scale = scale.pow(&power.unsqueeze(-1)?)?;
 
-                let cos = freqs.cos()?;
-                let sin = freqs.sin()?;
+    //             let cos = freqs.cos()?;
+    //             let sin = freqs.sin()?;
 
-                self.cos_cached = Some((&cos * &scale)?);
-                self.sin_cached = Some((&sin * &scale)?);
-                self.cos_k_cached = Some((&cos / &scale)?);
-                self.sin_k_cached = Some((&sin / &scale)?);
-            }
-        }
-        Ok(())
-    }
+    //             self.cos_cached = Some((&cos * &scale)?);
+    //             self.sin_cached = Some((&sin * &scale)?);
+    //             self.cos_k_cached = Some((&cos / &scale)?);
+    //             self.sin_k_cached = Some((&sin / &scale)?);
+    //         }
+    //     }
+    //     Ok(())
+    // }
 
     // pub fn forward(
     //     &mut self,
