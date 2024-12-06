@@ -2529,6 +2529,7 @@ dependencies = [
  "assert_cmd",
  "candle-core",
  "candle-examples",
+ "candle-hf-hub",
  "candle-metal-kernels",
  "candle-nn",
  "ferritin-test-data",

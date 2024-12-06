@@ -11,13 +11,13 @@ metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 
 [dependencies]
 anyhow.workspace = true
+candle-core.workspace = true
+candle-hf-hub.workspace = true
+candle-nn.workspace = true
 ferritin-test-data = { path = "../ferritin-test-data" }
 rand.workspace = true
 safetensors.workspace = true
 tokenizers.workspace = true
-candle-nn.workspace = true
-candle-core.workspace = true
-candle_hf_hub.workspace = true
 
 
 [target.'cfg(target_os = "macos")'.features]
