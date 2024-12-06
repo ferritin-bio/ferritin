@@ -1,7 +1,7 @@
 <html>
   <head>
     <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
-    <title>Candle Bert</title>
+    <title>Ferritin Amplify</title>
   </head>
   <body></body>
 </html>
@@ -235,33 +235,26 @@
     <main class="grid grid-cols-1 gap-5 relative">
       <span class="absolute text-5xl -ml-[1em]"> 🕯️ </span>
       <div>
-        <h1 class="text-5xl font-bold">Candle BERT</h1>
+        <h1 class="text-5xl font-bold">Ferritin AMPLIFY</h1>
         <h2 class="text-2xl font-bold">Rust/WASM Demo</h2>
         <p class="max-w-lg">
-          Running sentence embeddings and similarity search in the browser using
-          the Bert Model written with
+          Caluculating protein language model embeddings in the browser using
+          the AMPLIFY Model written with
           <a
             href="https://github.com/huggingface/candle/"
             target="_blank"
             class="underline hover:text-blue-500 hover:no-underline"
             >Candle
           </a>
-          and compiled to Wasm. Embeddings models from are from
+          and compiled to Wasm. Models and weights are derived from the
           <a
-            href="https://huggingface.co/sentence-transformers/"
+            href="https://github.com/chandar-lab/AMPLIFY/"
             target="_blank"
             class="underline hover:text-blue-500 hover:no-underline"
           >
-            Sentence Transformers
-          </a>
-          and
-          <a
-            href="https://huggingface.co/intfloat/"
-            target="_blank"
-            class="underline hover:text-blue-500 hover:no-underline"
-          >
-            Liang Wang - e5 Models
-          </a>
+              AMPLIFY model
+          </a>.
+
         </p>
       </div>
 
@@ -271,20 +264,8 @@
           id="model"
           class="border-2 border-gray-500 rounded-md font-light interactive disabled:cursor-not-allowed w-full max-w-max"
         >
-          <option value="intfloat_e5_small_v2" selected>
-            intfloat/e5-small-v2 (133 MB)
-          </option>
-          <option value="intfloat_e5_base_v2">
-            intfloat/e5-base-v2 (438 MB)
-          </option>
-          <option value="intfloat_multilingual_e5_small">
-            intfloat/multilingual-e5-small (471 MB)
-          </option>
-          <option value="sentence_transformers_all_MiniLM_L6_v2">
-            sentence-transformers/all-MiniLM-L6-v2 (90.9 MB)
-          </option>
-          <option value="sentence_transformers_all_MiniLM_L12_v2">
-            sentence-transformers/all-MiniLM-L12-v2 (133 MB)
+          <option value="amplify_120M" selected>
+            chandar-lab/AMPLIFY_120M (473 MB)
           </option>
         </select>
       </div>
