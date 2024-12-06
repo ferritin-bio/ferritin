@@ -3,15 +3,15 @@ use crate::esm::layers::transformer_stack::TransformerStack;
 use candle_core::{DType, Device, Module, Result, Tensor};
 use candle_nn::{self as nn, VarBuilder};
 // use crate::esm::pretrained::load_local_model;
-// use crate::esm::sdk::api::ESMProtein;
-// use crate::esm::sdk::api::ESMProteinTensor;
+use crate::esm::sdk::api::ESMProtein;
+use crate::esm::sdk::api::ESMProteinTensor;
 // use crate::esm::sdk::api::ForwardTrackData;
 // use crate::esm::sdk::api::LogitsConfig;
 // use crate::esm::sdk::api::LogitsOutput;
 use crate::esm::tokenization::sequence_tokenizer::EsmSequenceTokenizer;
 use crate::esm::tokenization::TokenizerCollection;
 // use crate::esm::utils::decoding::decode_sequence;
-// use crate::esm::utils::encoding::tokenize_sequence;
+use crate::esm::utils::encoding::tokenize_sequence;
 // use crate::esm::utils::sampling::BatchedESMProteinTensor;
 
 #[derive(Debug)]
@@ -126,9 +126,7 @@ impl ESMC {
             embedding_dim,
             ..
         } = config;
-
         let tokenizer_collection = tokenizer.get_model_tokenizers();
-
         Ok(Self {
             embed: nn::embedding(embedding_dim, d_model as usize, vb.pp("embed"))?,
             transformer: TransformerStack::load(vb.pp("transformer"), &config)?,
@@ -164,15 +162,15 @@ impl ESMC {
     //     })
     // }
 
-    // pub fn encode(&self, input: &ESMProtein) -> Result<ESMProteinTensor> {
-    //     let sequence_tokens = if let Some(seq) = &input.sequence {
-    //         Some(tokenize_sequence(seq, &self.tokenizer, true)?)
-    //     } else {
-    //         None
-    //     };
+    pub fn encode(&self, input: &ESMProtein) -> Result<ESMProteinTensor> {
+        let sequence_tokens = if let Some(seq) = &input.sequence {
+            Some(tokenize_sequence(seq, &self.tokenizer, true)?)
+        } else {
+            None
+        };
 
-    //     Ok(ESMProteinTensor::new(sequence_tokens)?.to_device(&self.device())?)
-    // }
+        Ok(ESMProteinTensor::new(sequence_tokens)?.to_device(&self.device())?)
+    }
 
     // pub fn decode(&self, input: &ESMProteinTensor) -> Result<ESMProtein> {
     //     let sequence = input.sequence.as_ref().ok_or("Missing sequence")?;
