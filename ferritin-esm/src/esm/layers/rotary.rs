@@ -112,14 +112,12 @@ impl RotaryEmbedding {
         // pos_idx_in_fp32=True,
 
         let inv_freq = Self::compute_inv_freq(rotary_dims, base, device)?;
-
-        //       arange = torch.arange(0, self.dim, 2, device=self.device, dtype=torch.float32)
-        //       scale = (
-        //           (arange + 0.4 * self.dim) / (1.4 * self.dim)
-        //           if self.scale_base is not None
-        //           else None
-        //       )
-        //       self.register_buffer("scale", scale)
+        let arange = Tensor::arange(0., rotary_dims as f64, device)?;
+        let scale = {
+            let numerator = (&arange + (0.4 * rotary_dims as f64))?;
+            let denominator = 1.4 * rotary_dims as f64;
+            numerator / denominator
+        };
 
         Ok(Self {
             dim: rotary_dims,
@@ -133,7 +131,7 @@ impl RotaryEmbedding {
             cos_k_cached: None,
             sin_k_cached: None,
             inv_freq,
-            scale,
+            scale: Some(scale?),
         })
     }
     fn compute_inv_freq(dim: usize, base: f64, device: &Device) -> Result<Tensor> {
