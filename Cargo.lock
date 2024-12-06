@@ -2420,18 +2420,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "esm3-candle"
-version = "0.1.0"
-dependencies = [
- "candle-core",
- "candle-nn",
- "ferritin-amplify",
- "gloo",
- "js-sys",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "euclid"
 version = "0.22.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2616,6 +2604,22 @@ name = "ferritin-test-data"
 version = "0.1.0"
 dependencies = [
  "tempfile",
+]
+
+[[package]]
+name = "ferritin-wasm-example-amplify"
+version = "0.1.0"
+dependencies = [
+ "candle-core",
+ "candle-nn",
+ "console_error_panic_hook",
+ "ferritin-amplify",
+ "gloo",
+ "js-sys",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "tokenizers 0.21.0",
+ "wasm-bindgen",
 ]
 
 [[package]]

@@ -1,12 +1,21 @@
 [package]
-name = "esm3-candle"
+name = "ferritin-wasm-example-amplify"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
+tokenizers = { workspace = true }
 ferritin-amplify = { path = "../../ferritin-amplify" }
+
+# for wasm
 gloo = "0.11.0"
 js-sys = "0.3.74"
 wasm-bindgen = "0.2.97"
+serde-wasm-bindgen = "0.6.5"
+serde_json.workspace = true
+console_error_panic_hook = "0.1.7"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
