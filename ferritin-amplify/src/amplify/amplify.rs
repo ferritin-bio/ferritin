@@ -506,6 +506,7 @@ impl AMPLIFY {
         let tokenizer = repo
             .get("tokenizer.json")
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+
         let protein_tokenizer =
             ProteinTokenizer::new(tokenizer).map_err(|e| candle_core::Error::Msg(e.to_string()))?;
 
