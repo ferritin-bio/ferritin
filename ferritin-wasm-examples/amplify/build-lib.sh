@@ -1,12 +1,9 @@
 #!/bin/bash
 set -e  # Exit on error
 
-cargo clean
+# cargo clean
 mkdir -p target/wasm32-unknown-unknown/release
-
 cargo update
-
-
 cargo +nightly build \
     --target wasm32-unknown-unknown \
     --release \
@@ -19,4 +16,4 @@ cargo +nightly build \
 # rustup +nightly target add wasm32-unknown-unknown
 # cargo +nightly build --target wasm32-unknown-unknown --release
 #
-# wasm-bindgen ../../target/wasm32-unknown-unknown/release/m.wasm --out-dir build --target web
+wasm-bindgen ../../target/wasm32-unknown-unknown/release/m.wasm --out-dir build --target web
