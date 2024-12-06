@@ -1,5 +1,5 @@
 [package]
-name = "ferritin-amplify"
+name = "ferritin-examples"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
