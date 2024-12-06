@@ -6,7 +6,9 @@ edition = "2021"
 [dependencies]
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
-tokenizers = { workspace = true, features = ["unstable_wasm"] }
+tokenizers = { workspace = true, default-features = false, features = [
+    "unstable_wasm",
+] }
 ferritin-amplify = { path = "../../ferritin-amplify" }
 
 # for wasm
@@ -19,5 +21,5 @@ console_error_panic_hook = "0.1.7"
 getrandom = { version = "0.2.15", features = ["js"] }
 
 
-[lib]
-crate-type = ["cdylib", "rlib"]
+# [lib]
+# crate-type = ["cdylib", "rlib"]

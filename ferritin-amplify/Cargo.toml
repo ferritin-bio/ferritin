@@ -12,18 +12,26 @@ metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 [dependencies]
 anyhow.workspace = true
 candle-core.workspace = true
-candle-hf-hub.workspace = true
 candle-nn.workspace = true
 ferritin-test-data = { path = "../ferritin-test-data" }
 rand.workspace = true
 safetensors = "0.4.5"
-tokenizers.workspace = true
 
 [target.'cfg(target_os = "macos")'.features]
 metal = []
 
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokenizers = { version = "0.21.0", default-features = false, features = [
+    "unstable_wasm",
+] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+candle-hf-hub = { workspace = true }
+tokenizers = { version = "0.21.0" }  # full features for non-wasm
+
 
 [dev-dependencies]
 candle-examples.workspace = true
