@@ -65,11 +65,11 @@ impl MultiHeadAttention {
         // let  qk_layernorm = true
         let q_ln = Box::new(nn::layer_norm(*d_model, ln_conf, vb.pp("q_ln"))?);
         let k_ln = Box::new(nn::layer_norm(*d_model, ln_conf, vb.pp("k_ln"))?);
-        let rotary: RotaryEmbedding::load(vb.pp("rotary"), config)?;
+        let rotary = RotaryEmbedding::load(vb.pp("rotary"), config)?;
 
         Ok(Self {
-            *d_model,
-            *n_heads,
+            d_model: *d_model,
+            n_heads: *n_heads,
             d_head,
             layernorm_qkv,
             out_proj,

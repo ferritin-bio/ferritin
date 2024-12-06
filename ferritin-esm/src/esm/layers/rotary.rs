@@ -55,25 +55,76 @@ pub struct RotaryEmbedding {
 }
 
 impl RotaryEmbedding {
-    pub fn new(
-        dim: usize,
-        device: &Device,
-        base: f64,
-        interleaved: bool,
-        scale_base: Option<f64>,
-        scaling_factor: f64,
-    ) -> Result<Self> {
-        let inv_freq = Self::compute_inv_freq(dim, base, device)?;
-        let scale = if let Some(scale_base) = scale_base {
-            let arange = Tensor::arange(0., dim as f64, 2., device)?;
-            let scale = (arange + 0.4 * dim as f64) / (1.4 * dim as f64);
-            Some(scale)
-        } else {
-            None
-        };
+    // pub fn new(
+    //     dim: usize,
+    //     device: &Device,
+    //     base: f64,
+    //     interleaved: bool,
+    //     scale_base: Option<f64>,
+    //     scaling_factor: f64,
+    // ) -> Result<Self> {
+    //     // self,
+    //     // dim: int,
+    //     // base=10000.0,
+    //     // interleaved=False,
+    //     // scale_base=None,
+    //     // scaling_factor=1.0,
+    //     // pos_idx_in_fp32=True,
+    //     // device=None,
+
+    //     let inv_freq = Self::compute_inv_freq(dim, base, device)?;
+
+    //     let scale = if let Some(scale_base) = scale_base {
+    //         let arange = Tensor::arange(0., dim as f64, 2., device)?;
+    //         let scale = (arange + 0.4 * dim as f64) / (1.4 * dim as f64);
+    //         Some(scale)
+    //     } else {
+    //         None
+    //     };
+
+    //     Ok(Self {
+    //         dim,
+    //         base,
+    //         interleaved,
+    //         scale_base,
+    //         scaling_factor,
+    //         seq_len_cached: 0,
+    //         cos_cached: None,
+    //         sin_cached: None,
+    //         cos_k_cached: None,
+    //         sin_k_cached: None,
+    //         inv_freq,
+    //         scale,
+    //     })
+    // }
+    pub fn load(vb: VarBuilder, config: &ESMCConfig) -> Result<Self> {
+        let ESMCConfig {
+            d_model, n_heads, ..
+        } = config;
+
+        let rotary_dims = d_model / n_heads;
+        let base = 10000.0;
+        let device = vb.device();
+        let interleaved = false;
+        let scaling_factor = 1.0;
+        // scale_base=None,
+        // scaling_factor=1.0,
+        // pos_idx_in_fp32=True,
+
+        //
+        // def reset_parameters(self):
+        //       inv_freq = self._compute_inv_freq(self.device)
+        //       self.register_buffer("inv_freq", inv_freq, persistent=False)
+        //       arange = torch.arange(0, self.dim, 2, device=self.device, dtype=torch.float32)
+        //       scale = (
+        //           (arange + 0.4 * self.dim) / (1.4 * self.dim)
+        //           if self.scale_base is not None
+        //           else None
+        //       )
+        //       self.register_buffer("scale", scale)
 
         Ok(Self {
-            dim,
+            dims: rotary_dims,
             base,
             interleaved,
             scale_base,
@@ -86,9 +137,6 @@ impl RotaryEmbedding {
             inv_freq,
             scale,
         })
-    }
-    pub fn load(vb: VarBuilder, config: &ESMCConfig) {
-        todo!()
     }
     fn compute_inv_freq(dim: usize, base: f64, device: &Device) -> Result<Tensor> {
         let arange = Tensor::arange(0., dim as f64, 2., device)?;

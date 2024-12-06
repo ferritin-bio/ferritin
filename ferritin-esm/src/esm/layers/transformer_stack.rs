@@ -29,9 +29,10 @@ impl TransformerStack {
             d_model, n_layers, ..
         } = config;
 
-        let blocks = (0..*n_layers)
-            .map(|i| UnifiedTransformerBlock::load(vb.pp("layer"), &config, i)?)
-            .collect()?;
+        let mut blocks = Vec::with_capacity(*n_layers as usize);
+        for i in 0..*n_layers {
+            blocks.push(UnifiedTransformerBlock::load(vb.pp("layer"), &config, i)?);
+        }
 
         let ln_conf = LayerNormConfig::from(1e-5);
         let norm = nn::layer_norm(*d_model, ln_conf, vb.pp("layer_norm"))?;
