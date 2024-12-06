@@ -3,7 +3,7 @@ use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device, D};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
-// use ferritin_esm::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
+use ferritin_esm::{ESMCConfig, ESMC};
 use safetensors::SafeTensors;
 
 // pub fn esmc_300m_202412(device: &Device) -> Result<Box<dyn Model>> {
@@ -35,23 +35,11 @@ fn main() -> Result<()> {
     for (name, tensor) in pth.tensor_infos() {
         println!("{}: {:?}", name, tensor);
     }
-    // let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, Device::Cpu);
 
-    // def ESMC_300M_202412(device: torch.device | str = "cpu"):
-    //     with torch.device(device):
-    //         model = ESMC(
-    //             d_model=960,
-    //             n_heads=15,
-    //             n_layers=30,
-    //             tokenizer=get_model_tokenizers(ESM3_OPEN_SMALL).sequence,
-    //         ).eval()
-    //     state_dict = torch.load(
-    //         data_root("esmc-300") / "data/weights/esmc_300m_2024_12_v0.pth",
-    //         map_location=device,
-    //     )
-    //     model.load_state_dict(state_dict)
+    let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, Device::Cpu);
+    let config = ESMCConfig::esmc_300m();
+    let esmc = ESMC::load(vb, config);
 
-    //     return model
-
+    println!("ESMC Loaded");
     Ok(())
 }

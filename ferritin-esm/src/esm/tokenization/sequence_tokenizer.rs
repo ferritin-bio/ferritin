@@ -3,7 +3,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokenizers::models::bpe::{BpeBuilder, BPE};
-use tokenizers::processors::template::TemplateProcessing;
+use tokenizers::processors::template::{Template, TemplateProcessing};
 use tokenizers::processors::PostProcessorWrapper;
 use tokenizers::{AddedToken, Tokenizer};
 
@@ -60,7 +60,7 @@ impl EsmSequenceTokenizer {
         tokenizer.add_special_tokens(&special_tokens);
 
         let post_processor = TemplateProcessing::builder()
-            .try_single(format!("{} $A {}", cls_token, eos_token))?
+            .try_single(Template::try_from(format!("{} $A {}", cls_token, eos_token)).unwrap())?
             .special_tokens(vec![
                 (cls_token, tokenizer.token_to_id(cls_token).unwrap()),
                 (eos_token, tokenizer.token_to_id(eos_token).unwrap()),
