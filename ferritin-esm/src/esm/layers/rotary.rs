@@ -43,7 +43,7 @@ pub struct RotaryEmbedding {
     dim: usize,
     base: f64,
     interleaved: bool,
-    scale_base: Option<f64>,
+    // scale_base: Option<f64>,
     scaling_factor: f64,
     seq_len_cached: usize,
     cos_cached: Option<Tensor>,
@@ -111,10 +111,8 @@ impl RotaryEmbedding {
         // scaling_factor=1.0,
         // pos_idx_in_fp32=True,
 
-        //
-        // def reset_parameters(self):
-        //       inv_freq = self._compute_inv_freq(self.device)
-        //       self.register_buffer("inv_freq", inv_freq, persistent=False)
+        let inv_freq = Self::compute_inv_freq(rotary_dims, base, device)?;
+
         //       arange = torch.arange(0, self.dim, 2, device=self.device, dtype=torch.float32)
         //       scale = (
         //           (arange + 0.4 * self.dim) / (1.4 * self.dim)
@@ -124,10 +122,10 @@ impl RotaryEmbedding {
         //       self.register_buffer("scale", scale)
 
         Ok(Self {
-            dims: rotary_dims,
+            dim: rotary_dims,
             base,
             interleaved,
-            scale_base,
+            // scale_base,
             scaling_factor,
             seq_len_cached: 0,
             cos_cached: None,
