@@ -16,17 +16,16 @@ metal = [
 
 [dependencies]
 anyhow.workspace = true
-candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
-] }
-candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
+candle-core.workspace = true
+candle-nn.workspace = true
+candle-transformers.workspace = true
 clap = "4.5.23"
 ferritin-core = { path = "../ferritin-core" }
 ferritin-test-data = { path = "../ferritin-test-data" }
 itertools.workspace = true
 pdbtbx.workspace = true
-rand = "0.8.5"
-safetensors = "0.4.5"
+rand.workspace = true
+safetensors.workspace = true
 strum = { version = "0.26", features = ["derive"] }
 
 
@@ -37,7 +36,7 @@ metal = []
 candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels", optional = true }
 
 [dev-dependencies]
-candle-examples = { git = "https://github.com/huggingface/candle.git", package = "candle-examples" }
+candle-examples.workspace = true
 ferritin-test-data = { path = "../ferritin-test-data" }
 assert_cmd = "2.0.16"
 tempfile = "3.14.0"

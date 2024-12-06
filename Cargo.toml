@@ -23,6 +23,15 @@ bitflags = "2.6.0"
 anyhow = "1.0"
 pdbtbx = "0.12.0"
 itertools = "0.13.0"
+candle-hf-hub = "0.3.3"
+candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
+] }
+candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
+tokenizers = "0.21.0"
+rand = "0.8.5"
+candle-examples = { git = "https://github.com/huggingface/candle.git", package = "candle-examples" }
+safetensors = "0.4.5"
 
 [workspace.package]
 version = "0.1.0"
