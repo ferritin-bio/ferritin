@@ -9,20 +9,29 @@ members = [
     "ferritin-molviewspec",
     "ferritin-pymol",
     "ferritin-test-data",
+    "ferritin-wasm-examples/*",
 ]
 resolver = "2"
 
 [workspace.dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.133"
-serde_bytes = "0.11.15"
-serde_repr = "0.1.19"
-urlencoding = "2.1.3"
-once_cell = "1.20.2"
-bitflags = "2.6.0"
 anyhow = "1.0"
-pdbtbx = "0.12.0"
+bitflags = "2.6.0"
+candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", features = [
+] }
+candle-examples = { git = "https://github.com/huggingface/candle.git", package = "candle-examples" }
+candle-hf-hub = "0.3.3"
+candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers" }
 itertools = "0.13.0"
+once_cell = "1.20.2"
+pdbtbx = "0.12.0"
+rand = "0.8.5"
+safetensors = "0.4.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_bytes = "0.11.15"
+serde_json = "1.0.133"
+serde_repr = "0.1.19"
+tokenizers = { version = "0.21.0", default-features = false }
 
 [workspace.package]
 version = "0.1.0"

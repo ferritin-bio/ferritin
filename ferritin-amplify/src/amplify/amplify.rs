@@ -12,11 +12,13 @@
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
 use super::tokenizer::ProteinTokenizer;
 use candle_core::{DType, Device, Module, Result, Tensor, D};
-use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::{
     embedding, linear, linear_no_bias, ops::softmax_last_dim, rms_norm, Activation, Dropout,
     Embedding, Linear, RmsNorm, VarBuilder,
 };
+
+#[cfg(not(target_arch = "wasm32"))]
+use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 
 #[derive(Debug, Clone)]
 /// Configuration Struct for AMPLIFY
@@ -481,6 +483,7 @@ impl AMPLIFY {
             config: cfg.clone(),
         })
     }
+    #[cfg(not(target_arch = "wasm32"))]
     /// Retreive the model and make it available for usage.
     /// hardcode the 120M for the moment...
     pub fn load_from_huggingface(device: Device) -> Result<(ProteinTokenizer, Self)> {
@@ -506,6 +509,7 @@ impl AMPLIFY {
         let tokenizer = repo
             .get("tokenizer.json")
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+
         let protein_tokenizer =
             ProteinTokenizer::new(tokenizer).map_err(|e| candle_core::Error::Msg(e.to_string()))?;
 

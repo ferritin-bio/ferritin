@@ -39,7 +39,8 @@ test-full:
     cargo test -- --include-ignored
 
 amplify:
-    cargo run --example amplify
+    # cargo run --example amplify
+    cargo run --example amplify --features metal
 
 test-ligandmpnn:
     cargo test --features metal -p ferritin-ligandmpnn test_cli_command_run_example_06 -- --nocapture
