@@ -39,36 +39,36 @@ pub struct EncoderBlock {
 }
 
 impl EncoderBlock {
-    pub fn new(config: &AMPLIFYConfig, vb: VarBuilder, layer: i32) -> Result<Self> {
-        let multiple_of = 8;
-        let intermediate_size = (config.intermediate_size * 2) / 3;
-        let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
-        let vb = vb.pp(layer);
-        let q = linear(config.hidden_size, config.hidden_size, vb.pp("q"))?;
-        let k = linear(config.hidden_size, config.hidden_size, vb.pp("k"))?;
-        let v = linear(config.hidden_size, config.hidden_size, vb.pp("v"))?;
-        let wo = linear(config.hidden_size, config.hidden_size, vb.pp("wo"))?;
-        let w12 = linear_no_bias(intermediate_size * 2, config.hidden_size, vb.pp("ffn.w12"))?;
-        let w3 = linear_no_bias(config.hidden_size, intermediate_size, vb.pp("ffn.w3"))?;
-        let ffn_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("ffn_norm"))?;
-        let attention_norm =
-            rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?;
+    // pub fn new(config: &AMPLIFYConfig, vb: VarBuilder, layer: i32) -> Result<Self> {
+    //     let multiple_of = 8;
+    //     let intermediate_size = (config.intermediate_size * 2) / 3;
+    //     let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
+    //     let vb = vb.pp(layer);
+    //     let q = linear(config.hidden_size, config.hidden_size, vb.pp("q"))?;
+    //     let k = linear(config.hidden_size, config.hidden_size, vb.pp("k"))?;
+    //     let v = linear(config.hidden_size, config.hidden_size, vb.pp("v"))?;
+    //     let wo = linear(config.hidden_size, config.hidden_size, vb.pp("wo"))?;
+    //     let w12 = linear_no_bias(intermediate_size * 2, config.hidden_size, vb.pp("ffn.w12"))?;
+    //     let w3 = linear_no_bias(config.hidden_size, intermediate_size, vb.pp("ffn.w3"))?;
+    //     let ffn_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("ffn_norm"))?;
+    //     let attention_norm =
+    //         rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?;
 
-        Ok(Self {
-            q,
-            k,
-            v,
-            wo,
-            resid_dropout: Dropout::new(config.dropout_prob as f32),
-            w12,
-            w3,
-            attention_norm,
-            ffn_norm,
-            ffn_dropout: Dropout::new(config.dropout_prob as f32),
-            d_head: config.hidden_size / config.num_attention_heads,
-            config: config.clone(), // Todo: remove this clone
-        })
-    }
+    //     Ok(Self {
+    //         q,
+    //         k,
+    //         v,
+    //         wo,
+    //         resid_dropout: Dropout::new(config.dropout_prob as f32),
+    //         w12,
+    //         w3,
+    //         attention_norm,
+    //         ffn_norm,
+    //         ffn_dropout: Dropout::new(config.dropout_prob as f32),
+    //         d_head: config.hidden_size / config.num_attention_heads,
+    //         config: config.clone(), // Todo: remove this clone
+    //     })
+    // }
     pub fn forward(
         &self,
         x: &Tensor,
@@ -86,10 +86,8 @@ impl EncoderBlock {
         let x = x.add(&ff)?;
         Ok((x, contacts))
     }
-    // process the FFN Block using swiglu
+    /// process the FFN Block using swiglu
     fn ffn_forward(&self, x: &Tensor) -> Result<Tensor> {
-        // Swiglu
-        //
         // Todo: see if the apply or add can be done di
         // Store original batch dimensions
         let dims = x.dims();
@@ -102,7 +100,6 @@ impl EncoderBlock {
         let chunks = w12_out.chunk(2, 1)?;
         let x1 = &chunks[0];
         let x2 = &chunks[1];
-
         // Apply SwiGLU: silu(x1) * x2
         let hidden = x1.silu()?.mul(x2)?;
         // Final linear transformation

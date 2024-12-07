@@ -33,9 +33,6 @@ pub struct AMPLIFY {
 }
 
 impl AMPLIFY {
-    // pub fn new(config: &AMPLIFYConfig, vb: VarBuilder) -> Result<Self> {
-    //     unimplemented!()
-    // }
     fn process_attention_mask(
         &self,
         pad_mask: Option<&Tensor>,
