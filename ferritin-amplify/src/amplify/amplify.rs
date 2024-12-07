@@ -10,7 +10,7 @@
 //!
 //!
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
-use candle_core::{DType, Device, Module, Result, Tensor, D};
+use candle_core::{Device, Module, Result, Tensor, D};
 use candle_nn::{
     embedding, linear, linear_no_bias, ops::softmax_last_dim, rms_norm, Activation, Dropout,
     Embedding, Linear, RmsNorm, VarBuilder,
@@ -94,7 +94,6 @@ impl AMPLIFYConfig {
     }
 }
 
-//noinspection SpellCheckingInspection
 /// Amplify EncoderBlock implementation
 ///
 /// References for coding the block from similar models.
@@ -150,7 +149,6 @@ impl EncoderBlock {
             config: config.clone(), // Todo: remove this clone
         })
     }
-
     pub fn forward(
         &self,
         x: &Tensor,
@@ -168,7 +166,6 @@ impl EncoderBlock {
         let x = x.add(&ff)?;
         Ok((x, contacts))
     }
-
     // process the FFN Block using swiglu
     fn ffn_forward(&self, x: &Tensor) -> Result<Tensor> {
         // Swiglu
@@ -195,7 +192,6 @@ impl EncoderBlock {
         new_shape.push(output.dim(1)?);
         output.reshape(new_shape)
     }
-
     fn flatten_last_dim(&self, x: &Tensor) -> Result<Tensor> {
         let dims = x.dims();
         let last_dim = dims[dims.len() - 1];
@@ -203,7 +199,6 @@ impl EncoderBlock {
         let first_dim = total_elements / last_dim;
         x.reshape((first_dim, last_dim))
     }
-
     fn scaled_dot_product_attention(
         &self,
         query: &Tensor,
@@ -223,7 +218,6 @@ impl EncoderBlock {
         if let Some(mask) = attn_mask {
             let scores = scores.add(mask)?;
         }
-
         // Apply softmax
         let attn = softmax_last_dim(&scores)?;
 
@@ -236,7 +230,6 @@ impl EncoderBlock {
         // Final matrix multiplication with values
         attn.matmul(value)
     }
-
     fn attention_block(
         &self,
         x: &Tensor,
@@ -273,7 +266,6 @@ impl EncoderBlock {
         let dropout_prob = self.config.dropout_prob;
 
         // need to handle pad_mask better ....
-        //
         let pad_mask = if let Some(mask) = pad_mask {
             let (batch_size, seq_len) = (x.dim(0)?, x.dim(1)?);
             let num_heads = self.config.num_attention_heads;
@@ -282,8 +274,8 @@ impl EncoderBlock {
             // 1. unsqueeze twice to add head dimensions
             // 2. repeat to match attention matrix size
             let mask = mask
-                .unsqueeze(1)? // Add first head dimension
-                .unsqueeze(1)? // Add second head dimension
+                .unsqueeze(1)?
+                .unsqueeze(1)?
                 .expand((batch_size, num_heads, seq_len, seq_len))?; // Expand to full attention size
             Some(mask)
         } else {
@@ -377,10 +369,9 @@ pub struct AMPLIFY {
 }
 
 impl AMPLIFY {
-    pub fn new(config: &AMPLIFYConfig, vb: VarBuilder) -> Result<Self> {
-        unimplemented!()
-    }
-
+    // pub fn new(config: &AMPLIFYConfig, vb: VarBuilder) -> Result<Self> {
+    //     unimplemented!()
+    // }
     fn process_attention_mask(
         &self,
         pad_mask: Option<&Tensor>,
@@ -401,7 +392,6 @@ impl AMPLIFY {
             .expand((batch_size, num_heads, seq_length, seq_length))?;
         Ok(Some(expanded_mask))
     }
-
     pub fn forward(
         &self,
         src: &Tensor,
@@ -411,14 +401,10 @@ impl AMPLIFY {
     ) -> Result<ModelOutput> {
         let mut hidden_states = vec![];
         let mut attentions = vec![];
-        // Process attention mask if provided
         let attention_mask =
             self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
         let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
-        // Embedding layer
         let mut x = self.encoder.forward(src)?.contiguous()?;
-        // Transform through encoder blocks
-        // println!("AMPLIFY.forward():  running through the transformer");;
         for layer in self.transformer_encoder.iter() {
             let (new_x, attn) =
                 layer.forward(&x, attention_mask.as_ref(), &freqs_cis, output_attentions)?;
@@ -432,9 +418,7 @@ impl AMPLIFY {
                 }
             }
         }
-
         // Final layer norm and decoder
-        // println!("AMPLIFY.forward():  calculating logits");
         let logits = if self.config.layer_norm_before_last_layer {
             self.decoder.forward(&self.layer_norm_2.forward(&x)?)?
         } else {
@@ -455,9 +439,7 @@ impl AMPLIFY {
             },
         })
     }
-
     pub fn load(vb: VarBuilder, cfg: &AMPLIFYConfig) -> Result<Self> {
-        // process the transformer section
         let mut transformer_encoder = Vec::with_capacity(cfg.num_hidden_layers);
         for i in 0..cfg.num_hidden_layers {
             transformer_encoder.push(EncoderBlock::load(
@@ -528,7 +510,6 @@ impl ModelOutput {
         // Subtract avg from x
         x.sub(&avg)
     }
-
     //From https://github.com/facebookresearch/esm/blob/main/esm/modules.py
     // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L77
     // "Make layer symmetric in final two dimensions, used for contact prediction."
@@ -536,7 +517,6 @@ impl ModelOutput {
         let x_transpose = x.transpose(D::Minus1, D::Minus2)?;
         x.add(&x_transpose)
     }
-
     /// Contact maps can be obtained from the self-attentions
     pub fn get_contact_map(&self) -> Result<Option<Tensor>> {
         let Some(attentions) = &self.attentions else {
