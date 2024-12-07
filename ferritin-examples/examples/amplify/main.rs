@@ -15,37 +15,32 @@ struct Args {
     /// Run on CPU rather than on GPU.
     #[arg(long)]
     cpu: bool,
+    // /// The model to use, check out available models: https://huggingface.co/models?library=sentence-transformers&sort=trending
+    // #[arg(long)]
+    // model_id: Option<String>,
 
-    /// Enable tracing (generates a trace-timestamp.json file).
-    #[arg(long)]
-    tracing: bool,
+    // #[arg(long)]
+    // revision: Option<String>,
 
-    /// The model to use, check out available models: https://huggingface.co/models?library=sentence-transformers&sort=trending
-    #[arg(long)]
-    model_id: Option<String>,
+    // /// When set, compute embeddings for this prompt.
+    // #[arg(long)]
+    // prompt: Option<String>,
 
-    #[arg(long)]
-    revision: Option<String>,
+    // /// Use the pytorch weights rather than the safetensors ones
+    // #[arg(long)]
+    // use_pth: bool,
 
-    /// When set, compute embeddings for this prompt.
-    #[arg(long)]
-    prompt: Option<String>,
+    // /// The number of times to run the prompt.
+    // #[arg(long, default_value = "1")]
+    // n: usize,
 
-    /// Use the pytorch weights rather than the safetensors ones
-    #[arg(long)]
-    use_pth: bool,
+    // /// L2 normalization for embeddings.
+    // #[arg(long, default_value = "true")]
+    // normalize_embeddings: bool,
 
-    /// The number of times to run the prompt.
-    #[arg(long, default_value = "1")]
-    n: usize,
-
-    /// L2 normalization for embeddings.
-    #[arg(long, default_value = "true")]
-    normalize_embeddings: bool,
-
-    /// Use tanh based approximation for Gelu instead of erf implementation.
-    #[arg(long, default_value = "false")]
-    approximate_gelu: bool,
+    // /// Use tanh based approximation for Gelu instead of erf implementation.
+    // #[arg(long, default_value = "false")]
+    // approximate_gelu: bool,
 }
 
 impl Args {
@@ -53,23 +48,20 @@ impl Args {
         let device = device(self.cpu)?;
         let default_model = "chandar-lab/AMPLIFY_120M".to_string();
         let default_revision = "main".to_string();
-        let (model_id, revision) = match (self.model_id.to_owned(), self.revision.to_owned()) {
-            (Some(model_id), Some(revision)) => (model_id, revision),
-            (Some(model_id), None) => (model_id, "main".to_string()),
-            (None, Some(revision)) => (default_model, revision),
-            (None, None) => (default_model, default_revision),
-        };
+        let (model_id, revision) = (default_model, default_revision);
+        // let (model_id, revision) = match (self.model_id.to_owned(), self.revision.to_owned()) {
+        //     (Some(model_id), Some(revision)) => (model_id, revision),
+        //     (Some(model_id), None) => (model_id, "main".to_string()),
+        //     (None, Some(revision)) => (default_model, revision),
+        //     (None, None) => (default_model, default_revision),
+        // };
         let repo = Repo::with_revision(model_id, RepoType::Model, revision);
         let (config_filename, tokenizer_filename, weights_filename) = {
             let api = Api::new()?;
             let api = api.repo(repo);
             let config = api.get("config.json")?;
             let tokenizer = api.get("tokenizer.json")?;
-            let weights = if self.use_pth {
-                api.get("pytorch_model.bin")?
-            } else {
-                api.get("model.safetensors")?
-            };
+            let weights = api.get("model.safetensors")?;
             (config, tokenizer, weights)
         };
         let config_str = std::fs::read_to_string(config_filename)?;
@@ -78,11 +70,8 @@ impl Args {
             .replace("Swiglu", "swiglu");
         let config: Config = serde_json::from_str(&config_str)?;
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
-        let vb = if self.use_pth {
-            VarBuilder::from_pth(&weights_filename, DTYPE, &device)?
-        } else {
-            unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? }
-        };
+        let vb =
+            unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
         let model = AMPLIFY::load(vb, &config)?;
         Ok((model, tokenizer))
     }
