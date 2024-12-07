@@ -2,4 +2,4 @@
 
 Protein utilities for Rust
 
-![](ferritin.png)
+<img src="ferritin.png" width="320">
