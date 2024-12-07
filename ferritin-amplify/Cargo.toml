@@ -16,6 +16,7 @@ candle-nn.workspace = true
 ferritin-test-data = { path = "../ferritin-test-data" }
 rand.workspace = true
 safetensors.workspace = true
+serde.workspace = true
 
 [target.'cfg(target_os = "macos")'.features]
 metal = []

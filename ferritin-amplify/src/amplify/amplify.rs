@@ -16,11 +16,12 @@ use candle_nn::{
     embedding, linear, linear_no_bias, ops::softmax_last_dim, rms_norm, Activation, Dropout,
     Embedding, Linear, RmsNorm, VarBuilder,
 };
+use serde::Deserialize;
 
 #[cfg(not(target_arch = "wasm32"))]
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 /// Configuration Struct for AMPLIFY
 ///
 /// Currently only holds the weight params for
@@ -513,6 +514,9 @@ impl AMPLIFY {
             ProteinTokenizer::new(tokenizer).map_err(|e| candle_core::Error::Msg(e.to_string()))?;
 
         Ok((protein_tokenizer, model))
+    }
+    pub fn get_device(&self) -> &Device {
+        self.freqs_cis.device()
     }
 }
 

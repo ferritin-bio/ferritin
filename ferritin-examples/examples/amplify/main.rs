@@ -5,12 +5,12 @@ extern crate intel_mkl_src;
 extern crate accelerate_src;
 
 use anyhow::{Error as E, Result};
-use candle::{DType, Tensor};
+use candle_core::DType;
 use candle_examples::device;
+use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use clap::Parser;
-use ferritin_amplify::{AMPLIFYConfig, AMPLIFY};
-use hf_hub::{api::sync::Api, Repo, RepoType};
+use ferritin_amplify::{AMPLIFYConfig as Config, AMPLIFY};
 use tokenizers::{PaddingParams, Tokenizer};
 
 pub const DTYPE: DType = DType::F32;
@@ -55,8 +55,8 @@ struct Args {
 }
 
 impl Args {
-    fn build_model_and_tokenizer(&self) -> Result<(BertModel, Tokenizer)> {
-        let device = candle_examples::device(self.cpu)?;
+    fn build_model_and_tokenizer(&self) -> Result<(AMPLIFY, Tokenizer)> {
+        let device = device(self.cpu)?;
         let default_model = "chandar-lab/AMPLIFY_120M".to_string();
         let default_revision = "main".to_string();
         let (model_id, revision) = match (self.model_id.to_owned(), self.revision.to_owned()) {
@@ -96,24 +96,26 @@ impl Args {
 }
 
 fn main() -> Result<()> {
-    use tracing_chrome::ChromeLayerBuilder;
-    use tracing_subscriber::prelude::*;
+    // use tracing_chrome::ChromeLayerBuilder;
+    // use tracing_subscriber::prelude::*;
 
     let args = Args::parse();
-    let _guard = if args.tracing {
-        println!("tracing...");
-        let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
-        tracing_subscriber::registry().with(chrome_layer).init();
-        Some(guard)
-    } else {
-        None
-    };
+    // let _guard = if args.tracing {
+    //     println!("tracing...");
+    //     let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
+    //     tracing_subscriber::registry().with(chrome_layer).init();
+    //     Some(guard)
+    // } else {
+    //     None
+    // };
     let start = std::time::Instant::now();
 
     let (model, mut tokenizer) = args.build_model_and_tokenizer()?;
-    let device = &model.device;
 
-    pritnln!("Here")
+    let device = &model.get_device();
+
+    println!("Here!");
+
     // if let Some(prompt) = args.prompt {
     //     let tokenizer = tokenizer
     //         .with_padding(None)
