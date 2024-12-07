@@ -18,13 +18,14 @@ ferritin-test-data = { path = "../ferritin-test-data" }
 rand.workspace = true
 safetensors.workspace = true
 tokenizers.workspace = true
+candle-metal-kernels = { workspace = true, optional = true }
 
 
 [target.'cfg(target_os = "macos")'.features]
 metal = []
 
 [target.'cfg(target_os = "macos")'.dependencies]
-candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels", optional = true }
+candle-metal-kernels.workspace = true
 
 [dev-dependencies]
 candle-examples.workspace = true

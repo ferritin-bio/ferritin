@@ -16,12 +16,14 @@ candle-nn.workspace = true
 clap = { version = "4.5.23", features = ["derive"] }
 ferritin-amplify = { path = "../ferritin-amplify" }
 serde_json.workspace = true
+candle-metal-kernels = { workspace = true, optional = true }
+
 
 [target.'cfg(target_os = "macos")'.features]
 metal = []
 
 [target.'cfg(target_os = "macos")'.dependencies]
-candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels", optional = true }
+candle-metal-kernels.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokenizers = { version = "0.21.0", default-features = false, features = [

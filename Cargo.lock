@@ -1563,8 +1563,9 @@ dependencies = [
 
 [[package]]
 name = "candle-core"
-version = "0.8.0"
-source = "git+https://github.com/huggingface/candle.git#1807be84f4d9e388b19710a9282eb6501ce55f80"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1e306c8a4276ba57ce9fac76d823cc8c8a7fca14bf222ac20ad8b12c4273152"
 dependencies = [
  "byteorder",
  "candle-metal-kernels",
@@ -1587,8 +1588,9 @@ dependencies = [
 
 [[package]]
 name = "candle-examples"
-version = "0.8.0"
-source = "git+https://github.com/huggingface/candle.git#1807be84f4d9e388b19710a9282eb6501ce55f80"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bdceca3faa253f7140230f8eb9ac05ed0c10c7e33afeb9ee0d7fa6305a5d946"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -1628,8 +1630,9 @@ dependencies = [
 
 [[package]]
 name = "candle-metal-kernels"
-version = "0.8.0"
-source = "git+https://github.com/huggingface/candle.git#1807be84f4d9e388b19710a9282eb6501ce55f80"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbc6621c7e2202f4f129bcc3185c2c6d4fa2fc6b8f3f2b07eaf7c06042910c83"
 dependencies = [
  "metal 0.27.0",
  "once_cell",
@@ -1639,8 +1642,9 @@ dependencies = [
 
 [[package]]
 name = "candle-nn"
-version = "0.8.0"
-source = "git+https://github.com/huggingface/candle.git#1807be84f4d9e388b19710a9282eb6501ce55f80"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39d417059c44d719fd03a0f711ccfe148d341469c9273d4b5731ebe965b2c97e"
 dependencies = [
  "candle-core",
  "candle-metal-kernels",
@@ -1655,8 +1659,9 @@ dependencies = [
 
 [[package]]
 name = "candle-transformers"
-version = "0.8.0"
-source = "git+https://github.com/huggingface/candle.git#1807be84f4d9e388b19710a9282eb6501ce55f80"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "962a277e90dea20968164175138b836bba8b51b57505579fd628d79933da2b70"
 dependencies = [
  "byteorder",
  "candle-core",
