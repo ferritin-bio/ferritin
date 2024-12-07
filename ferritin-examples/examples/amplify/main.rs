@@ -19,6 +19,14 @@ struct Args {
     /// Which AMPLIFY Model to use, either '120M' or '350M'.
     #[arg(long, value_parser = ["120M", "350M"], default_value = "120M")]
     model_id: String,
+
+    /// Protein String
+    #[arg(long)]
+    protein_string: Option<String>,
+
+    /// Path to a protein FASTA file
+    #[arg(long)]
+    protein_fasta: Option<std::path::PathBuf>,
 }
 
 impl Args {
@@ -53,27 +61,44 @@ impl Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+
+    println!("Loading the Model and Tokenizer.......");
     let (model, tokenizer) = args.build_model_and_tokenizer()?;
     let device = &model.get_device();
-    let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
 
-    let tokens = tokenizer
-        .encode(sprot_01.to_string(), false)
-        .map_err(E::msg)?
-        .get_ids()
-        .to_vec();
+    let protein_sequences = if let Some(seq) = args.protein_string {
+        vec![seq]
+    } else if let Some(fasta_path) = args.protein_fasta {
+        todo!("fasta processing unimplimented")
+        // std::fs::read_to_string(fasta_path)?
+    } else {
+        return Err(E::msg(
+            "Either protein_string or protein_fasta must be provided",
+        ));
+    };
 
-    let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
-    println!("Encoding.......");
-    let encoded = model.forward(&token_ids, None, false, false)?;
+    for prot in protein_sequences.iter() {
+        // let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
 
-    println!("Predicting.......");
-    let predictions = encoded.logits.argmax(D::Minus1)?;
+        let tokens = tokenizer
+            .encode(prot.to_string(), false)
+            .map_err(E::msg)?
+            .get_ids()
+            .to_vec();
 
-    println!("Decoding.......");
-    let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
-    let decoded = tokenizer.decode(indices.as_slice(), true);
+        let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
+        println!("Encoding.......");
+        let encoded = model.forward(&token_ids, None, false, false)?;
 
-    println!("Decoded: {:?}, ", decoded);
+        println!("Predicting.......");
+        let predictions = encoded.logits.argmax(D::Minus1)?;
+
+        println!("Decoding.......");
+        let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
+        let decoded = tokenizer.decode(indices.as_slice(), true);
+
+        println!("Decoded: {:?}, ", decoded);
+    }
+
     Ok(())
 }

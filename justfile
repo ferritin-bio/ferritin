@@ -39,8 +39,12 @@ test-full:
     cargo test -- --include-ignored
 
 amplify:
-    # cargo run --example amplify
-    RUST_BACKTRACE=1 cargo run --example amplify --features metal
+    cargo run --example amplify
+
+amplify-example-01:
+    cargo run --example amplify --features metal -- --model-id 350M --protein-string \
+    MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL
+
 
 test-ligandmpnn:
     cargo test --features metal -p ferritin-ligandmpnn test_cli_command_run_example_06 -- --nocapture
