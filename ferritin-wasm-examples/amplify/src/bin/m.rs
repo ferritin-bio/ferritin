@@ -1,6 +1,6 @@
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use ferritin_amplify::{AMPLIFYConfig, ProteinTokenizer, AMPLIFY};
+use ferritin_amplify::{AMPLIFYConfig as Config, ProteinTokenizer, AMPLIFY};
 use ferritin_wasm_example_amplify::console_log;
 use tokenizers::{PaddingParams, Tokenizer};
 use wasm_bindgen::prelude::*;
@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 pub struct Model {
     amplify: AMPLIFY,
-    tokenizer: ProteinTokenizer,
+    tokenizer: Tokenizer,
 }
 
 #[wasm_bindgen]
@@ -18,14 +18,21 @@ impl Model {
         console_error_panic_hook::set_once();
         let device = &Device::Cpu;
         let vb = VarBuilder::from_buffered_safetensors(weights, DType::F32, device)?;
-        let config: AMPLIFYConfig = serde_json::from_slice(&config)?;
+
+        let config_str = String::from_utf8(config).map_err(|e| JsError::new(&e.to_string()))?;
+        let config_str = config_str
+            .replace("SwiGLU", "swiglu")
+            .replace("Swiglu", "swiglu");
+
+        let config: Config = serde_json::from_str(&config_str)?;
+
         let amplify = AMPLIFY::load(vb, &config)?;
+
         // currently tokenizer fetches from HuggingFace
         let tokenizer =
             Tokenizer::from_bytes(&tokenizer).map_err(|m| JsError::new(&m.to_string()))?;
 
         Ok(Self { amplify, tokenizer })
-        // Ok(Self { amplify })
     }
 
     // pub fn get_embeddings(&mut self, input: JsValue) -> Result<JsValue, JsError> {
