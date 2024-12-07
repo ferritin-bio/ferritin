@@ -79,8 +79,13 @@ impl Args {
             };
             (config, tokenizer, weights)
         };
-        let config = std::fs::read_to_string(config_filename)?;
-        let mut config: Config = serde_json::from_str(&config)?;
+
+        let config_str = std::fs::read_to_string(config_filename)?;
+        let config_str = config_str
+            .replace("SwiGLU", "swiglu")
+            .replace("Swiglu", "swiglu");
+        let config: Config = serde_json::from_str(&config_str)?;
+
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
         let vb = if self.use_pth {
             VarBuilder::from_pth(&weights_filename, DTYPE, &device)?

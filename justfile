@@ -40,7 +40,7 @@ test-full:
 
 amplify:
     # cargo run --example amplify
-    cargo run --example amplify --features metal
+    RUST_BACKTRACE=1 cargo run --example amplify --features metal
 
 test-ligandmpnn:
     cargo test --features metal -p ferritin-ligandmpnn test_cli_command_run_example_06 -- --nocapture
