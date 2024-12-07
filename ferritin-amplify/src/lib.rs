@@ -5,4 +5,3 @@
 
 mod amplify;
 pub use amplify::amplify::{AMPLIFYConfig, ModelOutput, AMPLIFY};
-pub use amplify::tokenizer::ProteinTokenizer;
