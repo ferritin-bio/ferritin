@@ -7,5 +7,6 @@
 //! - [Paper](https://www.biorxiv.org/content/10.1101/2024.09.23.614603v1)
 //!
 pub mod amplify;
+pub mod config;
 pub mod rotary;
 // pub mod loss;
