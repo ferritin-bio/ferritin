@@ -10,7 +10,7 @@
 //!
 //!
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
-use candle_core::{DType, Device, Module, Result, Tensor, D};
+use candle_core::{DType, Device, Error, Module, Result, Tensor, D};
 use candle_nn::{
     embedding, linear, linear_no_bias, ops::softmax_last_dim, rms_norm, Activation, Dropout,
     Embedding, Linear, RmsNorm, VarBuilder,
@@ -506,10 +506,6 @@ impl AMPLIFY {
         };
         let config = AMPLIFYConfig::amp_120m();
         let model = AMPLIFY::load(vb, &config)?;
-        // let tokenizer = repo
-        //     .get("tokenizer.json")
-        //     .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-
         let tokenizer = AMPLIFY::load_tokenizer()?;
         Ok((tokenizer, model))
     }
@@ -517,9 +513,9 @@ impl AMPLIFY {
         self.freqs_cis.device()
     }
     pub fn load_tokenizer() -> Result<Tokenizer> {
-        let tokenizer_path = std::path::Path::new("tokenizer.json");
-        let tokenizer_contents = std::fs::read(tokenizer_path)?;
-        Ok(Tokenizer::from_bytes(&tokenizer_contents)?)
+        let tokenizer_bytes = include_bytes!("tokenizer.json");
+        Tokenizer::from_bytes(tokenizer_bytes)
+            .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
     }
 }
 
