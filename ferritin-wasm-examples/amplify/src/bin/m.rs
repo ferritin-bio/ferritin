@@ -25,7 +25,6 @@ impl Model {
             .replace("Swiglu", "swiglu");
 
         let config: Config = serde_json::from_str(&config_str)?;
-
         let amplify = AMPLIFY::load(vb, &config)?;
 
         // currently tokenizer fetches from HuggingFace
