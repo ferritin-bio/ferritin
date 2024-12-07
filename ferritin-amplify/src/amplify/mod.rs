@@ -7,5 +7,7 @@
 //! - [Paper](https://www.biorxiv.org/content/10.1101/2024.09.23.614603v1)
 //!
 pub mod amplify;
+pub mod config;
+pub mod encoder;
 pub mod rotary;
-pub mod tokenizer;
+// pub mod loss;

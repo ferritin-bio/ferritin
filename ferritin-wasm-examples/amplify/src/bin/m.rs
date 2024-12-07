@@ -1,13 +1,13 @@
-use candle_core::{DType, Device, Tensor};
+use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
-use ferritin_amplify::{AMPLIFYConfig as Config, ProteinTokenizer, AMPLIFY};
+use ferritin_amplify::{AMPLIFYConfig as Config, AMPLIFY};
 use ferritin_wasm_example_amplify::console_log;
-use tokenizers::{PaddingParams, Tokenizer};
+use tokenizers::Tokenizer;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct Model {
-    amplify: AMPLIFY,
+    model: AMPLIFY,
     tokenizer: Tokenizer,
 }
 
@@ -25,13 +25,13 @@ impl Model {
             .replace("Swiglu", "swiglu");
 
         let config: Config = serde_json::from_str(&config_str)?;
-        let amplify = AMPLIFY::load(vb, &config)?;
+        let model = AMPLIFY::load(vb, &config)?;
 
         // currently tokenizer fetches from HuggingFace
         let tokenizer =
             Tokenizer::from_bytes(&tokenizer).map_err(|m| JsError::new(&m.to_string()))?;
 
-        Ok(Self { amplify, tokenizer })
+        Ok(Self { model, tokenizer })
     }
 
     // pub fn get_embeddings(&mut self, input: JsValue) -> Result<JsValue, JsError> {

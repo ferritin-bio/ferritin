@@ -16,60 +16,34 @@ struct Args {
     #[arg(long)]
     cpu: bool,
 
-    /// Enable tracing (generates a trace-timestamp.json file).
+    /// Which AMPLIFY Model to use, either '120M' or '350M'.
+    #[arg(long, value_parser = ["120M", "350M"], default_value = "120M")]
+    model_id: String,
+
+    /// Protein String
     #[arg(long)]
-    tracing: bool,
+    protein_string: Option<String>,
 
-    /// The model to use, check out available models: https://huggingface.co/models?library=sentence-transformers&sort=trending
+    /// Path to a protein FASTA file
     #[arg(long)]
-    model_id: Option<String>,
-
-    #[arg(long)]
-    revision: Option<String>,
-
-    /// When set, compute embeddings for this prompt.
-    #[arg(long)]
-    prompt: Option<String>,
-
-    /// Use the pytorch weights rather than the safetensors ones
-    #[arg(long)]
-    use_pth: bool,
-
-    /// The number of times to run the prompt.
-    #[arg(long, default_value = "1")]
-    n: usize,
-
-    /// L2 normalization for embeddings.
-    #[arg(long, default_value = "true")]
-    normalize_embeddings: bool,
-
-    /// Use tanh based approximation for Gelu instead of erf implementation.
-    #[arg(long, default_value = "false")]
-    approximate_gelu: bool,
+    protein_fasta: Option<std::path::PathBuf>,
 }
 
 impl Args {
     fn build_model_and_tokenizer(&self) -> Result<(AMPLIFY, Tokenizer)> {
         let device = device(self.cpu)?;
-        let default_model = "chandar-lab/AMPLIFY_120M".to_string();
-        let default_revision = "main".to_string();
-        let (model_id, revision) = match (self.model_id.to_owned(), self.revision.to_owned()) {
-            (Some(model_id), Some(revision)) => (model_id, revision),
-            (Some(model_id), None) => (model_id, "main".to_string()),
-            (None, Some(revision)) => (default_model, revision),
-            (None, None) => (default_model, default_revision),
+        let (model_id, revision) = match self.model_id.as_str() {
+            "120M" => ("chandar-lab/AMPLIFY_120M", "main"),
+            "350M" => ("chandar-lab/AMPLIFY_350M", "main"),
+            _ => panic!("Amplify models are either `120M` or `350M`"),
         };
-        let repo = Repo::with_revision(model_id, RepoType::Model, revision);
+        let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());
         let (config_filename, tokenizer_filename, weights_filename) = {
             let api = Api::new()?;
             let api = api.repo(repo);
             let config = api.get("config.json")?;
             let tokenizer = api.get("tokenizer.json")?;
-            let weights = if self.use_pth {
-                api.get("pytorch_model.bin")?
-            } else {
-                api.get("model.safetensors")?
-            };
+            let weights = api.get("model.safetensors")?;
             (config, tokenizer, weights)
         };
         let config_str = std::fs::read_to_string(config_filename)?;
@@ -78,11 +52,8 @@ impl Args {
             .replace("Swiglu", "swiglu");
         let config: Config = serde_json::from_str(&config_str)?;
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
-        let vb = if self.use_pth {
-            VarBuilder::from_pth(&weights_filename, DTYPE, &device)?
-        } else {
-            unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? }
-        };
+        let vb =
+            unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
         let model = AMPLIFY::load(vb, &config)?;
         Ok((model, tokenizer))
     }
@@ -90,27 +61,44 @@ impl Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+
+    println!("Loading the Model and Tokenizer.......");
     let (model, tokenizer) = args.build_model_and_tokenizer()?;
     let device = &model.get_device();
-    let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
 
-    let tokens = tokenizer
-        .encode(sprot_01.to_string(), false)
-        .map_err(E::msg)?
-        .get_ids()
-        .to_vec();
+    let protein_sequences = if let Some(seq) = args.protein_string {
+        vec![seq]
+    } else if let Some(fasta_path) = args.protein_fasta {
+        todo!("fasta processing unimplimented")
+        // std::fs::read_to_string(fasta_path)?
+    } else {
+        return Err(E::msg(
+            "Either protein_string or protein_fasta must be provided",
+        ));
+    };
 
-    let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
-    println!("Encoding.......");
-    let encoded = model.forward(&token_ids, None, false, false)?;
+    for prot in protein_sequences.iter() {
+        // let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
 
-    println!("Predicting.......");
-    let predictions = encoded.logits.argmax(D::Minus1)?;
+        let tokens = tokenizer
+            .encode(prot.to_string(), false)
+            .map_err(E::msg)?
+            .get_ids()
+            .to_vec();
 
-    println!("Decoding.......");
-    let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
-    let decoded = tokenizer.decode(indices.as_slice(), true);
+        let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
+        println!("Encoding.......");
+        let encoded = model.forward(&token_ids, None, false, false)?;
 
-    println!("Decoded: {:?}, ", decoded);
+        println!("Predicting.......");
+        let predictions = encoded.logits.argmax(D::Minus1)?;
+
+        println!("Decoding.......");
+        let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
+        let decoded = tokenizer.decode(indices.as_slice(), true);
+
+        println!("Decoded: {:?}, ", decoded);
+    }
+
     Ok(())
 }
