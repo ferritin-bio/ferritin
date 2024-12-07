@@ -10,16 +10,13 @@
 //!
 //!
 use super::rotary::{apply_rotary_emb, precompute_freqs_cis};
-use candle_core::{DType, Device, Error, Module, Result, Tensor, D};
+use candle_core::{DType, Device, Module, Result, Tensor, D};
 use candle_nn::{
     embedding, linear, linear_no_bias, ops::softmax_last_dim, rms_norm, Activation, Dropout,
     Embedding, Linear, RmsNorm, VarBuilder,
 };
 use serde::Deserialize;
-use tokenizers::{Encoding, Tokenizer};
-
-#[cfg(not(target_arch = "wasm32"))]
-use candle_hf_hub::{api::sync::Api, Repo, RepoType};
+use tokenizers::Tokenizer;
 
 #[derive(Debug, Clone, Deserialize)]
 /// Configuration Struct for AMPLIFY
@@ -483,31 +480,6 @@ impl AMPLIFY {
             freqs_cis,
             config: cfg.clone(),
         })
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    /// Retreive the model and make it available for usage.
-    /// hardcode the 120M for the moment...
-    pub fn load_from_huggingface(device: Device) -> Result<(Tokenizer, Self)> {
-        let model_id = "chandar-lab/AMPLIFY_120M";
-        let revision = "main";
-        let api = Api::new().map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-        let repo = api.repo(Repo::with_revision(
-            model_id.to_string(),
-            RepoType::Model,
-            revision.to_string(),
-        ));
-        // Load and analyze the safetensors file
-        let weights_path = repo
-            .get("model.safetensors")
-            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights_path.clone()], DType::F32, &device)?
-        };
-        let config = AMPLIFYConfig::amp_120m();
-        let model = AMPLIFY::load(vb, &config)?;
-        let tokenizer = AMPLIFY::load_tokenizer()?;
-        Ok((tokenizer, model))
     }
     pub fn get_device(&self) -> &Device {
         self.freqs_cis.device()
