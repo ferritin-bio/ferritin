@@ -15,21 +15,21 @@ struct Args {
     /// Run on CPU rather than on GPU.
     #[arg(long)]
     cpu: bool,
+
+    /// Which AMPLIFY Model to use, either '120M' or '350M'.
+    #[arg(long, value_parser = ["120M", "350M"], default_value = "120M")]
+    model_id: String,
 }
 
 impl Args {
     fn build_model_and_tokenizer(&self) -> Result<(AMPLIFY, Tokenizer)> {
         let device = device(self.cpu)?;
-        let default_model = "chandar-lab/AMPLIFY_120M".to_string();
-        let default_revision = "main".to_string();
-        let (model_id, revision) = (default_model, default_revision);
-        // let (model_id, revision) = match (self.model_id.to_owned(), self.revision.to_owned()) {
-        //     (Some(model_id), Some(revision)) => (model_id, revision),
-        //     (Some(model_id), None) => (model_id, "main".to_string()),
-        //     (None, Some(revision)) => (default_model, revision),
-        //     (None, None) => (default_model, default_revision),
-        // };
-        let repo = Repo::with_revision(model_id, RepoType::Model, revision);
+        let (model_id, revision) = match self.model_id.as_str() {
+            "120M" => ("chandar-lab/AMPLIFY_120M", "main"),
+            "350M" => ("chandar-lab/AMPLIFY_350M", "main"),
+            _ => panic!("Amplify models are either `120M` or `350M`"),
+        };
+        let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());
         let (config_filename, tokenizer_filename, weights_filename) = {
             let api = Api::new()?;
             let api = api.repo(repo);

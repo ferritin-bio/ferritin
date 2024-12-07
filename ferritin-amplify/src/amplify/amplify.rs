@@ -145,7 +145,6 @@ impl AMPLIFY {
 ///
 ///  logits -> distribution of the sequences.
 ///  attentions -> contact map
-///
 pub struct ModelOutput {
     pub logits: Tensor,
     pub hidden_states: Option<Vec<Tensor>>,
@@ -157,24 +156,18 @@ impl ModelOutput {
     /// https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L83
     /// "Perform average product correct, used for contact prediction."
     fn apc(&self, x: &Tensor) -> Result<Tensor> {
-        // Sum along last dimension (keeping dims)
         let a1 = x.sum_keepdim(D::Minus1)?;
-        // Sum along second-to-last dimension (keeping dims)
         let a2 = x.sum_keepdim(D::Minus2)?;
-        // Sum along both last dimensions (keeping dims)
         let a12 = x.sum_keepdim((D::Minus1, D::Minus2))?;
-        // Multiply a1 and a2
         let avg = a1.matmul(&a2)?;
         // Divide by a12 (equivalent to pytorch's div_)
         // println!("IN the APC: avg, a12 {:?}, {:?}", avg, a12);
         // let avg = avg.div(&a12)?;
         let a12_broadcast = a12.broadcast_as(avg.shape())?;
-        // Divide by a12 (with proper broadcasting)
         let avg = avg.div(&a12_broadcast)?;
-        // Subtract avg from x
         x.sub(&avg)
     }
-    //From https://github.com/facebookresearch/esm/blob/main/esm/modules.py
+    // From https://github.com/facebookresearch/esm/blob/main/esm/modules.py
     // https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L77
     // "Make layer symmetric in final two dimensions, used for contact prediction."
     fn symmetrize(&self, x: &Tensor) -> Result<Tensor> {
