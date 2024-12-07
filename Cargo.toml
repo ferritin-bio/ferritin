@@ -4,6 +4,7 @@ members = [
     "ferritin-cellscape",
     "ferritin-core",
     "ferritin-esm",
+    "ferritin-examples",
     "ferritin-amplify",
     "ferritin-ligandmpnn",
     "ferritin-molviewspec",
