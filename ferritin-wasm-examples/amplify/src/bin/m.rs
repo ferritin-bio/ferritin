@@ -1,6 +1,6 @@
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use ferritin_amplify::{AMPLIFYConfig as Config, ProteinTokenizer, AMPLIFY};
+use ferritin_amplify::{AMPLIFYConfig as Config, AMPLIFY};
 use ferritin_wasm_example_amplify::console_log;
 use tokenizers::{PaddingParams, Tokenizer};
 use wasm_bindgen::prelude::*;

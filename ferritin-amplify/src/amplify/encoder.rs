@@ -5,14 +5,23 @@ use candle_nn::{
     linear, linear_no_bias, ops::softmax_last_dim, rms_norm, Dropout, Linear, RmsNorm, VarBuilder,
 };
 
-/// Amplify EncoderBlock implementation
+/// An encoder block in the AMPLIFY transformer architecture.
 ///
-/// References for coding the block from similar models.
+/// This implements a standard transformer encoder block with:
+/// - Multi-head self-attention with rotary positional embeddings
+/// - Feed-forward network with SwiGLU activation
+/// - RMSNorm for layer normalization
+///
+/// # Arguments
+/// * `config` - Configuration parameters for the model
+/// * `vb` - Variable builder for loading weights
+/// * `layer` - Layer index in the transformer stack
 ///
 /// - [T5](https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/t5.rs#L331)
 /// - [distilbert](https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/distilbert.rs#L198)
 /// - [glm4](https://github.com/huggingface/candle/blob/e2b6b367fa852ed30ac532f8d77cd8479c7ed092/candle-transformers/src/models/glm4.rs#L340)
 /// - [SwiGLu Implementation](https://github.com/facebookresearch/xformers/blob/main/xformers/ops/swiglu_op.py#L462)
+
 #[derive(Debug)]
 pub struct EncoderBlock {
     q: Linear,
@@ -226,7 +235,6 @@ impl EncoderBlock {
         let output02 = self.resid_dropout.forward(&output01, false)?;
         Ok((output02, _attn))
     }
-
     /// Load Weights from a Model
     pub fn load(vb: VarBuilder, config: &AMPLIFYConfig, layer: i32) -> Result<Self> {
         // To keep the number of parameters and the amount of computation constant, we reduce the number of

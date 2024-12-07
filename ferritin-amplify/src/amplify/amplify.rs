@@ -186,8 +186,8 @@ impl ModelOutput {
         let Some(attentions) = &self.attentions else {
             return Ok(None);
         };
-        // we need the dimentions to reshape below.
-        // the attention blocks have the following shaep
+        // we need the dimensions to reshape below.
+        // the attention blocks have the following shape
         let (_1, _n_head, _seq_length, seq_length) = attentions.first().unwrap().dims4()?;
         let last_dim = seq_length;
         let attn_stacked = Tensor::stack(attentions, 0)?;

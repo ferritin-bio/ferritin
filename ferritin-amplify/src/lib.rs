@@ -14,4 +14,5 @@
 //!
 //!
 mod amplify;
-pub use amplify::amplify::{AMPLIFYConfig, ModelOutput, AMPLIFY};
+pub use amplify::amplify::{ModelOutput, AMPLIFY};
+pub use amplify::config::AMPLIFYConfig;
