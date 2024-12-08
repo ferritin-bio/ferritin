@@ -9,5 +9,6 @@
 pub mod amplify;
 pub mod config;
 pub mod encoder;
+pub mod outputs;
 pub mod rotary;
 // pub mod loss;
