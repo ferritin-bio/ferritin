@@ -10,7 +10,7 @@ members = [
     "ferritin-molviewspec",
     "ferritin-pymol",
     "ferritin-test-data",
-    "ferritin-wasm-examples/*",
+    "ferritin-wasm-examples/amplify",
 ]
 resolver = "2"
 

@@ -1,11 +1,4 @@
-use super::config::AMPLIFYConfig;
-use super::encoder::EncoderBlock;
-use super::rotary::precompute_freqs_cis;
-use super::
-use candle_core::{Device, Module, Result, Tensor, D};
-use candle_nn::{embedding, linear, rms_norm, Embedding, Linear, RmsNorm, VarBuilder};
-use tokenizers::Tokenizer;
-
+use candle_core::{Result, Tensor, D};
 
 // Helper structs and enums
 #[derive(Debug)]
