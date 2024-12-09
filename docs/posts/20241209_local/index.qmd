@@ -1,0 +1,43 @@
+---
+title: "PLM-Local"
+description: "Local Compilation of AMPLIFY on Metal"
+author: "Zachary Charlop-Powers"
+date: "2024-12-09"
+categories: [rust, ai, proteins]
+image: "images/cargo_run.jpg"
+---
+
+
+# PLM-Local
+
+
+This is a quick update post.
+
+- release of [ESMC](https://www.evolutionaryscale.ai/blog/esm-cambrian)
+- begin to port ESMC model in subcrate [ferritin-esm](https://github.com/zachcp/ferritin/tree/main/ferritin-esm).
+- ported the model in [this pr](https://github.com/zachcp/ferritin/pull/66), and [this PR](https://github.com/zachcp/ferritin/pull/67)
+- However, when I went to implement the tokenizer, I ended up encountering some issue, although ESMC is similar to ESM2 in that it is trained only on sequences, it shares a common codebase with ESM3 which uses structural information.
+- The major implication is that the tokenizer is not as simple and self-contained and porting requires either:
+    - a full minimal reimplemnetation of ESM functionality or
+    - a simpler tokeinzation scheme that deviates from the current codebase.
+- While brainstorming on ESMC, I remembered that I hadn't implemented METAL for AMPLIFY; so [I did](https://github.com/zachcp/ferritin/pull/69).
+- This makes AMPLIFY really pleasantly fast!
+- I was therefore inspired to build and serve the binary via a new project, [plm-local](https://github.com/zachcp/plm-local), and can build deploy to a Conda channel.
+- h/t to [luizirber](https://bsky.app/profile/luizirber.bsky.social/post/3lcss7hz6v22k) for showing me this nice trick
+
+```shell
+pixi exec -c https://repo.prefix.dev/protein-language-local-public \
+    plm-local --protein-string MSVVGIDLGFQSCYVAVARAGGIETIANEYSDRCTPACISFGPKNR
+
+# thats prety awesome.
+time pixi exec ... <as above>   0.53s user 0.65s system 42% cpu 2.800 total
+time pixi exec ... <as above>  0.53s user 0.27s system 172% cpu 0.464 total
+```
+
+
+## What it looks like at the moment.
+
+Current CLI simply encodes and decodes the protein. But it can do it in half a second with no compilaiton step
+or dependencies! Boom.
+
+![](images/binary_conda.jpg)
