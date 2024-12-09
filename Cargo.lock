@@ -2529,7 +2529,6 @@ dependencies = [
 name = "ferritin-core"
 version = "0.1.0"
 dependencies = [
- "ferritin-pymol",
  "ferritin-test-data",
  "itertools 0.13.0",
  "lazy_static",
@@ -2612,6 +2611,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags 2.6.0",
  "clap",
+ "ferritin-core",
  "ferritin-molviewspec",
  "ferritin-test-data",
  "itertools 0.13.0",
