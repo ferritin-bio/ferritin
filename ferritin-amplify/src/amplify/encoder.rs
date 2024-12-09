@@ -2,7 +2,7 @@ use super::config::AMPLIFYConfig;
 use super::rotary::apply_rotary_emb;
 use candle_core::{Module, Result, Tensor, D};
 use candle_nn::{
-    linear, linear_no_bias, ops::softmax_last_dim, rms_norm, Dropout, Linear, RmsNorm, VarBuilder,
+    linear_no_bias, ops::softmax_last_dim, rms_norm, Dropout, Linear, RmsNorm, VarBuilder,
 };
 
 /// An encoder block in the AMPLIFY transformer architecture.

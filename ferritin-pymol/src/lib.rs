@@ -18,5 +18,6 @@
 //! ```
 //!
 pub mod pymolparsing;
+pub mod conversions;
 pub use self::pymolparsing::parsing::PyObjectMolecule;
 pub use self::pymolparsing::psedata::PSEData;
