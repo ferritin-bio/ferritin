@@ -7,6 +7,7 @@ license.workspace = true
 description.workspace = true
 
 [dependencies]
+ferritin-core = { path = "../ferritin-core" }
 ferritin-molviewspec = { path = "../ferritin-molviewspec" }
 clap = { version = "4.5.23", features = ["derive"] }
 serde-pickle = "1.2"
