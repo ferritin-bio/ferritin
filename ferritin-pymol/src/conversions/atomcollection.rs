@@ -67,8 +67,8 @@ impl From<&PSEData> for AtomCollection {
 
 #[cfg(test)]
 mod tests {
-    use crate::AtomCollection;
-    use ferritin_pymol::PSEData;
+    use ferritin_core::AtomCollection;
+    use crate::PSEData;
     use ferritin_test_data::TestFile;
 
     #[test]
