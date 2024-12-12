@@ -5,7 +5,7 @@
 
 use super::axial_attention::{ColumnSelfAttention, RowSelfAttention};
 use super::multihead_attention::MultiheadAttention;
-use candle_core::{DType, Device, Module, Result, Tensor};
+use candle_core::{DType, Device, Module, Result, Tensor, D};
 use candle_nn::{VarBuilder, VarMap};
 use std::f64::consts::PI;
 
@@ -22,14 +22,15 @@ use std::f64::consts::PI;
 // }
 
 // fn apc(x: &Tensor) -> Result<Tensor> {
-//     let a1 = x.sum_keepdim(-1)?;
-//     let a2 = x.sum_keepdim(-2)?;
-//     let a12 = x.sum_keepdim(&[-1, -2])?;
-
-//     let avg = a1.matmul(&a2)?;
-//     let avg = avg.div(&a12)?;
-//     x.sub(&avg)
-// }
+fn apc(x: &Tensor) -> Result<()> {
+    // let a1 = x.sum_keepdim(D::Minus1)?;
+    // let a2 = x.sum_keepdim(D::Minus2)?;
+    // let a12 = x.sum_keepdim(&[D::Minus1, D::Minus2])?;
+    // let avg = a1.matmul(&a2)?;
+    // let avg = avg.div(&a12)?;
+    // x.sub(&avg)
+    Ok(())
+}
 
 #[derive(Debug)]
 pub struct ESM1LayerNorm {
@@ -342,27 +343,27 @@ pub struct RobertaLMHead {
 }
 
 impl RobertaLMHead {
-    pub fn new(
-        embed_dim: usize,
-        output_dim: usize,
-        weight: Tensor,
-        vb: VarBuilder,
-    ) -> Result<Self> {
-        Ok(Self {
-            dense: candle_nn::linear(embed_dim, embed_dim, vb.pp("dense"))?,
-            layer_norm: ESM1bLayerNorm::new(embed_dim, 1e-12, true, vb.pp("layer_norm"))?,
-            weight,
-            bias: vb.get_with_hints(output_dim, "bias", candle_nn::Init::Const(0.))?,
-        })
-    }
+    // pub fn new(
+    //     embed_dim: usize,
+    //     output_dim: usize,
+    //     weight: Tensor,
+    //     vb: VarBuilder,
+    // ) -> Result<Self> {
+    //     Ok(Self {
+    //         dense: candle_nn::linear(embed_dim, embed_dim, vb.pp("dense"))?,
+    //         layer_norm: ESM1bLayerNorm::new(embed_dim, 1e-12, true, vb.pp("layer_norm"))?,
+    //         weight,
+    //         bias: vb.get_with_hints(output_dim, "bias", candle_nn::Init::Const(0.))?,
+    //     })
+    // }
 
-    pub fn forward(&self, features: &Tensor) -> Result<Tensor> {
-        let x = self.dense.forward(features)?;
-        let x = gelu(&x)?;
-        let x = self.layer_norm.forward(&x)?;
-        let x = x.matmul(&self.weight)?;
-        x.add(&self.bias)
-    }
+    // pub fn forward(&self, features: &Tensor) -> Result<Tensor> {
+    //     let x = self.dense.forward(features)?;
+    //     let x = gelu(&x)?;
+    //     let x = self.layer_norm.forward(&x)?;
+    //     let x = x.matmul(&self.weight)?;
+    //     x.add(&self.bias)
+    // }
 }
 
 #[derive(Debug)]
@@ -375,51 +376,51 @@ pub struct ContactPredictionHead {
 }
 
 impl ContactPredictionHead {
-    pub fn new(
-        in_features: usize,
-        prepend_bos: bool,
-        append_eos: bool,
-        bias: bool,
-        eos_idx: Option<usize>,
-        vb: VarBuilder,
-    ) -> Result<Self> {
-        if append_eos && eos_idx.is_none() {
-            return Err(candle_core::Error::Msg(
-                "Using an alphabet with eos token, but no eos token was passed in.".to_string(),
-            ));
-        }
+    // pub fn new(
+    //     in_features: usize,
+    //     prepend_bos: bool,
+    //     append_eos: bool,
+    //     bias: bool,
+    //     eos_idx: Option<usize>,
+    //     vb: VarBuilder,
+    // ) -> Result<Self> {
+    //     if append_eos && eos_idx.is_none() {
+    //         return Err(candle_core::Error::Msg(
+    //             "Using an alphabet with eos token, but no eos token was passed in.".to_string(),
+    //         ));
+    //     }
 
-        Ok(Self {
-            in_features,
-            prepend_bos,
-            append_eos,
-            eos_idx,
-            regression: candle_nn::linear(in_features, 1, vb)?,
-        })
-    }
+    //     Ok(Self {
+    //         in_features,
+    //         prepend_bos,
+    //         append_eos,
+    //         eos_idx,
+    //         regression: candle_nn::linear(in_features, 1, vb)?,
+    //     })
+    // }
 
-    pub fn forward(&self, tokens: &Tensor, attentions: &Tensor) -> Result<Tensor> {
-        let mut attns = attentions.clone();
+    // pub fn forward(&self, tokens: &Tensor, attentions: &Tensor) -> Result<Tensor> {
+    //     let mut attns = attentions.clone();
 
-        if self.append_eos {
-            let eos_mask = tokens.ne_scalar(self.eos_idx.unwrap() as i64)?;
-            let eos_mask = eos_mask.unsqueeze(1)?.matmul(&eos_mask.unsqueeze(2)?)?;
-            attns = attns.broadcast_mul(&eos_mask.unsqueeze(1)?.unsqueeze(2)?)?;
-            attns = attns.slice((.., .., .., ..-1, ..-1))?;
-        }
+    //     if self.append_eos {
+    //         let eos_mask = tokens.ne_scalar(self.eos_idx.unwrap() as i64)?;
+    //         let eos_mask = eos_mask.unsqueeze(1)?.matmul(&eos_mask.unsqueeze(2)?)?;
+    //         attns = attns.broadcast_mul(&eos_mask.unsqueeze(1)?.unsqueeze(2)?)?;
+    //         attns = attns.slice((.., .., .., ..-1, ..-1))?;
+    //     }
 
-        if self.prepend_bos {
-            attns = attns.slice((.., .., .., 1.., 1..))?;
-        }
+    //     if self.prepend_bos {
+    //         attns = attns.slice((.., .., .., 1.., 1..))?;
+    //     }
 
-        let (batch_size, layers, heads, seqlen, _) = attns.dims5()?;
-        let attns = attns.reshape((batch_size, layers * heads, seqlen, seqlen))?;
+    //     let (batch_size, layers, heads, seqlen, _) = attns.dims5()?;
+    //     let attns = attns.reshape((batch_size, layers * heads, seqlen, seqlen))?;
 
-        let attns = apc(&symmetrize(&attns)?)?;
-        let attns = attns.permute((0, 2, 3, 1))?;
-        let out = self.regression.forward(&attns)?;
-        out.squeeze(3)?.sigmoid()
-    }
+    //     let attns = apc(&symmetrize(&attns)?)?;
+    //     let attns = attns.permute((0, 2, 3, 1))?;
+    //     let out = self.regression.forward(&attns)?;
+    //     out.squeeze(3)?.sigmoid()
+    // }
 }
 
 #[derive(Debug)]
