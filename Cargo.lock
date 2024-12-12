@@ -2549,6 +2549,7 @@ dependencies = [
  "ferritin-test-data",
  "rand",
  "safetensors",
+ "serde",
  "tempfile",
  "tokenizers 0.21.0",
 ]
@@ -2566,6 +2567,7 @@ dependencies = [
  "candle-nn",
  "clap",
  "ferritin-amplify",
+ "ferritin-esm",
  "ferritin-test-data",
  "serde_json",
  "tempfile",
