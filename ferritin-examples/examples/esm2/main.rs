@@ -35,8 +35,8 @@ struct Args {
 }
 
 impl Args {
-    // fn build_model_and_tokenizer(&self) -> Result<(ESM2, Tokenizer)> {
-    fn build_model_and_tokenizer(&self) -> Result<((), Tokenizer)> {
+    fn build_model_and_tokenizer(&self) -> Result<(ESM2, Tokenizer)> {
+        // fn build_model_and_tokenizer(&self) -> Result<((), Tokenizer)> {
         let device = device(self.cpu)?;
         let (model_id, revision) = match self.model_id.as_str() {
             "8M" => ("facebook/esm2_t6_8M_UR50D", "main"),
@@ -48,16 +48,12 @@ impl Args {
             _ => panic!("Invalid ESM models."),
         };
         let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());
-        let (config_filename, tokenizer_config, tokenizer_vocab, weights_filename) = {
+        let (config_filename, weights_filename) = {
             let api = Api::new()?;
             let api = api.repo(repo);
             let config = api.get("config.json")?;
-            // let tokenizer = api.get("tokenizer.json")?;
-            let tokenizer_cfg = api.get("tokenizer_config.json")?;
-            let vocab = api.get("vocab.txt")?;
             let weights = api.get("model.safetensors")?;
-            // (config, tokenizer, weights)
-            (config, tokenizer_cfg, vocab, weights)
+            (config, weights)
         };
         let config_str = std::fs::read_to_string(config_filename)?;
         let config_str = config_str
@@ -65,42 +61,14 @@ impl Args {
             .replace("Swiglu", "swiglu");
         let config: Config = serde_json::from_str(&config_str)?;
 
-        let vocab_path = tokenizer_vocab.to_str().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Failed to convert path to string",
-            )
-        })?;
-        // let model = WordLevel::from_file(vocab_path, "<unk>".to_string())?;
-        // Create WordLevel model with normalized options
-        let model = WordLevel::builder()
-            .files(vocab_path.to_string())
-            .unk_token("<unk>".to_string())
-            // Optionally add other special tokens
-            .build()
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let vb =
+            unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
+        let model = ESM2::load(vb, &config);
 
-        println!("Model: {:?}", model);
-
-        // let tokenizer = TokenizerBuilder::new().with_model(model).build()?;
-
-        //let tokenizer = Tokenizer::from_pretrained("facebook/esm2_t6_8M_UR50D")?;
-
-        let tokenizer: Tokenizer = TokenizerBuilder::new()
-            .with_model(model)
-            .with_pre_tokenizer(None) // Important for character-level tokenization
-            .build()
-            .map_err(|e| anyhow::anyhow!(e))?
-            .into();
-        // .map_err(|e| anyhow::anyhow!(e))?;
-
-        // let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
-        // let vb =
-        //     unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
-        // let model = ESM2::load(vb, &config);
+        let tokenizer = ESM2::load_tokenizer()?;
 
         // Ok((model, tokenizer))
-        Ok(((), tokenizer))
+        Ok((model, tokenizer))
     }
 }
 

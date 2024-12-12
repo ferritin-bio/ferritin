@@ -47,30 +47,33 @@ impl ESM2Config {
 
 /// ESM2 Architecture
 pub struct ESM2 {
-    num_layers: i32,
-    embed_dim: i32,
-    attention_heads: i32,
-    alphabet_size: i32,
-    padding_idx: i32,
-    mask_idx: i32,
-    cls_idx: i32,
-    eos_idx: i32,
-    prepend_bos: bool,
-    append_eos: bool,
-    token_dropout: bool,
-    embed_scale: f32,
-    embed_tokens: nn::Embedding,
-    layers: Vec<TransformerLayer>,
-    contact_head: ContactPredictionHead,
-    emb_layer_norm_after: ESM1bLayerNorm,
-    lm_head: RobertaLMHead,
+    // num_layers: i32,
+    // embed_dim: i32,
+    // attention_heads: i32,
+    // alphabet_size: i32,
+    // padding_idx: i32,
+    // mask_idx: i32,
+    // cls_idx: i32,
+    // eos_idx: i32,
+    // prepend_bos: bool,
+    // append_eos: bool,
+    // token_dropout: bool,
+    // embed_scale: f32,
+    // embed_tokens: nn::Embedding,
+    // layers: Vec<TransformerLayer>,
+    // contact_head: ContactPredictionHead,
+    // emb_layer_norm_after: ESM1bLayerNorm,
+    // lm_head: RobertaLMHead,
 }
 
 impl ESM2 {
-    pub fn load(vb: VarBuilder, config: &ESM2Config) {}
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Self {
+        Self {}
+    }
     // pub fn get_device(&self) -> &Device {
     //     self.freqs_cis.device()
     // }
+    //
     // pub fn new(
     //     num_layers: i32,
     //     embed_dim: i32,
@@ -246,9 +249,9 @@ impl ESM2 {
     //     Ok(result.remove("contacts").unwrap())
     // }
 
-    // pub fn load_tokenizer() -> Result<Tokenizer> {
-    //     let tokenizer_bytes = include_bytes!("tokenizer.json");
-    //     Tokenizer::from_bytes(tokenizer_bytes)
-    //         .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
-    // }
+    pub fn load_tokenizer() -> Result<Tokenizer> {
+        let tokenizer_bytes = include_bytes!("tokenizer.json");
+        Tokenizer::from_bytes(tokenizer_bytes)
+            .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
+    }
 }
