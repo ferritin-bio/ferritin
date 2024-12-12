@@ -1,14 +1,15 @@
 use crate::esm::utils::constants::esm3::SEQUENCE_VOCAB;
-use anyhow::Result;
+// use anyhow::Result;
+use candle_core::{Error, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokenizers::models::bpe::{BpeBuilder, BPE};
 use tokenizers::processors::template::{Template, TemplateProcessing};
 use tokenizers::processors::PostProcessorWrapper;
-use tokenizers::{AddedToken, Tokenizer};
+use tokenizers::{AddedToken, Encoding, Tokenizer};
 
 pub trait EsmTokenizerBase {
-    fn encode(&self) -> Result<()>;
+    fn encode(&self, sequence: &str, add_special_tokens: bool) -> Result<Encoding>;
     fn decode(&self) -> Result<()>;
     fn mask_token(&self) -> &str;
     fn mask_token_id(&self) -> u32;
@@ -46,7 +47,7 @@ impl EsmSequenceTokenizer {
         let bpe: BPE = bpe_builder
             .unk_token(unk_token.to_string())
             .build()
-            .map_err(|e| anyhow::anyhow!("Failed to build BPE tokenizer: {}", e))?;
+            .map_err(|e| Error::Msg(format!("Failed to build BPE tokenizer: {}", e)))?;
 
         let mut tokenizer = Tokenizer::new(bpe);
         let special_tokens = vec![
@@ -65,7 +66,8 @@ impl EsmSequenceTokenizer {
                 (cls_token, tokenizer.token_to_id(cls_token).unwrap()),
                 (eos_token, tokenizer.token_to_id(eos_token).unwrap()),
             ])
-            .build()?;
+            .build()
+            .map_err(|e| Error::Msg(format!("Failed to generate the postprocessor: {}", e)))?;
 
         tokenizer.with_post_processor(Some(PostProcessorWrapper::Template(post_processor)));
 
@@ -83,8 +85,10 @@ impl Default for EsmSequenceTokenizer {
 }
 
 impl EsmTokenizerBase for EsmSequenceTokenizer {
-    fn encode(&self) -> Result<()> {
-        todo!()
+    fn encode(&self, sequence: &str, add_special_tokens: bool) -> Result<Encoding> {
+        self.tokenizer
+            .encode(sequence, add_special_tokens)
+            .map_err(|e| Error::Msg(e.to_string()))
     }
 
     fn decode(&self) -> Result<()> {

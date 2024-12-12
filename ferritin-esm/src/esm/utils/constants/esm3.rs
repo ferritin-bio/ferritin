@@ -47,7 +47,7 @@ const CHAIN_BREAK_STR: &str = "|";
 const SEQUENCE_BOS_STR: &str = "<cls>";
 const SEQUENCE_EOS_STR: &str = "<eos>";
 
-const MASK_STR_SHORT: &str = "_";
+pub const MASK_STR_SHORT: &str = "_";
 const SEQUENCE_MASK_STR: &str = "<mask>";
 const SASA_MASK_STR: &str = "<unk>";
 const SS8_MASK_STR: &str = "<unk>";
