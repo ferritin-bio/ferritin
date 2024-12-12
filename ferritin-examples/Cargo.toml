@@ -16,6 +16,7 @@ candle-metal-kernels = { workspace = true, optional = true }
 candle-nn.workspace = true
 clap = { version = "4.5.23", features = ["derive"] }
 ferritin-amplify = { path = "../ferritin-amplify" }
+ferritin-esm = { path = "../ferritin-esm" }
 serde_json.workspace = true
 
 
