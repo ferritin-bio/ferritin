@@ -1,8 +1,10 @@
 use super::modules::{ContactPredictionHead, ESM1bLayerNorm, RobertaLMHead, TransformerLayer};
 use candle_core::{DType, Device, Module, Result, Tensor};
 use candle_nn::{self as nn, VarBuilder};
+use serde::Deserialize;
 use tokenizers::Tokenizer;
 
+#[derive(Deserialize)]
 pub struct ESM2Config {
     num_layers: i32,
     num_attention_heads: i32,
@@ -65,6 +67,10 @@ pub struct ESM2 {
 }
 
 impl ESM2 {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) {}
+    // pub fn get_device(&self) -> &Device {
+    //     self.freqs_cis.device()
+    // }
     // pub fn new(
     //     num_layers: i32,
     //     embed_dim: i32,
