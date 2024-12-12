@@ -57,22 +57,22 @@ impl ESM1LayerNorm {
     // }
 }
 
-impl Module for ESM1LayerNorm {
-    // fn forward(&self, x: &Tensor) -> Result<Tensor> {
-    //     let dims: Vec<_> = (1..x.dims().len()).rev().collect();
-    //     let mean = x.mean_dim(dims.as_slice(), true)?;
-    //     let x_centered = x.broadcast_sub(&mean)?;
-    //     let var = x_centered.sqr()?.mean_dim(dims.as_slice(), true)?;
-    //     let scale = (&var + self.eps).sqrt()?.recip()?;
-    //     let normalized = x_centered.mul(&scale)?;
+// impl Module for ESM1LayerNorm {
+//     fn forward(&self, x: &Tensor) -> Result<Tensor> {
+//         let dims: Vec<_> = (1..x.dims().len()).rev().collect();
+//         let mean = x.mean_dim(dims.as_slice(), true)?;
+//         let x_centered = x.broadcast_sub(&mean)?;
+//         let var = x_centered.sqr()?.mean_dim(dims.as_slice(), true)?;
+//         let scale = (&var + self.eps).sqrt()?.recip()?;
+//         let normalized = x_centered.mul(&scale)?;
 
-    //     let weighted = normalized.mul(&self.weight)?;
-    //     match &self.bias {
-    //         Some(bias) => weighted.add(bias),
-    //         None => Ok(weighted),
-    //     }
-    // }
-}
+//         let weighted = normalized.mul(&self.weight)?;
+//         match &self.bias {
+//             Some(bias) => weighted.add(bias),
+//             None => Ok(weighted),
+//         }
+//     }
+// }
 
 pub type ESM1bLayerNorm = ESM1LayerNorm;
 
@@ -86,66 +86,66 @@ pub struct TransformerLayer {
 }
 
 impl TransformerLayer {
-    pub fn new(
-        embed_dim: usize,
-        ffn_embed_dim: usize,
-        attention_heads: usize,
-        add_bias_kv: bool,
-        use_esm1b_layer_norm: bool,
-        use_rotary_embeddings: bool,
-        vb: VarBuilder,
-    ) -> Result<Self> {
-        let norm_builder = vb.pp("layer_norm");
-        let layer_norm = ESM1LayerNorm::new(embed_dim, 1e-12, true, norm_builder)?;
+    // pub fn new(
+    //     embed_dim: usize,
+    //     ffn_embed_dim: usize,
+    //     attention_heads: usize,
+    //     add_bias_kv: bool,
+    //     use_esm1b_layer_norm: bool,
+    //     use_rotary_embeddings: bool,
+    //     vb: VarBuilder,
+    // ) -> Result<Self> {
+    //     let norm_builder = vb.pp("layer_norm");
+    //     let layer_norm = ESM1LayerNorm::new(embed_dim, 1e-12, true, norm_builder)?;
 
-        Ok(Self {
-            self_attn: MultiheadAttention::new(
-                embed_dim,
-                attention_heads,
-                add_bias_kv,
-                false,
-                use_rotary_embeddings,
-                vb.pp("self_attn"),
-            )?,
-            self_attn_layer_norm: layer_norm,
-            fc1: candle_nn::linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?,
-            fc2: candle_nn::linear(ffn_embed_dim, embed_dim, vb.pp("fc2"))?,
-            final_layer_norm: ESM1LayerNorm::new(
-                embed_dim,
-                1e-12,
-                true,
-                vb.pp("final_layer_norm"),
-            )?,
-        })
-    }
+    //     Ok(Self {
+    //         self_attn: MultiheadAttention::new(
+    //             embed_dim,
+    //             attention_heads,
+    //             add_bias_kv,
+    //             false,
+    //             use_rotary_embeddings,
+    //             vb.pp("self_attn"),
+    //         )?,
+    //         self_attn_layer_norm: layer_norm,
+    //         fc1: candle_nn::linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?,
+    //         fc2: candle_nn::linear(ffn_embed_dim, embed_dim, vb.pp("fc2"))?,
+    //         final_layer_norm: ESM1LayerNorm::new(
+    //             embed_dim,
+    //             1e-12,
+    //             true,
+    //             vb.pp("final_layer_norm"),
+    //         )?,
+    //     })
+    // }
 
-    pub fn forward(
-        &self,
-        x: &Tensor,
-        self_attn_mask: Option<&Tensor>,
-        self_attn_padding_mask: Option<&Tensor>,
-        need_head_weights: bool,
-    ) -> Result<(Tensor, Option<Tensor>)> {
-        let residual = x;
-        let x = self.self_attn_layer_norm.forward(x)?;
-        let (x, attn) = self.self_attn.forward_t(
-            &x,
-            &x,
-            &x,
-            self_attn_padding_mask,
-            need_head_weights,
-            self_attn_mask,
-        )?;
-        let x = x.add(residual)?;
+    // pub fn forward(
+    //     &self,
+    //     x: &Tensor,
+    //     self_attn_mask: Option<&Tensor>,
+    //     self_attn_padding_mask: Option<&Tensor>,
+    //     need_head_weights: bool,
+    // ) -> Result<(Tensor, Option<Tensor>)> {
+    //     let residual = x;
+    //     let x = self.self_attn_layer_norm.forward(x)?;
+    //     let (x, attn) = self.self_attn.forward_t(
+    //         &x,
+    //         &x,
+    //         &x,
+    //         self_attn_padding_mask,
+    //         need_head_weights,
+    //         self_attn_mask,
+    //     )?;
+    //     let x = x.add(residual)?;
 
-        let residual = &x;
-        let x = self.final_layer_norm.forward(&x)?;
-        let x = gelu(&self.fc1.forward(&x)?)?;
-        let x = self.fc2.forward(&x)?;
-        let x = x.add(residual)?;
+    //     let residual = &x;
+    //     let x = self.final_layer_norm.forward(&x)?;
+    //     let x = gelu(&self.fc1.forward(&x)?)?;
+    //     let x = self.fc2.forward(&x)?;
+    //     let x = x.add(residual)?;
 
-        Ok((x, attn))
-    }
+    //     Ok((x, attn))
+    // }
 }
 
 #[derive(Debug)]

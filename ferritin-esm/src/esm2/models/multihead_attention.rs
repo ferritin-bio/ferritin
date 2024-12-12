@@ -56,6 +56,7 @@ impl FairseqIncrementalState {
     }
 }
 
+#[derive(Debug)]
 pub struct MultiheadAttention {
     embed_dim: i64,
     num_heads: i64,
