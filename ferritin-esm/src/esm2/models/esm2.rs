@@ -293,3 +293,20 @@ impl ESM2 {
             .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_tokenizer_load() -> Result<()> {
+        let tokenizer = ESM2::load_tokenizer()?;
+        let text = "MLKLRV";
+        let encoding = tokenizer
+            .encode(text, false)
+            .map_err(|e| candle_core::Error::Msg(format!("Failed to encode: {}", e)))?;
+        let tokens = encoding.get_tokens();
+        assert_eq!(tokens.len(), 6);
+        assert_eq!(tokens, &["M", "L", "K", "L", "R", "V"]);
+        Ok(())
+    }
+}
