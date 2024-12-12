@@ -1,0 +1,152 @@
+use anyhow::{Error as E, Result};
+use candle_core::{DType, Tensor, D};
+use candle_examples::device;
+use candle_hf_hub::{api::sync::Api, Repo, RepoType};
+use candle_nn::VarBuilder;
+use clap::Parser;
+use ferritin_esm::{ESM2Config as Config, ESM2};
+use std::path::Path;
+use tokenizers::decoders::Decoder;
+use tokenizers::models::wordlevel::{WordLevel, WordLevelBuilder};
+use tokenizers::normalizers::BertNormalizer;
+use tokenizers::{Tokenizer, TokenizerBuilder, TokenizerImpl};
+
+pub const DTYPE: DType = DType::F32;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Run on CPU rather than on GPU.
+    #[arg(long)]
+    cpu: bool,
+
+    /// Which AMPLIFY Model to use, either '120M' or '350M'.
+    ///
+    #[arg(long, value_parser = ["8M", "35M", "150M", "650M", "3B", "15B"], default_value = "35M")]
+    model_id: String,
+
+    /// Protein String
+    #[arg(long)]
+    protein_string: Option<String>,
+
+    /// Path to a protein FASTA file
+    #[arg(long)]
+    protein_fasta: Option<std::path::PathBuf>,
+}
+
+impl Args {
+    // fn build_model_and_tokenizer(&self) -> Result<(ESM2, Tokenizer)> {
+    fn build_model_and_tokenizer(&self) -> Result<((), Tokenizer)> {
+        let device = device(self.cpu)?;
+        let (model_id, revision) = match self.model_id.as_str() {
+            "8M" => ("facebook/esm2_t6_8M_UR50D", "main"),
+            "35M" => ("facebook/esm2_t12_35M_UR50D", "main"),
+            "150M" => ("facebook/esm2_t30_150M_UR50D", "main"),
+            "650M" => ("facebook/esm2_t33_650M_UR50D", "main"),
+            "3B" => ("facebook/esm2_t36_3B_UR50D", "main"),
+            "15B" => ("facebook/esm2_t48_15B_UR50D", "main"),
+            _ => panic!("Invalid ESM models."),
+        };
+        let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());
+        let (config_filename, tokenizer_config, tokenizer_vocab, weights_filename) = {
+            let api = Api::new()?;
+            let api = api.repo(repo);
+            let config = api.get("config.json")?;
+            // let tokenizer = api.get("tokenizer.json")?;
+            let tokenizer_cfg = api.get("tokenizer_config.json")?;
+            let vocab = api.get("vocab.txt")?;
+            let weights = api.get("model.safetensors")?;
+            // (config, tokenizer, weights)
+            (config, tokenizer_cfg, vocab, weights)
+        };
+        let config_str = std::fs::read_to_string(config_filename)?;
+        let config_str = config_str
+            .replace("SwiGLU", "swiglu")
+            .replace("Swiglu", "swiglu");
+        let config: Config = serde_json::from_str(&config_str)?;
+
+        let vocab_path = tokenizer_vocab.to_str().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Failed to convert path to string",
+            )
+        })?;
+        // let model = WordLevel::from_file(vocab_path, "<unk>".to_string())?;
+        // Create WordLevel model with normalized options
+        let model = WordLevel::builder()
+            .files(vocab_path.to_string())
+            .unk_token("<unk>".to_string())
+            // Optionally add other special tokens
+            .build()
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        println!("Model: {:?}", model);
+
+        // let tokenizer = TokenizerBuilder::new().with_model(model).build()?;
+
+        //let tokenizer = Tokenizer::from_pretrained("facebook/esm2_t6_8M_UR50D")?;
+
+        let tokenizer: Tokenizer = TokenizerBuilder::new()
+            .with_model(model)
+            .with_pre_tokenizer(None) // Important for character-level tokenization
+            .build()
+            .map_err(|e| anyhow::anyhow!(e))?
+            .into();
+        // .map_err(|e| anyhow::anyhow!(e))?;
+
+        // let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
+        // let vb =
+        //     unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
+        // let model = ESM2::load(vb, &config);
+
+        // Ok((model, tokenizer))
+        Ok(((), tokenizer))
+    }
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+
+    println!("Loading the Model and Tokenizer.......");
+    let (model, tokenizer) = args.build_model_and_tokenizer()?;
+    // let device = &model.get_device();
+    let device = device(false)?;
+
+    let protein_sequences = if let Some(seq) = args.protein_string {
+        vec![seq]
+    } else if let Some(fasta_path) = args.protein_fasta {
+        todo!("fasta processing unimplimented")
+        // std::fs::read_to_string(fasta_path)?
+    } else {
+        return Err(E::msg(
+            "Either protein_string or protein_fasta must be provided",
+        ));
+    };
+
+    for prot in protein_sequences.iter() {
+        // let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
+
+        let tokens = tokenizer
+            .encode(prot.to_string(), false)
+            .map_err(E::msg)?
+            .get_ids()
+            .to_vec();
+
+        let token_ids = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
+
+        println!("token_ids");
+        // println!("Encoding.......");
+        // let encoded = model.forward(&token_ids, None, false, false)?;
+
+        // println!("Predicting.......");
+        // let predictions = encoded.logits.argmax(D::Minus1)?;
+
+        // println!("Decoding.......");
+        // let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
+        // let decoded = tokenizer.decode(indices.as_slice(), true);
+
+        // println!("Decoded: {:?}, ", decoded);
+    }
+
+    Ok(())
+}
