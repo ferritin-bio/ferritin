@@ -6,15 +6,15 @@
 use candle_core::{Device, Module, Result, Tensor};
 use candle_nn::{init, linear, ops, VarBuilder};
 use std::collections::HashMap;
-use uuid::Uuid;
+// use uuid::Uuid;
 
-pub fn utils_softmax(x: &Tensor, dim: i64, onnx_trace: bool) -> Result<Tensor> {
-    if onnx_trace {
-        x.to_dtype(candle_core::DType::F32)?.softmax(dim)
-    } else {
-        x.softmax(dim)
-    }
-}
+// pub fn utils_softmax(x: &Tensor, dim: i64, onnx_trace: bool) -> Result<Tensor> {
+//     if onnx_trace {
+//         x.to_dtype(candle_core::DType::F32)?.softmax(dim)
+//     } else {
+//         x.softmax(dim)
+//     }
+// }
 
 pub struct FairseqIncrementalState {
     incremental_state_id: String,

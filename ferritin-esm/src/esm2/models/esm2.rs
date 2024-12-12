@@ -3,8 +3,6 @@ use candle_core::{DType, Device, Module, Result, Tensor};
 use candle_nn::{self as nn, VarBuilder};
 use tokenizers::Tokenizer;
 
-
-
 pub struct ESM2Config {
     num_layers: i32,
     num_attention_heads: i32,
@@ -14,15 +12,16 @@ pub struct ESM2Config {
 }
 impl ESM2Config {
     pub fn esm2_t36_3B_UR50() -> Self {
-        num_layers: 36;
-        num_attention_heads: 40;
-        embed_dim: 30;
-        attention_heads: 20;
-        alphabet_size: 33;
-        // layer_norm_eps: 1e-05,
+        Self {
+            num_layers: 36,
+            num_attention_heads: 40,
+            embed_dim: 30,
+            attention_heads: 20,
+            alphabet_size: 33,
+            // layer_norm_eps: 1e-05,
+        }
     }
 }
-
 
 //   "hidden_size": 2560,
 //   "initializer_range": 0.02,

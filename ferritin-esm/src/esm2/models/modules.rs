@@ -10,27 +10,27 @@ use std::f64::consts::PI;
 use super::axial_attention::{ColumnSelfAttention, RowSelfAttention};
 use super::multihead_attention::MultiheadAttention;
 
-fn gelu(x: &Tensor) -> Result<Tensor> {
-    let x_sqrt2 = x.div_scalar(2f64.sqrt())?;
-    let x_half = x.div_scalar(2.)?;
-    let erf = x_sqrt2.erf()?;
-    x_half.mul(&(erf.add_scalar(1.))?)
-}
+// fn gelu(x: &Tensor) -> Result<Tensor> {
+//     let x_sqrt2 = x.div_scalar(2f64.sqrt())?;
+//     let x_half = x.div_scalar(2.)?;
+//     let erf = x_sqrt2.erf()?;
+//     x_half.mul(&(erf.add_scalar(1.))?)
+// }
 
-fn symmetrize(x: &Tensor) -> Result<Tensor> {
-    let xt = x.transpose(-1, -2)?;
-    x.add(&xt)
-}
+// fn symmetrize(x: &Tensor) -> Result<Tensor> {
+//     let xt = x.transpose(-1, -2)?;
+//     x.add(&xt)
+// }
 
-fn apc(x: &Tensor) -> Result<Tensor> {
-    let a1 = x.sum_keepdim(-1)?;
-    let a2 = x.sum_keepdim(-2)?;
-    let a12 = x.sum_keepdim(&[-1, -2])?;
+// fn apc(x: &Tensor) -> Result<Tensor> {
+//     let a1 = x.sum_keepdim(-1)?;
+//     let a2 = x.sum_keepdim(-2)?;
+//     let a12 = x.sum_keepdim(&[-1, -2])?;
 
-    let avg = a1.matmul(&a2)?;
-    let avg = avg.div(&a12)?;
-    x.sub(&avg)
-}
+//     let avg = a1.matmul(&a2)?;
+//     let avg = avg.div(&a12)?;
+//     x.sub(&avg)
+// }
 
 #[derive(Debug)]
 pub struct ESM1LayerNorm {
@@ -40,38 +40,38 @@ pub struct ESM1LayerNorm {
 }
 
 impl ESM1LayerNorm {
-    pub fn new(size: usize, eps: f64, affine: bool, vb: VarBuilder) -> Result<Self> {
-        let weight = if affine {
-            vb.get_with_hints(size, "weight", candle_nn::Init::Const(1.))?
-        } else {
-            Tensor::ones(size, &Device::Cpu)?
-        };
+    // pub fn new(size: usize, eps: f64, affine: bool, vb: VarBuilder) -> Result<Self> {
+    //     let weight = if affine {
+    //         vb.get_with_hints(size, "weight", candle_nn::Init::Const(1.))?
+    //     } else {
+    //         Tensor::ones(size, &Device::Cpu)?
+    //     };
 
-        let bias = if affine {
-            Some(vb.get_with_hints(size, "bias", candle_nn::Init::Const(0.))?)
-        } else {
-            None
-        };
+    //     let bias = if affine {
+    //         Some(vb.get_with_hints(size, "bias", candle_nn::Init::Const(0.))?)
+    //     } else {
+    //         None
+    //     };
 
-        Ok(Self { weight, bias, eps })
-    }
+    //     Ok(Self { weight, bias, eps })
+    // }
 }
 
 impl Module for ESM1LayerNorm {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let dims: Vec<_> = (1..x.dims().len()).rev().collect();
-        let mean = x.mean_dim(dims.as_slice(), true)?;
-        let x_centered = x.broadcast_sub(&mean)?;
-        let var = x_centered.sqr()?.mean_dim(dims.as_slice(), true)?;
-        let scale = (&var + self.eps).sqrt()?.recip()?;
-        let normalized = x_centered.mul(&scale)?;
+    // fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    //     let dims: Vec<_> = (1..x.dims().len()).rev().collect();
+    //     let mean = x.mean_dim(dims.as_slice(), true)?;
+    //     let x_centered = x.broadcast_sub(&mean)?;
+    //     let var = x_centered.sqr()?.mean_dim(dims.as_slice(), true)?;
+    //     let scale = (&var + self.eps).sqrt()?.recip()?;
+    //     let normalized = x_centered.mul(&scale)?;
 
-        let weighted = normalized.mul(&self.weight)?;
-        match &self.bias {
-            Some(bias) => weighted.add(bias),
-            None => Ok(weighted),
-        }
-    }
+    //     let weighted = normalized.mul(&self.weight)?;
+    //     match &self.bias {
+    //         Some(bias) => weighted.add(bias),
+    //         None => Ok(weighted),
+    //     }
+    // }
 }
 
 pub type ESM1bLayerNorm = ESM1LayerNorm;
