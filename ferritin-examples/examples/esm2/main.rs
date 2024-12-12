@@ -6,10 +6,7 @@ use candle_nn::VarBuilder;
 use clap::Parser;
 use ferritin_esm::{ESM2Config as Config, ESM2};
 use std::path::Path;
-use tokenizers::decoders::Decoder;
-use tokenizers::models::wordlevel::{WordLevel, WordLevelBuilder};
-use tokenizers::normalizers::BertNormalizer;
-use tokenizers::{Tokenizer, TokenizerBuilder, TokenizerImpl};
+use tokenizers::Tokenizer;
 
 pub const DTYPE: DType = DType::F32;
 
@@ -56,16 +53,26 @@ impl Args {
             (config, weights)
         };
         let config_str = std::fs::read_to_string(config_filename)?;
+
         let config_str = config_str
             .replace("SwiGLU", "swiglu")
             .replace("Swiglu", "swiglu");
+
+        println!("JSON: {:#?}", &config_str);
+
         let config: Config = serde_json::from_str(&config_str)?;
 
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
-        let model = ESM2::load(vb, &config);
 
+        // Still an Issue here
         let tokenizer = ESM2::load_tokenizer()?;
+        let seq = "AAAAPAPAPAPAPAGRGRTEPPDDDNDNM";
+
+        let encoded = tokenizer.encode(seq.to_string(), false);
+        println!("Encoded: {:?}", encoded);
+
+        let model = ESM2::load(vb, &config);
 
         // Ok((model, tokenizer))
         Ok((model, tokenizer))

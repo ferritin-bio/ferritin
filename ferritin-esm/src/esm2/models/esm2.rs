@@ -3,24 +3,62 @@ use candle_core::{DType, Device, Module, Result, Tensor};
 use candle_nn::{self as nn, VarBuilder};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
-
 #[derive(Deserialize)]
+
 pub struct ESM2Config {
-    num_layers: i32,
     num_attention_heads: i32,
-    embed_dim: i32,
-    attention_heads: i32,
-    alphabet_size: i32,
+    attention_probs_dropout_prob: f32,
+    classifier_dropout: Option<f32>,
+    emb_layer_norm_before: bool,
+    esmfold_config: Option<String>,
+    hidden_act: String,
+    hidden_dropout_prob: f32,
+    hidden_size: i32,
+    initializer_range: f32,
+    intermediate_size: i32,
+    is_folding_model: bool,
+    layer_norm_eps: f32,
+    mask_token_id: i32,
+    max_position_embeddings: i32,
+    model_type: String,
+    num_hidden_layers: i32,
+    pad_token_id: i32,
+    position_embedding_type: String,
+    token_dropout: bool,
+    torch_dtype: String,
+    transformers_version: String,
+    use_cache: bool,
+    vocab_list: Option<Vec<String>>,
+    vocab_size: i32,
 }
+
 impl ESM2Config {
-    pub fn esm2_t36_3B_UR50() -> Self {
+    pub fn esm2_t36_3b_ur50() -> Self {
         Self {
-            num_layers: 36,
             num_attention_heads: 40,
-            embed_dim: 30,
-            attention_heads: 20,
-            alphabet_size: 33,
-            // layer_norm_eps: 1e-05,
+            attention_probs_dropout_prob: 0.0,
+            classifier_dropout: None,
+            emb_layer_norm_before: false,
+            esmfold_config: None,
+            hidden_act: "gelu".to_string(),
+            hidden_dropout_prob: 0.0,
+            hidden_size: 2560,
+            initializer_range: 0.02,
+            intermediate_size: 10240,
+            is_folding_model: false,
+            layer_norm_eps: 1e-5,
+            mask_token_id: 32,
+            max_position_embeddings: 1026,
+            model_type: "esm".to_string(),
+            num_hidden_layers: 36,
+            pad_token_id: 1,
+            position_embedding_type: "rotary".to_string(),
+            token_dropout: true,
+            torch_dtype: "float32".to_string(),
+            transformers_version: "4.25.0.dev0".to_string(),
+            use_cache: true,
+            vocab_list: None,
+            vocab_size: 33,
         }
     }
 }
