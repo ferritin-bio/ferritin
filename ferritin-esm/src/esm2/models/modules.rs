@@ -3,12 +3,11 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use super::axial_attention::{ColumnSelfAttention, RowSelfAttention};
+use super::multihead_attention::MultiheadAttention;
 use candle_core::{DType, Device, Module, Result, Tensor};
 use candle_nn::{VarBuilder, VarMap};
 use std::f64::consts::PI;
-
-use super::axial_attention::{ColumnSelfAttention, RowSelfAttention};
-use super::multihead_attention::MultiheadAttention;
 
 // fn gelu(x: &Tensor) -> Result<Tensor> {
 //     let x_sqrt2 = x.div_scalar(2f64.sqrt())?;
@@ -150,76 +149,76 @@ impl TransformerLayer {
 
 #[derive(Debug)]
 pub struct AxialTransformerLayer {
-    row_self_attention: NormalizedResidualBlock<RowSelfAttention>,
-    column_self_attention: NormalizedResidualBlock<ColumnSelfAttention>,
-    feed_forward_layer: NormalizedResidualBlock<FeedForwardNetwork>,
+    // row_self_attention: NormalizedResidualBlock<RowSelfAttention>,
+    // column_self_attention: NormalizedResidualBlock<ColumnSelfAttention>,
+    // feed_forward_layer: NormalizedResidualBlock<FeedForwardNetwork>,
 }
 
 impl AxialTransformerLayer {
-    pub fn new(
-        embedding_dim: usize,
-        ffn_embedding_dim: usize,
-        num_attention_heads: usize,
-        dropout: f64,
-        attention_dropout: f64,
-        activation_dropout: f64,
-        max_tokens_per_msa: usize,
-        vb: VarBuilder,
-    ) -> Result<Self> {
-        let row_attn = RowSelfAttention::new(
-            embedding_dim,
-            num_attention_heads,
-            dropout,
-            max_tokens_per_msa,
-            vb.pp("row_self_attn"),
-        )?;
+    // pub fn new(
+    //     embedding_dim: usize,
+    //     ffn_embedding_dim: usize,
+    //     num_attention_heads: usize,
+    //     dropout: f64,
+    //     attention_dropout: f64,
+    //     activation_dropout: f64,
+    //     max_tokens_per_msa: usize,
+    //     vb: VarBuilder,
+    // ) -> Result<Self> {
+    //     let row_attn = RowSelfAttention::new(
+    //         embedding_dim,
+    //         num_attention_heads,
+    //         dropout,
+    //         max_tokens_per_msa,
+    //         vb.pp("row_self_attn"),
+    //     )?;
 
-        let col_attn = ColumnSelfAttention::new(
-            embedding_dim,
-            num_attention_heads,
-            dropout,
-            max_tokens_per_msa,
-            vb.pp("col_self_attn"),
-        )?;
+    //     let col_attn = ColumnSelfAttention::new(
+    //         embedding_dim,
+    //         num_attention_heads,
+    //         dropout,
+    //         max_tokens_per_msa,
+    //         vb.pp("col_self_attn"),
+    //     )?;
 
-        let ffn = FeedForwardNetwork::new(
-            embedding_dim,
-            ffn_embedding_dim,
-            activation_dropout,
-            max_tokens_per_msa,
-            vb.pp("ffn"),
-        )?;
+    //     let ffn = FeedForwardNetwork::new(
+    //         embedding_dim,
+    //         ffn_embedding_dim,
+    //         activation_dropout,
+    //         max_tokens_per_msa,
+    //         vb.pp("ffn"),
+    //     )?;
 
-        Ok(Self {
-            row_self_attention: NormalizedResidualBlock::new(row_attn, embedding_dim, dropout)?,
-            column_self_attention: NormalizedResidualBlock::new(col_attn, embedding_dim, dropout)?,
-            feed_forward_layer: NormalizedResidualBlock::new(ffn, embedding_dim, dropout)?,
-        })
-    }
+    //     Ok(Self {
+    //         row_self_attention: NormalizedResidualBlock::new(row_attn, embedding_dim, dropout)?,
+    //         column_self_attention: NormalizedResidualBlock::new(col_attn, embedding_dim, dropout)?,
+    //         feed_forward_layer: NormalizedResidualBlock::new(ffn, embedding_dim, dropout)?,
+    //     })
+    // }
 
-    pub fn forward(
-        &self,
-        x: &Tensor,
-        self_attn_mask: Option<&Tensor>,
-        self_attn_padding_mask: Option<&Tensor>,
-        need_head_weights: bool,
-    ) -> Result<(Tensor, Option<Tensor>, Option<Tensor>)> {
-        let (x, row_attn) =
-            self.row_self_attention
-                .forward_t(x, self_attn_mask, self_attn_padding_mask)?;
+    // pub fn forward(
+    //     &self,
+    //     x: &Tensor,
+    //     self_attn_mask: Option<&Tensor>,
+    //     self_attn_padding_mask: Option<&Tensor>,
+    //     need_head_weights: bool,
+    // ) -> Result<(Tensor, Option<Tensor>, Option<Tensor>)> {
+    //     let (x, row_attn) =
+    //         self.row_self_attention
+    //             .forward_t(x, self_attn_mask, self_attn_padding_mask)?;
 
-        let (x, col_attn) =
-            self.column_self_attention
-                .forward_t(&x, self_attn_mask, self_attn_padding_mask)?;
+    //     let (x, col_attn) =
+    //         self.column_self_attention
+    //             .forward_t(&x, self_attn_mask, self_attn_padding_mask)?;
 
-        let x = self.feed_forward_layer.forward(&x)?;
+    //     let x = self.feed_forward_layer.forward(&x)?;
 
-        if need_head_weights {
-            Ok((x, Some(col_attn), Some(row_attn)))
-        } else {
-            Ok((x, None, None))
-        }
-    }
+    //     if need_head_weights {
+    //         Ok((x, Some(col_attn), Some(row_attn)))
+    //     } else {
+    //         Ok((x, None, None))
+    //     }
+    // }
 }
 
 #[derive(Debug)]
@@ -230,41 +229,41 @@ pub struct LearnedPositionalEmbedding {
 }
 
 impl LearnedPositionalEmbedding {
-    pub fn new(
-        num_embeddings: usize,
-        embedding_dim: usize,
-        padding_idx: usize,
-        vb: VarBuilder,
-    ) -> Result<Self> {
-        let num_embeddings = if padding_idx > 0 {
-            num_embeddings + padding_idx + 1
-        } else {
-            num_embeddings
-        };
+    // pub fn new(
+    //     num_embeddings: usize,
+    //     embedding_dim: usize,
+    //     padding_idx: usize,
+    //     vb: VarBuilder,
+    // ) -> Result<Self> {
+    //     let num_embeddings = if padding_idx > 0 {
+    //         num_embeddings + padding_idx + 1
+    //     } else {
+    //         num_embeddings
+    //     };
 
-        Ok(Self {
-            max_positions: num_embeddings,
-            embedding: candle_nn::embedding(num_embeddings, embedding_dim, vb)?,
-            padding_idx,
-        })
-    }
+    //     Ok(Self {
+    //         max_positions: num_embeddings,
+    //         embedding: candle_nn::embedding(num_embeddings, embedding_dim, vb)?,
+    //         padding_idx,
+    //     })
+    // }
 
-    pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let seq_len = x.dims()[1];
-        if seq_len > self.max_positions {
-            return Err(candle_core::Error::Msg(format!(
-                "sequence length {} above maximum sequence length of {}",
-                seq_len, self.max_positions
-            )));
-        }
+    // pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    //     let seq_len = x.dims()[1];
+    //     if seq_len > self.max_positions {
+    //         return Err(candle_core::Error::Msg(format!(
+    //             "sequence length {} above maximum sequence length of {}",
+    //             seq_len, self.max_positions
+    //         )));
+    //     }
 
-        let mask = x.ne_scalar(self.padding_idx as i64)?;
-        let cumsum = mask.cumsum(1)?;
-        let positions = cumsum.mul(&mask)?;
-        let positions = positions.add_scalar(self.padding_idx as i64)?;
+    //     let mask = x.ne_scalar(self.padding_idx as i64)?;
+    //     let cumsum = mask.cumsum(1)?;
+    //     let positions = cumsum.mul(&mask)?;
+    //     let positions = positions.add_scalar(self.padding_idx as i64)?;
 
-        self.embedding.forward(&positions)
-    }
+    //     self.embedding.forward(&positions)
+    // }
 }
 
 #[derive(Debug)]
@@ -275,63 +274,63 @@ pub struct SinusoidalPositionalEmbedding {
 }
 
 impl SinusoidalPositionalEmbedding {
-    pub fn new(embed_dim: usize, padding_idx: usize) -> Self {
-        Self {
-            embed_dim,
-            padding_idx,
-            weights: None,
-        }
-    }
+    // pub fn new(embed_dim: usize, padding_idx: usize) -> Self {
+    //     Self {
+    //         embed_dim,
+    //         padding_idx,
+    //         weights: None,
+    //     }
+    // }
 
-    pub fn forward(&mut self, x: &Tensor) -> Result<Tensor> {
-        let (bsz, seq_len) = (x.dims()[0], x.dims()[1]);
-        let max_pos = self.padding_idx + 1 + seq_len;
+    // pub fn forward(&mut self, x: &Tensor) -> Result<Tensor> {
+    //     let (bsz, seq_len) = (x.dims()[0], x.dims()[1]);
+    //     let max_pos = self.padding_idx + 1 + seq_len;
 
-        if self.weights.is_none() || max_pos > self.weights.as_ref().unwrap().dims()[0] {
-            self.weights = Some(self.get_embedding(max_pos)?);
-        }
+    //     if self.weights.is_none() || max_pos > self.weights.as_ref().unwrap().dims()[0] {
+    //         self.weights = Some(self.get_embedding(max_pos)?);
+    //     }
 
-        let positions = self.make_positions(x)?;
-        let embeddings = self.weights.as_ref().unwrap();
-        let out = embeddings.gather(&positions.flatten_all()?, 0)?;
-        out.reshape((bsz, seq_len, -1))
-    }
+    //     let positions = self.make_positions(x)?;
+    //     let embeddings = self.weights.as_ref().unwrap();
+    //     let out = embeddings.gather(&positions.flatten_all()?, 0)?;
+    //     out.reshape((bsz, seq_len, -1))
+    // }
 
-    fn make_positions(&self, x: &Tensor) -> Result<Tensor> {
-        let mask = x.ne_scalar(self.padding_idx as i64)?;
-        let range = Tensor::arange(0u32, x.dims()[1] as u32, &x.device())?;
-        let range = range.add_scalar((self.padding_idx + 1) as i64)?;
-        let positions = range.expand_as(x)?;
-        mask.mul(&positions)
-    }
+    // fn make_positions(&self, x: &Tensor) -> Result<Tensor> {
+    //     let mask = x.ne_scalar(self.padding_idx as i64)?;
+    //     let range = Tensor::arange(0u32, x.dims()[1] as u32, &x.device())?;
+    //     let range = range.add_scalar((self.padding_idx + 1) as i64)?;
+    //     let positions = range.expand_as(x)?;
+    //     mask.mul(&positions)
+    // }
 
-    fn get_embedding(&self, num_embeddings: usize) -> Result<Tensor> {
-        let half_dim = self.embed_dim / 2;
-        let emb = (PI / 10000f64).ln() / (half_dim as f64 - 1.0);
-        let emb = Tensor::arange(0f32, half_dim as f32, &Device::Cpu)?
-            .neg()?
-            .mul_scalar(emb as f32)?
-            .exp()?;
+    // fn get_embedding(&self, num_embeddings: usize) -> Result<Tensor> {
+    //     let half_dim = self.embed_dim / 2;
+    //     let emb = (PI / 10000f64).ln() / (half_dim as f64 - 1.0);
+    //     let emb = Tensor::arange(0f32, half_dim as f32, &Device::Cpu)?
+    //         .neg()?
+    //         .mul_scalar(emb as f32)?
+    //         .exp()?;
 
-        let pos = Tensor::arange(0f32, num_embeddings as f32, &Device::Cpu)?;
-        let emb = pos.unsqueeze(1)?.matmul(&emb.unsqueeze(0)?)?;
+    //     let pos = Tensor::arange(0f32, num_embeddings as f32, &Device::Cpu)?;
+    //     let emb = pos.unsqueeze(1)?.matmul(&emb.unsqueeze(0)?)?;
 
-        let sin = emb.sin()?;
-        let cos = emb.cos()?;
-        let emb = Tensor::cat(&[&sin, &cos], 1)?;
+    //     let sin = emb.sin()?;
+    //     let cos = emb.cos()?;
+    //     let emb = Tensor::cat(&[&sin, &cos], 1)?;
 
-        if self.embed_dim % 2 == 1 {
-            let zeros = Tensor::zeros((num_embeddings, 1), DType::F32, &Device::Cpu)?;
-            let emb = Tensor::cat(&[&emb, &zeros], 1)?;
-        }
+    //     if self.embed_dim % 2 == 1 {
+    //         let zeros = Tensor::zeros((num_embeddings, 1), DType::F32, &Device::Cpu)?;
+    //         let emb = Tensor::cat(&[&emb, &zeros], 1)?;
+    //     }
 
-        if self.padding_idx > 0 {
-            let zeros = Tensor::zeros(self.embed_dim, DType::F32, &Device::Cpu)?;
-            emb.index_select(&[self.padding_idx], &zeros, 0)?;
-        }
+    //     if self.padding_idx > 0 {
+    //         let zeros = Tensor::zeros(self.embed_dim, DType::F32, &Device::Cpu)?;
+    //         emb.index_select(&[self.padding_idx], &zeros, 0)?;
+    //     }
 
-        Ok(emb)
-    }
+    //     Ok(emb)
+    // }
 }
 
 #[derive(Debug)]
@@ -430,44 +429,44 @@ pub struct NormalizedResidualBlock<T: Module> {
     layer_norm: ESM1bLayerNorm,
 }
 
-impl<T: Module> NormalizedResidualBlock<T> {
-    pub fn new(layer: T, embedding_dim: usize, dropout: f64) -> Result<Self> {
-        let vb = VarBuilder::zeros();
-        Ok(Self {
-            layer,
-            dropout,
-            layer_norm: ESM1bLayerNorm::new(embedding_dim, 1e-12, true, vb)?,
-        })
-    }
+// impl<T: Module> NormalizedResidualBlock<T> {
+//     pub fn new(layer: T, embedding_dim: usize, dropout: f64) -> Result<Self> {
+//         let vb = VarBuilder::zeros();
+//         Ok(Self {
+//             layer,
+//             dropout,
+//             layer_norm: ESM1bLayerNorm::new(embedding_dim, 1e-12, true, vb)?,
+//         })
+//     }
 
-    pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let residual = x;
-        let x = self.layer_norm.forward(x)?;
-        let x = self.layer.forward(&x)?;
-        let x = if self.dropout > 0. {
-            x.dropout(self.dropout)?
-        } else {
-            x
-        };
-        x.add(residual)
-    }
+//     pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
+//         let residual = x;
+//         let x = self.layer_norm.forward(x)?;
+//         let x = self.layer.forward(&x)?;
+//         let x = if self.dropout > 0. {
+//             x.dropout(self.dropout)?
+//         } else {
+//             x
+//         };
+//         x.add(residual)
+//     }
 
-    pub fn forward_t<A, B>(&self, x: &Tensor, a: A, b: B) -> Result<(Tensor, Tensor)>
-    where
-        T: ModuleWithAttention<A, B>,
-    {
-        let residual = x;
-        let x = self.layer_norm.forward(x)?;
-        let (x, attn) = self.layer.forward_t(&x, a, b)?;
-        let x = if self.dropout > 0. {
-            x.dropout(self.dropout)?
-        } else {
-            x
-        };
-        let x = x.add(residual)?;
-        Ok((x, attn))
-    }
-}
+//     pub fn forward_t<A, B>(&self, x: &Tensor, a: A, b: B) -> Result<(Tensor, Tensor)>
+//     where
+//         T: ModuleWithAttention<A, B>,
+//     {
+//         let residual = x;
+//         let x = self.layer_norm.forward(x)?;
+//         let (x, attn) = self.layer.forward_t(&x, a, b)?;
+//         let x = if self.dropout > 0. {
+//             x.dropout(self.dropout)?
+//         } else {
+//             x
+//         };
+//         let x = x.add(residual)?;
+//         Ok((x, attn))
+//     }
+// }
 
 pub trait ModuleWithAttention<A, B> {
     fn forward_t(&self, x: &Tensor, a: A, b: B) -> Result<(Tensor, Tensor)>;
@@ -481,29 +480,29 @@ pub struct FeedForwardNetwork {
 }
 
 impl FeedForwardNetwork {
-    pub fn new(
-        embedding_dim: usize,
-        ffn_embedding_dim: usize,
-        activation_dropout: f64,
-        _max_tokens_per_msa: usize,
-        vb: VarBuilder,
-    ) -> Result<Self> {
-        Ok(Self {
-            fc1: candle_nn::linear(embedding_dim, ffn_embedding_dim, vb.pp("fc1"))?,
-            fc2: candle_nn::linear(ffn_embedding_dim, embedding_dim, vb.pp("fc2"))?,
-            activation_dropout,
-        })
-    }
+    // pub fn new(
+    //     embedding_dim: usize,
+    //     ffn_embedding_dim: usize,
+    //     activation_dropout: f64,
+    //     _max_tokens_per_msa: usize,
+    //     vb: VarBuilder,
+    // ) -> Result<Self> {
+    //     Ok(Self {
+    //         fc1: candle_nn::linear(embedding_dim, ffn_embedding_dim, vb.pp("fc1"))?,
+    //         fc2: candle_nn::linear(ffn_embedding_dim, embedding_dim, vb.pp("fc2"))?,
+    //         activation_dropout,
+    //     })
+    // }
 }
 
-impl Module for FeedForwardNetwork {
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let x = gelu(&self.fc1.forward(x)?)?;
-        let x = if self.activation_dropout > 0. {
-            x.dropout(self.activation_dropout)?
-        } else {
-            x
-        };
-        self.fc2.forward(&x)
-    }
-}
+// impl Module for FeedForwardNetwork {
+//     fn forward(&self, x: &Tensor) -> Result<Tensor> {
+//         let x = gelu(&self.fc1.forward(x)?)?;
+//         let x = if self.activation_dropout > 0. {
+//             x.dropout(self.activation_dropout)?
+//         } else {
+//             x
+//         };
+//         self.fc2.forward(&x)
+//     }
+// }
