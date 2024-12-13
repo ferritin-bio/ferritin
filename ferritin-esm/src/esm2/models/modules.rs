@@ -89,10 +89,9 @@ fn apc(x: &Tensor) -> Result<()> {
 pub struct TransformerLayer {
     self_attn: MultiheadAttention,
     self_attn_layer_norm: LayerNorm,
-    // self_attn_layer_norm: ESM1bLayerNorm,
     // fc1: nn::Linear,
     // fc2: nn::Linear,
-    // final_layer_norm: LayerNorm,
+    final_layer_norm: LayerNorm,
 }
 
 impl TransformerLayer {
@@ -120,7 +119,6 @@ impl TransformerLayer {
         let multi_head = MultiheadAttention::load(vb.pp("attention"), config)?;
         // let fc1 = nn::linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?;
         // let fc2 = nn::linear(ffn_embed_dim, embed_dim, vb.pp("fc2"))?;
-        // let final_layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm2"), config)?;
         let final_layer_norm =
             nn::layer_norm((*hidden_size as usize), ln_conf, vb.pp("LayerNorm"))?;
 
@@ -129,7 +127,7 @@ impl TransformerLayer {
             self_attn_layer_norm: layer_norm,
             // fc1,
             // fc2,
-            // final_layer_norm,
+            final_layer_norm,
         })
     }
 
@@ -166,33 +164,33 @@ impl TransformerLayer {
     //     })
     // }
 
-    // pub fn forward(
-    //     &self,
-    //     x: &Tensor,
-    //     self_attn_mask: Option<&Tensor>,
-    //     self_attn_padding_mask: Option<&Tensor>,
-    //     need_head_weights: bool,
-    // ) -> Result<(Tensor, Option<Tensor>)> {
-    //     let residual = x;
-    //     let x = self.self_attn_layer_norm.forward(x)?;
-    //     let (x, attn) = self.self_attn.forward_t(
-    //         &x,
-    //         &x,
-    //         &x,
-    //         self_attn_padding_mask,
-    //         need_head_weights,
-    //         self_attn_mask,
-    //     )?;
-    //     let x = x.add(residual)?;
+    pub fn forward(
+        &self,
+        x: &Tensor,
+        self_attn_mask: Option<&Tensor>,
+        self_attn_padding_mask: Option<&Tensor>,
+        need_head_weights: bool,
+    ) -> Result<(Tensor, Option<Tensor>)> {
+        let residual = x;
+        let x = self.self_attn_layer_norm.forward(x)?;
+        let (x, attn) = self.self_attn.forward_t(
+            &x,
+            &x,
+            &x,
+            self_attn_padding_mask,
+            need_head_weights,
+            self_attn_mask,
+        )?;
+        // let x = x.add(residual)?;
 
-    //     let residual = &x;
-    //     let x = self.final_layer_norm.forward(&x)?;
-    //     let x = gelu(&self.fc1.forward(&x)?)?;
-    //     let x = self.fc2.forward(&x)?;
-    //     let x = x.add(residual)?;
+        // let residual = &x;
+        // let x = self.final_layer_norm.forward(&x)?;
+        // let x = gelu(&self.fc1.forward(&x)?)?;
+        // let x = self.fc2.forward(&x)?;
+        // let x = x.add(residual)?;
 
-    //     Ok((x, attn))
-    // }
+        Ok((x, attn))
+    }
 }
 
 #[derive(Debug)]
