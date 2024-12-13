@@ -56,24 +56,15 @@ impl Args {
             .replace("SwiGLU", "swiglu")
             .replace("Swiglu", "swiglu");
 
-        println!("JSON: {:#?}", &config_str);
-
         let config: Config = serde_json::from_str(&config_str)?;
-
-        println!("Loaded!");
 
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
 
-        println!("VB!");
-
-        // Still an Issue here
-        println!("Loading Tokenizer!");
         let tokenizer = ESM2::load_tokenizer()?;
-        println!("Tokenizer loaded!");
-        let seq = "AAAAPAPAPAPAPAGRGRTEPPDDDNDNM";
 
-        let encoded = tokenizer.encode(seq.to_string(), false);
+        let protein = self.protein_string.as_ref().unwrap().as_str();
+        let encoded = tokenizer.encode(protein, false);
         println!("Encoded: {:?}", encoded);
 
         let model = ESM2::load(vb, &config);
