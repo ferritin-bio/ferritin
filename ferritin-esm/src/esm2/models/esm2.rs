@@ -104,7 +104,8 @@ pub struct ESM2 {
 }
 
 impl ESM2 {
-    // note: in thisload function we do NOT handle the embedding code which gets invoked only when the model is invokes with tokens
+    // note: in this load function we do NOT handle the embedding code
+    // which gets invoked only when the model is invokes with tokens
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let ESM2Config {
             intermediate_size,
@@ -134,12 +135,12 @@ impl ESM2 {
             vb.device(),
         )?;
         let embed_tokens = Embedding::new(embed_tensor, *intermediate_size as usize);
-
         let mut layers = Vec::with_capacity(*num_hidden_layers as usize);
         for i in 0..*num_hidden_layers {
-            let transformer_layer =
-                TransformerLayer::load(vb.pp(format!("esm.encoder.layer.{}", i)), config)?;
-            layers.push(transformer_layer);
+            layers.push(TransformerLayer::load(
+                vb.pp(format!("esm.encoder.layer.{}", i)),
+                config,
+            )?);
         }
         let contact_head = ContactPredictionHead::load(vb.pp("esm.contact_head"), config)?;
         let ln_conf = nn::LayerNormConfig {
@@ -148,11 +149,10 @@ impl ESM2 {
             affine: false,
         };
         let emb_layer_norm_after = nn::layer_norm(
-            (*hidden_size as usize),
+            *hidden_size as usize,
             ln_conf,
             vb.pp("esm.encoder.emb_layer_norm_after"),
         )?;
-
         let lm_head = RobertaLMHead::load(vb.pp("lm_head"), config)?;
 
         Ok(Self {

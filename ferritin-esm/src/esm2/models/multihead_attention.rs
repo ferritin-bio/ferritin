@@ -5,8 +5,9 @@
 
 use super::esm2::ESM2Config;
 use super::rotary_embedding::RotaryEmbedding;
-use candle_core::{Device, Module, Result, Tensor, D};
+use candle_core::{Module, Result, Tensor, D};
 use candle_nn::{self as nn, linear, ops, VarBuilder};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct FairseqIncrementalState {
@@ -133,10 +134,11 @@ impl MultiheadAttention {
         before_softmax: bool,
         need_head_weights: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
-        // Todo: heck these
+        // Todo: check these
         let num_heads = 10;
         let head_dim = 10;
-
+        let embed_dims = 200;
+        //
         let need_weights = need_weights || need_head_weights;
         let (tgt_len, bsz, embed_dim) = query.dims3()?;
         let q = self.q_proj.forward(query)?;
@@ -147,34 +149,25 @@ impl MultiheadAttention {
             .reshape((tgt_len, bsz * num_heads as usize, head_dim as usize))?
             .transpose(0, 1)?;
         k = k
-            .reshape((D::minus1, bsz * num_heads as usize, head_dim as usize))?
+            .reshape((D::Minus1, bsz * num_heads as usize, head_dim as usize))?
             .transpose(0, 1)?;
         v = v
-            .reshape((-1, bsz * num_heads as usize, head_dim as usize))?
+            .reshape((D::Minus1, bsz * num_heads as usize, head_dim as usize))?
             .transpose(0, 1)?;
         let src_len = k.dim(1)?;
-        let (q, k) = rot_emb.forward(&q, &k)?;
+        let (q, k) = self.rot_emb.unwrap().forward(&q, &k)?;
         let attn_weights = q.matmul(&k.transpose(1, 2)?)?;
-        let attn_weights = attn_weights.softmax(2)?;
+        // let attn_weights = attn_weights.softmax(2)?;
         // let attn_weights = ops::dropout(&attn_weights, self.dropout, self.training)?;
         let attn = attn_weights.matmul(&v)?;
         let attn = attn
             .transpose(0, 1)?
-            .reshape((tgt_len, bsz, self.embed_dim as usize))?;
+            .reshape((tgt_len, bsz, embed_dim as usize))?;
         let attn = self.out_proj.forward(&attn)?;
-        let attn_weights = if need_weights {
-            let attn_weights = attn_weights
-                .reshape((bsz, self.num_heads as usize, tgt_len, src_len))?
-                .transpose(0, 1)?;
-            if !need_head_weights {
-                Some(attn_weights.mean(0)?)
-            } else {
-                Some(attn_weights)
-            }
-        } else {
-            None
-        };
+        let attn_weights = attn_weights
+            .reshape((bsz, num_heads as usize, tgt_len, src_len))?
+            .transpose(0, 1)?;
 
-        Ok((attn, attn_weights))
+        Ok((attn, Some(attn_weights)))
     }
 }
