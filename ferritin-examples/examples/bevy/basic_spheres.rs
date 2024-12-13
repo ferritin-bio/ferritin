@@ -37,7 +37,7 @@ fn main() -> Result<()> {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(StructurePlugin::new().with_file(
-            "examples/1fap.cif",
+            molfile,
             Some(StructureSettings {
                 render_type: RenderOptions::Solid,
                 color_scheme: ColorScheme::ByAtomType,
