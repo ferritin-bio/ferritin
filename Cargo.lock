@@ -2560,6 +2560,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "bevy",
  "candle-core",
  "candle-examples",
  "candle-hf-hub",
@@ -2567,6 +2568,7 @@ dependencies = [
  "candle-nn",
  "clap",
  "ferritin-amplify",
+ "ferritin-bevy",
  "ferritin-esm",
  "ferritin-test-data",
  "serde_json",
