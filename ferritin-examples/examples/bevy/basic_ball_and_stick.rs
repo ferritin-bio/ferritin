@@ -1,4 +1,3 @@
-//!  Example allowing custom colors and rendering options
 use bevy::prelude::*;
 use ferritin_bevy::{ColorScheme, RenderOptions, StructurePlugin, StructureSettings};
 

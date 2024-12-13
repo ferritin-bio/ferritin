@@ -17,6 +17,7 @@ candle-nn.workspace = true
 clap = { version = "4.5.23", features = ["derive"] }
 ferritin-amplify = { path = "../ferritin-amplify" }
 ferritin-esm = { path = "../ferritin-esm" }
+ferritin-bevy = { path = "../ferritin-bevy" }
 serde_json.workspace = true
 
 
@@ -41,3 +42,25 @@ candle-examples.workspace = true
 ferritin-test-data = { path = "../ferritin-test-data" }
 assert_cmd = "2.0.16"
 tempfile = "3.14.0"
+
+
+[[example]]
+name = "bevy_basic_ball_and_stick"
+path = "examples/bevy/basic_putty.rs"
+
+
+[[example]]
+name = "bevy_basic_putty"
+path = "examples/bevy/basic_putty.rs"
+
+[[example]]
+name = "bevy_basic_snapshot"
+path = "examples/bevy/basic_snapshot.rs"
+
+[[example]]
+name = "bevy_basic_spheres"
+path = "examples/bevy/basic_spheres.rs"
+
+[[example]]
+name = "bevy_screenshot"
+path = "examples/bevy/screenshot.rs"
