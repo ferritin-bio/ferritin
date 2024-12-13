@@ -287,8 +287,9 @@ impl ESM2 {
         // };
 
         for (layer_idx, layer) in self.layers.iter().enumerate() {
-            // let (new_x, attn) = layer.forward(&x, padding_mask.as_ref(), need_head_weights)?;
-            // x = new_x;
+            let (new_x, attn) =
+                layer.forward(&x, Some(padding_mask.as_ref()), None, need_head_weights)?;
+            x = new_x;
             // if repr_layers.contains(&(layer_idx as i32 + 1)) {
             //     hidden_representations
             //         .insert((layer_idx + 1).to_string(), x.transpose(0, 1)?.clone());
@@ -305,7 +306,7 @@ impl ESM2 {
         //     hidden_representations.insert(self.layers.len().to_string(), x.clone());
         // }
 
-        // let logits = self.lm_head.forward(&x)?;
+        let logits = self.lm_head.forward(&x)?;
 
         // let mut result = BTreeMap::new();
         // result.insert("logits".to_string(), logits);

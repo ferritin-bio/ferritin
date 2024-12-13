@@ -175,21 +175,22 @@ impl TransformerLayer {
         let x = self.self_attn_layer_norm.forward(x)?;
         // todo: fix forward-t
         // let (x, attn) = self.self_attn.forward_t(
-        let (x, attn) = self.self_attn.forward(
-            &x,
-            &x,
-            &x,
-            self_attn_padding_mask,
-            need_head_weights,
-            self_attn_mask,
-        )?;
+        // let (x, attn) = self.self_attn.forward(
+        //     &x,
+        //     &x,
+        //     &x,
+        //     self_attn_padding_mask,
+        //     need_head_weights,
+        //     self_attn_mask,
+        // )?;
         // let x = x.add(residual)?;
-        // let residual = &x;
-        // let x = self.final_layer_norm.forward(&x)?;
+        let residual = &x;
+        let x = self.final_layer_norm.forward(&x)?;
         // let x = gelu(&self.fc1.forward(&x)?)?;
         // let x = self.fc2.forward(&x)?;
-        // let x = x.add(residual)?;
+        let x = x.add(residual)?;
 
+        let attn = Some(x.clone());
         Ok((x, attn))
     }
 }
@@ -412,13 +413,13 @@ impl RobertaLMHead {
     //     })
     // }
 
-    // pub fn forward(&self, features: &Tensor) -> Result<Tensor> {
-    //     let x = self.dense.forward(features)?;
-    //     let x = gelu(&x)?;
-    //     let x = self.layer_norm.forward(&x)?;
-    //     let x = x.matmul(&self.weight)?;
-    //     x.add(&self.bias)
-    // }
+    pub fn forward(&self, features: &Tensor) -> Result<Tensor> {
+        let x = self.dense.forward(features)?;
+        let x = gelu(&x)?;
+        let x = self.layer_norm.forward(&x)?;
+        let x = x.matmul(&self.weight)?;
+        x.add(&self.bias)
+    }
 }
 
 #[derive(Debug)]
