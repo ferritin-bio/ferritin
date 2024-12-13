@@ -3,6 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use crate::ESMCConfig;
+
 use super::rotary_embedding::RotaryEmbedding;
 use candle_core::{Device, Module, Result, Tensor};
 use candle_nn::{init, linear, ops, VarBuilder};
@@ -61,30 +63,33 @@ impl FairseqIncrementalState {
 
 #[derive(Debug)]
 pub struct MultiheadAttention {
-    embed_dim: i64,
-    num_heads: i64,
-    kdim: i64,
-    vdim: i64,
-    qkv_same_dim: bool,
-    dropout: f64,
-    head_dim: i64,
-    scaling: f64,
-    self_attention: bool,
-    encoder_decoder_attention: bool,
-    q_proj: linear::Linear,
-    k_proj: linear::Linear,
-    v_proj: linear::Linear,
-    out_proj: linear::Linear,
-    bias_k: Option<Tensor>,
-    bias_v: Option<Tensor>,
-    add_zero_attn: bool,
-    rot_emb: Option<RotaryEmbedding>,
-    onnx_trace: bool,
-    enable_torch_version: bool,
-    incremental_state: FairseqIncrementalState,
+    // embed_dim: i64,
+    // num_heads: i64,
+    // kdim: i64,
+    // vdim: i64,
+    // qkv_same_dim: bool,
+    // dropout: f64,
+    // head_dim: i64,
+    // scaling: f64,
+    // self_attention: bool,
+    // encoder_decoder_attention: bool,
+    // q_proj: linear::Linear,
+    // k_proj: linear::Linear,
+    // v_proj: linear::Linear,
+    // out_proj: linear::Linear,
+    // bias_k: Option<Tensor>,
+    // bias_v: Option<Tensor>,
+    // add_zero_attn: bool,
+    // rot_emb: Option<RotaryEmbedding>,
+    // onnx_trace: bool,
+    // enable_torch_version: bool,
+    // incremental_state: FairseqIncrementalState,
 }
 
 impl MultiheadAttention {
+    pub fn load(vb: VarBuilder, config: &ESMCConfig) -> Result<Self> {
+        Ok(Self {})
+    }
     // pub fn new(
     //     vb: VarBuilder,
     //     embed_dim: i64,
