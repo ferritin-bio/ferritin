@@ -272,7 +272,7 @@ mod tests {
 
     #[test]
     fn test_pdb_to_mesh() {
-        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let (molfile, _handle) = TestFile::protein_04().create_temp();
 
         // let (pdb, _errors) = pdbtbx::open("examples/1fap.cif").unwrap();
         let (pdb, _errors) = pdbtbx::open("examples/1fap.cif").unwrap();
