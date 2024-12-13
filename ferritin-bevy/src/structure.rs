@@ -268,6 +268,7 @@ impl Structure {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feritin_test_data::TestData;
     #[test]
     fn test_pdb_to_mesh() {
         let (pdb, _errors) = pdbtbx::open("examples/1fap.cif").unwrap();
