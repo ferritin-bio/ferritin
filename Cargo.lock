@@ -2509,9 +2509,11 @@ dependencies = [
 name = "ferritin-bevy"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bevy",
  "bon",
  "ferritin-core",
+ "ferritin-test-data",
  "pdbtbx",
 ]
 

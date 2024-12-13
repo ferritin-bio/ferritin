@@ -47,6 +47,14 @@ impl TestFile {
             suffix: "cif",
         }
     }
+    /// 1FAP.cif
+    /// THE STRUCTURE OF THE IMMUNOPHILIN-IMMUNOSUPPRESSANT FKBP12-RAPAMYCIN COMPLEX INTERACTING WITH HUMAN FRAP
+    pub fn protein_04() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/structures/1fap.cif"),
+            suffix: "cif",
+        }
+    }
     pub fn pymol_01() -> Self {
         Self {
             filebinary: include_bytes!("../data/pymol/example.pse"),

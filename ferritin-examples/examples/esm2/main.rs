@@ -1,11 +1,11 @@
 use anyhow::{Error as E, Result};
+use candle_core::safetensors::load;
 use candle_core::{DType, Tensor, D};
 use candle_examples::device;
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use clap::Parser;
 use ferritin_esm::{ESM2Config as Config, ESM2};
-use std::path::Path;
 use tokenizers::Tokenizer;
 
 pub const DTYPE: DType = DType::F32;
@@ -17,8 +17,7 @@ struct Args {
     #[arg(long)]
     cpu: bool,
 
-    /// Which AMPLIFY Model to use, either '120M' or '350M'.
-    ///
+    /// Which ESM2 Model to use
     #[arg(long, value_parser = ["8M", "35M", "150M", "650M", "3B", "15B"], default_value = "35M")]
     model_id: String,
 
@@ -53,28 +52,28 @@ impl Args {
             (config, weights)
         };
         let config_str = std::fs::read_to_string(config_filename)?;
-
         let config_str = config_str
             .replace("SwiGLU", "swiglu")
             .replace("Swiglu", "swiglu");
 
-        println!("JSON: {:#?}", &config_str);
+        // Now you can iterate through the tensors
+        let tensors = load(&weights_filename, &device)?;
+        for (name, tensor) in tensors.iter() {
+            println!("Name: {}, Shape: {:?}", name, tensor.shape());
+        }
 
         let config: Config = serde_json::from_str(&config_str)?;
-
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
 
-        // Still an Issue here
         let tokenizer = ESM2::load_tokenizer()?;
-        let seq = "AAAAPAPAPAPAPAGRGRTEPPDDDNDNM";
+        let protein = self.protein_string.as_ref().unwrap().as_str();
+        let encoded = tokenizer.encode(protein, false);
 
-        let encoded = tokenizer.encode(seq.to_string(), false);
-        println!("Encoded: {:?}", encoded);
+        println!("Encoded.... and.....");
+        let model = ESM2::load(vb, &config)?;
+        println!("Loaded!");
 
-        let model = ESM2::load(vb, &config);
-
-        // Ok((model, tokenizer))
         Ok((model, tokenizer))
     }
 }
@@ -84,6 +83,7 @@ fn main() -> Result<()> {
 
     println!("Loading the Model and Tokenizer.......");
     let (model, tokenizer) = args.build_model_and_tokenizer()?;
+
     // let device = &model.get_device();
     let device = device(false)?;
 
@@ -99,8 +99,6 @@ fn main() -> Result<()> {
     };
 
     for prot in protein_sequences.iter() {
-        // let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
-
         let tokens = tokenizer
             .encode(prot.to_string(), false)
             .map_err(E::msg)?
@@ -109,8 +107,7 @@ fn main() -> Result<()> {
 
         let token_ids = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
 
-        println!("token_ids");
-        // println!("Encoding.......");
+        println!("Encoding.......");
         // let encoded = model.forward(&token_ids, None, false, false)?;
 
         // println!("Predicting.......");

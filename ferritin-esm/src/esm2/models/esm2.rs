@@ -3,33 +3,33 @@ use candle_core::{DType, Device, Module, Result, Tensor};
 use candle_nn::{self as nn, VarBuilder};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
-#[derive(Deserialize)]
 
+#[derive(Deserialize, Clone)]
 pub struct ESM2Config {
-    num_attention_heads: i32,
-    attention_probs_dropout_prob: f32,
-    classifier_dropout: Option<f32>,
-    emb_layer_norm_before: bool,
-    esmfold_config: Option<String>,
-    hidden_act: String,
-    hidden_dropout_prob: f32,
-    hidden_size: i32,
-    initializer_range: f32,
-    intermediate_size: i32,
-    is_folding_model: bool,
-    layer_norm_eps: f32,
-    mask_token_id: i32,
-    max_position_embeddings: i32,
-    model_type: String,
-    num_hidden_layers: i32,
-    pad_token_id: i32,
-    position_embedding_type: String,
-    token_dropout: bool,
-    torch_dtype: String,
-    transformers_version: String,
-    use_cache: bool,
-    vocab_list: Option<Vec<String>>,
-    vocab_size: i32,
+    pub(crate) num_attention_heads: i32,
+    pub(crate) attention_probs_dropout_prob: f32,
+    pub(crate) classifier_dropout: Option<f32>,
+    pub(crate) emb_layer_norm_before: bool,
+    pub(crate) esmfold_config: Option<String>,
+    pub(crate) hidden_act: String,
+    pub(crate) hidden_dropout_prob: f32,
+    pub(crate) hidden_size: i32,
+    pub(crate) initializer_range: f32,
+    pub(crate) intermediate_size: i32,
+    pub(crate) is_folding_model: bool,
+    pub(crate) layer_norm_eps: f32,
+    pub(crate) mask_token_id: i32,
+    pub(crate) max_position_embeddings: i32,
+    pub(crate) model_type: String,
+    pub(crate) num_hidden_layers: i32,
+    pub(crate) pad_token_id: i32,
+    pub(crate) position_embedding_type: String,
+    pub(crate) token_dropout: bool,
+    pub(crate) torch_dtype: String,
+    pub(crate) transformers_version: String,
+    pub(crate) use_cache: bool,
+    pub(crate) vocab_list: Option<Vec<String>>,
+    pub(crate) vocab_size: i32,
 }
 
 impl ESM2Config {
@@ -61,52 +61,72 @@ impl ESM2Config {
             vocab_size: 33,
         }
     }
+    pub fn esm2_t6_8M_ur50() -> Self {
+        Self {
+            num_attention_heads: 20,
+            attention_probs_dropout_prob: 0.0,
+            classifier_dropout: None,
+            emb_layer_norm_before: false,
+            esmfold_config: None,
+            hidden_act: "gelu".to_string(),
+            hidden_dropout_prob: 0.0,
+            hidden_size: 320,
+            initializer_range: 0.02,
+            intermediate_size: 1280,
+            is_folding_model: false,
+            layer_norm_eps: 1e-5,
+            mask_token_id: 32,
+            max_position_embeddings: 1026,
+            model_type: "esm".to_string(),
+            num_hidden_layers: 6,
+            pad_token_id: 1,
+            position_embedding_type: "rotary".to_string(),
+            token_dropout: true,
+            torch_dtype: "float32".to_string(),
+            transformers_version: "4.25.0.dev0".to_string(),
+            use_cache: true,
+            vocab_list: None,
+            vocab_size: 33,
+        }
+    }
 }
-
-//   "hidden_size": 2560,
-//   "initializer_range": 0.02,
-//   "intermediate_size": 10240,
-//   "is_folding_model": false,
-//   "layer_norm_eps": 1e-05,
-//   "mask_token_id": 32,
-//   "max_position_embeddings": 1026,
-//   "model_type": "esm",
-//   "num_attention_heads": 40,
-//   "num_hidden_layers": 36,
-//   "pad_token_id": 1,
-//   "position_embedding_type": "rotary",
-//   "token_dropout": true,
-//   "torch_dtype": "float32",
-//   "transformers_version": "4.25.0.dev0",
-//   "use_cache": true,
-//   "vocab_list": null,
-//   "vocab_size": 33
-// }
 
 /// ESM2 Architecture
 pub struct ESM2 {
-    // num_layers: i32,
-    // embed_dim: i32,
-    // attention_heads: i32,
-    // alphabet_size: i32,
-    // padding_idx: i32,
-    // mask_idx: i32,
-    // cls_idx: i32,
-    // eos_idx: i32,
-    // prepend_bos: bool,
-    // append_eos: bool,
-    // token_dropout: bool,
-    // embed_scale: f32,
-    // embed_tokens: nn::Embedding,
-    // layers: Vec<TransformerLayer>,
-    // contact_head: ContactPredictionHead,
-    // emb_layer_norm_after: ESM1bLayerNorm,
-    // lm_head: RobertaLMHead,
+    embed_tokens: Option<nn::Embedding>,
+    layers: Vec<TransformerLayer>,
+    contact_head: ContactPredictionHead,
+    emb_layer_norm_after: ESM1bLayerNorm,
+    lm_head: RobertaLMHead,
+    config: ESM2Config,
 }
 
 impl ESM2 {
-    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Self {
-        Self {}
+    // note: in thisload function we do NOT handle the embedding code which gets invoked only when the model is invokes with tokens
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        let ESM2Config {
+            num_hidden_layers, ..
+        } = config;
+
+        let mut layers = Vec::with_capacity(*num_hidden_layers as usize);
+        for i in 0..*num_hidden_layers {
+            let transformer_layer =
+                TransformerLayer::load(vb.pp(format!("esm.encoder.layer.{}", i)), config)?;
+            layers.push(transformer_layer);
+        }
+        let contact_head = ContactPredictionHead::load(vb.pp("esm.contact_head"), config)?;
+        let emb_layer_norm_after =
+            ESM1bLayerNorm::load(vb.pp("esm.encoder.emb_layer_norm_after"), config)?;
+        let lm_head = RobertaLMHead::load(vb.pp("lm_head"), config)?;
+
+        Ok(Self {
+            embed_tokens: None,
+            layers,
+            contact_head,
+            emb_layer_norm_after,
+            lm_head,
+            config: config.clone(),
+        })
     }
     // pub fn get_device(&self) -> &Device {
     //     self.freqs_cis.device()
@@ -128,7 +148,6 @@ impl ESM2 {
     //     let eos_idx = alphabet.eos_idx();
     //     let prepend_bos = alphabet.prepend_bos();
     //     let append_eos = alphabet.append_eos();
-
     //     let embed_scale = 1.0;
     //     let embed_tokens =
     //         nn::embedding(alphabet_size, embed_dim, padding_idx, vb.pp("embed_tokens"))?;

@@ -5,8 +5,9 @@
 
 use super::axial_attention::{ColumnSelfAttention, RowSelfAttention};
 use super::multihead_attention::MultiheadAttention;
+use crate::ESM2Config;
 use candle_core::{DType, Device, Module, Result, Tensor, D};
-use candle_nn::{VarBuilder, VarMap};
+use candle_nn::{self as nn, VarBuilder, VarMap};
 use std::f64::consts::PI;
 
 // fn gelu(x: &Tensor) -> Result<Tensor> {
@@ -34,12 +35,15 @@ fn apc(x: &Tensor) -> Result<()> {
 
 #[derive(Debug)]
 pub struct ESM1LayerNorm {
-    weight: Tensor,
-    bias: Option<Tensor>,
-    eps: f64,
+    // weight: Tensor,
+    // bias: Option<Tensor>,
 }
 
 impl ESM1LayerNorm {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        Ok(Self {})
+    }
+
     // pub fn new(size: usize, eps: f64, affine: bool, vb: VarBuilder) -> Result<Self> {
     //     let weight = if affine {
     //         vb.get_with_hints(size, "weight", candle_nn::Init::Const(1.))?
@@ -80,12 +84,42 @@ pub type ESM1bLayerNorm = ESM1LayerNorm;
 pub struct TransformerLayer {
     self_attn: MultiheadAttention,
     self_attn_layer_norm: ESM1bLayerNorm,
-    fc1: candle_nn::Linear,
-    fc2: candle_nn::Linear,
+    // fc1: nn::Linear,
+    // fc2: nn::Linear,
     final_layer_norm: ESM1bLayerNorm,
 }
 
 impl TransformerLayer {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        let ESM2Config {
+            // embed_dim,
+            // ffn_embed_dim,
+            // attention_heads,
+            // add_bias_kv,
+            // use_esm1b_layer_norm,
+            // use_rotary_embeddings,
+            ..
+        } = config;
+
+        // Todo: Fix this!
+        let embed_dim = 100;
+        let ffn_embed_dim = 100;
+
+        let layer_norm = ESM1LayerNorm::load(vb.pp("Layer_Norm"), config)?;
+        let multi_head = MultiheadAttention::load(vb.pp("attention"), config)?;
+        // let fc1 = nn::linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?;
+        // let fc2 = nn::linear(ffn_embed_dim, embed_dim, vb.pp("fc2"))?;
+        let final_layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
+
+        Ok(Self {
+            self_attn: multi_head,
+            self_attn_layer_norm: layer_norm,
+            // fc1,
+            // fc2,
+            final_layer_norm,
+        })
+    }
+
     // pub fn new(
     //     embed_dim: usize,
     //     ffn_embed_dim: usize,
@@ -338,11 +372,15 @@ impl SinusoidalPositionalEmbedding {
 pub struct RobertaLMHead {
     dense: candle_nn::Linear,
     layer_norm: ESM1bLayerNorm,
-    weight: Tensor,
-    bias: Tensor,
 }
 
 impl RobertaLMHead {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        let ESM2Config { hidden_size, .. } = config;
+        let dense = nn::linear(*hidden_size as usize, *hidden_size as usize, vb.pp("dense"))?;
+        let layer_norm = ESM1bLayerNorm::load(vb.pp("LayerNorm"), config)?;
+        Ok(Self { dense, layer_norm })
+    }
     // pub fn new(
     //     embed_dim: usize,
     //     output_dim: usize,
@@ -368,14 +406,17 @@ impl RobertaLMHead {
 
 #[derive(Debug)]
 pub struct ContactPredictionHead {
-    in_features: usize,
-    prepend_bos: bool,
-    append_eos: bool,
-    regression: candle_nn::Linear,
-    eos_idx: Option<usize>,
+    // in_features: usize,
+    // prepend_bos: bool,
+    // append_eos: bool,
+    // regression: candle_nn::Linear,
+    // eos_idx: Option<usize>,
 }
 
 impl ContactPredictionHead {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        Ok(Self {})
+    }
     // pub fn new(
     //     in_features: usize,
     //     prepend_bos: bool,
@@ -430,44 +471,44 @@ pub struct NormalizedResidualBlock<T: Module> {
     layer_norm: ESM1bLayerNorm,
 }
 
-// impl<T: Module> NormalizedResidualBlock<T> {
-//     pub fn new(layer: T, embedding_dim: usize, dropout: f64) -> Result<Self> {
-//         let vb = VarBuilder::zeros();
-//         Ok(Self {
-//             layer,
-//             dropout,
-//             layer_norm: ESM1bLayerNorm::new(embedding_dim, 1e-12, true, vb)?,
-//         })
-//     }
+impl<T: Module> NormalizedResidualBlock<T> {
+    // pub fn new(layer: T, embedding_dim: usize, dropout: f64) -> Result<Self> {
+    //     let vb = VarBuilder::zeros();
+    //     Ok(Self {
+    //         layer,
+    //         dropout,
+    //         layer_norm: ESM1bLayerNorm::new(embedding_dim, 1e-12, true, vb)?,
+    //     })
+    // }
 
-//     pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
-//         let residual = x;
-//         let x = self.layer_norm.forward(x)?;
-//         let x = self.layer.forward(&x)?;
-//         let x = if self.dropout > 0. {
-//             x.dropout(self.dropout)?
-//         } else {
-//             x
-//         };
-//         x.add(residual)
-//     }
+    //     pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    //         let residual = x;
+    //         let x = self.layer_norm.forward(x)?;
+    //         let x = self.layer.forward(&x)?;
+    //         let x = if self.dropout > 0. {
+    //             x.dropout(self.dropout)?
+    //         } else {
+    //             x
+    //         };
+    //         x.add(residual)
+    //     }
 
-//     pub fn forward_t<A, B>(&self, x: &Tensor, a: A, b: B) -> Result<(Tensor, Tensor)>
-//     where
-//         T: ModuleWithAttention<A, B>,
-//     {
-//         let residual = x;
-//         let x = self.layer_norm.forward(x)?;
-//         let (x, attn) = self.layer.forward_t(&x, a, b)?;
-//         let x = if self.dropout > 0. {
-//             x.dropout(self.dropout)?
-//         } else {
-//             x
-//         };
-//         let x = x.add(residual)?;
-//         Ok((x, attn))
-//     }
-// }
+    //     pub fn forward_t<A, B>(&self, x: &Tensor, a: A, b: B) -> Result<(Tensor, Tensor)>
+    //     where
+    //         T: ModuleWithAttention<A, B>,
+    //     {
+    //         let residual = x;
+    //         let x = self.layer_norm.forward(x)?;
+    //         let (x, attn) = self.layer.forward_t(&x, a, b)?;
+    //         let x = if self.dropout > 0. {
+    //             x.dropout(self.dropout)?
+    //         } else {
+    //             x
+    //         };
+    //         let x = x.add(residual)?;
+    //         Ok((x, attn))
+    //     }
+}
 
 pub trait ModuleWithAttention<A, B> {
     fn forward_t(&self, x: &Tensor, a: A, b: B) -> Result<(Tensor, Tensor)>;
