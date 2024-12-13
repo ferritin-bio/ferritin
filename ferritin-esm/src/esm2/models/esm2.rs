@@ -114,10 +114,6 @@ impl ESM2 {
             ..
         } = config;
 
-        // num_layers: int = 33,
-        // embed_dim: int = 1280,
-        // attention_heads: int = 20,
-        //
         // self.embed_scale = 1
         // self.embed_tokens = nn.Embedding(
         //     self.alphabet_size,
@@ -126,6 +122,12 @@ impl ESM2 {
         // )
 
         // todo: check this embedding section....
+        //
+        // (embeddings): EsmEmbeddings(
+        //   (word_embeddings): Embedding(33, 320, padding_idx=1)
+        //   (dropout): Dropout(p=0.0, inplace=False)
+        //   (position_embeddings): Embedding(1026, 320, padding_idx=1))
+        //
         let embed_tensor = Tensor::zeros(
             (*vocab_size as usize, *intermediate_size as usize),
             vb.dtype(),
