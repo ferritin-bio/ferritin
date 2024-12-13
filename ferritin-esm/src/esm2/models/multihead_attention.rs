@@ -3,8 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use crate::ESMCConfig;
-
+use super::esm2::ESM2Config;
 use super::rotary_embedding::RotaryEmbedding;
 use candle_core::{Device, Module, Result, Tensor};
 use candle_nn::{init, linear, ops, VarBuilder};
@@ -87,7 +86,15 @@ pub struct MultiheadAttention {
 }
 
 impl MultiheadAttention {
-    pub fn load(vb: VarBuilder, config: &ESMCConfig) -> Result<Self> {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        // MultiheadAttention::new(
+        //             embed_dim,
+        //             attention_heads,
+        //             add_bias_kv,
+        //             false,
+        //             use_rotary_embeddings,
+        //             vb.pp("self_attn"),
+        //         )?,
         Ok(Self {})
     }
     // pub fn new(

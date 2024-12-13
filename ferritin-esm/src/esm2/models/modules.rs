@@ -84,58 +84,42 @@ pub type ESM1bLayerNorm = ESM1LayerNorm;
 
 #[derive(Debug)]
 pub struct TransformerLayer {
-    // self_attn: MultiheadAttention,
-    // self_attn_layer_norm: ESM1bLayerNorm,
-    // fc1: nn::Linear,
-    // fc2: nn::Linear,
-    // final_layer_norm: ESM1bLayerNorm,
+    self_attn: MultiheadAttention,
+    self_attn_layer_norm: ESM1bLayerNorm,
+    fc1: nn::Linear,
+    fc2: nn::Linear,
+    final_layer_norm: ESM1bLayerNorm,
 }
 
 impl TransformerLayer {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        // let ESM2Config {
-        //     embed_dim,
-        //     ffn_embed_dim,
-        //     attention_heads,
-        //     add_bias_kv,
-        //     use_esm1b_layer_norm,
-        //     use_rotary_embeddings,
-        // } = config;
+        let ESM2Config {
+            // embed_dim,
+            // ffn_embed_dim,
+            // attention_heads,
+            // add_bias_kv,
+            // use_esm1b_layer_norm,
+            // use_rotary_embeddings,
+            ..
+        } = config;
 
-        // check sizes of hte LN here...
-        let lnconf = nn::LayerNormConfig {
-            eps: 1e-5,
-            remove_mean: true,
-            affine: true,
-        };
-        let norm_builder = nn::layer_norm(10, lnconf, vb.pp("Layer_Norm"));
-        let multi_head = MultiheadAttention::load(vb.push("attention"), config);
+        // Todo: Fix this
+        let embed_dim = 100;
+        let ffn_embed_dim = 100;
 
-        // MultiheadAttention::new(
-        //             embed_dim,
-        //             attention_heads,
-        //             add_bias_kv,
-        //             false,
-        //             use_rotary_embeddings,
-        //             vb.pp("self_attn"),
-        //         )?,
-        //         self_attn_layer_norm: layer_norm,
-        //         fc1: candle_nn::linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?,
-        //         fc2: candle_nn::linear(ffn_embed_dim, embed_dim, vb.pp("fc2"))?,
-        //         final_layer_norm: ESM1LayerNorm::new(
-        //             embed_dim,
-        //             1e-12,
-        //             true,
-        //             vb.pp("final_layer_norm"),
-        //         )?,
-        //
-        // self_attn: MultiheadAttention,
-        // self_attn_layer_norm: ESM1bLayerNorm,
-        // fc1: nn::Linear,
-        // fc2: nn::Linear,
-        // final_layer_norm: ESM1bLayerNorm,
+        let layer_norm = ESM1LayerNorm::load(vb.pp("Layer_Norm"), config)?;
+        let multi_head = MultiheadAttention::load(vb.pp("attention"), config)?;
+        let fc1 = nn::linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?;
+        let fc2 = nn::linear(ffn_embed_dim, embed_dim, vb.pp("fc2"))?;
+        let final_layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
 
-        Ok(Self {})
+        Ok(Self {
+            self_attn: multi_head,
+            self_attn_layer_norm: layer_norm,
+            fc1,
+            fc2,
+            final_layer_norm,
+        })
     }
 
     // pub fn new(
