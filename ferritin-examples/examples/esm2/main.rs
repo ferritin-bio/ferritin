@@ -109,7 +109,7 @@ fn main() -> Result<()> {
 
         println!("Encoding.......");
 
-        let encoded = model.forward(&token_ids, None, false, false)?;
+        // let encoded = model.forward(&token_ids, None, false, false)?;
 
         // println!("Predicting.......");
         // let predictions = encoded.logits.argmax(D::Minus1)?;
