@@ -51,25 +51,22 @@ impl Args {
             (config, weights)
         };
         let config_str = std::fs::read_to_string(config_filename)?;
-
         let config_str = config_str
             .replace("SwiGLU", "swiglu")
             .replace("Swiglu", "swiglu");
 
         let config: Config = serde_json::from_str(&config_str)?;
-
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
 
         let tokenizer = ESM2::load_tokenizer()?;
-
         let protein = self.protein_string.as_ref().unwrap().as_str();
         let encoded = tokenizer.encode(protein, false);
-        println!("Encoded: {:?}", encoded);
 
+        println!("Encoded.... and.....");
         let model = ESM2::load(vb, &config);
+        println!("Loaded!");
 
-        // Ok((model, tokenizer))
         Ok((model, tokenizer))
     }
 }
