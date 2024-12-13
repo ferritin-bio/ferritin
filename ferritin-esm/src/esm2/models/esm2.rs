@@ -136,7 +136,75 @@ pub struct ESM2 {
 
 impl ESM2 {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Self {
-        Self {}
+        // Self {}
+        // pub fn new(
+        //     num_layers: i32,
+        //     embed_dim: i32,
+        //     attention_heads: i32,
+        //     // alphabet: &EsmSequenceTokenizer,
+        //     alphabet: &Tokenizer,
+        //     token_dropout: bool,
+        //     vb: VarBuilder,
+        // ) -> Result<Self>
+
+            let alphabet_size = alphabet.vocab_size();
+            let padding_idx = alphabet.padding_idx();
+            let mask_idx = alphabet.mask_idx();
+            let cls_idx = alphabet.cls_idx();
+            let eos_idx = alphabet.eos_idx();
+            let prepend_bos = alphabet.prepend_bos();
+            let append_eos = alphabet.append_eos();
+            let embed_scale = 1.0;
+            let embed_tokens =
+                nn::embedding(alphabet_size, embed_dim, padding_idx, vb.pp("embed_tokens"))?;
+
+            let mut layers = Vec::with_capacity(num_layers as usize);
+            for i in 0..num_layers {
+                layers.push(TransformerLayer::new(
+                    embed_dim,
+                    4 * embed_dim,
+                    attention_heads,
+                    false,
+                    true,
+                    true,
+                    vb.pp(&format!("layers.{}", i)),
+                )?);
+            }
+
+            let contact_head = ContactPredictionHead::new(
+                num_layers * attention_heads,
+                prepend_bos,
+                append_eos,
+                eos_idx,
+                vb.pp("contact_head"),
+            )?;
+
+            let emb_layer_norm_after = ESM1bLayerNorm::new(embed_dim, vb.pp("emb_layer_norm_after"))?;
+
+            let lm_head =
+                RobertaLMHead::new(embed_dim, alphabet_size, &embed_tokens, vb.pp("lm_head"))?;
+
+            Ok(Self {
+                // num_layers,
+                // embed_dim,
+                // attention_heads,
+                // alphabet_size,
+                // padding_idx,
+                // mask_idx,
+                // cls_idx,
+                // eos_idx,
+                // prepend_bos,
+                // append_eos,
+                // token_dropout,
+                // embed_scale,
+                // embed_tokens,
+                // layers,
+                // contact_head,
+                // emb_layer_norm_after,
+                // lm_head,
+            })
+        }
+
     }
     // pub fn get_device(&self) -> &Device {
     //     self.freqs_cis.device()
@@ -158,7 +226,6 @@ impl ESM2 {
     //     let eos_idx = alphabet.eos_idx();
     //     let prepend_bos = alphabet.prepend_bos();
     //     let append_eos = alphabet.append_eos();
-
     //     let embed_scale = 1.0;
     //     let embed_tokens =
     //         nn::embedding(alphabet_size, embed_dim, padding_idx, vb.pp("embed_tokens"))?;
