@@ -110,10 +110,11 @@ impl ESM2 {
 
         let mut layers = Vec::with_capacity(*num_hidden_layers as usize);
         for i in 0..*num_hidden_layers {
-            let transformer_layer = TransformerLayer::load(vb.pp(format!("layer.{}", i)), config)?;
+            let transformer_layer =
+                TransformerLayer::load(vb.pp(format!("esm.encoder.layer.{}", i)), config)?;
             layers.push(transformer_layer);
         }
-        let contact_head = ContactPredictionHead::load(vb.pp("contact_head"), config)?;
+        let contact_head = ContactPredictionHead::load(vb.pp("esm.contact_head"), config)?;
         let emb_layer_norm_after = ESM1bLayerNorm::load(vb.pp("emb_layer_norm_after"), config)?;
         let lm_head = RobertaLMHead::load(vb.pp("lm_head"), config)?;
 

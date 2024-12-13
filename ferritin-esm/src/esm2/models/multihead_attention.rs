@@ -87,18 +87,21 @@ pub struct MultiheadAttention {
 
 impl MultiheadAttention {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        let ESM2Config { .. } = config;
+        let ESM2Config {
+            hidden_size,
+            num_attention_heads,
+            ..
+        } = config;
 
-        // let kdim = kdim.unwrap_or(embed_dim);
-        // let vdim = vdim.unwrap_or(embed_dim);
-        // let qkv_same_dim = kdim == embed_dim && vdim == embed_dim;
-
-        let kdim = 100;
-        let vdim = 100;
-        let qkv_same_dim = true;
-        let num_heads = 10;
-        let embed_dim = 10;
+        let embed_dim = *hidden_size as usize;
+        let num_heads = *num_attention_heads as usize;
         let head_dim = embed_dim / num_heads;
+
+        // Todo: need to double check  this....
+        let kdim = *hidden_size as usize;
+        let vdim = *hidden_size as usize;
+        let qkv_same_dim = true;
+
         assert!(
             head_dim * num_heads == embed_dim,
             "embed_dim must be divisible by num_heads"
