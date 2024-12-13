@@ -87,6 +87,23 @@ pub struct MultiheadAttention {
 
 impl MultiheadAttention {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        let ESM2Config { .. } = config;
+
+        let kdim = kdim.unwrap_or(embed_dim);
+        let vdim = vdim.unwrap_or(embed_dim);
+        let qkv_same_dim = kdim == embed_dim && vdim == embed_dim;
+
+        let head_dim = embed_dim / num_heads;
+        assert!(
+            head_dim * num_heads == embed_dim,
+            "embed_dim must be divisible by num_heads"
+        );
+        let scaling = (head_dim as f64).powf(-0.5);
+
+        let q_proj = nn::linear(embed_dim, embed_dim, bias, vb.pp("q_proj"))?;
+        let k_proj = nn::linear(kdim, embed_dim, bias, vb.pp("k_proj"))?;
+        let v_proj = nn::linear(vdim, embed_dim, bias, vb.pp("v_proj"))?;
+
         // MultiheadAttention::new(
         //             embed_dim,
         //             attention_heads,

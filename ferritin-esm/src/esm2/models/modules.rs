@@ -379,7 +379,6 @@ impl RobertaLMHead {
         let ESM2Config { hidden_size, .. } = config;
         let dense = nn::linear(*hidden_size as usize, *hidden_size as usize, vb.pp("dense"))?;
         let layer_norm = ESM1bLayerNorm::load(vb.pp("LayerNorm"), config)?;
-
         Ok(Self { dense, layer_norm })
     }
     // pub fn new(
