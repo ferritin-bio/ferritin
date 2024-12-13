@@ -248,57 +248,54 @@ impl MultiheadAttention {
             );
         }
 
-        let mut saved_state = None;
-        if let Some(inc_state) = incremental_state {
-            saved_state = self.get_incremental_state(Some(inc_state), "attn_state");
-            if let Some(saved_state_ref) = &saved_state {
-                if saved_state_ref.contains_key("prev_key") && static_kv {
-                    assert!(self.encoder_decoder_attention && !self.self_attention);
-                }
-            }
-        }
+        // let mut saved_state = None;
+        // if let Some(inc_state) = incremental_state {
+        //     saved_state = self.get_incremental_state(Some(inc_state), "attn_state");
+        //     if let Some(saved_state_ref) = &saved_state {
+        //         if saved_state_ref.contains_key("prev_key") && static_kv {
+        //             assert!(self.encoder_decoder_attention && !self.self_attention);
+        //         }
+        //     }
+        // }
 
-        let q = if self.self_attention {
-            self.q_proj.forward(query)?
-        } else if self.encoder_decoder_attention {
-            self.q_proj.forward(query)?
-        } else {
-            assert!(key.is_some() && value.is_some());
-            self.q_proj.forward(query)?
-        };
+        // let q = if self.self_attention {
+        //     self.q_proj.forward(query)?
+        // } else if self.encoder_decoder_attention {
+        //     self.q_proj.forward(query)?
+        // } else {
+        //     assert!(key.is_some() && value.is_some());
+        //     self.q_proj.forward(query)?
+        // };
 
-        let k = if self.self_attention {
-            self.k_proj.forward(query)?
-        } else if self.encoder_decoder_attention && key.is_none() {
-            assert!(value.is_none());
-            Tensor::zeros((), query.device())?
-        } else {
-            assert!(key.is_some());
-            self.k_proj.forward(key.unwrap())?
-        };
+        // let k = if self.self_attention {
+        //     self.k_proj.forward(query)?
+        // } else if self.encoder_decoder_attention && key.is_none() {
+        //     assert!(value.is_none());
+        //     Tensor::zeros((), query.device())?
+        // } else {
+        //     assert!(key.is_some());
+        //     self.k_proj.forward(key.unwrap())?
+        // };
 
-        let v = if self.self_attention {
-            self.v_proj.forward(query)?
-        } else if self.encoder_decoder_attention && value.is_none() {
-            Tensor::zeros((), query.device())?
-        } else {
-            assert!(value.is_some());
-            self.v_proj.forward(value.unwrap())?
-        };
+        // let v = if self.self_attention {
+        //     self.v_proj.forward(query)?
+        // } else if self.encoder_decoder_attention && value.is_none() {
+        //     Tensor::zeros((), query.device())?
+        // } else {
+        //     assert!(value.is_some());
+        //     self.v_proj.forward(value.unwrap())?
+        // };
 
-        let q = (q * self.scaling)?;
+        // let q = (q * self.scaling)?;
 
         let (mut k, mut v) = if self.bias_k.is_some() {
             assert!(self.bias_v.is_some());
             let bias_k = self.bias_k.as_ref().unwrap();
             let bias_v = self.bias_v.as_ref().unwrap();
-
             let bias_k = bias_k.broadcast_as((1, 1, bias_k.dim(2)?))?;
             let bias_v = bias_v.broadcast_as((1, 1, bias_v.dim(2)?))?;
-
             let k = Tensor::cat(&[&k, &bias_k], 1)?;
             let v = Tensor::cat(&[&v, &bias_v], 1)?;
-
             if let Some(attn_mask) = attn_mask {
                 let attn_mask = Tensor::cat(
                     &[
@@ -308,7 +305,6 @@ impl MultiheadAttention {
                     1,
                 )?;
             }
-
             if let Some(key_padding_mask) = key_padding_mask {
                 let key_padding_mask = Tensor::cat(
                     &[
@@ -318,12 +314,10 @@ impl MultiheadAttention {
                     1,
                 )?;
             }
-
             (k, v)
         } else {
             (k, v)
         };
-
         let q = q
             .reshape((
                 tgt_len,
@@ -331,19 +325,16 @@ impl MultiheadAttention {
                 self.head_dim as usize,
             ))?
             .transpose(0, 1)?;
-
         if k.dim()? > 0 {
             k = k
                 .reshape((-1, bsz * self.num_heads as usize, self.head_dim as usize))?
                 .transpose(0, 1)?;
         }
-
         if v.dim()? > 0 {
             v = v
                 .reshape((-1, bsz * self.num_heads as usize, self.head_dim as usize))?
                 .transpose(0, 1)?;
         }
-
         if let Some(saved_state_ref) = &mut saved_state {
             if saved_state_ref.contains_key("prev_key") {
                 let prev_key = saved_state_ref.get("prev_key").unwrap().as_ref().unwrap();
@@ -358,7 +349,6 @@ impl MultiheadAttention {
                     k = Tensor::cat(&[prev_key, &k], 1)?;
                 }
             }
-
             if saved_state_ref.contains_key("prev_value") {
                 let prev_value = saved_state_ref.get("prev_value").unwrap().as_ref().unwrap();
                 let prev_value = prev_value.reshape((
@@ -372,22 +362,17 @@ impl MultiheadAttention {
                     v = Tensor::cat(&[prev_value, &v], 1)?;
                 }
             }
-
             saved_state_ref.insert("prev_key".to_string(), Some(k.clone()));
             saved_state_ref.insert("prev_value".to_string(), Some(v.clone()));
-
             if let Some(inc_state) = incremental_state {
                 self.set_incremental_state(Some(inc_state), "attn_state", saved_state_ref.clone());
             }
         }
-
         let src_len = k.dim(1)?;
-
         if let Some(key_padding_mask) = key_padding_mask {
             assert_eq!(key_padding_mask.dim(0)? as i64, bsz);
             assert_eq!(key_padding_mask.dim(1)? as i64, src_len);
         }
-
         if self.add_zero_attn {
             src_len += 1;
             k = Tensor::cat(
@@ -404,7 +389,6 @@ impl MultiheadAttention {
                 ],
                 1,
             )?;
-
             if let Some(attn_mask) = attn_mask {
                 let attn_mask = Tensor::cat(
                     &[
@@ -414,7 +398,6 @@ impl MultiheadAttention {
                     1,
                 )?;
             }
-
             if let Some(key_padding_mask) = key_padding_mask {
                 let key_padding_mask = Tensor::cat(
                     &[
@@ -425,18 +408,14 @@ impl MultiheadAttention {
                 )?;
             }
         }
-
         if let Some(rot_emb) = &self.rot_emb {
             let (q, k) = rot_emb.forward(&q, &k)?;
         }
-
         let attn_weights = q.matmul(&k.transpose(1, 2)?)?;
-
         assert_eq!(
             attn_weights.dims(),
             &[bsz * self.num_heads as usize, tgt_len, src_len]
         );
-
         if let Some(attn_mask) = attn_mask {
             let attn_mask = attn_mask.unsqueeze(0)?;
             if self.onnx_trace {
@@ -444,7 +423,6 @@ impl MultiheadAttention {
             }
             attn_weights = (&attn_weights + attn_mask)?;
         }
-
         if let Some(key_padding_mask) = key_padding_mask {
             let attn_weights =
                 attn_weights.reshape((bsz, self.num_heads as usize, tgt_len, src_len))?;
@@ -453,26 +431,20 @@ impl MultiheadAttention {
                 .unsqueeze(1)?
                 .unsqueeze(2)?
                 .to_dtype(candle_core::DType::Bool)?;
-
             let attn_weights = attn_weights
                 .masked_fill(&key_padding_mask, f32::NEG_INFINITY)?
                 .reshape((bsz * self.num_heads as usize, tgt_len, src_len))?;
         }
-
         if before_softmax {
             return Ok((attn_weights, Some(v)));
         }
-
         let attn_weights = if self.onnx_trace {
             attn_weights.to_dtype(candle_core::DType::F32)?.softmax(2)?
         } else {
             attn_weights.softmax(2)?
         };
-
         let attn_weights = ops::dropout(&attn_weights, self.dropout, self.training)?;
-
         let attn = attn_weights.matmul(&v)?;
-
         assert_eq!(
             attn.dims(),
             &[
@@ -481,21 +453,17 @@ impl MultiheadAttention {
                 self.head_dim as usize
             ]
         );
-
         let attn = if self.onnx_trace && attn.dim(1)? == 1 {
             attn.reshape((tgt_len, bsz, self.embed_dim as usize))?
         } else {
             attn.transpose(0, 1)?
                 .reshape((tgt_len, bsz, self.embed_dim as usize))?
         };
-
         let attn = self.out_proj.forward(&attn)?;
-
         let attn_weights = if need_weights {
             let attn_weights = attn_weights
                 .reshape((bsz, self.num_heads as usize, tgt_len, src_len))?
                 .transpose(0, 1)?;
-
             if !need_head_weights {
                 Some(attn_weights.mean(0)?)
             } else {
