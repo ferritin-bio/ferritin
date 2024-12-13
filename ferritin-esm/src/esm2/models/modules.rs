@@ -173,7 +173,9 @@ impl TransformerLayer {
     ) -> Result<(Tensor, Option<Tensor>)> {
         let residual = x;
         let x = self.self_attn_layer_norm.forward(x)?;
-        let (x, attn) = self.self_attn.forward_t(
+        // todo: fix forward-t
+        // let (x, attn) = self.self_attn.forward_t(
+        let (x, attn) = self.self_attn.forward(
             &x,
             &x,
             &x,
@@ -182,7 +184,6 @@ impl TransformerLayer {
             self_attn_mask,
         )?;
         // let x = x.add(residual)?;
-
         // let residual = &x;
         // let x = self.final_layer_norm.forward(&x)?;
         // let x = gelu(&self.fc1.forward(&x)?)?;

@@ -287,7 +287,7 @@ impl ESM2 {
         // };
 
         for (layer_idx, layer) in self.layers.iter().enumerate() {
-            let (new_x, attn) = layer.forward(&x, padding_mask.as_ref(), need_head_weights)?;
+            // let (new_x, attn) = layer.forward(&x, padding_mask.as_ref(), need_head_weights)?;
             // x = new_x;
             // if repr_layers.contains(&(layer_idx as i32 + 1)) {
             //     hidden_representations
@@ -298,7 +298,7 @@ impl ESM2 {
             // }
         }
 
-        // x = self.emb_layer_norm_after.forward(&x)?;
+        x = self.emb_layer_norm_after.forward(&x)?;
         // x = x.transpose(0, 1)?;
 
         // if repr_layers.contains(&(self.layers.len() as i32)) {

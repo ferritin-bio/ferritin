@@ -4,6 +4,7 @@ use candle_core::{Module, Result, Tensor};
 use candle_nn::{self as nn, LayerNormConfig, VarBuilder};
 // use scaled_dot_product_attention;
 
+// Todo: see if we can use the esmC Multihead Attention
 pub struct MultiHeadAttention {
     d_model: usize,
     n_heads: usize,
