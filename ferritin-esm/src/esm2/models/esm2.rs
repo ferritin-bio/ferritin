@@ -161,6 +161,8 @@ impl ESM2 {
         // let lm_head =
         //     RobertaLMHead::new(embed_dim, alphabet_size, &embed_tokens, vb.pp("lm_head"))?;
 
+        let lm_head = RobertaLMHead::load(vb.pp("lm_head"), config)?;
+
         Ok(Self {
                 // num_layers,
                 // embed_dim,
