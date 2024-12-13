@@ -74,78 +74,20 @@ pub struct ESM2 {
 }
 
 impl ESM2 {
+    // note: in thisload function we do NOT handle the embedding code which gets invoked only when the model is invokes with tokens
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let ESM2Config {
             num_attention_heads,
-            attention_probs_dropout_prob,
-            classifier_dropout,
-            emb_layer_norm_before,
-            esmfold_config,
-            hidden_act,
-            hidden_dropout_prob,
-            hidden_size,
-            initializer_range,
-            intermediate_size,
-            is_folding_model,
-            layer_norm_eps,
-            mask_token_id,
-            max_position_embeddings,
-            model_type,
-            num_hidden_layers,
-            pad_token_id,
-            position_embedding_type,
-            token_dropout,
-            torch_dtype,
-            transformers_version,
-            use_cache,
-            vocab_list,
-            vocab_size,
+            ..
         } = config;
-
-        let num_layers = num_attention_heads.clone() as usize; // Todo: this is probably wrong
-                                                               // let alphabet_size = vocab_size.clone() as usize;
-                                                               // let (cls_idx, padding_idx, eos_idx, mask_idx) = (0, 1, 2, 32);
-                                                               // let prepend_bos = alphabet.prepend_bos();
-                                                               // let append_eos = alphabet.append_eos();
-
-        // let embed_dim = 32;
-        // let embed_scale = 1.0;
-        // let embed_tokens = nn::embedding(
-        //     alphabet_size,
-        //     embed_dim,
-        //     // padding_idx,
-        //     vb.pp("esm.embeddings"),
-        // )?;
-
+        let num_layers = num_attention_heads.clone() as usize;
         let mut layers = Vec::with_capacity(num_layers as usize);
         for i in 0..num_layers {
             let transformer_layer = TransformerLayer::load(vb.pp(format!("layer.{}", i)), config)?;
             layers.push(transformer_layer);
-            // layers.push(TransformerLayer::new(
-            //     embed_dim,
-            //     4 * embed_dim,
-            //     attention_heads,
-            //     false,
-            //     true,
-            //     true,
-            //     vb.pp(&format!("layers.{}", i)),
-            // )?);
         }
-
-        // let contact_head = ContactPredictionHead::new(
-        //     num_layers * attention_heads,
-        //     prepend_bos,
-        //     append_eos,
-        //     eos_idx,
-        //     vb.pp("contact_head"),
-        // )?;
         let contact_head = ContactPredictionHead::load(vb.pp("contact_head"), config)?;
-
-        // let emb_layer_norm_after = ESM1bLayerNorm::new(embed_dim, vb.pp("emb_layer_norm_after"))?;
         let emb_layer_norm_after = ESM1bLayerNorm::load(vb.pp("emb_layer_norm_after"), config)?;
-
-        // let lm_head =
-        //     RobertaLMHead::new(embed_dim, alphabet_size, &embed_tokens, vb.pp("lm_head"))?;
         let lm_head = RobertaLMHead::load(vb.pp("lm_head"), config)?;
 
         Ok(Self {
