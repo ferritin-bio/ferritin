@@ -5,7 +5,6 @@ use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use clap::Parser;
 use ferritin_esm::{ESM2Config as Config, ESM2};
-use std::path::Path;
 use tokenizers::Tokenizer;
 
 pub const DTYPE: DType = DType::F32;
@@ -17,8 +16,7 @@ struct Args {
     #[arg(long)]
     cpu: bool,
 
-    /// Which AMPLIFY Model to use, either '120M' or '350M'.
-    ///
+    /// Which ESM2 Model to use
     #[arg(long, value_parser = ["8M", "35M", "150M", "650M", "3B", "15B"], default_value = "35M")]
     model_id: String,
 
@@ -62,11 +60,17 @@ impl Args {
 
         let config: Config = serde_json::from_str(&config_str)?;
 
+        println!("Loaded!");
+
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
 
+        println!("VB!");
+
         // Still an Issue here
+        println!("Loading Tokenizer!");
         let tokenizer = ESM2::load_tokenizer()?;
+        println!("Tokenizer loaded!");
         let seq = "AAAAPAPAPAPAPAGRGRTEPPDDDNDNM";
 
         let encoded = tokenizer.encode(seq.to_string(), false);

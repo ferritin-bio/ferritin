@@ -6,26 +6,46 @@
     {
       "id": 0,
       "content": "<cls>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
       "special": true
     },
     {
       "id": 1,
       "content": "<pad>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
       "special": true
     },
     {
       "id": 2,
       "content": "<eos>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
       "special": true
     },
     {
       "id": 3,
       "content": "<unk>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
       "special": true
     },
     {
       "id": 32,
       "content": "<mask>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
       "special": true
     }
   ],
