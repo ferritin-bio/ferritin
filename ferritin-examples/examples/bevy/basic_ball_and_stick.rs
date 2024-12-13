@@ -1,7 +1,11 @@
+use anyhow::Result;
 use bevy::prelude::*;
 use ferritin_bevy::{ColorScheme, RenderOptions, StructurePlugin, StructureSettings};
+use ferritin_test_data::TestFile;
 
-fn main() {
+fn main() -> Result<()> {
+    let (molfile, _handle) = TestFile::protein_01().create_temp()?;
+
     let chalky = StandardMaterial {
         base_color: Color::srgb(0.9, 0.9, 0.9), // Light gray color
         perceptual_roughness: 1.0,              // Maximum roughness for a matte look
@@ -32,7 +36,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(StructurePlugin::new().with_file(
-            "examples/1fap.cif",
+            molfile,
             Some(StructureSettings {
                 render_type: RenderOptions::BallAndStick,
                 color_scheme: ColorScheme::ByAtomType,
@@ -41,6 +45,8 @@ fn main() {
         ))
         .add_systems(Startup, setup)
         .run();
+
+    Ok(())
 }
 
 #[derive(Component)]
