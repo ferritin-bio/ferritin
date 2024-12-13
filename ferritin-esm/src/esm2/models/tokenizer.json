@@ -55,7 +55,8 @@
     "pattern": {
       "String": ""
     },
-    "behavior": "Removed"
+    "behavior": "Removed",
+    "invert": false
   },
   "post_processor": null,
   "decoder": null,
