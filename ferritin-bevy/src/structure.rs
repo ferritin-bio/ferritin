@@ -268,10 +268,15 @@ impl Structure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use feritin_test_data::TestData;
+    use ferritin_test_data::TestFile;
+
     #[test]
     fn test_pdb_to_mesh() {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+
+        // let (pdb, _errors) = pdbtbx::open("examples/1fap.cif").unwrap();
         let (pdb, _errors) = pdbtbx::open("examples/1fap.cif").unwrap();
+
         let structure = Structure::builder().pdb(AtomCollection::from(&pdb)).build();
         assert_eq!(structure.pdb.get_size(), 2154);
         let mesh = structure.to_mesh();

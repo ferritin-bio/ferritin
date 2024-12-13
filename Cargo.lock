@@ -2512,6 +2512,7 @@ dependencies = [
  "bevy",
  "bon",
  "ferritin-core",
+ "ferritin-test-data",
  "pdbtbx",
 ]
 
