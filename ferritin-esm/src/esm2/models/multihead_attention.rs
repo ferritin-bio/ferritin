@@ -5,16 +5,8 @@
 
 use super::esm2::ESM2Config;
 use super::rotary_embedding::RotaryEmbedding;
-use candle_core::{Device, Module, Result, Tensor, D},;
+use candle_core::{Device, Module, Result, Tensor, D};
 use candle_nn::{self as nn, linear, ops, VarBuilder};
-
-// pub fn utils_softmax(x: &Tensor, dim: i64, onnx_trace: bool) -> Result<Tensor> {
-//     if onnx_trace {
-//         x.to_dtype(candle_core::DType::F32)?.softmax(dim)
-//     } else {
-//         x.softmax(dim)
-//     }
-// }
 
 #[derive(Debug)]
 pub struct FairseqIncrementalState {
@@ -157,7 +149,8 @@ impl MultiheadAttention {
         k = k
             .reshape((D::minus1, bsz * num_heads as usize, head_dim as usize))?
             .transpose(0, 1)?;
-        v = v.reshape((-1, bsz * num_heads as usize, head_dim as usize))?
+        v = v
+            .reshape((-1, bsz * num_heads as usize, head_dim as usize))?
             .transpose(0, 1)?;
         let src_len = k.dim(1)?;
         let (q, k) = rot_emb.forward(&q, &k)?;
@@ -165,8 +158,9 @@ impl MultiheadAttention {
         let attn_weights = attn_weights.softmax(2)?;
         // let attn_weights = ops::dropout(&attn_weights, self.dropout, self.training)?;
         let attn = attn_weights.matmul(&v)?;
-        let attn = attn.transpose(0, 1)?
-                .reshape((tgt_len, bsz, self.embed_dim as usize))?;
+        let attn = attn
+            .transpose(0, 1)?
+            .reshape((tgt_len, bsz, self.embed_dim as usize))?;
         let attn = self.out_proj.forward(&attn)?;
         let attn_weights = if need_weights {
             let attn_weights = attn_weights
