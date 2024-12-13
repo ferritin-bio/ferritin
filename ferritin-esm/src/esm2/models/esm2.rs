@@ -1,6 +1,6 @@
 use super::modules::{ContactPredictionHead, ESM1bLayerNorm, RobertaLMHead, TransformerLayer};
 use candle_core::{DType, Device, Module, Result, Tensor};
-use candle_nn::{self as nn, VarBuilder};
+use candle_nn::{self as nn, Linear, VarBuilder};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
 
@@ -91,6 +91,8 @@ impl ESM2Config {
     }
 }
 
+pub struct ModelOutput {}
+
 /// ESM2 Architecture
 pub struct ESM2 {
     embed_tokens: Option<nn::Embedding>,
@@ -105,8 +107,29 @@ impl ESM2 {
     // note: in thisload function we do NOT handle the embedding code which gets invoked only when the model is invokes with tokens
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let ESM2Config {
-            num_hidden_layers, ..
+            intermediate_size,
+            num_hidden_layers,
+            vocab_size,
+            ..
         } = config;
+
+        // num_layers: int = 33,
+        // embed_dim: int = 1280,
+        // attention_heads: int = 20,
+        //
+        // self.embed_scale = 1
+        // self.embed_tokens = nn.Embedding(
+        //     self.alphabet_size,
+        //     self.embed_dim,
+        //     padding_idx=self.padding_idx,
+        // )
+
+        let e_tensor = Tensor::zeros(
+            (*vocab_size as usize, *intermediate_size as usize),
+            vb.dtype(),
+            vb.device(),
+        )?;
+        let embed_tokens = Linear::new(e_tensor, None);
 
         let mut layers = Vec::with_capacity(*num_hidden_layers as usize);
         for i in 0..*num_hidden_layers {
@@ -199,107 +222,108 @@ impl ESM2 {
     //     })
     // }
 
-    // fn forward(
-    //     &self,
-    //     tokens: &Tensor,
-    //     repr_layers: &[i32],
-    //     need_head_weights: bool,
-    //     return_contacts: bool,
-    // ) -> Result<BTreeMap<String, Tensor>> {
-    //     let need_head_weights = need_head_weights || return_contacts;
+    fn forward(
+        &self,
+        tokens: &Tensor,
+        repr_layers: &[i32],
+        need_head_weights: bool,
+        return_contacts: bool,
+    ) -> Result<ModelOutput> {
+        // let need_head_weights = need_head_weights || return_contacts;
+        let padding_idx = 1_u32; // see tokenizer.json
+        let padding_mask = tokens.eq(padding_idx)?;
 
-    //     let padding_mask = tokens.eq(self.padding_idx)?;
+        let mut x = self
+            .embed_tokens
+            .forward(tokens)?
+            .mul_scalar(self.embed_scale)?;
 
-    //     let mut x = self
-    //         .embed_tokens
-    //         .forward(tokens)?
-    //         .mul_scalar(self.embed_scale)?;
+        // if self.token_dropout {
+        //     let mask = tokens.eq(self.mask_idx)?.unsqueeze(-1)?;
+        //     x = x.masked_fill(&mask, 0.0)?;
 
-    //     if self.token_dropout {
-    //         let mask = tokens.eq(self.mask_idx)?.unsqueeze(-1)?;
-    //         x = x.masked_fill(&mask, 0.0)?;
+        //     let mask_ratio_train = 0.15 * 0.8;
+        //     let src_lengths = padding_mask.logical_not()?.sum_keepdim(-1)?;
+        //     let mask_ratio_observed = tokens
+        //         .eq(self.mask_idx)?
+        //         .sum_keepdim(-1)?
+        //         .to_dtype(x.dtype())?
+        //         .div(&src_lengths)?;
+        //     let scale = (1.0 - mask_ratio_train) / (1.0 - mask_ratio_observed)?;
+        //     x = x.mul(&scale.unsqueeze(-1)?)?;
+        // }
 
-    //         let mask_ratio_train = 0.15 * 0.8;
-    //         let src_lengths = padding_mask.logical_not()?.sum_keepdim(-1)?;
-    //         let mask_ratio_observed = tokens
-    //             .eq(self.mask_idx)?
-    //             .sum_keepdim(-1)?
-    //             .to_dtype(x.dtype())?
-    //             .div(&src_lengths)?;
-    //         let scale = (1.0 - mask_ratio_train) / (1.0 - mask_ratio_observed)?;
-    //         x = x.mul(&scale.unsqueeze(-1)?)?;
-    //     }
+        // if !padding_mask.all()? {
+        //     let not_padding = padding_mask.logical_not()?.to_dtype(x.dtype())?;
+        //     x = x.mul(&not_padding.unsqueeze(-1)?)?;
+        // }
 
-    //     if !padding_mask.all()? {
-    //         let not_padding = padding_mask.logical_not()?.to_dtype(x.dtype())?;
-    //         x = x.mul(&not_padding.unsqueeze(-1)?)?;
-    //     }
+        // let repr_layers: HashSet<_> = repr_layers.iter().cloned().collect();
+        // let mut hidden_representations = BTreeMap::new();
+        // if repr_layers.contains(&0) {
+        //     hidden_representations.insert("0".to_string(), x.clone());
+        // }
 
-    //     let repr_layers: HashSet<_> = repr_layers.iter().cloned().collect();
-    //     let mut hidden_representations = BTreeMap::new();
-    //     if repr_layers.contains(&0) {
-    //         hidden_representations.insert("0".to_string(), x.clone());
-    //     }
+        // let mut attn_weights = Vec::new();
+        // x = x.transpose(0, 1)?;
 
-    //     let mut attn_weights = Vec::new();
-    //     x = x.transpose(0, 1)?;
+        // let padding_mask = if !padding_mask.any()? {
+        //     None
+        // } else {
+        //     Some(padding_mask)
+        // };
 
-    //     let padding_mask = if !padding_mask.any()? {
-    //         None
-    //     } else {
-    //         Some(padding_mask)
-    //     };
+        // for (layer_idx, layer) in self.layers.iter().enumerate() {
+        //     let (new_x, attn) = layer.forward(&x, padding_mask.as_ref(), need_head_weights)?;
+        //     x = new_x;
 
-    //     for (layer_idx, layer) in self.layers.iter().enumerate() {
-    //         let (new_x, attn) = layer.forward(&x, padding_mask.as_ref(), need_head_weights)?;
-    //         x = new_x;
+        //     if repr_layers.contains(&(layer_idx as i32 + 1)) {
+        //         hidden_representations
+        //             .insert((layer_idx + 1).to_string(), x.transpose(0, 1)?.clone());
+        //     }
 
-    //         if repr_layers.contains(&(layer_idx as i32 + 1)) {
-    //             hidden_representations
-    //                 .insert((layer_idx + 1).to_string(), x.transpose(0, 1)?.clone());
-    //         }
+        //     if need_head_weights {
+        //         attn_weights.push(attn.transpose(1, 0)?);
+        //     }
+        // }
 
-    //         if need_head_weights {
-    //             attn_weights.push(attn.transpose(1, 0)?);
-    //         }
-    //     }
+        // x = self.emb_layer_norm_after.forward(&x)?;
+        // x = x.transpose(0, 1)?;
 
-    //     x = self.emb_layer_norm_after.forward(&x)?;
-    //     x = x.transpose(0, 1)?;
+        // if repr_layers.contains(&(self.layers.len() as i32)) {
+        //     hidden_representations.insert(self.layers.len().to_string(), x.clone());
+        // }
 
-    //     if repr_layers.contains(&(self.layers.len() as i32)) {
-    //         hidden_representations.insert(self.layers.len().to_string(), x.clone());
-    //     }
+        // let logits = self.lm_head.forward(&x)?;
 
-    //     let logits = self.lm_head.forward(&x)?;
+        // let mut result = BTreeMap::new();
+        // result.insert("logits".to_string(), logits);
+        // result.insert("representations".to_string(), x);
 
-    //     let mut result = BTreeMap::new();
-    //     result.insert("logits".to_string(), logits);
-    //     result.insert("representations".to_string(), x);
+        // if need_head_weights {
+        //     let attentions = Tensor::stack(&attn_weights, 1)?;
+        //     if let Some(padding_mask) = padding_mask {
+        //         let attention_mask = padding_mask.logical_not()?.to_dtype(attentions.dtype())?;
+        //         let attention_mask = attention_mask
+        //             .unsqueeze(1)?
+        //             .mul(&attention_mask.unsqueeze(2)?)?;
+        //         result.insert(
+        //             "attentions".to_string(),
+        //             attentions.mul(&attention_mask.unsqueeze(1)?.unsqueeze(1)?)?,
+        //         );
+        //     } else {
+        //         result.insert("attentions".to_string(), attentions);
+        //     }
 
-    //     if need_head_weights {
-    //         let attentions = Tensor::stack(&attn_weights, 1)?;
-    //         if let Some(padding_mask) = padding_mask {
-    //             let attention_mask = padding_mask.logical_not()?.to_dtype(attentions.dtype())?;
-    //             let attention_mask = attention_mask
-    //                 .unsqueeze(1)?
-    //                 .mul(&attention_mask.unsqueeze(2)?)?;
-    //             result.insert(
-    //                 "attentions".to_string(),
-    //                 attentions.mul(&attention_mask.unsqueeze(1)?.unsqueeze(1)?)?,
-    //             );
-    //         } else {
-    //             result.insert("attentions".to_string(), attentions);
-    //         }
+        //     if return_contacts {
+        //         let contacts = self.contact_head.forward(tokens, &attentions)?;
+        //         result.insert("contacts".to_string(), contacts);
+        //     }
+        // }
 
-    //         if return_contacts {
-    //             let contacts = self.contact_head.forward(tokens, &attentions)?;
-    //             result.insert("contacts".to_string(), contacts);
-    //         }
-    //     }
-
-    //     Ok(result)
-    // }
+        // Ok(result)
+        Ok(ModelOutput {})
+    }
 
     // pub fn predict_contacts(&self, tokens: &Tensor) -> Result<Tensor> {
     //     let mut result = self.forward(tokens, &[], false, true)?;

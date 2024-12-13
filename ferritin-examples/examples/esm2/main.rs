@@ -108,7 +108,7 @@ fn main() -> Result<()> {
         let token_ids = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
 
         println!("Encoding.......");
-        // let encoded = model.forward(&token_ids, None, false, false)?;
+        let encoded = model.forward(&token_ids, None, false, false)?;
 
         // println!("Predicting.......");
         // let predictions = encoded.logits.argmax(D::Minus1)?;
