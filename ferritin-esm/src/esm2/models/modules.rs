@@ -376,10 +376,8 @@ pub struct RobertaLMHead {
 
 impl RobertaLMHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        // Todo: Fix this!
-        let embed_dim = 100;
-        let output_dim = 100;
-        let dense = candle_nn::linear(embed_dim, output_dim, vb.pp("dense"))?;
+        let ESM2Config { hidden_size, .. } = config;
+        let dense = nn::linear(*hidden_size as usize, *hidden_size as usize, vb.pp("dense"))?;
         let layer_norm = ESM1bLayerNorm::load(vb.pp("LayerNorm"), config)?;
 
         Ok(Self { dense, layer_norm })
