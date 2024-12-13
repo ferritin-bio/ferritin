@@ -113,28 +113,36 @@ impl ESM2 {
             vocab_size,
         } = config;
 
-        let alphabet_size = vocab_size;
+        let num_layers = num_attention_heads.clone() as usize; // Todo: this is probably wrong
+        let alphabet_size = vocab_size.clone() as usize;
         let (cls_idx, padding_idx, eos_idx, mask_idx) = (0, 1, 2, 32);
 
         // let prepend_bos = alphabet.prepend_bos();
         // let append_eos = alphabet.append_eos();
 
+        let embed_dim = 32;
         let embed_scale = 1.0;
-        // let embed_tokens =
-        //     nn::embedding(alphabet_size, embed_dim, padding_idx, vb.pp("embed_tokens"))?;
+        // let embed_tokens = nn::embedding(
+        //     alphabet_size,
+        //     embed_dim,
+        //     // padding_idx,
+        //     vb.pp("embeddings"),
+        // )?;
 
-        // let mut layers = Vec::with_capacity(num_layers as usize);
-        // for i in 0..num_layers {
-        //     layers.push(TransformerLayer::new(
-        //         embed_dim,
-        //         4 * embed_dim,
-        //         attention_heads,
-        //         false,
-        //         true,
-        //         true,
-        //         vb.pp(&format!("layers.{}", i)),
-        //     )?);
-        // }
+        let mut layers = Vec::with_capacity(num_layers as usize);
+        for i in 0..num_layers {
+            let transformer_layer = TransformerLayer::load(vb.pp(format!("layer.{}", i)), config);
+            layers.push(transformer_layer);
+            // layers.push(TransformerLayer::new(
+            //     embed_dim,
+            //     4 * embed_dim,
+            //     attention_heads,
+            //     false,
+            //     true,
+            //     true,
+            //     vb.pp(&format!("layers.{}", i)),
+            // )?);
+        }
 
         // let contact_head = ContactPredictionHead::new(
         //     num_layers * attention_heads,
@@ -144,7 +152,11 @@ impl ESM2 {
         //     vb.pp("contact_head"),
         // )?;
 
+        let contact_head = ContactPredictionHead::load(vb.pp("contact_head"), config)?;
+
         // let emb_layer_norm_after = ESM1bLayerNorm::new(embed_dim, vb.pp("emb_layer_norm_after"))?;
+
+        let emb_layer_norm_after = ESM1bLayerNorm::load(vb.pp("emb_layer_norm_after"), config)?;
 
         // let lm_head =
         //     RobertaLMHead::new(embed_dim, alphabet_size, &embed_tokens, vb.pp("lm_head"))?;

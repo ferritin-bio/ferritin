@@ -3,6 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use crate::ESM2Config;
+
 use super::axial_attention::{ColumnSelfAttention, RowSelfAttention};
 use super::multihead_attention::MultiheadAttention;
 use candle_core::{DType, Device, Module, Result, Tensor, D};
@@ -34,12 +36,16 @@ fn apc(x: &Tensor) -> Result<()> {
 
 #[derive(Debug)]
 pub struct ESM1LayerNorm {
-    weight: Tensor,
-    bias: Option<Tensor>,
-    eps: f64,
+    // weight: Tensor,
+    // bias: Option<Tensor>,
+    // eps: f64,
 }
 
 impl ESM1LayerNorm {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        Ok(Self {})
+    }
+
     // pub fn new(size: usize, eps: f64, affine: bool, vb: VarBuilder) -> Result<Self> {
     //     let weight = if affine {
     //         vb.get_with_hints(size, "weight", candle_nn::Init::Const(1.))?
@@ -78,14 +84,18 @@ pub type ESM1bLayerNorm = ESM1LayerNorm;
 
 #[derive(Debug)]
 pub struct TransformerLayer {
-    self_attn: MultiheadAttention,
-    self_attn_layer_norm: ESM1bLayerNorm,
-    fc1: candle_nn::Linear,
-    fc2: candle_nn::Linear,
-    final_layer_norm: ESM1bLayerNorm,
+    // self_attn: MultiheadAttention,
+    // self_attn_layer_norm: ESM1bLayerNorm,
+    // fc1: candle_nn::Linear,
+    // fc2: candle_nn::Linear,
+    // final_layer_norm: ESM1bLayerNorm,
 }
 
 impl TransformerLayer {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        Ok(Self {})
+    }
+
     // pub fn new(
     //     embed_dim: usize,
     //     ffn_embed_dim: usize,
@@ -336,13 +346,16 @@ impl SinusoidalPositionalEmbedding {
 
 #[derive(Debug)]
 pub struct RobertaLMHead {
-    dense: candle_nn::Linear,
-    layer_norm: ESM1bLayerNorm,
-    weight: Tensor,
-    bias: Tensor,
+    // dense: candle_nn::Linear,
+    // layer_norm: ESM1bLayerNorm,
+    // weight: Tensor,
+    // bias: Tensor,
 }
 
 impl RobertaLMHead {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        Ok(Self {})
+    }
     // pub fn new(
     //     embed_dim: usize,
     //     output_dim: usize,
@@ -368,14 +381,17 @@ impl RobertaLMHead {
 
 #[derive(Debug)]
 pub struct ContactPredictionHead {
-    in_features: usize,
-    prepend_bos: bool,
-    append_eos: bool,
-    regression: candle_nn::Linear,
-    eos_idx: Option<usize>,
+    // in_features: usize,
+    // prepend_bos: bool,
+    // append_eos: bool,
+    // regression: candle_nn::Linear,
+    // eos_idx: Option<usize>,
 }
 
 impl ContactPredictionHead {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        Ok(Self {})
+    }
     // pub fn new(
     //     in_features: usize,
     //     prepend_bos: bool,
