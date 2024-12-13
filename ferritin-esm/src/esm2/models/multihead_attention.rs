@@ -72,14 +72,14 @@ pub struct MultiheadAttention {
     // scaling: f64,
     // self_attention: bool,
     // encoder_decoder_attention: bool,
-    // q_proj: linear::Linear,
-    // k_proj: linear::Linear,
-    // v_proj: linear::Linear,
-    // out_proj: linear::Linear,
+    q_proj: nn::Linear,
+    k_proj: nn::Linear,
+    v_proj: nn::Linear,
+    out_proj: nn::Linear,
     // bias_k: Option<Tensor>,
     // bias_v: Option<Tensor>,
     // add_zero_attn: bool,
-    // rot_emb: Option<RotaryEmbedding>,
+    rot_emb: Option<RotaryEmbedding>,
     // onnx_trace: bool,
     // enable_torch_version: bool,
     // incremental_state: FairseqIncrementalState,
@@ -110,16 +110,24 @@ impl MultiheadAttention {
         let q_proj = nn::linear(embed_dim, embed_dim, vb.pp("self.query"))?;
         let k_proj = nn::linear(kdim, embed_dim, vb.pp("self.key"))?;
         let v_proj = nn::linear(vdim, embed_dim, vb.pp("self.value"))?;
+        let out_proj = nn::linear(embed_dim, embed_dim, vb.pp("output.dense"))?;
+        let rot_emb = RotaryEmbedding::load(vb.pp("rotary_embeddings"), config)?;
 
-        // MultiheadAttention::new(
-        //             embed_dim,
-        //             attention_heads,
-        //             add_bias_kv,
-        //             false,
-        //             use_rotary_embeddings,
-        //             vb.pp("self_attn"),
-        //         )?,
-        Ok(Self {})
+        //     let (bias_k, bias_v) = if add_bias_kv {
+        //         let bias_k = vb.get_with_hints("bias_k", &[1, 1, embed_dim], init::ZEROS)?;
+        //         let bias_v = vb.get_with_hints("bias_v", &[1, 1, embed_dim], init::ZEROS)?;
+        //         (Some(bias_k), Some(bias_v))
+        //     } else {
+        //         (None, None)
+        //     };
+
+        Ok(Self {
+            q_proj,
+            k_proj,
+            v_proj,
+            out_proj,
+            rot_emb: Some(rot_emb),
+        })
     }
     // pub fn new(
     //     vb: VarBuilder,

@@ -1,4 +1,6 @@
+use super::esm2::ESM2Config;
 use candle_core::{Module, Result, Tensor};
+use candle_nn::VarBuilder;
 
 // fn rotate_half(x: &Tensor) -> Result<Tensor> {
 //     let (x1, x2) = x.chunk(2, -1)?;
@@ -19,12 +21,26 @@ use candle_core::{Module, Result, Tensor};
 #[derive(Debug)]
 pub struct RotaryEmbedding {
     inv_freq: Tensor,
-    seq_len_cached: Option<usize>,
-    cos_cached: Option<Tensor>,
-    sin_cached: Option<Tensor>,
+    // seq_len_cached: Option<usize>,
+    // cos_cached: Option<Tensor>,
+    // sin_cached: Option<Tensor>,
 }
 
 impl RotaryEmbedding {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        let ESM2Config {
+            num_hidden_layers, ..
+        } = config;
+
+        let inv_freq = (0..*num_hidden_layers)
+            .step_by(2)
+            .map(|i| 1f32 / 10000f32.powf(i as f32 / *num_hidden_layers as f32))
+            .collect::<Vec<_>>();
+
+        let inv_freq = Tensor::new(inv_freq, vb.device())?;
+
+        Ok(Self { inv_freq })
+    }
     // pub fn new(dim: usize, device: &Device) -> Result<Self> {
     //     let inv_freq = (0..dim)
     //         .step_by(2)
