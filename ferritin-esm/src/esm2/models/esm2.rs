@@ -1,4 +1,4 @@
-use super::modules::{ContactPredictionHead, ESM1bLayerNorm, RobertaLMHead, TransformerLayer};
+use super::modules::{ContactPredictionHead, RobertaLMHead, TransformerLayer};
 use candle_core::{DType, Device, Module, Result, Tensor};
 use candle_nn::{self as nn, Embedding, LayerNorm, VarBuilder};
 use serde::Deserialize;

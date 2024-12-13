@@ -33,38 +33,38 @@ fn apc(x: &Tensor) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug)]
-pub struct ESM1LayerNorm {
-    layernorm: LayerNorm,
-}
+// #[derive(Debug)]
+// pub struct ESM1LayerNorm {
+//     layernorm: LayerNorm,
+// }
 
-impl ESM1LayerNorm {
-    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        let ln_conf = nn::LayerNormConfig {
-            eps: 1e-5,
-            remove_mean: true,
-            affine: true,
-        };
-        let layernorm = nn::layer_norm((100), ln_conf, vb.pp("LayerNorm"))?;
-        Ok(Self { layernorm })
-    }
+// impl ESM1LayerNorm {
+//     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+//         let ln_conf = nn::LayerNormConfig {
+//             eps: 1e-5,
+//             remove_mean: true,
+//             affine: true,
+//         };
+//         let layernorm = nn::layer_norm((100), ln_conf, vb.pp("LayerNorm"))?;
+//         Ok(Self { layernorm })
+//     }
 
-    // pub fn new(size: usize, eps: f64, affine: bool, vb: VarBuilder) -> Result<Self> {
-    //     let weight = if affine {
-    //         vb.get_with_hints(size, "weight", candle_nn::Init::Const(1.))?
-    //     } else {
-    //         Tensor::ones(size, &Device::Cpu)?
-    //     };
+// pub fn new(size: usize, eps: f64, affine: bool, vb: VarBuilder) -> Result<Self> {
+//     let weight = if affine {
+//         vb.get_with_hints(size, "weight", candle_nn::Init::Const(1.))?
+//     } else {
+//         Tensor::ones(size, &Device::Cpu)?
+//     };
 
-    //     let bias = if affine {
-    //         Some(vb.get_with_hints(size, "bias", candle_nn::Init::Const(0.))?)
-    //     } else {
-    //         None
-    //     };
+//     let bias = if affine {
+//         Some(vb.get_with_hints(size, "bias", candle_nn::Init::Const(0.))?)
+//     } else {
+//         None
+//     };
 
-    //     Ok(Self { weight, bias, eps })
-    // }
-}
+//     Ok(Self { weight, bias, eps })
+// }
+// }
 
 // impl Module for ESM1LayerNorm {
 //     fn forward(&self, x: &Tensor) -> Result<Tensor> {
@@ -83,7 +83,7 @@ impl ESM1LayerNorm {
 //     }
 // }
 
-pub type ESM1bLayerNorm = ESM1LayerNorm;
+// pub type ESM1bLayerNorm = ESM1LayerNorm;
 
 #[derive(Debug)]
 pub struct TransformerLayer {
@@ -486,7 +486,7 @@ impl ContactPredictionHead {
 pub struct NormalizedResidualBlock<T: Module> {
     layer: T,
     dropout: f64,
-    layer_norm: ESM1bLayerNorm,
+    layer_norm: LayerNorm,
 }
 
 impl<T: Module> NormalizedResidualBlock<T> {
