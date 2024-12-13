@@ -18,7 +18,42 @@ MAFSAEDVLKEYDRR\<mask\>RMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIK
 
 ## Model Shape
 
+```txt
+EsmModel(
+  (embeddings): EsmEmbeddings(
+    (word_embeddings): Embedding(33, 320, padding_idx=1)
+    (dropout): Dropout(p=0.0, inplace=False)
+    (position_embeddings): Embedding(1026, 320, padding_idx=1))
+  (encoder): EsmEncoder(
+    (layer): ModuleList(
+      (0-5): 6 x EsmLayer(
+        (attention): EsmAttention(
+          (self): EsmSelfAttention(
+            (query): Linear(in_features=320, out_features=320, bias=True)
+            (key): Linear(in_features=320, out_features=320, bias=True)
+            (value): Linear(in_features=320, out_features=320, bias=True)
+            (dropout): Dropout(p=0.0, inplace=False)
+            (rotary_embeddings): RotaryEmbedding())
+          (output): EsmSelfOutput(
+            (dense): Linear(in_features=320, out_features=320, bias=True)
+            (dropout): Dropout(p=0.0, inplace=False))
+          (LayerNorm): LayerNorm((320,), eps=1e-05, elementwise_affine=True))
+        (intermediate): EsmIntermediate(
+          (dense): Linear(in_features=320, out_features=1280, bias=True))
+        (output): EsmOutput(
+          (dense): Linear(in_features=1280, out_features=320, bias=True)
+          (dropout): Dropout(p=0.0, inplace=False))
+        (LayerNorm): LayerNorm((320,), eps=1e-05, elementwise_affine=True)))
+    (emb_layer_norm_after): LayerNorm((320,), eps=1e-05, elementwise_affine=True))
+  (pooler): EsmPooler(
+    (dense): Linear(in_features=320, out_features=320, bias=True)
+    (activation): Tanh())
+  (contact_head): EsmContactPredictionHead(
+    (regression): Linear(in_features=120, out_features=1, bias=True)
+    (activation): Sigmoid())
 ```
+
+```txt
 Loading the Model and Tokenizer.......
 Name: esm.contact_head.regression.bias, Shape: [1]
 Name: esm.contact_head.regression.weight, Shape: [1, 120]

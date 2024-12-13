@@ -111,15 +111,12 @@ impl TransformerLayer {
         // Todo: Fix this!
         let embed_dim = 100;
         let ffn_embed_dim = 100;
-
         let ln_conf = nn::LayerNormConfig {
             eps: 1e-5,
             remove_mean: true,
             affine: true,
         };
-
         let layer_norm = nn::layer_norm((*hidden_size as usize), ln_conf, vb.pp("LayerNorm"))?;
-
         let multi_head = MultiheadAttention::load(vb.pp("attention"), config)?;
         // let fc1 = nn::linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?;
         // let fc2 = nn::linear(ffn_embed_dim, embed_dim, vb.pp("fc2"))?;
@@ -387,14 +384,19 @@ impl SinusoidalPositionalEmbedding {
 #[derive(Debug)]
 pub struct RobertaLMHead {
     dense: candle_nn::Linear,
-    layer_norm: ESM1bLayerNorm,
+    layer_norm: LayerNorm,
 }
 
 impl RobertaLMHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let ESM2Config { hidden_size, .. } = config;
         let dense = nn::linear(*hidden_size as usize, *hidden_size as usize, vb.pp("dense"))?;
-        let layer_norm = ESM1bLayerNorm::load(vb.pp("LayerNorm"), config)?;
+        let ln_conf = nn::LayerNormConfig {
+            eps: 1e-5,
+            remove_mean: true,
+            affine: true,
+        };
+        let layer_norm = nn::layer_norm((*hidden_size as usize), ln_conf, vb.pp("layer_norm"))?;
         Ok(Self { dense, layer_norm })
     }
     // pub fn new(

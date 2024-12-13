@@ -1,6 +1,6 @@
 use super::modules::{ContactPredictionHead, ESM1bLayerNorm, RobertaLMHead, TransformerLayer};
 use candle_core::{DType, Device, Module, Result, Tensor};
-use candle_nn::{self as nn, Embedding, VarBuilder};
+use candle_nn::{self as nn, Embedding, LayerNorm, VarBuilder};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
 
@@ -98,7 +98,7 @@ pub struct ESM2 {
     pub embed_tokens: nn::Embedding,
     layers: Vec<TransformerLayer>,
     contact_head: ContactPredictionHead,
-    emb_layer_norm_after: ESM1bLayerNorm,
+    emb_layer_norm_after: LayerNorm,
     lm_head: RobertaLMHead,
     config: ESM2Config,
 }
@@ -109,6 +109,7 @@ impl ESM2 {
         let ESM2Config {
             intermediate_size,
             num_hidden_layers,
+            hidden_size,
             vocab_size,
             ..
         } = config;
@@ -139,8 +140,17 @@ impl ESM2 {
             layers.push(transformer_layer);
         }
         let contact_head = ContactPredictionHead::load(vb.pp("esm.contact_head"), config)?;
-        let emb_layer_norm_after =
-            ESM1bLayerNorm::load(vb.pp("esm.encoder.emb_layer_norm_after"), config)?;
+        let ln_conf = nn::LayerNormConfig {
+            eps: 1e-5,
+            remove_mean: true,
+            affine: false,
+        };
+        let emb_layer_norm_after = nn::layer_norm(
+            (*hidden_size as usize),
+            ln_conf,
+            vb.pp("esm.encoder.emb_layer_norm_after"),
+        )?;
+
         let lm_head = RobertaLMHead::load(vb.pp("lm_head"), config)?;
 
         Ok(Self {
