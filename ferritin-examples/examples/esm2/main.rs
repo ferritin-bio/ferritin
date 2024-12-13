@@ -1,4 +1,5 @@
 use anyhow::{Error as E, Result};
+use candle_core::safetensors::load;
 use candle_core::{DType, Tensor, D};
 use candle_examples::device;
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
@@ -55,6 +56,12 @@ impl Args {
             .replace("SwiGLU", "swiglu")
             .replace("Swiglu", "swiglu");
 
+        // Now you can iterate through the tensors
+        let tensors = load(&weights_filename, &device)?;
+        for (name, tensor) in tensors.iter() {
+            println!("Name: {}, Shape: {:?}", name, tensor.shape());
+        }
+
         let config: Config = serde_json::from_str(&config_str)?;
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
@@ -64,7 +71,7 @@ impl Args {
         let encoded = tokenizer.encode(protein, false);
 
         println!("Encoded.... and.....");
-        let model = ESM2::load(vb, &config);
+        let model = ESM2::load(vb, &config)?;
         println!("Loaded!");
 
         Ok((model, tokenizer))

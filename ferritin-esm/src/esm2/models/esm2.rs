@@ -3,38 +3,8 @@ use candle_core::{DType, Device, Module, Result, Tensor};
 use candle_nn::{self as nn, VarBuilder};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
-#[derive(Deserialize)]
 
-// {
-//   "_name_or_path": "/tmp/facebook/esm2_t12_35M_UR50D",
-//   "architectures": [
-//     "EsmForMaskedLM"
-//   ],
-//   "attention_probs_dropout_prob": 0.0,
-//   "classifier_dropout": null,
-//   "emb_layer_norm_before": false,
-//   "esmfold_config": null,
-//   "hidden_act": "gelu",
-//   "hidden_dropout_prob": 0.0,
-//   "hidden_size": 480,
-//   "initializer_range": 0.02,
-//   "intermediate_size": 1920,
-//   "is_folding_model": false,
-//   "layer_norm_eps": 1e-05,
-//   "mask_token_id": 32,
-//   "max_position_embeddings": 1026,
-//   "model_type": "esm",
-//   "num_attention_heads": 20,
-//   "num_hidden_layers": 12,
-//   "pad_token_id": 1,
-//   "position_embedding_type": "rotary",
-//   "token_dropout": true,
-//   "torch_dtype": "float32",
-//   "transformers_version": "4.25.0.dev0",
-//   "use_cache": true,
-//   "vocab_list": null,
-//   "vocab_size": 33
-// }
+#[derive(Deserialize)]
 pub struct ESM2Config {
     num_attention_heads: i32,
     attention_probs_dropout_prob: f32,
@@ -93,26 +63,6 @@ impl ESM2Config {
     }
 }
 
-//   "hidden_size": 2560,
-//   "initializer_range": 0.02,
-//   "intermediate_size": 10240,
-//   "is_folding_model": false,
-//   "layer_norm_eps": 1e-05,
-//   "mask_token_id": 32,
-//   "max_position_embeddings": 1026,
-//   "model_type": "esm",
-//   "num_attention_heads": 40,
-//   "num_hidden_layers": 36,
-//   "pad_token_id": 1,
-//   "position_embedding_type": "rotary",
-//   "token_dropout": true,
-//   "torch_dtype": "float32",
-//   "transformers_version": "4.25.0.dev0",
-//   "use_cache": true,
-//   "vocab_list": null,
-//   "vocab_size": 33
-// }
-
 /// ESM2 Architecture
 pub struct ESM2 {
     // num_layers: i32,
@@ -135,56 +85,71 @@ pub struct ESM2 {
 }
 
 impl ESM2 {
-    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Self {
-        // Self {}
-        // pub fn new(
-        //     num_layers: i32,
-        //     embed_dim: i32,
-        //     attention_heads: i32,
-        //     // alphabet: &EsmSequenceTokenizer,
-        //     alphabet: &Tokenizer,
-        //     token_dropout: bool,
-        //     vb: VarBuilder,
-        // ) -> Result<Self>
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        let ESM2Config {
+            num_attention_heads,
+            attention_probs_dropout_prob,
+            classifier_dropout,
+            emb_layer_norm_before,
+            esmfold_config,
+            hidden_act,
+            hidden_dropout_prob,
+            hidden_size,
+            initializer_range,
+            intermediate_size,
+            is_folding_model,
+            layer_norm_eps,
+            mask_token_id,
+            max_position_embeddings,
+            model_type,
+            num_hidden_layers,
+            pad_token_id,
+            position_embedding_type,
+            token_dropout,
+            torch_dtype,
+            transformers_version,
+            use_cache,
+            vocab_list,
+            vocab_size,
+        } = config;
 
-            let alphabet_size = alphabet.vocab_size();
-            let padding_idx = alphabet.padding_idx();
-            let mask_idx = alphabet.mask_idx();
-            let cls_idx = alphabet.cls_idx();
-            let eos_idx = alphabet.eos_idx();
-            let prepend_bos = alphabet.prepend_bos();
-            let append_eos = alphabet.append_eos();
-            let embed_scale = 1.0;
-            let embed_tokens =
-                nn::embedding(alphabet_size, embed_dim, padding_idx, vb.pp("embed_tokens"))?;
+        let alphabet_size = vocab_size;
+        let (cls_idx, padding_idx, eos_idx, mask_idx) = (0, 1, 2, 32);
 
-            let mut layers = Vec::with_capacity(num_layers as usize);
-            for i in 0..num_layers {
-                layers.push(TransformerLayer::new(
-                    embed_dim,
-                    4 * embed_dim,
-                    attention_heads,
-                    false,
-                    true,
-                    true,
-                    vb.pp(&format!("layers.{}", i)),
-                )?);
-            }
+        // let prepend_bos = alphabet.prepend_bos();
+        // let append_eos = alphabet.append_eos();
 
-            let contact_head = ContactPredictionHead::new(
-                num_layers * attention_heads,
-                prepend_bos,
-                append_eos,
-                eos_idx,
-                vb.pp("contact_head"),
-            )?;
+        let embed_scale = 1.0;
+        // let embed_tokens =
+        //     nn::embedding(alphabet_size, embed_dim, padding_idx, vb.pp("embed_tokens"))?;
 
-            let emb_layer_norm_after = ESM1bLayerNorm::new(embed_dim, vb.pp("emb_layer_norm_after"))?;
+        // let mut layers = Vec::with_capacity(num_layers as usize);
+        // for i in 0..num_layers {
+        //     layers.push(TransformerLayer::new(
+        //         embed_dim,
+        //         4 * embed_dim,
+        //         attention_heads,
+        //         false,
+        //         true,
+        //         true,
+        //         vb.pp(&format!("layers.{}", i)),
+        //     )?);
+        // }
 
-            let lm_head =
-                RobertaLMHead::new(embed_dim, alphabet_size, &embed_tokens, vb.pp("lm_head"))?;
+        // let contact_head = ContactPredictionHead::new(
+        //     num_layers * attention_heads,
+        //     prepend_bos,
+        //     append_eos,
+        //     eos_idx,
+        //     vb.pp("contact_head"),
+        // )?;
 
-            Ok(Self {
+        // let emb_layer_norm_after = ESM1bLayerNorm::new(embed_dim, vb.pp("emb_layer_norm_after"))?;
+
+        // let lm_head =
+        //     RobertaLMHead::new(embed_dim, alphabet_size, &embed_tokens, vb.pp("lm_head"))?;
+
+        Ok(Self {
                 // num_layers,
                 // embed_dim,
                 // attention_heads,
@@ -203,8 +168,6 @@ impl ESM2 {
                 // emb_layer_norm_after,
                 // lm_head,
             })
-        }
-
     }
     // pub fn get_device(&self) -> &Device {
     //     self.freqs_cis.device()
