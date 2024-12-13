@@ -108,6 +108,7 @@ fn main() -> Result<()> {
         let token_ids = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
 
         println!("Encoding.......");
+
         let encoded = model.forward(&token_ids, None, false, false)?;
 
         // println!("Predicting.......");

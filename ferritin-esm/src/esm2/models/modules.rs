@@ -153,33 +153,33 @@ impl TransformerLayer {
     //     })
     // }
 
-    // pub fn forward(
-    //     &self,
-    //     x: &Tensor,
-    //     self_attn_mask: Option<&Tensor>,
-    //     self_attn_padding_mask: Option<&Tensor>,
-    //     need_head_weights: bool,
-    // ) -> Result<(Tensor, Option<Tensor>)> {
-    //     let residual = x;
-    //     let x = self.self_attn_layer_norm.forward(x)?;
-    //     let (x, attn) = self.self_attn.forward_t(
-    //         &x,
-    //         &x,
-    //         &x,
-    //         self_attn_padding_mask,
-    //         need_head_weights,
-    //         self_attn_mask,
-    //     )?;
-    //     let x = x.add(residual)?;
+    pub fn forward(
+        &self,
+        x: &Tensor,
+        self_attn_mask: Option<&Tensor>,
+        self_attn_padding_mask: Option<&Tensor>,
+        need_head_weights: bool,
+    ) -> Result<(Tensor, Option<Tensor>)> {
+        let residual = x;
+        let x = self.self_attn_layer_norm.forward(x)?;
+        let (x, attn) = self.self_attn.forward_t(
+            &x,
+            &x,
+            &x,
+            self_attn_padding_mask,
+            need_head_weights,
+            self_attn_mask,
+        )?;
+        let x = x.add(residual)?;
 
-    //     let residual = &x;
-    //     let x = self.final_layer_norm.forward(&x)?;
-    //     let x = gelu(&self.fc1.forward(&x)?)?;
-    //     let x = self.fc2.forward(&x)?;
-    //     let x = x.add(residual)?;
+        let residual = &x;
+        let x = self.final_layer_norm.forward(&x)?;
+        let x = gelu(&self.fc1.forward(&x)?)?;
+        let x = self.fc2.forward(&x)?;
+        let x = x.add(residual)?;
 
-    //     Ok((x, attn))
-    // }
+        Ok((x, attn))
+    }
 }
 
 #[derive(Debug)]

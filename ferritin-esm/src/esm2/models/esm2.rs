@@ -1,6 +1,6 @@
 use super::modules::{ContactPredictionHead, ESM1bLayerNorm, RobertaLMHead, TransformerLayer};
 use candle_core::{DType, Device, Module, Result, Tensor};
-use candle_nn::{self as nn, Linear, VarBuilder};
+use candle_nn::{self as nn, Embedding, VarBuilder};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
 
@@ -95,7 +95,7 @@ pub struct ModelOutput {}
 
 /// ESM2 Architecture
 pub struct ESM2 {
-    embed_tokens: Option<nn::Embedding>,
+    pub embed_tokens: nn::Embedding,
     layers: Vec<TransformerLayer>,
     contact_head: ContactPredictionHead,
     emb_layer_norm_after: ESM1bLayerNorm,
@@ -124,12 +124,13 @@ impl ESM2 {
         //     padding_idx=self.padding_idx,
         // )
 
-        let e_tensor = Tensor::zeros(
+        // todo: check this embedding section....
+        let embed_tensor = Tensor::zeros(
             (*vocab_size as usize, *intermediate_size as usize),
             vb.dtype(),
             vb.device(),
         )?;
-        let embed_tokens = Linear::new(e_tensor, None);
+        let embed_tokens = Embedding::new(embed_tensor, *intermediate_size as usize);
 
         let mut layers = Vec::with_capacity(*num_hidden_layers as usize);
         for i in 0..*num_hidden_layers {
@@ -143,7 +144,7 @@ impl ESM2 {
         let lm_head = RobertaLMHead::load(vb.pp("lm_head"), config)?;
 
         Ok(Self {
-            embed_tokens: None,
+            embed_tokens: embed_tokens,
             layers,
             contact_head,
             emb_layer_norm_after,
@@ -222,7 +223,7 @@ impl ESM2 {
     //     })
     // }
 
-    fn forward(
+    pub fn forward(
         &self,
         tokens: &Tensor,
         repr_layers: &[i32],
@@ -233,10 +234,10 @@ impl ESM2 {
         let padding_idx = 1_u32; // see tokenizer.json
         let padding_mask = tokens.eq(padding_idx)?;
 
-        let mut x = self
-            .embed_tokens
-            .forward(tokens)?
-            .mul_scalar(self.embed_scale)?;
+        let embed_scale = 1.;
+
+        let mut x = self.embed_tokens.forward(tokens)?;
+        x = (x * embed_scale)?;
 
         // if self.token_dropout {
         //     let mask = tokens.eq(self.mask_idx)?.unsqueeze(-1)?;
@@ -273,19 +274,17 @@ impl ESM2 {
         //     Some(padding_mask)
         // };
 
-        // for (layer_idx, layer) in self.layers.iter().enumerate() {
-        //     let (new_x, attn) = layer.forward(&x, padding_mask.as_ref(), need_head_weights)?;
-        //     x = new_x;
-
-        //     if repr_layers.contains(&(layer_idx as i32 + 1)) {
-        //         hidden_representations
-        //             .insert((layer_idx + 1).to_string(), x.transpose(0, 1)?.clone());
-        //     }
-
-        //     if need_head_weights {
-        //         attn_weights.push(attn.transpose(1, 0)?);
-        //     }
-        // }
+        for (layer_idx, layer) in self.layers.iter().enumerate() {
+            let (new_x, attn) = layer.forward(&x, padding_mask.as_ref(), need_head_weights)?;
+            x = new_x;
+            if repr_layers.contains(&(layer_idx as i32 + 1)) {
+                hidden_representations
+                    .insert((layer_idx + 1).to_string(), x.transpose(0, 1)?.clone());
+            }
+            if need_head_weights {
+                attn_weights.push(attn.transpose(1, 0)?);
+            }
+        }
 
         // x = self.emb_layer_norm_after.forward(&x)?;
         // x = x.transpose(0, 1)?;
