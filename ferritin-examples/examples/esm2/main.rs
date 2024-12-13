@@ -83,6 +83,7 @@ fn main() -> Result<()> {
 
     println!("Loading the Model and Tokenizer.......");
     let (model, tokenizer) = args.build_model_and_tokenizer()?;
+
     // let device = &model.get_device();
     let device = device(false)?;
 
@@ -98,8 +99,6 @@ fn main() -> Result<()> {
     };
 
     for prot in protein_sequences.iter() {
-        // let sprot_01 = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
-
         let tokens = tokenizer
             .encode(prot.to_string(), false)
             .map_err(E::msg)?
@@ -108,8 +107,7 @@ fn main() -> Result<()> {
 
         let token_ids = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
 
-        println!("token_ids");
-        // println!("Encoding.......");
+        println!("Encoding.......");
         // let encoded = model.forward(&token_ids, None, false, false)?;
 
         // println!("Predicting.......");

@@ -4,7 +4,7 @@ use candle_nn::{self as nn, VarBuilder};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct ESM2Config {
     num_attention_heads: i32,
     attention_probs_dropout_prob: f32,
@@ -65,23 +65,12 @@ impl ESM2Config {
 
 /// ESM2 Architecture
 pub struct ESM2 {
-    // num_layers: i32,
-    // embed_dim: i32,
-    // attention_heads: i32,
-    // alphabet_size: i32,
-    // padding_idx: i32,
-    // mask_idx: i32,
-    // cls_idx: i32,
-    // eos_idx: i32,
-    // prepend_bos: bool,
-    // append_eos: bool,
-    // token_dropout: bool,
-    // embed_scale: f32,
-    // embed_tokens: nn::Embedding,
-    // layers: Vec<TransformerLayer>,
-    // contact_head: ContactPredictionHead,
-    // emb_layer_norm_after: ESM1bLayerNorm,
-    // lm_head: RobertaLMHead,
+    embed_tokens: nn::Embedding,
+    layers: Vec<TransformerLayer>,
+    contact_head: ContactPredictionHead,
+    emb_layer_norm_after: ESM1bLayerNorm,
+    lm_head: RobertaLMHead,
+    config: ESM2Config,
 }
 
 impl ESM2 {
@@ -122,16 +111,16 @@ impl ESM2 {
 
         let embed_dim = 32;
         let embed_scale = 1.0;
-        // let embed_tokens = nn::embedding(
-        //     alphabet_size,
-        //     embed_dim,
-        //     // padding_idx,
-        //     vb.pp("embeddings"),
-        // )?;
+        let embed_tokens = nn::embedding(
+            alphabet_size,
+            embed_dim,
+            // padding_idx,
+            vb.pp("embeddings"),
+        )?;
 
         let mut layers = Vec::with_capacity(num_layers as usize);
         for i in 0..num_layers {
-            let transformer_layer = TransformerLayer::load(vb.pp(format!("layer.{}", i)), config);
+            let transformer_layer = TransformerLayer::load(vb.pp(format!("layer.{}", i)), config)?;
             layers.push(transformer_layer);
             // layers.push(TransformerLayer::new(
             //     embed_dim,
@@ -164,24 +153,13 @@ impl ESM2 {
         let lm_head = RobertaLMHead::load(vb.pp("lm_head"), config)?;
 
         Ok(Self {
-                // num_layers,
-                // embed_dim,
-                // attention_heads,
-                // alphabet_size,
-                // padding_idx,
-                // mask_idx,
-                // cls_idx,
-                // eos_idx,
-                // prepend_bos,
-                // append_eos,
-                // token_dropout,
-                // embed_scale,
-                // embed_tokens,
-                // layers,
-                // contact_head,
-                // emb_layer_norm_after,
-                // lm_head,
-            })
+            embed_tokens: embed_tokens,
+            layers: layers,
+            contact_head: contact_head,
+            emb_layer_norm_after: emb_layer_norm_after,
+            lm_head: lm_head,
+            config: config.clone(),
+        })
     }
     // pub fn get_device(&self) -> &Device {
     //     self.freqs_cis.device()
