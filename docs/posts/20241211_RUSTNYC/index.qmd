@@ -1,0 +1,17 @@
+---
+title: "RUST NYC"
+description: "Presenting on ferritin at NYC-Rust"
+author: "Zachary Charlop-Powers"
+date: "2024-12-11"
+categories: [rust, ai, proteins]
+image: "images/rust-nyc.png"
+---
+
+
+# Rust NYC
+
+I presented at the [Rust NYC Meetup](https://www.meetup.com/rust-nyc/). Great group; highly recommend.
+
+<iframe width="100%" height="100%" style="aspect-ratio: 16/9;" src="https://www.youtube.com/embed/YyjUFKD3e3A"
+ title="YouTube video player"
+ frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
