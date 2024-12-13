@@ -65,7 +65,7 @@ impl ESM2Config {
 
 /// ESM2 Architecture
 pub struct ESM2 {
-    embed_tokens: nn::Embedding,
+    embed_tokens: Option<nn::Embedding>,
     layers: Vec<TransformerLayer>,
     contact_head: ContactPredictionHead,
     emb_layer_norm_after: ESM1bLayerNorm,
@@ -103,20 +103,19 @@ impl ESM2 {
         } = config;
 
         let num_layers = num_attention_heads.clone() as usize; // Todo: this is probably wrong
-        let alphabet_size = vocab_size.clone() as usize;
-        let (cls_idx, padding_idx, eos_idx, mask_idx) = (0, 1, 2, 32);
+                                                               // let alphabet_size = vocab_size.clone() as usize;
+                                                               // let (cls_idx, padding_idx, eos_idx, mask_idx) = (0, 1, 2, 32);
+                                                               // let prepend_bos = alphabet.prepend_bos();
+                                                               // let append_eos = alphabet.append_eos();
 
-        // let prepend_bos = alphabet.prepend_bos();
-        // let append_eos = alphabet.append_eos();
-
-        let embed_dim = 32;
-        let embed_scale = 1.0;
-        let embed_tokens = nn::embedding(
-            alphabet_size,
-            embed_dim,
-            // padding_idx,
-            vb.pp("embeddings"),
-        )?;
+        // let embed_dim = 32;
+        // let embed_scale = 1.0;
+        // let embed_tokens = nn::embedding(
+        //     alphabet_size,
+        //     embed_dim,
+        //     // padding_idx,
+        //     vb.pp("esm.embeddings"),
+        // )?;
 
         let mut layers = Vec::with_capacity(num_layers as usize);
         for i in 0..num_layers {
@@ -140,20 +139,17 @@ impl ESM2 {
         //     eos_idx,
         //     vb.pp("contact_head"),
         // )?;
-
         let contact_head = ContactPredictionHead::load(vb.pp("contact_head"), config)?;
 
         // let emb_layer_norm_after = ESM1bLayerNorm::new(embed_dim, vb.pp("emb_layer_norm_after"))?;
-
         let emb_layer_norm_after = ESM1bLayerNorm::load(vb.pp("emb_layer_norm_after"), config)?;
 
         // let lm_head =
         //     RobertaLMHead::new(embed_dim, alphabet_size, &embed_tokens, vb.pp("lm_head"))?;
-
         let lm_head = RobertaLMHead::load(vb.pp("lm_head"), config)?;
 
         Ok(Self {
-            embed_tokens: embed_tokens,
+            embed_tokens: None,
             layers: layers,
             contact_head: contact_head,
             emb_layer_norm_after: emb_layer_norm_after,
