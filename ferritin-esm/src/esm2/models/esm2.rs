@@ -115,7 +115,8 @@ impl ESM2 {
             layers.push(transformer_layer);
         }
         let contact_head = ContactPredictionHead::load(vb.pp("esm.contact_head"), config)?;
-        let emb_layer_norm_after = ESM1bLayerNorm::load(vb.pp("emb_layer_norm_after"), config)?;
+        let emb_layer_norm_after =
+            ESM1bLayerNorm::load(vb.pp("esm.encoder.emb_layer_norm_after"), config)?;
         let lm_head = RobertaLMHead::load(vb.pp("lm_head"), config)?;
 
         Ok(Self {

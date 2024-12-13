@@ -28,6 +28,9 @@ pub struct RotaryEmbedding {
 
 impl RotaryEmbedding {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        // todo: I am pullin gout the num_hidden_layers here but the real shape is
+        // Name: esm.encoder.layer.0.attention.self.rotary_embeddings.inv_freq, Shape: [8]
+        // where is that `8` coming from?
         let ESM2Config {
             num_hidden_layers, ..
         } = config;

@@ -7,9 +7,6 @@ use super::esm2::ESM2Config;
 use super::rotary_embedding::RotaryEmbedding;
 use candle_core::{Device, Module, Result, Tensor};
 use candle_nn::{self as nn, linear, ops, VarBuilder};
-use std::collections::HashMap;
-
-// use uuid::Uuid;
 
 // pub fn utils_softmax(x: &Tensor, dim: i64, onnx_trace: bool) -> Result<Tensor> {
 //     if onnx_trace {
@@ -72,16 +69,16 @@ pub struct MultiheadAttention {
     // scaling: f64,
     // self_attention: bool,
     // encoder_decoder_attention: bool,
+    // bias_k: Option<Tensor>,
+    // bias_v: Option<Tensor>,
+    // add_zero_attn: bool,
+    // onnx_trace: bool,
+    // enable_torch_version: bool,
     q_proj: nn::Linear,
     k_proj: nn::Linear,
     v_proj: nn::Linear,
     out_proj: nn::Linear,
-    // bias_k: Option<Tensor>,
-    // bias_v: Option<Tensor>,
-    // add_zero_attn: bool,
     rot_emb: Option<RotaryEmbedding>,
-    // onnx_trace: bool,
-    // enable_torch_version: bool,
     // incremental_state: FairseqIncrementalState,
 }
 
@@ -93,6 +90,7 @@ impl MultiheadAttention {
             ..
         } = config;
 
+        //  "num_attention_heads": 20,
         let embed_dim = *hidden_size as usize;
         let num_heads = *num_attention_heads as usize;
         let head_dim = embed_dim / num_heads;

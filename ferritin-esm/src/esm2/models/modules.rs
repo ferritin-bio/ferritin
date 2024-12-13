@@ -471,44 +471,44 @@ pub struct NormalizedResidualBlock<T: Module> {
     layer_norm: ESM1bLayerNorm,
 }
 
-// impl<T: Module> NormalizedResidualBlock<T> {
-//     pub fn new(layer: T, embedding_dim: usize, dropout: f64) -> Result<Self> {
-//         let vb = VarBuilder::zeros();
-//         Ok(Self {
-//             layer,
-//             dropout,
-//             layer_norm: ESM1bLayerNorm::new(embedding_dim, 1e-12, true, vb)?,
-//         })
-//     }
+impl<T: Module> NormalizedResidualBlock<T> {
+    // pub fn new(layer: T, embedding_dim: usize, dropout: f64) -> Result<Self> {
+    //     let vb = VarBuilder::zeros();
+    //     Ok(Self {
+    //         layer,
+    //         dropout,
+    //         layer_norm: ESM1bLayerNorm::new(embedding_dim, 1e-12, true, vb)?,
+    //     })
+    // }
 
-//     pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
-//         let residual = x;
-//         let x = self.layer_norm.forward(x)?;
-//         let x = self.layer.forward(&x)?;
-//         let x = if self.dropout > 0. {
-//             x.dropout(self.dropout)?
-//         } else {
-//             x
-//         };
-//         x.add(residual)
-//     }
+    //     pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    //         let residual = x;
+    //         let x = self.layer_norm.forward(x)?;
+    //         let x = self.layer.forward(&x)?;
+    //         let x = if self.dropout > 0. {
+    //             x.dropout(self.dropout)?
+    //         } else {
+    //             x
+    //         };
+    //         x.add(residual)
+    //     }
 
-//     pub fn forward_t<A, B>(&self, x: &Tensor, a: A, b: B) -> Result<(Tensor, Tensor)>
-//     where
-//         T: ModuleWithAttention<A, B>,
-//     {
-//         let residual = x;
-//         let x = self.layer_norm.forward(x)?;
-//         let (x, attn) = self.layer.forward_t(&x, a, b)?;
-//         let x = if self.dropout > 0. {
-//             x.dropout(self.dropout)?
-//         } else {
-//             x
-//         };
-//         let x = x.add(residual)?;
-//         Ok((x, attn))
-//     }
-// }
+    //     pub fn forward_t<A, B>(&self, x: &Tensor, a: A, b: B) -> Result<(Tensor, Tensor)>
+    //     where
+    //         T: ModuleWithAttention<A, B>,
+    //     {
+    //         let residual = x;
+    //         let x = self.layer_norm.forward(x)?;
+    //         let (x, attn) = self.layer.forward_t(&x, a, b)?;
+    //         let x = if self.dropout > 0. {
+    //             x.dropout(self.dropout)?
+    //         } else {
+    //             x
+    //         };
+    //         let x = x.add(residual)?;
+    //         Ok((x, attn))
+    //     }
+}
 
 pub trait ModuleWithAttention<A, B> {
     fn forward_t(&self, x: &Tensor, a: A, b: B) -> Result<(Tensor, Tensor)>;
