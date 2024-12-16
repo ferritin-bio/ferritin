@@ -1,1 +1,0 @@
-# Amplify WASM Example
