@@ -1,0 +1,47 @@
+[package]
+name = "ferritin-plms"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+
+
+[features]
+metal = [
+    "candle-core/metal",
+    "candle-nn/metal",
+    "candle-transformers/metal",
+    "candle-metal-kernels",
+]
+
+[dependencies]
+anyhow.workspace = true
+candle-core.workspace = true
+candle-hf-hub.workspace = true
+candle-metal-kernels = { workspace = true, optional = true }
+candle-nn.workspace = true
+candle-transformers.workspace = true
+clap = "4.5.23"
+ferritin-core = { path = "../ferritin-core" }
+ferritin-test-data = { path = "../ferritin-test-data" }
+itertools.workspace = true
+pdbtbx.workspace = true
+rand.workspace = true
+safetensors.workspace = true
+serde.workspace = true
+strum = { version = "0.26", features = ["derive"] }
+tokenizers.workspace = true
+
+
+[target.'cfg(target_os = "macos")'.features]
+metal = []
+
+[target.'cfg(target_os = "macos")'.dependencies]
+candle-metal-kernels.workspace = true
+
+[dev-dependencies]
+assert_cmd = "2.0.16"
+candle-examples.workspace = true
+ferritin-test-data = { path = "../ferritin-test-data" }
+tempfile = "3.14.0"

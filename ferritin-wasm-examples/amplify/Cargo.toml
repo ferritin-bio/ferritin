@@ -9,12 +9,12 @@ candle-nn = { workspace = true }
 tokenizers = { workspace = true, default-features = false, features = [
     "unstable_wasm",
 ] }
-ferritin-amplify = { path = "../../ferritin-amplify" }
+ferritin-plms = { path = "../../ferritin-plms/" }
 
 # for wasm
 gloo = "0.11.0"
-js-sys = "0.3.74"
-wasm-bindgen = "0.2.97"
+js-sys = "0.3.76"
+wasm-bindgen = "0.2.99"
 serde-wasm-bindgen = "0.6.5"
 serde_json.workspace = true
 console_error_panic_hook = "0.1.7"
