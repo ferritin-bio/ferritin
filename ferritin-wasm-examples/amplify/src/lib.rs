@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 
-pub use ferritin_amplify::AMPLIFY;
+pub use ferritin_plms::AMPLIFY;
 pub use tokenizers::{PaddingParams, Tokenizer};
 
 #[wasm_bindgen]

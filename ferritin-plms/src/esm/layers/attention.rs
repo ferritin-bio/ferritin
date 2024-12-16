@@ -1,5 +1,5 @@
+use crate::esm::layers::rotary::RotaryEmbedding;
 use crate::esm::models::esmc::ESMCConfig;
-use crate::esm::rotary::RotaryEmbedding;
 use candle_core::{Module, Result, Tensor};
 use candle_nn::{self as nn, LayerNormConfig, VarBuilder};
 // use scaled_dot_product_attention;
