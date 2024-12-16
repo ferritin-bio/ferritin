@@ -3,14 +3,12 @@ members = [
     "ferritin-bevy",
     "ferritin-cellscape",
     "ferritin-core",
-    "ferritin-plms/ferritin-esm",
+    "ferritin-plms",
     "ferritin-examples",
-    "ferritin-plms/ferritin-amplify",
-    "ferritin-plms/ferritin-ligandmpnn",
     "ferritin-molviewspec",
     "ferritin-pymol",
     "ferritin-test-data",
-    "ferritin-wasm-examples/amplify", "ferritin-plms",
+    "ferritin-wasm-examples/amplify",
 ]
 resolver = "2"
 
