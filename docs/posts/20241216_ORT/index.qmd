@@ -1,0 +1,62 @@
+---
+title: "Open Neural Network Exchange"
+description: "Switching to the ONNX standard"
+author: "Zachary Charlop-Powers"
+date: "2024-12-16"
+categories: [rust, ai, proteins, onnx]
+image: "images/trend-banner.png"
+---
+
+
+# Switch to ORT
+
+The initial goals of ferritin were to 1) learn Rust, 2) learn/understand protein deep learning model internals sufficiently to 3) develop fast, reliable, cross-platform inference tools in Rust.
+Heres what I've come up with: you can run it as follows:
+
+
+```sh
+# encodes the proteins as tokens
+# runs them through the ONNX version of ESM2
+#
+# see ferritin-examples/examples/esm2-onnx/esm2_t6_8M_UR50D_onnx/model.onnx
+
+git clone https://github.com/zachcp/ferritin.git
+cd ferritin
+cargo run --example esm2-onnx -- \
+    --model-id 8M \
+    --protein-string \
+    MAFSAEDVLKEYDRR\<mask\>RMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAP...
+
+Loading the Model and Tokenizer.......
+
+Input name: input_ids
+Input type: Tensor {
+    ty: Int64, dimensions: [-1, -1],
+    dimension_symbols: [Some("batch_size"), Some("sequence_length")] }
+
+Input name: attention_mask
+Input type: Tensor {
+    ty: Int64, dimensions: [-1, -1],
+    dimension_symbols: [Some("batch_size"), Some("sequence_length")] }
+
+Output name: logits
+#  <batch> <seqlength> <tokens>
+Shape: [1, 256, 33]
+
+```
+
+
+What you may be able to discern from above:
+
+1. CLI and runtime still in Rust.
+2. Model has been converted to an ONNX file.
+3. That ONNX file can be interpreted and run in a variety of contexts and the backends are maintained by [consortia](https://onnx.ai) that is supported by the tech giants.
+4. I am re-using the ESM2 tokenizer.
+5. ONNX conversions reults in a defined INPUT/OUTPUT interface. in this case:
+  - Inputs: The sequence tensor and the mask tensor (as i64).
+  - Outputs: logits in the dimensions of `[<batch>, <seqlength>, <vocab_size>]`
+
+
+Basically this is a MUCH better, faster way to make pLMs accessible for local apps. I will continue to use Rust for the ferritin project but will move
+any of my scientific efforts downstream closer to application. For this reason I have consolidated all the various pLM models I've worked on into a common,
+simple namespace, `ferritin-plms`.
