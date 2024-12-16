@@ -13,9 +13,9 @@
 //! - `ResidueControl` - Residue-level design controls
 //! - `RunConfig` - Runtime execution parameters// Core Configs for handling CLI ARGs and Model Params
 
-use super::proteinfeatures::ProteinFeatures;
 use super::model::ProteinMPNN;
-use crate::ligandmpnn::proteinfeatures::LMPNNFeatures;
+use super::proteinfeatures::LMPNNFeatures;
+use super::proteinfeatures::ProteinFeatures;
 use anyhow::Error;
 use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device, Tensor};

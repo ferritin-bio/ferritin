@@ -3,7 +3,7 @@
 //! ** work in progress **
 //!
 use super::commands;
-use crate::ligandmpnn::configs::{
+use super::ligandmpnn::configs::{
     AABiasConfig, LigandMPNNConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig, ResidueControl,
     RunConfig,
 };

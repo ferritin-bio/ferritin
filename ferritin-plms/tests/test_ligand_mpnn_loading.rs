@@ -4,7 +4,7 @@ mod tests {
     use candle_core::pickle::PthTensors;
     use candle_core::{DType, Device, Error};
     use candle_nn::VarBuilder;
-    use ferritin_ligandmpnn::{ProteinMPNN, ProteinMPNNConfig};
+    use ferritin_plms::{ProteinMPNN, ProteinMPNNConfig};
     use ferritin_test_data::TestFile;
 
     #[test]
