@@ -1,7 +1,7 @@
 use crate::esm::layers::blocks::UnifiedTransformerBlock;
 use crate::esm::models::esmc::ESMCConfig;
 // use crate::esm::utils::structure::affine3d::Affine3D;
-use candle_core::{Module, Result, Tensor, D};
+use candle_core::Result;
 use candle_nn::{self as nn, LayerNorm, LayerNormConfig};
 
 pub struct TransformerStack {

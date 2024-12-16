@@ -1,6 +1,6 @@
 use anyhow::{Error as E, Result};
 use candle_core::safetensors::load;
-use candle_core::{DType, Tensor, D};
+use candle_core::{DType, Tensor};
 use candle_examples::device;
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;

@@ -3,12 +3,10 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use super::axial_attention::{ColumnSelfAttention, RowSelfAttention};
 use super::multihead_attention::MultiheadAttention;
 use crate::ESM2Config;
-use candle_core::{DType, Device, Module, Result, Tensor, D};
-use candle_nn::{self as nn, VarBuilder, VarMap};
-use std::f64::consts::PI;
+use candle_core::{Module, Result, Tensor};
+use candle_nn::{self as nn, VarBuilder};
 
 // fn gelu(x: &Tensor) -> Result<Tensor> {
 //     let x_sqrt2 = x.div_scalar(2f64.sqrt())?;

@@ -1,7 +1,5 @@
 use crate::esm::layers::regression_head::RegressionHead;
 use crate::esm::layers::transformer_stack::TransformerStack;
-use candle_core::{DType, Device, Module, Result, Tensor};
-use candle_nn::{self as nn, VarBuilder};
 // use crate::esm::pretrained::load_local_model;
 // use crate::esm::sdk::api::ESMProtein;
 // use crate::esm::sdk::api::ESMProteinTensor;
@@ -10,6 +8,8 @@ use candle_nn::{self as nn, VarBuilder};
 // use crate::esm::sdk::api::LogitsOutput;
 use crate::esm::tokenization::sequence_tokenizer::EsmSequenceTokenizer;
 use crate::esm::tokenization::TokenizerCollection;
+use candle_core::{Result, Tensor};
+use candle_nn::{self as nn, VarBuilder};
 // use crate::esm::utils::decoding::decode_sequence;
 // use crate::esm::utils::encoding::tokenize_sequence;
 // use crate::esm::utils::sampling::BatchedESMProteinTensor;
@@ -130,7 +130,7 @@ impl ESMC {
         let tokenizer_collection = tokenizer.get_model_tokenizers();
 
         Ok(Self {
-            embed: nn::embedding(embedding_dim, d_model as usize, vb.pp("embed"))?,
+            embed: nn::embedding(embedding_dim, d_model, vb.pp("embed"))?,
             transformer: TransformerStack::load(vb.pp("transformer"), &config)?,
             sequence_head: RegressionHead::load(vb.pp("sequence_head"), &config)?,
             tokenizer: tokenizer_collection.sequence,

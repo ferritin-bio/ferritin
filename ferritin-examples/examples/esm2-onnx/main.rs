@@ -52,6 +52,7 @@ fn main() -> Result<()> {
 
     println!("Loading the Model and Tokenizer.......");
     let tokenizer = ESM2::load_tokenizer()?;
+
     let protein = args.protein_string.as_ref().unwrap().as_str();
     let tokens = tokenizer
         .encode(protein.to_string(), false)

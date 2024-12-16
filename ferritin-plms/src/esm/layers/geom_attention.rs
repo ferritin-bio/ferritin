@@ -1,6 +1,6 @@
-use crate::esm::{models::esmc::ESMCConfig, utils::constants::SQRT_3};
-use candle_core::{Device, Module, Result, Tensor};
-use candle_nn::{self as nn, layer_norm, LayerNorm, LayerNormConfig, Linear, VarBuilder};
+use crate::esm::models::esmc::ESMCConfig;
+use candle_core::{Result, Tensor};
+use candle_nn::{self as nn, LayerNorm, LayerNormConfig, Linear, VarBuilder};
 
 pub struct GeometricReasoningOriginalImpl {
     c_s: usize,
@@ -64,8 +64,8 @@ impl GeometricReasoningOriginalImpl {
         let rotation_scale_per_head = Tensor::zeros((v_heads,), vb.dtype(), vb.device())?;
 
         Ok(Self {
-            c_s: *d_model as usize,
-            v_heads: v_heads as usize,
+            c_s: *d_model,
+            v_heads: v_heads,
             num_vector_messages,
             mask_and_zero_frameless: *mask_and_zero_frameless,
             s_norm,

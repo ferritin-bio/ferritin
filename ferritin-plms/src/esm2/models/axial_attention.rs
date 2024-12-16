@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use candle_core::{Module, Result, Tensor};
+use candle_core::{Result, Tensor};
 use candle_nn::{Dropout, Linear};
 use std::f64;
 

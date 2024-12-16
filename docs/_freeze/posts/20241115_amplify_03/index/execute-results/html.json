@@ -1,0 +1,12 @@
+{
+  "hash": "4dedc015856959bf9f636ee50bcd4bcb",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"Amplify Pytorch->Candle Conversion Part 3\"\ndescription: \"Conversion of AMPLIFY from Pytorch to Candle\"\nauthor: \"Zachary Charlop-Powers\"\ndate: \"2024-11-15\"\ncategories: [rust, ai, proteins]\nimage: \"images/runpod.png\"\n---\n\n::: {#9f6ce464 .cell execution_count=1}\n``` {.rust .cell-code}\n:dep candle-core\n:dep ferritin-core = {path = \"../../../ferritin-core\"}\n```\n:::\n\n\n::: {#cb971d3c .cell execution_count=2}\n``` {.rust .cell-code}\nprintln!(\"Hello wold!\");\n```\n:::\n\n\n::: {#f39030c0 .cell execution_count=3}\n``` {.rust .cell-code}\nuse candle_core::{Tensor, DType, Device};\n\nlet a = Tensor::arange(0f32, 6f32, &Device::Cpu)?.reshape((2, 3))?;\nlet b = Tensor::arange(0f32, 12f32, &Device::Cpu)?.reshape((3, 4))?;\nlet c = a.matmul(&b)?;\n\nc\n```\n\n::: {.cell-output .cell-output-display execution_count=4}\n```\nTensor[dims 2, 4; f32]\n```\n:::\n:::\n\n\n```rust\nuse ferritin_featurizers::{AMPLIFY, AMPLIFYConfig, ModelOutput};\n```\n\n",
+    "supporting": [
+      "index_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}

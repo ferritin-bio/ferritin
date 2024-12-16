@@ -1,6 +1,6 @@
 use anyhow::Result;
 use candle_core::pickle::PthTensors;
-use candle_core::{DType, Device, D};
+use candle_core::{DType, Device};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use ferritin_plms::{ESMCConfig, ESMC};

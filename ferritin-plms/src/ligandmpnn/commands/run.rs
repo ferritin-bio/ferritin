@@ -3,7 +3,7 @@ use crate::ligandmpnn::ligandmpnn::configs::{
     ResidueControl, RunConfig,
 };
 use candle_core::utils::{cuda_is_available, metal_is_available};
-use candle_core::{Device, Result, Tensor};
+use candle_core::{Device, Result};
 use rand::Rng;
 
 pub fn device(cpu: bool) -> Result<Device> {
@@ -59,13 +59,10 @@ pub fn execute(
         .model_type
         .unwrap_or(ModelTypes::ProteinMPNN);
 
-    let seed = match exec.run_config.seed {
-        Some(s) => s,
-        None => {
-            let mut rng = rand::thread_rng();
-            rng.gen_range(0..99999) as i32
-        }
-    };
+    let seed = exec.run_config.seed.unwrap_or_else(|| {
+        let mut rng = rand::thread_rng();
+        rng.gen_range(0..99999) as i32
+    });
 
     let temperature = exec.run_config.temperature.unwrap_or(0.1);
     let save_stats = exec.run_config.save_stats.unwrap_or(false);

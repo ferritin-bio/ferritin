@@ -16,12 +16,11 @@ candle-core.workspace = true
 candle-metal-kernels = { workspace = true, optional = true }
 candle-nn.workspace = true
 clap = { version = "4.5.23", features = ["derive"] }
-ferritin-plms = { path = "../ferritin-plms/" }
-ferritin-bevy = { path = "../ferritin-bevy/" }
+ferritin-plms = { path = "../ferritin-plms" }
+ferritin-bevy = { path = "../ferritin-bevy" }
 serde_json.workspace = true
 ort = "=2.0.0-rc.9"
 ndarray = "0.16.1"
-rand.workspace = true
 
 
 [target.'cfg(target_os = "macos")'.features]
@@ -43,8 +42,6 @@ tokenizers = { version = "0.21.0" }  # full features for non-wasm
 [dev-dependencies]
 candle-examples.workspace = true
 ferritin-test-data = { path = "../ferritin-test-data" }
-assert_cmd = "2.0.16"
-tempfile = "3.14.0"
 
 
 [[example]]
