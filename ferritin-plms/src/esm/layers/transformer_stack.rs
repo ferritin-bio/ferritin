@@ -1,5 +1,5 @@
-use ferritin_plms::::layers::blocks::UnifiedTransformerBlock;
-use ferritin_plms::::models::esmc::ESMCConfig;
+use crate::esm::layers::blocks::UnifiedTransformerBlock;
+use crate::esm::models::esmc::ESMCConfig;
 // use crate::esm::utils::structure::affine3d::Affine3D;
 use candle_core::{Module, Result, Tensor, D};
 use candle_nn::{self as nn, LayerNorm, LayerNormConfig};
