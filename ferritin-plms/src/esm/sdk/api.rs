@@ -218,7 +218,6 @@ impl ESMProteinTensor {
         if let Some(t) = &self.structure {
             new.structure = Some(t.to_device(device)?);
         }
-        // etc for other fields
 
         Ok(new)
     }
@@ -239,7 +238,6 @@ impl ESMProteinTensor {
                 encoding::get_default_structure_tokens(length, tokenizers.structure)?
                     .to_device(device)?,
             ),
-            // etc for other fields
             ..Default::default()
         })
     }

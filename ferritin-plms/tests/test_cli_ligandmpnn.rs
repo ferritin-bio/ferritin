@@ -6,7 +6,7 @@ mod tests {
     // cargo instruments -t time --bin ferritin-ligandmpnn -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
     use assert_cmd::Command;
     use ferritin_test_data::TestFile;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     use tempfile::NamedTempFile;
 
     fn setup(folder: String) -> (String, NamedTempFile, PathBuf) {

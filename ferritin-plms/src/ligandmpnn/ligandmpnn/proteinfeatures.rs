@@ -9,8 +9,8 @@
 //! - Chemical features like hydrophobicity, charge
 //! - Evolutionary features from MSA profiles
 
-use super::utilities::{aa1to_int, aa3to1, calculate_cb, AAAtom};
-use candle_core::{DType, Device, Result, Tensor};
+use super::utilities::{aa1to_int, aa3to1, AAAtom};
+use candle_core::{Device, Result, Tensor};
 use ferritin_core::AtomCollection;
 use itertools::MultiUnzip;
 use pdbtbx::Element;
@@ -373,7 +373,7 @@ impl ProteinFeatures {
     pub fn get_encoded_tensor(&self, fixed_residues: String, device: &Device) -> Result<Tensor> {
         let res_set: HashSet<String> = fixed_residues.split(' ').map(String::from).collect();
         let (encoded_res, _, _) = &self.get_encoded()?;
-        candle_core::Tensor::from_iter(
+        Tensor::from_iter(
             encoded_res
                 .iter()
                 .map(|item| u32::from(!res_set.contains(item))),

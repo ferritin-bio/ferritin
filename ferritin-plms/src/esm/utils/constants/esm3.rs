@@ -8,7 +8,6 @@ const SEQUENCE_PAD_TOKEN: i32 = 1;
 const SEQUENCE_EOS_TOKEN: i32 = 2;
 const SEQUENCE_CHAINBREAK_TOKEN: i32 = 31;
 const SEQUENCE_MASK_TOKEN: i32 = 32;
-
 const VQVAE_CODEBOOK_SIZE: i32 = 4096;
 
 // lazy_static! {

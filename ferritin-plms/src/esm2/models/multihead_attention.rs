@@ -5,8 +5,8 @@
 
 use super::esm2::ESM2Config;
 use super::rotary_embedding::RotaryEmbedding;
-use candle_core::{Device, Module, Result, Tensor};
-use candle_nn::{self as nn, linear, ops, VarBuilder};
+use candle_core::Result;
+use candle_nn::{self as nn, VarBuilder};
 
 // pub fn utils_softmax(x: &Tensor, dim: i64, onnx_trace: bool) -> Result<Tensor> {
 //     if onnx_trace {
@@ -100,10 +100,7 @@ impl MultiheadAttention {
         let vdim = *hidden_size as usize;
         let qkv_same_dim = true;
 
-        assert!(
-            head_dim * num_heads == embed_dim,
-            "embed_dim must be divisible by num_heads"
-        );
+        assert_eq!(head_dim * num_heads, embed_dim, "embed_dim must be divisible by num_heads");
         let scaling = (head_dim as f64).powf(-0.5);
         let q_proj = nn::linear(embed_dim, embed_dim, vb.pp("self.query"))?;
         let k_proj = nn::linear(kdim, embed_dim, vb.pp("self.key"))?;

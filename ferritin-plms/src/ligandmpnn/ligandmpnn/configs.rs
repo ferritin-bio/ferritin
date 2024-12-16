@@ -56,7 +56,7 @@ impl MPNNExecConfig {
             membrane_mpnn_config: membrane_mpnn_specific,
             residue_control_config: residue_config,
             multi_pdb_config: multi_pdb_specific,
-            device: device,
+            device,
         })
     }
     // Todo: refactor this to use loader.

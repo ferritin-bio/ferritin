@@ -1,5 +1,5 @@
 use super::esm2::ESM2Config;
-use candle_core::{Module, Result, Tensor};
+use candle_core::{Result, Tensor};
 use candle_nn::VarBuilder;
 
 // fn rotate_half(x: &Tensor) -> Result<Tensor> {
