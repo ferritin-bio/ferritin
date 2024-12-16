@@ -2525,25 +2525,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferritin-amplify"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "candle-core",
- "candle-examples",
- "candle-hf-hub",
- "candle-metal-kernels",
- "candle-nn",
- "ferritin-test-data",
- "rand",
- "safetensors",
- "serde",
- "tempfile",
- "tokenizers 0.21.0",
-]
-
-[[package]]
 name = "ferritin-bevy"
 version = "0.1.0"
 dependencies = [
@@ -2576,25 +2557,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferritin-esm"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "candle-core",
- "candle-examples",
- "candle-hf-hub",
- "candle-metal-kernels",
- "candle-nn",
- "ferritin-test-data",
- "rand",
- "safetensors",
- "serde",
- "tempfile",
- "tokenizers 0.21.0",
-]
-
-[[package]]
 name = "ferritin-examples"
 version = "0.1.0"
 dependencies = [
@@ -2607,9 +2569,7 @@ dependencies = [
  "candle-metal-kernels",
  "candle-nn",
  "clap",
- "ferritin-amplify",
- "ferritin-bevy",
- "ferritin-esm",
+ "ferritin-plms",
  "ferritin-test-data",
  "ndarray",
  "ort",
@@ -2617,28 +2577,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokenizers 0.21.0",
-]
-
-[[package]]
-name = "ferritin-ligandmpnn"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "candle-core",
- "candle-examples",
- "candle-metal-kernels",
- "candle-nn",
- "candle-transformers",
- "clap",
- "ferritin-core",
- "ferritin-test-data",
- "itertools 0.13.0",
- "pdbtbx",
- "rand",
- "safetensors",
- "strum",
- "tempfile",
 ]
 
 [[package]]
@@ -2655,6 +2593,27 @@ dependencies = [
 [[package]]
 name = "ferritin-plms"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "candle-core",
+ "candle-examples",
+ "candle-hf-hub",
+ "candle-metal-kernels",
+ "candle-nn",
+ "candle-transformers",
+ "clap",
+ "ferritin-core",
+ "ferritin-test-data",
+ "itertools 0.13.0",
+ "pdbtbx",
+ "rand",
+ "safetensors",
+ "serde",
+ "strum",
+ "tempfile",
+ "tokenizers 0.21.0",
+]
 
 [[package]]
 name = "ferritin-pymol"
@@ -2689,7 +2648,7 @@ dependencies = [
  "candle-core",
  "candle-nn",
  "console_error_panic_hook",
- "ferritin-amplify",
+ "ferritin-plms",
  "getrandom",
  "gloo",
  "js-sys",
@@ -4171,7 +4130,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]

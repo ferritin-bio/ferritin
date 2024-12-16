@@ -9,7 +9,7 @@ candle-nn = { workspace = true }
 tokenizers = { workspace = true, default-features = false, features = [
     "unstable_wasm",
 ] }
-ferritin-amplify = { path = "../../ferritin-plms/ferritin-amplify" }
+ferritin-plms = { path = "../../ferritin-plms/" }
 
 # for wasm
 gloo = "0.11.0"
