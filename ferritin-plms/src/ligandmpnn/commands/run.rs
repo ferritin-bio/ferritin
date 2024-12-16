@@ -1,4 +1,4 @@
-use crate::ligandmpnn::configs::{
+use crate::ligandmpnn::ligandmpnn::configs::{
     AABiasConfig, LigandMPNNConfig, MPNNExecConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig,
     ResidueControl, RunConfig,
 };
