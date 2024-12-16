@@ -2569,6 +2569,7 @@ dependencies = [
  "candle-metal-kernels",
  "candle-nn",
  "clap",
+ "ferritin-bevy",
  "ferritin-plms",
  "ferritin-test-data",
  "ndarray",

@@ -1,6 +1,6 @@
 use anyhow::{Error as E, Result};
 use clap::Parser;
-use ferritin_esm::ESM2;
+use ferritin_plms::ESM2;
 use ndarray::Array2;
 use ort::{
     execution_providers::CUDAExecutionProvider,

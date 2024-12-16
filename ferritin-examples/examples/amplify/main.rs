@@ -4,7 +4,7 @@ use candle_examples::device;
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use clap::Parser;
-use ferritin_amplify::{AMPLIFYConfig as Config, AMPLIFY};
+use ferritin_plms::{AMPLIFYConfig as Config, AMPLIFY};
 use tokenizers::Tokenizer;
 
 pub const DTYPE: DType = DType::F32;

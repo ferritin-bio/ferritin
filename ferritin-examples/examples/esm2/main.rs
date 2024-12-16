@@ -5,7 +5,7 @@ use candle_examples::device;
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
 use clap::Parser;
-use ferritin_esm::{ESM2Config as Config, ESM2};
+use ferritin_plms::{ESM2Config as Config, ESM2};
 use tokenizers::Tokenizer;
 
 pub const DTYPE: DType = DType::F32;
