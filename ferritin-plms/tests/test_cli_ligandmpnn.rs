@@ -1,4 +1,6 @@
-//! These tests recreate the LigandMPNN Test Suite[found here](https://github.com/dauparas/LigandMPNN/blob/main/run_examples.sh)
+// Note: as of 12/16/2024 I am no longer pursuing the CLI. I Have set all of the test to ignore.
+//
+// These tests recreate the LigandMPNN Test Suite[found here](https://github.com/dauparas/LigandMPNN/blob/main/run_examples.sh)
 mod tests {
     // cargo flamegraph --bin ferritin-ligandmpnn -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
     // cargo instruments -t time --bin ferritin-ligandmpnn -- run --seed 111 --pdb-path ferritin-test-data/data/structures/1bc8.cif --model-type protein_mpnn --out-folder testout
@@ -18,9 +20,10 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_cli_command_run_example_01() {
         let (pdbfile, _tmp, out_folder) = setup("./outputs/default".to_string());
-        let assert = Command::cargo_bin("ferritin-ligandmpnn")
+        let assert = Command::cargo_bin("ferritin-plms")
             .unwrap()
             .arg("run")
             .arg("--seed")
@@ -38,6 +41,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_cli_command_run_example_02() {
         let (pdbfile, _tmp, out_folder) = setup("./outputs/temperature".to_string());
         let assert = Command::cargo_bin("ferritin-ligandmpnn")
@@ -60,6 +64,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_cli_command_run_example_03() {
         let (pdbfile, _tmp, out_folder) = setup("./outputs/random_seed".to_string());
         let assert = Command::cargo_bin("ferritin-ligandmpnn")
@@ -101,6 +106,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_cli_command_run_example_05() {
         let (pdbfile, _tmp, out_folder) = setup("./outputs/save_stats".to_string());
         let assert = Command::cargo_bin("ferritin-ligandmpnn")
@@ -123,6 +129,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_cli_command_run_example_06() {
         let (pdbfile, _tmp, out_folder) = setup("./outputs/fix_residues".to_string());
 
