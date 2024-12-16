@@ -1,0 +1,9 @@
+[package]
+name = "ferritin-plms"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+
+[dependencies]

@@ -7,7 +7,7 @@ license.workspace = true
 description.workspace = true
 
 [dependencies]
-chrono = "0.4.38"
+chrono = "0.4.39"
 validator = { version = "0.19.0", features = ["derive"] }
 serde = { workspace = true }
 serde_json = { workspace = true }

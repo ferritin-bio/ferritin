@@ -1,5 +1,5 @@
 [package]
-name = "ferritin-amplify"
+name = "ferritin-esm"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -12,11 +12,13 @@ metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 [dependencies]
 anyhow.workspace = true
 candle-core.workspace = true
-candle-metal-kernels = { workspace = true, optional = true }
+candle-hf-hub.workspace = true
 candle-nn.workspace = true
-ferritin-test-data = { path = "../ferritin-test-data" }
+ferritin-test-data = { path = "../../ferritin-test-data" }
 rand.workspace = true
 safetensors.workspace = true
+tokenizers.workspace = true
+candle-metal-kernels = { workspace = true, optional = true }
 serde.workspace = true
 
 [target.'cfg(target_os = "macos")'.features]
@@ -25,18 +27,8 @@ metal = []
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-metal-kernels.workspace = true
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-tokenizers = { version = "0.21.0", default-features = false, features = [
-    "unstable_wasm",
-] }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-candle-hf-hub = { workspace = true }
-tokenizers = { version = "0.21.0" }  # full features for non-wasm
-
-
 [dev-dependencies]
 candle-examples.workspace = true
-ferritin-test-data = { path = "../ferritin-test-data" }
+ferritin-test-data = { path = "../../ferritin-test-data" }
 assert_cmd = "2.0.16"
 tempfile = "3.14.0"
