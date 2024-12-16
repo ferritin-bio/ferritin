@@ -1,4 +1,4 @@
-use crate::esm::models::esmc::ESMCConfig;
+use ferritin_plms::::models::esmc::ESMCConfig;
 use candle_core::{Device, Result, Tensor};
 use candle_nn::VarBuilder;
 

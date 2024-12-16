@@ -1,4 +1,4 @@
-use crate::esm::models::esmc::ESMCConfig;
+use ferritin_plms::::models::esmc::ESMCConfig;
 use candle_core::Tensor;
 use candle_nn::{self as nn, LayerNormConfig, Module, Sequential, VarBuilder};
 

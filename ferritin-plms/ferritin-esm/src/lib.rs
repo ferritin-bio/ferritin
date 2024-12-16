@@ -1,8 +1,6 @@
 //! ferritin-esm
 //!
 
-pub mod esm;
-pub use esm::models::esmc::{ESMCConfig, ESMC};
+pub use ferritin_plms::::models::esmc::{ESMCConfig, ESMC};
 
-pub mod esm2;
-pub use esm2::models::esm2::{ESM2Config, ESM2};
+pub use ferritin_plms::::models::esm2::{ESM2Config, ESM2};

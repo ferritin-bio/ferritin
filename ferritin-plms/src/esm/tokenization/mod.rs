@@ -1,5 +1,5 @@
 pub mod sequence_tokenizer;
-use crate::esm::utils::constants::models::{normalize_model_name, ESM3_OPEN_SMALL};
+use ferritin_plms::::utils::constants::models::{normalize_model_name, ESM3_OPEN_SMALL};
 use anyhow::{anyhow, Result};
 use sequence_tokenizer::{EsmSequenceTokenizer, EsmTokenizerBase};
 

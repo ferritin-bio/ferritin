@@ -1,4 +1,4 @@
-use crate::esm::utils::constants::esm3::SEQUENCE_VOCAB;
+use ferritin_plms::::utils::constants::esm3::SEQUENCE_VOCAB;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;

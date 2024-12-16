@@ -1,4 +1,4 @@
-use crate::esm::{models::esmc::ESMCConfig, utils::constants::SQRT_3};
+use ferritin_plms::::{models::esmc::ESMCConfig, utils::constants::SQRT_3};
 use candle_core::{Device, Module, Result, Tensor};
 use candle_nn::{self as nn, layer_norm, LayerNorm, LayerNormConfig, Linear, VarBuilder};
 

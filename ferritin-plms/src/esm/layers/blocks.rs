@@ -1,6 +1,6 @@
 use super::attention::MultiHeadAttention;
 use super::geom_attention::GeometricReasoningOriginalImpl;
-use crate::esm::models::esmc::{ESMCConfig, Ffn_Type};
+use ferritin_plms::::models::esmc::{ESMCConfig, Ffn_Type};
 // use crate::esm::utils::structure::affine3d::Affine3D;
 use candle_core::{Module, Result, Tensor, D};
 use candle_nn::ops::silu;
