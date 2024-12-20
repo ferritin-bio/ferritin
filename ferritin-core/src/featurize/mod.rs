@@ -84,6 +84,7 @@ pub struct ProteinFeatures<T> {
     pub chain_mask: Option<T>,
     /// List of chains
     pub chain_list: Vec<String>,
+    pub device: Option<T>,
 }
 
 impl<T> ProteinFeatures<T> {
