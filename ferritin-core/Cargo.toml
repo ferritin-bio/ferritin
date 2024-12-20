@@ -9,7 +9,7 @@ description.workspace = true
 [dependencies]
 pdbtbx.workspace = true
 itertools.workspace = true
-ndarray = { version = "0.15" }
+ndarray = { version = "0.16" }
 lazy_static = "1.5.0"
 strum = { version = "0.25", features = ["derive"] }
 
