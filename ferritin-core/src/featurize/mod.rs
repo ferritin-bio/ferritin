@@ -22,28 +22,29 @@ pub use candle_impl::*;
 pub use ndarray_impl::*;
 
 use crate::AtomCollection;
+
 use std::collections::HashMap;
 
 pub trait StructureFeatures<T> {
     type Error;
 
     /// Convert amino acid sequence to numeric representation
-    fn encode_amino_acids(&self, device: Option<T>) -> Result<T, Self::Error>;
+    fn encode_amino_acids(&self, device: Option<&Device>) -> Result<T, Self::Error>;
 
     /// Convert structure into complete feature set
-    fn featurize(&self, device: Option<T>) -> Result<ProteinFeatures<T>, Self::Error>;
+    fn featurize(&self, device: Option<&Device>) -> Result<ProteinFeatures<T>, Self::Error>;
 
     /// Get residue indices
-    fn get_res_index(&self, device: Option<T>) -> Vec<u32>;
+    fn get_res_index(&self, device: Option<&Device>) -> Vec<u32>;
 
     /// Extract backbone atom coordinates (N, CA, C, O)
-    fn to_numeric_backbone_atoms(&self, device: Option<T>) -> Result<T, Self::Error>;
+    fn to_numeric_backbone_atoms(&self, device: Option<&Device>) -> Result<T, Self::Error>;
 
     /// Extract all atom coordinates in standard ordering
-    fn to_numeric_atom37(&self, device: Option<T>) -> Result<T, Self::Error>;
+    fn to_numeric_atom37(&self, device: Option<&Device>) -> Result<T, Self::Error>;
 
     /// Extract ligand atom coordinates and properties
-    fn to_numeric_ligand_atoms(&self, device: Option<T>) -> Result<(T, T, T), Self::Error>;
+    fn to_numeric_ligand_atoms(&self, device: Option<&Device>) -> Result<(T, T, T), Self::Error>;
 
     /// Convert to PDB format
     fn to_pdb(&self);
@@ -72,7 +73,6 @@ pub struct ProteinFeatures<T> {
     pub chain_mask: Option<T>,
     /// List of chains
     pub chain_list: Vec<String>,
-    pub device: Option<T>,
 }
 
 impl<T> ProteinFeatures<T> {

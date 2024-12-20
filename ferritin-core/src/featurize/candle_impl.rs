@@ -73,6 +73,13 @@ impl StructureFeatures<Tensor> for AtomCollection {
     // equivalent to protien MPNN's parse_PDB
     /// create numeric Tensor of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: Option<&Device>) -> Result<Tensor> {
+        let device = match device {
+            Some(d) => d,
+            None => {
+                eprintln!("Warning: No device specified, using CPU");
+                &Device::Cpu
+            }
+        };
         let res_count = self.iter_residues_aminoacid().count();
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
         for residue in self.iter_residues_aminoacid() {
@@ -98,6 +105,14 @@ impl StructureFeatures<Tensor> for AtomCollection {
     }
     /// create numeric Tensor of shape [<sequence-length>, 37, 3]
     fn to_numeric_atom37(&self, device: Option<&Device>) -> Result<Tensor> {
+        let device = match device {
+            Some(d) => d,
+            None => {
+                eprintln!("Warning: No device specified, using CPU");
+                &Device::Cpu
+            }
+        };
+
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
 
@@ -124,6 +139,13 @@ impl StructureFeatures<Tensor> for AtomCollection {
     //           y_t = elements
     //           y_m = mask
     fn to_numeric_ligand_atoms(&self, device: Option<&Device>) -> Result<(Tensor, Tensor, Tensor)> {
+        let device = match device {
+            Some(d) => d,
+            None => {
+                eprintln!("Warning: No device specified, using CPU");
+                &Device::Cpu
+            }
+        };
         let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
             .iter_residues_all()
             // keep only the non-protein, non-water residues
