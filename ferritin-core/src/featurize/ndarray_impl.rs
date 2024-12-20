@@ -6,7 +6,7 @@ use ndarray::{Array, Array2};
 impl StructureFeatures<Array2<f32>> for AtomCollection {
     type Error = ndarray::ShapeError;
 
-    fn encode_amino_acids(&self) -> Result<Array2<f32>, Self::Error> {
+    fn encode_amino_acids(&self, device: Option<T>) -> Result<Array2<f32>, Self::Error> {
         let n = self.iter_residues_aminoacid().count();
         let s: Vec<f32> = self
             .iter_residues_aminoacid()
@@ -22,7 +22,7 @@ impl StructureFeatures<Array2<f32>> for AtomCollection {
     }
     // equivalent to protien MPNN's parse_PDB
     /// create numeric Array of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
-    fn to_numeric_backbone_atoms(&self) -> Result<Array4<f32>, Self::Error> {
+    fn to_numeric_backbone_atoms(&self, device: Option<T>) -> Result<Array4<f32>, Self::Error> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
         for residue in self.iter_residues_aminoacid() {
@@ -47,7 +47,7 @@ impl StructureFeatures<Array2<f32>> for AtomCollection {
         Array4::from_shape_vec((1, res_count, 4, 3), backbone_data)
     }
     /// create numeric Array of shape [<sequence-length>, 37, 3]
-    fn to_numeric_atom37(&self) -> Result<Array4<f32>, Self::Error> {
+    fn to_numeric_atom37(&self, device: Option<T>) -> Result<Array4<f32>, Self::Error> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
 
@@ -75,6 +75,7 @@ impl StructureFeatures<Array2<f32>> for AtomCollection {
     //           y_m = mask
     fn to_numeric_ligand_atoms(
         &self,
+        device: Option<T>,
     ) -> Result<(Array2<f32>, Array1<f32>, Array2<f32>), Self::Error> {
         let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
             .iter_residues_all()

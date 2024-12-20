@@ -3,7 +3,6 @@ use super::utilities::{aa1to_int, aa3to1, AAAtom};
 use super::{ProteinFeatures, StructureFeatures};
 use crate::AtomCollection;
 use candle_core::{Device, Result, Tensor};
-use candle_core::{Device, Result, Tensor};
 use ferritin_core::AtomCollection;
 use itertools::MultiUnzip;
 use pdbtbx::Element;
@@ -17,7 +16,7 @@ fn is_heavy_atom(element: &Element) -> bool {
 impl StructureFeatures<Tensor> for AtomCollection {
     type Error = candle_core::Error;
 
-    fn encode_amino_acids(&self) -> Result<Tensor, Self::Error> {
+    fn encode_amino_acids(&self, device: Option<&Device>) -> Result<Tensor, Self::Error> {
         let device = Device::Cpu; // or pass device as parameter
         let n = self.iter_residues_aminoacid().count();
         let s = self
@@ -29,8 +28,7 @@ impl StructureFeatures<Tensor> for AtomCollection {
         Ok(Tensor::from_iter(s, &device)?.reshape((1, n))?)
     }
 
-    fn featurize(&self) -> Result<ProteinFeatures> {
-        let device = Some(&self.device);
+    fn featurize(&self, device: Option<&Device>) -> Result<ProteinFeatures> {
         todo!();
         // let x_37 = self.to_numeric_atom37(device)?;
         // let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
@@ -74,8 +72,7 @@ impl StructureFeatures<Tensor> for AtomCollection {
     }
     // equivalent to protien MPNN's parse_PDB
     /// create numeric Tensor of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
-    fn to_numeric_backbone_atoms(&self) -> Result<Tensor> {
-        let device = Some(&self.device);
+    fn to_numeric_backbone_atoms(&self, device: Option<&Device>) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
         for residue in self.iter_residues_aminoacid() {
@@ -100,8 +97,7 @@ impl StructureFeatures<Tensor> for AtomCollection {
         Tensor::from_vec(backbone_data, (1, res_count, 4, 3), &device)
     }
     /// create numeric Tensor of shape [<sequence-length>, 37, 3]
-    fn to_numeric_atom37(&self) -> Result<Tensor> {
-        let device = Some(&self.device);
+    fn to_numeric_atom37(&self, device: Option<&Device>) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
 
@@ -127,8 +123,7 @@ impl StructureFeatures<Tensor> for AtomCollection {
     //           y = coords
     //           y_t = elements
     //           y_m = mask
-    fn to_numeric_ligand_atoms(&self) -> Result<(Tensor, Tensor, Tensor)> {
-        let device = Some(&self.device);
+    fn to_numeric_ligand_atoms(&self, device: Option<&Device>) -> Result<(Tensor, Tensor, Tensor)> {
         let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
             .iter_residues_all()
             // keep only the non-protein, non-water residues
@@ -435,10 +430,10 @@ mod tests {
     use candle_core::{Device, Tensor};
     use ferritin_test_data::TestFile;
 
-    fn setup_test_structure() -> AtomCollection {
-        // let (pdb_path, _handle) = TestFile:;    ;
-        // AtomCollection::from_pdb(&pdb_path).unwrap()
-    }
+    // fn setup_test_structure() -> AtomCollection {
+    // let (pdb_path, _handle) = TestFile:;    ;
+    // AtomCollection::from_pdb(&pdb_path).unwrap()
+    // }
 
     #[test]
     #[cfg(feature = "candle-backend")]

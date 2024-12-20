@@ -22,40 +22,28 @@ pub use candle_impl::*;
 pub use ndarray_impl::*;
 
 use crate::AtomCollection;
-use std::collections::{HashMap, HashSet};
-
-// /// Convert the AtomCollection into a struct that can be passed to a model.
-// pub trait LMPNNFeatures {
-//     fn encode_amino_acids(&self, device: &Device) -> Result<Tensor>; // ( residue types )
-//     fn featurize(&self, device: &Device) -> Result<ProteinFeatures>; // need more control over this featurization process
-//     fn get_res_index(&self) -> Vec<u32>;
-//     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
-
-//     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
-//     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
-//     fn to_pdb(&self); //
-// }
+use std::collections::HashMap;
 
 pub trait StructureFeatures<T> {
     type Error;
 
     /// Convert amino acid sequence to numeric representation
-    fn encode_amino_acids(&self) -> Result<T, Self::Error>;
+    fn encode_amino_acids(&self, device: Option<T>) -> Result<T, Self::Error>;
 
     /// Convert structure into complete feature set
-    fn featurize(&self) -> Result<ProteinFeatures<T>, Self::Error>;
+    fn featurize(&self, device: Option<T>) -> Result<ProteinFeatures<T>, Self::Error>;
 
     /// Get residue indices
-    fn get_res_index(&self) -> Vec<u32>;
+    fn get_res_index(&self, device: Option<T>) -> Vec<u32>;
 
     /// Extract backbone atom coordinates (N, CA, C, O)
-    fn to_numeric_backbone_atoms(&self) -> Result<T, Self::Error>;
+    fn to_numeric_backbone_atoms(&self, device: Option<T>) -> Result<T, Self::Error>;
 
     /// Extract all atom coordinates in standard ordering
-    fn to_numeric_atom37(&self) -> Result<T, Self::Error>;
+    fn to_numeric_atom37(&self, device: Option<T>) -> Result<T, Self::Error>;
 
     /// Extract ligand atom coordinates and properties
-    fn to_numeric_ligand_atoms(&self) -> Result<(T, T, T), Self::Error>;
+    fn to_numeric_ligand_atoms(&self, device: Option<T>) -> Result<(T, T, T), Self::Error>;
 
     /// Convert to PDB format
     fn to_pdb(&self);
