@@ -14,6 +14,7 @@
 mod atomcollection;
 mod bonds;
 mod conversions;
+mod featurize;
 mod info;
 mod residue;
 mod selection;

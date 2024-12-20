@@ -1,15 +1,8 @@
-//! Protein Featurizer for ProteinMPNN/LignadMPNN
-//!
-//! Extract protein features for ligandmpnn
-//!
-//! Returns a set of features calculated from protein structure
-//! including:
-//! - Residue-level features like amino acid type, secondary structure
-//! - Geometric features like distances, angles
-//! - Chemical features like hydrophobicity, charge
-//! - Evolutionary features from MSA profiles
-
+// ferritin-core/src/features/candle_impl.rs
 use super::utilities::{aa1to_int, aa3to1, AAAtom};
+use super::{ProteinFeatures, StructureFeatures};
+use crate::AtomCollection;
+use candle_core::{Device, Result, Tensor};
 use candle_core::{Device, Result, Tensor};
 use ferritin_core::AtomCollection;
 use itertools::MultiUnzip;
@@ -17,28 +10,15 @@ use pdbtbx::Element;
 use std::collections::{HashMap, HashSet};
 use strum::IntoEnumIterator;
 
-// Helper Fns --------------------------------------
 fn is_heavy_atom(element: &Element) -> bool {
     !matches!(element, Element::H | Element::He)
 }
 
-/// Convert the AtomCollection into a struct that can be passed to a model.
-pub trait LMPNNFeatures {
-    fn encode_amino_acids(&self, device: &Device) -> Result<Tensor>; // ( residue types )
-    fn featurize(&self, device: &Device) -> Result<ProteinFeatures>; // need more control over this featurization process
-    fn get_res_index(&self) -> Vec<u32>;
-    fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
+impl StructureFeatures<Tensor> for AtomCollection {
+    type Error = candle_core::Error;
 
-    fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
-    fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
-    fn to_pdb(&self); //
-}
-
-/// Methods for Convering an AtomCollection into a LigandMPNN-ready
-/// datasets
-impl LMPNNFeatures for AtomCollection {
-    /// Return a 2D tensor of [1, seqlength]
-    fn encode_amino_acids(&self, device: &Device) -> Result<Tensor> {
+    fn encode_amino_acids(&self) -> Result<Tensor, Self::Error> {
+        let device = Device::Cpu; // or pass device as parameter
         let n = self.iter_residues_aminoacid().count();
         let s = self
             .iter_residues_aminoacid()
@@ -46,9 +26,9 @@ impl LMPNNFeatures for AtomCollection {
             .map(|res| aa3to1(&res))
             .map(|res| aa1to_int(res));
 
-        Ok(Tensor::from_iter(s, device)?.reshape((1, n))?)
+        Ok(Tensor::from_iter(s, &device)?.reshape((1, n))?)
     }
-    // equivalent to protien MPNN's parse_PDB
+
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
         todo!();
         // let x_37 = self.to_numeric_atom37(device)?;
@@ -91,6 +71,7 @@ impl LMPNNFeatures for AtomCollection {
         //     chain_list: None,
         // })
     }
+    // equivalent to protien MPNN's parse_PDB
     /// create numeric Tensor of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
@@ -272,6 +253,24 @@ impl LMPNNFeatures for AtomCollection {
         self.iter_residues_aminoacid()
             .map(|res| res.res_id as u32)
             .collect()
+    }
+}
+
+impl ProteinFeatures<Tensor> {
+    pub fn save_to_safetensor(&self, path: &str) -> Result<(), candle_core::Error> {
+        let mut tensors: HashMap<String, Tensor> = HashMap::new();
+        tensors.insert("protein_atom_sequence".to_string(), self.sequence.clone());
+        tensors.insert(
+            "protein_atom_positions".to_string(),
+            self.coordinates.clone(),
+        );
+        tensors.insert(
+            "ligand_atom_positions".to_string(),
+            self.ligand_coords.clone(),
+        );
+        tensors.insert("ligand_atom_types".to_string(), self.ligand_types.clone());
+        candle_core::safetensors::save(&tensors, path)?;
+        Ok(())
     }
 }
 
