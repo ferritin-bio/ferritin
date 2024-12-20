@@ -426,3 +426,49 @@ impl ProteinFeatures {
         }
     }
 }
+
+#[cfg(feature = "candle-backend")]
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ferritin_test_data::TestData;
+
+    #[test]
+    fn test_encode_amino_acids() -> Result<()> {
+        let device = Device::Cpu;
+        let (mpnn_file, _handle) = TestFile::;
+        let atoms = AtomCollection::default(); // Need to populate with test data
+        let result = atoms.encode_amino_acids()?;
+        assert_eq!(result.dims(), &[1, 0]); // Empty collection
+        Ok(())
+    }
+
+    #[test]
+    fn test_numeric_backbone() -> Result<()> {
+        let device = Device::Cpu;
+        let atoms = AtomCollection::default();
+        let result = atoms.to_numeric_backbone_atoms(&device)?;
+        assert_eq!(result.dims(), &[1, 0, 4, 3]); // Empty collection
+        Ok(())
+    }
+
+    #[test]
+    fn test_numeric_atom37() -> Result<()> {
+        let device = Device::Cpu;
+        let atoms = AtomCollection::default();
+        let result = atoms.to_numeric_atom37(&device)?;
+        assert_eq!(result.dims(), &[1, 0, 37, 3]); // Empty collection
+        Ok(())
+    }
+
+    #[test]
+    fn test_ligand_atoms() -> Result<()> {
+        let device = Device::Cpu;
+        let atoms = AtomCollection::default();
+        let (coords, elements, mask) = atoms.to_numeric_ligand_atoms(&device)?;
+        assert_eq!(coords.dims(), &[0, 3]); // Empty collection
+        assert_eq!(elements.dims(), &[0]);
+        assert_eq!(mask.dims(), &[0, 3]);
+        Ok(())
+    }
+}

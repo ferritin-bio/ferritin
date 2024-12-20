@@ -9,6 +9,18 @@
 //! - Chemical features like hydrophobicity, charge
 //! - Evolutionary features from MSA profiles
 
+#[cfg(feature = "candle-backend")]
+pub mod candle_impl;
+
+#[cfg(feature = "ndarray-backend")]
+pub mod ndarray_impl;
+
+#[cfg(feature = "candle-backend")]
+pub use candle_impl::*;
+
+#[cfg(feature = "ndarray-backend")]
+pub use ndarray_impl::*;
+
 use crate::AtomCollection;
 use std::collections::{HashMap, HashSet};
 
@@ -104,15 +116,3 @@ impl<T> ProteinFeatures<T> {
         todo!()
     }
 }
-
-#[cfg(feature = "candle-backend")]
-pub mod candle_impl;
-
-#[cfg(feature = "ndarray-backend")]
-pub mod ndarray_impl;
-
-#[cfg(feature = "candle-backend")]
-pub use candle_impl::*;
-
-#[cfg(feature = "ndarray-backend")]
-pub use ndarray_impl::*;
