@@ -9,14 +9,9 @@ description.workspace = true
 [dependencies]
 pdbtbx.workspace = true
 itertools.workspace = true
-candle-core = { workspace = true, optional = true }
-ndarray = { version = "0.15", optional = true }
+ndarray = { version = "0.15" }
 lazy_static = "1.5.0"
 strum = { version = "0.25", features = ["derive"] }
 
 [dev-dependencies]
 ferritin-test-data = { path = "../ferritin-test-data" }
-
-[features]
-candle-backend = ["dep:candle-core"]
-ndarray-backend = ["dep:ndarray"]
