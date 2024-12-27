@@ -23,3 +23,4 @@ pub use self::atomcollection::AtomCollection;
 pub use self::bonds::{Bond, BondOrder};
 pub use self::residue::ResidueAtoms;
 pub use self::selection::Selection;
+pub use self::featurize::{StructureFeatures, ProteinFeatures, aa3to1, aa1to_int, int_to_aa1}
