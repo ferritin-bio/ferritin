@@ -10,3 +10,6 @@
 //! - Evolutionary features from MSA profiles
 mod ndarray_impl;
 mod utilities;
+
+pub use ndarray_impl::{ProteinFeatures, StructureFeatures};
+pub use utilities::{aa1to_int, aa3to1, int_to_aa1};
