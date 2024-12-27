@@ -28,6 +28,7 @@ pub trait LMPNNFeatures {
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures>; // need more control over this featurization process
     fn get_res_index(&self) -> Vec<u32>;
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
+
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
     fn to_pdb(&self); //
