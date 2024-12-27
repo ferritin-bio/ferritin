@@ -21,6 +21,7 @@ mod selection;
 
 pub use self::atomcollection::AtomCollection;
 pub use self::bonds::{Bond, BondOrder};
+pub use self::featurize::{aa1to_int, aa3to1, int_to_aa1, ProteinFeatures, StructureFeatures};
 pub use self::residue::ResidueAtoms;
 pub use self::selection::Selection;
 pub use self::featurize::{StructureFeatures, ProteinFeatures, aa3to1, aa1to_int, int_to_aa1}
