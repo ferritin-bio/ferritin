@@ -1,3 +1,4 @@
+use candle_core::{DType, Result, Tensor, D};
 use strum::{Display, EnumIter, EnumString};
 
 #[rustfmt::skip]
@@ -139,6 +140,54 @@ define_residues! {
     TRP: "TRP", 'W', 18, [0.0, 0.0], [AAAtom::N, AAAtom::CA, AAAtom::C, AAAtom::O, AAAtom::CB, AAAtom::CG, AAAtom::CD1, AAAtom::CD2, AAAtom::CE2, AAAtom::CE3, AAAtom::NE1, AAAtom::CZ2, AAAtom::CZ3, AAAtom::CH2],
     TYR: "TYR", 'Y', 19, [0.0, 0.0], [AAAtom::N, AAAtom::CA, AAAtom::C, AAAtom::O, AAAtom::CB, AAAtom::CG, AAAtom::CD1, AAAtom::CD2, AAAtom::CE1, AAAtom::CE2, AAAtom::CZ, AAAtom::OH, AAAtom::Unknown, AAAtom::Unknown],
     UNK: "UNK", 'X', 20, [0.0, 0.0], [AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown],
+}
+
+/// Retrieve the nearest Neighbor of a set of coordinates.
+/// Usually used for CA carbon distance.
+pub fn compute_nearest_neighbors(
+    coords: &Tensor,
+    mask: &Tensor,
+    k: usize,
+    eps: f32,
+) -> Result<(Tensor, Tensor)> {
+    // Todo: fix the F32/F64 issue
+    let (_batch_size, seq_len, _) = coords.dims3()?;
+
+    // broadcast_matmul handles broadcasting automatically
+    // [2, 3, 1] × [2, 1, 3] -> [2, 3, 3]
+    let mask_2d = mask
+        .unsqueeze(2)?
+        .broadcast_matmul(&mask.unsqueeze(1)?)?
+        .to_dtype(DType::F32)?; // Convert to f64 once, at the start
+
+    // Compute pairwise distances with broadcasting
+    let distances = (coords
+        .unsqueeze(2)?
+        .broadcast_sub(&coords.unsqueeze(1)?)?
+        .powf(2.)?
+        .sum(D::Minus1)?
+        + eps as f64)?
+        .sqrt()?
+        .to_dtype(DType::F32)?;
+
+    // Apply mask
+    // Get max values for adjustment
+    let masked_distances = (&distances * &mask_2d.to_dtype(DType::F32)?)?;
+    // println!("after masked_distances");
+    let d_max = masked_distances.max_keepdim(D::Minus1)?;
+    let mask_term = ((&mask_2d.to_dtype(DType::F32)? * -1.0)? + 1.0)?;
+    let d_adjust = (&masked_distances + mask_term.broadcast_mul(&d_max)?)?;
+    let d_adjust = d_adjust.to_dtype(DType::F32)?;
+
+    Ok(topk_last_dim(&d_adjust, k.min(seq_len))?)
+}
+
+// https://github.com/huggingface/candle/pull/2375/files#diff-e4d52a71060a80ac8c549f2daffcee77f9bf4de8252ad067c47b1c383c3ac828R957
+pub fn topk_last_dim(xs: &Tensor, topk: usize) -> Result<(Tensor, Tensor)> {
+    let sorted_indices = xs.arg_sort_last_dim(false)?.to_dtype(DType::U32)?;
+    let topk_indices = sorted_indices.narrow(D::Minus1, 0, topk)?.contiguous()?;
+    let gathered = xs.gather(&topk_indices, D::Minus1)?;
+    Ok((gathered, topk_indices))
 }
 
 #[cfg(test)]

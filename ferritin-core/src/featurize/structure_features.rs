@@ -2,6 +2,7 @@
 use super::utilities::{aa1to_int, aa3to1, int_to_aa1, AAAtom};
 use crate::AtomCollection;
 use candle_core::{DType, Device, Error as CandleError, Result, Tensor};
+use itertools::MultiUnzip;
 use pdbtbx::Element;
 use strum::IntoEnumIterator;
 
@@ -19,7 +20,7 @@ pub trait StructureFeatures {
     fn encode_amino_acids(&self, device: &Device) -> Result<Tensor>;
 
     /// Get residue indices
-    fn get_res_index(&self) -> Result<Tensor>;
+    fn get_res_index(&self) -> Vec<u32>;
 
     /// Extract backbone atom coordinates (N, CA, C, O)
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>;
@@ -50,8 +51,10 @@ impl StructureFeatures for AtomCollection {
     }
 
     /// Get residue indices
-    fn get_res_index(&self) -> Result<Tensor> {
-        todo!()
+    fn get_res_index(&self) -> Vec<u32> {
+        self.iter_residues_aminoacid()
+            .map(|res| res.res_id as u32)
+            .collect()
     }
 
     /// create numeric Tensor of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
@@ -101,6 +104,29 @@ impl StructureFeatures for AtomCollection {
     }
 
     /// Extract ligand atom coordinates and properties
+    ///
+    /// 1. Input Y starts as (N_atoms, 3)
+    // 2. Key transformation steps:
+    // ```python
+    // # Creates (num_residues, N_atoms, 3) by repeating Y for each residue
+    // Y_r = Y[None, :, :].repeat(CB.shape[0], 1, 1)
+    // # Gathers nearest neighbors based on distances, shape becomes (num_residues, num_ligand_atoms, 3)
+    // Y_tmp = torch.gather(Y_r, 1, nn_idx[:, :, None].repeat(1, 1, 3))
+    // # Creates final Y with shape (num_residues, number_of_ligand_atoms, 3)
+    // Y = torch.zeros([CB.shape[0], number_of_ligand_atoms, 3], dtype=torch.float32, device=device)
+    // Y[:, :num_nn_update] = Y_tmp
+    // ```
+    // 3. Finally in the featurize function:
+    // ```python
+    // output_dict["Y"] = Y[None,]  # Adds batch dimension
+    // ```
+    // So the final 4D shape is:
+    // - (1, num_residues, number_of_ligand_atoms, 3)
+    //   - 1: batch size
+    //   - num_residues: number of protein residues (from CB.shape[0])
+    //   - number_of_ligand_atoms: fixed number (16 in your case)
+    //   - 3: x,y,z coordinates
+    // The function finds the nearest ligand atoms to each protein residue's CB atom, effectively creating a local chemical environment representation for each residue
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
         let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
             .iter_residues_all()
