@@ -11,7 +11,7 @@ candle-core.workspace = true
 itertools.workspace = true
 lazy_static = "1.5.0"
 pdbtbx.workspace = true
-strum = { version = "0.25", features = ["derive"] }
+strum = { version = "0.26", features = ["derive"] }
 
 [dev-dependencies]
 ferritin-test-data = { path = "../ferritin-test-data" }
