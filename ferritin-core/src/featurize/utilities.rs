@@ -162,30 +162,19 @@ pub fn get_nearest_neighbours(
     let Y_expanded = Y.unsqueeze(0)?;
     let diff = &CB_expanded - &Y_expanded;
     let L2_AB = diff?.powf(2.0)?.sum(D::Minus1)?;
-
     let complement_mask = mask_CBY.neg()? + 1.0;
-    // Then multiply by 1000
     let padding = complement_mask? * 1000.0;
-    // Finally combine with the masked L2_AB
     let L2_AB = L2_AB.mul(&mask_CBY)?.add(&padding?)?;
 
-    // let L2_AB = L2_AB.mul(&mask_CBY)? + ((&mask_CBY * -1.0 + 1.0)? * 1000.0)?;
-
-    // Get nearest neighbors indices
     let nn_idx = L2_AB.arg_sort_last_dim(false)?;
     let nn_idx = nn_idx.narrow(1, 0, number_of_ligand_atoms as usize)?;
 
-    // Calculate closest distances
     let D_AB_closest = L2_AB.gather(&nn_idx, 1)?.i((.., 0))?.sqrt()?;
-
-    // Expand original tensors
     let Y_r = Y
         .unsqueeze(0)?
         .expand((num_residues, num_ligand_atoms, xyz_dims))?;
     let Y_t_r = Y_t.unsqueeze(0)?.expand((num_residues, num_ligand_atoms))?;
     let Y_m_r = Y_m.unsqueeze(0)?.expand((num_residues, num_ligand_atoms))?;
-
-    // Expand indices for gathering
     let nn_idx_expanded =
         nn_idx
             .unsqueeze(2)?
