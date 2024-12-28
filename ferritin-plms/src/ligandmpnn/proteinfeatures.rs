@@ -91,6 +91,11 @@ impl LMPNNFeatures for AtomCollection {
         //     chain_list: None,
         // })
     }
+    fn get_res_index(&self) -> Vec<u32> {
+        self.iter_residues_aminoacid()
+            .map(|res| res.res_id as u32)
+            .collect()
+    }
     /// create numeric Tensor of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
@@ -116,6 +121,7 @@ impl LMPNNFeatures for AtomCollection {
         // Create tensor with shape [1,residues, 4, 3]
         Tensor::from_vec(backbone_data, (1, res_count, 4, 3), &device)
     }
+
     /// create numeric Tensor of shape [<sequence-length>, 37, 3]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
@@ -267,12 +273,6 @@ impl LMPNNFeatures for AtomCollection {
         // }
         unimplemented!()
     }
-
-    fn get_res_index(&self) -> Vec<u32> {
-        self.iter_residues_aminoacid()
-            .map(|res| res.res_id as u32)
-            .collect()
-    }
 }
 
 pub struct ProteinFeatures {
@@ -408,7 +408,7 @@ impl ProteinFeatures {
         let device = self.s.device();
         let dtype = self.s.dtype();
         match bias_aa {
-            None => Tensor::zeros((21), dtype, device),
+            None => Tensor::zeros(21, dtype, device),
             Some(bias_aa) => {
                 let mut bias_values = vec![0.0f32; 21];
                 for pair in bias_aa.split(',') {
@@ -422,7 +422,7 @@ impl ProteinFeatures {
                         }
                     }
                 }
-                Tensor::from_slice(&bias_values, (21), device)
+                Tensor::from_slice(&bias_values, 21, device)
             }
         }
     }
