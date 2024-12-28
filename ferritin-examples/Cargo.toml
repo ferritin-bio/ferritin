@@ -21,10 +21,9 @@ ferritin-bevy = { path = "../ferritin-bevy" }
 ferritin-core = { path = "../ferritin-core" }
 ferritin-plms = { path = "../ferritin-plms" }
 ferritin-onnx-models = { path = "../ferritin-onnx-models" }
-serde_json.workspace = true
 ort = "=2.0.0-rc.9"
-ndarray.workspace = true
-ndarray-safetensor = "0.2"
+ndarray_safetensors = "0.2"
+serde_json.workspace = true
 
 
 [target.'cfg(target_os = "macos")'.features]
