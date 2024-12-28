@@ -1,4 +1,4 @@
-use candle_core::{DType, Result, Tensor, D};
+use candle_core::{DType, Device, IndexOp, Result, Tensor, D};
 use strum::{Display, EnumIter, EnumString};
 
 #[rustfmt::skip]
@@ -142,74 +142,54 @@ define_residues! {
     UNK: "UNK", 'X', 20, [0.0, 0.0], [AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown],
 }
 
-/// Retrieve the nearest Neighbor of a set of coordinates.
-/// Usually used for CA carbon distance.
-pub fn compute_nearest_neighbors(
-    coords: &Tensor,
+// Use CB to find nearest Ligand coords.
+pub fn get_nearest_neighbours(
+    CB: &Tensor,
     mask: &Tensor,
-    k: usize,
-    eps: f32,
-) -> Result<(Tensor, Tensor)> {
-    // Todo: fix the F32/F64 issue
-    let (_batch_size, seq_len, _) = coords.dims3()?;
+    Y: &Tensor,
+    Y_t: &Tensor,
+    Y_m: &Tensor,
+    number_of_ligand_atoms: i64,
+) -> Result<(Tensor, Tensor, Tensor, Tensor)> {
+    let device = CB.device();
+    let num_residues = CB.dim(0)?;
+    let num_ligand_atoms = Y.dim(0)?;
+    let xyz_dims = 3;
+    let mask_CBY = mask.unsqueeze(1)?.matmul(&Y_m.unsqueeze(0)?)?;
 
-    // broadcast_matmul handles broadcasting automatically
-    // [2, 3, 1] × [2, 1, 3] -> [2, 3, 3]
-    let mask_2d = mask
-        .unsqueeze(2)?
-        .broadcast_matmul(&mask.unsqueeze(1)?)?
-        .to_dtype(DType::F32)?; // Convert to f64 once, at the start
+    // Calculate L2 distances
+    let CB_expanded = CB.unsqueeze(1)?;
+    let Y_expanded = Y.unsqueeze(0)?;
+    let diff = &CB_expanded - &Y_expanded;
+    let L2_AB = diff?.powf(2.0)?.sum(D::Minus1)?;
+    let L2_AB = L2_AB.mul(&mask_CBY)? + ((&mask_CBY * -1.0 + 1.0)? * 1000.0)?;
 
-    // Compute pairwise distances with broadcasting
-    let distances = (coords
-        .unsqueeze(2)?
-        .broadcast_sub(&coords.unsqueeze(1)?)?
-        .powf(2.)?
-        .sum(D::Minus1)?
-        + eps as f64)?
-        .sqrt()?
-        .to_dtype(DType::F32)?;
+    // Get nearest neighbors indices
+    let nn_idx = L2_AB.arg_sort_last_dim(false)?;
+    let nn_idx = nn_idx.narrow(1, 0, number_of_ligand_atoms as usize)?;
 
-    // Apply mask
-    // Get max values for adjustment
-    let masked_distances = (&distances * &mask_2d.to_dtype(DType::F32)?)?;
-    // println!("after masked_distances");
-    let d_max = masked_distances.max_keepdim(D::Minus1)?;
-    let mask_term = ((&mask_2d.to_dtype(DType::F32)? * -1.0)? + 1.0)?;
-    let d_adjust = (&masked_distances + mask_term.broadcast_mul(&d_max)?)?;
-    let d_adjust = d_adjust.to_dtype(DType::F32)?;
+    // Calculate closest distances
+    let D_AB_closest = L2_AB.gather(&nn_idx, 1)?.i((.., 0))?.sqrt()?;
 
-    Ok(topk_last_dim(&d_adjust, k.min(seq_len))?)
-}
+    // Expand original tensors
+    let Y_r = Y
+        .unsqueeze(0)?
+        .expand((num_residues, num_ligand_atoms, xyz_dims))?;
+    let Y_t_r = Y_t.unsqueeze(0)?.expand((num_residues, num_ligand_atoms))?;
+    let Y_m_r = Y_m.unsqueeze(0)?.expand((num_residues, num_ligand_atoms))?;
 
-// https://github.com/huggingface/candle/pull/2375/files#diff-e4d52a71060a80ac8c549f2daffcee77f9bf4de8252ad067c47b1c383c3ac828R957
-pub fn topk_last_dim(xs: &Tensor, topk: usize) -> Result<(Tensor, Tensor)> {
-    let sorted_indices = xs.arg_sort_last_dim(false)?.to_dtype(DType::U32)?;
-    let topk_indices = sorted_indices.narrow(D::Minus1, 0, topk)?.contiguous()?;
-    let gathered = xs.gather(&topk_indices, D::Minus1)?;
-    Ok((gathered, topk_indices))
-}
+    // Expand indices for gathering
+    let nn_idx_expanded =
+        nn_idx
+            .unsqueeze(2)?
+            .expand((num_residues, number_of_ligand_atoms as usize, xyz_dims))?;
 
-/// Custom Cross-Product Fn.
-pub fn cross_product(a: &Tensor, b: &Tensor) -> Result<Tensor> {
-    let last_dim = a.dims().len() - 1;
+    // Gather nearest neighbors
+    let Y = Y_r.gather(&nn_idx_expanded, 1)?;
+    let Y_t = Y_t_r.gather(&nn_idx, 1)?;
+    let Y_m = Y_m_r.gather(&nn_idx, 1)?;
 
-    // Extract components
-    let a0 = a.narrow(last_dim, 0, 1)?;
-    let a1 = a.narrow(last_dim, 1, 1)?;
-    let a2 = a.narrow(last_dim, 2, 1)?;
-
-    let b0 = b.narrow(last_dim, 0, 1)?;
-    let b1 = b.narrow(last_dim, 1, 1)?;
-    let b2 = b.narrow(last_dim, 2, 1)?;
-
-    // Compute cross product components
-    let c0 = ((&a1 * &b2)? - (&a2 * &b1)?)?;
-    let c1 = ((&a2 * &b0)? - (&a0 * &b2)?)?;
-    let c2 = ((&a0 * &b1)? - (&a1 * &b0)?)?;
-
-    // Stack the results
-    Tensor::cat(&[&c0, &c1, &c2], last_dim)
+    Ok((Y, Y_t, Y_m, D_AB_closest))
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 //!  Protein->Tensor utiilities useful for Machine Learning
-use super::utilities::{aa1to_int, aa3to1, cross_product, int_to_aa1, AAAtom};
+use super::utilities::{aa1to_int, aa3to1, get_nearest_neighbours, int_to_aa1, AAAtom};
 use crate::AtomCollection;
 use candle_core::{DType, Device, Error as CandleError, IndexOp, Result, Tensor};
 use itertools::MultiUnzip;
@@ -220,11 +220,11 @@ impl StructureFeatures for AtomCollection {
         let y_m = Tensor::ones_like(&y)?;
 
         // get the C-beta tensor.
-        let CB = self.create_CB(device);
+        let CB = self.create_CB(device)?;
 
-        let  (y, y_t, y_m, D_XY) = get_nearest_neighbours(
-            CB, mask, y, y_t, y_m, number_of_ligand_atoms
-        )
+        // compute_nearest_neighbors()
+        let (y, y_t, y_m, D_XY) =
+            get_nearest_neighbours(&CB, &mask, &y, &y_t, &y_m, &number_of_ligand_atoms)?;
 
         Ok((y, y_t, y_m))
     }
