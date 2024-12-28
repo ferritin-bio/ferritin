@@ -199,8 +199,23 @@ impl StructureFeatures for AtomCollection {
         let CB = self.create_CB(device)?;
         let (batch, res_num, _coords) = CB.dims3()?;
         let mask = Tensor::zeros((batch, res_num), DType::F32, device)?;
+        println!(
+            "Input tensor dims - CB: {:?}, mask: {:?}, y: {:?}, y_t: {:?}, y_m: {:?}",
+            CB.dims(),
+            mask.dims(),
+            y.dims(),
+            y_t.dims(),
+            y_m.dims()
+        );
         let (y, y_t, y_m, d_xy) =
             get_nearest_neighbours(&CB, &mask, &y, &y_t, &y_m, number_of_ligand_atoms)?;
+        println!(
+            "Output tensor dims - y: {:?}, y_t: {:?}, y_m: {:?}, d_xy: {:?}",
+            y.dims(),
+            y_t.dims(),
+            y_m.dims(),
+            d_xy.dims()
+        );
         let distance_mask = d_xy.lt(cutoff_for_score)?;
         let y_m_first = y_m.i((.., 0))?;
         let mask_xy = distance_mask.mul(&mask)?.mul(&y_m_first)?;

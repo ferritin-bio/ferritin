@@ -143,6 +143,124 @@ define_residues! {
 }
 
 // Use CB to find nearest Ligand coords.
+// pub fn get_nearest_neighbours(
+//     CB: &Tensor,
+//     mask: &Tensor,
+//     Y: &Tensor,
+//     Y_t: &Tensor,
+//     Y_m: &Tensor,
+//     number_of_ligand_atoms: i64,
+// ) -> Result<(Tensor, Tensor, Tensor, Tensor)> {
+//     let device = CB.device();
+//     let (batch_size, num_residues, _coords) = CB.dims3()?;
+//     let (num_ligand_atoms, _coords) = Y.dims2()?;
+//     let xyz_dims = 3;
+//     let mask_CBY = mask.unsqueeze(1)?.matmul(&Y_m.unsqueeze(0)?)?;
+
+//     // Add batch dim to Y tensors if they don't have it
+//     let Y = Y
+//         .unsqueeze(0)?
+//         .expand((batch_size, num_ligand_atoms, xyz_dims))?;
+//     let Y_t = Y_t.unsqueeze(0)?.expand((batch_size, num_ligand_atoms))?;
+//     let Y_m = Y_m.unsqueeze(0)?.expand((batch_size, num_ligand_atoms))?;
+
+//     // Calculate L2 distances
+//     let CB_expanded = CB.unsqueeze(1)?;
+//     let Y_expanded = Y.unsqueeze(0)?;
+//     let diff = &CB_expanded - &Y_expanded;
+//     let L2_AB = diff?.powf(2.0)?.sum(D::Minus1)?;
+//     let complement_mask = mask_CBY.neg()? + 1.0;
+//     let padding = complement_mask? * 1000.0;
+//     let L2_AB = L2_AB.mul(&mask_CBY)?.add(&padding?)?;
+
+//     let nn_idx = L2_AB.arg_sort_last_dim(false)?;
+//     let nn_idx = nn_idx.narrow(1, 0, number_of_ligand_atoms as usize)?;
+
+//     let D_AB_closest = L2_AB.gather(&nn_idx, 1)?.i((.., 0))?.sqrt()?;
+//     let Y_r = Y
+//         .unsqueeze(0)?
+//         .expand((num_residues, num_ligand_atoms, xyz_dims))?;
+//     let Y_t_r = Y_t
+//         .unsqueeze(0)?
+//         .expand((batch_size, num_residues, num_ligand_atoms))?;
+//     let Y_m_r = Y_m
+//         .unsqueeze(0)?
+//         .expand((batch_size, num_residues, num_ligand_atoms))?;
+//     let nn_idx_expanded = nn_idx.unsqueeze(2)?.expand((
+//         batch_size,
+//         num_residues,
+//         number_of_ligand_atoms as usize,
+//         xyz_dims,
+//     ))?;
+
+//     // Gather nearest neighbors
+//     let Y = Y_r.gather(&nn_idx_expanded, 1)?;
+//     let Y_t = Y_t_r.gather(&nn_idx, 1)?;
+//     let Y_m = Y_m_r.gather(&nn_idx, 1)?;
+
+//     Ok((Y, Y_t, Y_m, D_AB_closest))
+// }
+
+// pub fn get_nearest_neighbours(
+//     CB: &Tensor,
+//     mask: &Tensor,
+//     Y: &Tensor,
+//     Y_t: &Tensor,
+//     Y_m: &Tensor,
+//     number_of_ligand_atoms: i64,
+// ) -> Result<(Tensor, Tensor, Tensor, Tensor)> {
+//     let device = CB.device();
+//     let batch_size = CB.dim(0)?;
+//     let num_residues = CB.dim(1)?; // Changed from dim(0) to dim(1)
+//     let num_ligand_atoms = Y.dim(0)?;
+//     let xyz_dims = 3;
+
+//     // Add batch dim to Y tensors if they don't have it
+//     let Y = Y
+//         .unsqueeze(0)?
+//         .expand((batch_size, num_ligand_atoms, xyz_dims))?;
+//     let Y_t = Y_t.unsqueeze(0)?.expand((batch_size, num_ligand_atoms))?;
+//     let last_dim = Y_m.dim(D::Minus1)?;
+//     let Y_m = Y_m
+//         .unsqueeze(0)?
+//         .expand((batch_size, num_ligand_atoms, last_dim))?;
+//     // Adjust mask operations for batch dimension
+//     let mask_CBY = mask.unsqueeze(2)?.matmul(&Y_m.unsqueeze(1)?)?;
+
+//     // Calculate L2 distances with batch dimension
+//     let CB_expanded = CB.unsqueeze(2)?; // [batch, num_residues, 1, 3]
+//     let Y_expanded = Y.unsqueeze(1)?; // [batch, 1, num_ligand_atoms, 3]
+//     let diff = &CB_expanded - &Y_expanded;
+//     let L2_AB = diff?.powf(2.0)?.sum(D::Minus1)?;
+//     let complement_mask = mask_CBY.neg()? + 1.0;
+//     let padding = complement_mask? * 1000.0;
+//     let L2_AB = L2_AB.mul(&mask_CBY)?.add(&padding?)?;
+//     let nn_idx = L2_AB.arg_sort_last_dim(false)?;
+//     let nn_idx = nn_idx.narrow(2, 0, number_of_ligand_atoms as usize)?;
+//     let D_AB_closest = L2_AB.gather(&nn_idx, 2)?.i((.., .., 0))?.sqrt()?;
+//     // Expand Y tensors with batch dimension
+//     let Y_r = Y
+//         .unsqueeze(1)?
+//         .expand((batch_size, num_residues, num_ligand_atoms, xyz_dims))?;
+//     let Y_t_r = Y_t
+//         .unsqueeze(1)?
+//         .expand((batch_size, num_residues, num_ligand_atoms))?;
+//     let Y_m_r = Y_m
+//         .unsqueeze(1)?
+//         .expand((batch_size, num_residues, num_ligand_atoms))?;
+//     let nn_idx_expanded = nn_idx.unsqueeze(3)?.expand((
+//         batch_size,
+//         num_residues,
+//         number_of_ligand_atoms as usize,
+//         xyz_dims,
+//     ))?;
+//     // Gather nearest neighbors
+//     let Y = Y_r.gather(&nn_idx_expanded, 2)?;
+//     let Y_t = Y_t_r.gather(&nn_idx, 2)?;
+//     let Y_m = Y_m_r.gather(&nn_idx, 2)?;
+//     Ok((Y, Y_t, Y_m, D_AB_closest))
+// }
+
 pub fn get_nearest_neighbours(
     CB: &Tensor,
     mask: &Tensor,
@@ -152,40 +270,60 @@ pub fn get_nearest_neighbours(
     number_of_ligand_atoms: i64,
 ) -> Result<(Tensor, Tensor, Tensor, Tensor)> {
     let device = CB.device();
+
+    // First, remove batch dimension if present using squeeze(0)
+    let CB = CB.squeeze(0)?;
+    let mask = mask.squeeze(0)?;
+    let Y_m = if Y_m.dims().len() > 1 {
+        Y_m.sum_keepdim(1)?.squeeze(1)? // or .any(1)? depending on your needs
+    } else {
+        Y_m.clone()
+    };
     let num_residues = CB.dim(0)?;
     let num_ligand_atoms = Y.dim(0)?;
-    let xyz_dims = 3;
     let mask_CBY = mask.unsqueeze(1)?.matmul(&Y_m.unsqueeze(0)?)?;
-
     // Calculate L2 distances
-    let CB_expanded = CB.unsqueeze(1)?;
-    let Y_expanded = Y.unsqueeze(0)?;
-    let diff = &CB_expanded - &Y_expanded;
-    let L2_AB = diff?.powf(2.0)?.sum(D::Minus1)?;
-    let complement_mask = mask_CBY.neg()? + 1.0;
-    let padding = complement_mask? * 1000.0;
-    let L2_AB = L2_AB.mul(&mask_CBY)?.add(&padding?)?;
+    let CB_expanded = CB.unsqueeze(1)?; // [num_residues, 1, 3]
+    let Y_expanded = Y.unsqueeze(0)?; // [1, num_ligand_atoms, 3]
 
-    let nn_idx = L2_AB.arg_sort_last_dim(false)?;
-    let nn_idx = nn_idx.narrow(1, 0, number_of_ligand_atoms as usize)?;
+    let diff = CB_expanded.sub(&Y_expanded)?; // [154, 54, 3]
+    let L2_AB = diff.powf(2.0)?.sum(D::Minus1)?; // [154, 54]
 
-    let D_AB_closest = L2_AB.gather(&nn_idx, 1)?.i((.., 0))?.sqrt()?;
-    let Y_r = Y
+    // let L2_AB = (&CB_expanded - &Y_expanded)?.powf(2.0)?.sum(D::Minus1)?; // [num_residues, num_ligand_atoms]
+    let complement_mask = (mask_CBY.neg()? + 1.0)?;
+    let padding_value = Tensor::full(1000., mask_CBY.dims(), CB.device())?;
+    let masked_distances = L2_AB.mul(&mask_CBY)?;
+    let padding_contribution = complement_mask.mul(&padding_value)?;
+    let L2_AB = masked_distances.add(&padding_contribution)?;
+
+    // Get nearest neighbors
+    let nn_idx = L2_AB
+        .arg_sort_last_dim(false)?
+        .narrow(1, 0, number_of_ligand_atoms as usize)?;
+
+    let L2_AB_nn = L2_AB.gather(&nn_idx, 1)?;
+    let D_AB_closest = L2_AB_nn.i((.., 0))?.sqrt()?;
+
+    let Y_new = Y
         .unsqueeze(0)?
-        .expand((num_residues, num_ligand_atoms, xyz_dims))?;
-    let Y_t_r = Y_t.unsqueeze(0)?.expand((num_residues, num_ligand_atoms))?;
-    let Y_m_r = Y_m.unsqueeze(0)?.expand((num_residues, num_ligand_atoms))?;
-    let nn_idx_expanded =
-        nn_idx
-            .unsqueeze(2)?
-            .expand((num_residues, number_of_ligand_atoms as usize, xyz_dims))?;
+        .expand((num_residues, Y.dim(0)?, 3))?
+        .gather(
+            &nn_idx
+                .unsqueeze(2)?
+                .expand((num_residues, number_of_ligand_atoms as usize, 3))?,
+            1,
+        )?;
 
-    // Gather nearest neighbors
-    let Y = Y_r.gather(&nn_idx_expanded, 1)?;
-    let Y_t = Y_t_r.gather(&nn_idx, 1)?;
-    let Y_m = Y_m_r.gather(&nn_idx, 1)?;
+    let Y_t_new = Y_t
+        .unsqueeze(0)?
+        .expand((num_residues, Y_t.dim(0)?))?
+        .gather(&nn_idx, 1)?;
 
-    Ok((Y, Y_t, Y_m, D_AB_closest))
+    let Y_m_new = Y_m
+        .unsqueeze(0)?
+        .expand((num_residues, Y_m.dim(0)?))?
+        .gather(&nn_idx, 1)?;
+    Ok((Y_new, Y_t_new, Y_m_new, D_AB_closest))
 }
 
 #[cfg(test)]
