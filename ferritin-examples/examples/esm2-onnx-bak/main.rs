@@ -1,6 +1,6 @@
 use anyhow::{Error as E, Result};
-use biomodel_base::{ESM2Models, ESM2};
 use clap::Parser;
+use ferritin_plms::ESM2;
 use ndarray::Array2;
 use ort::{
     execution_providers::CUDAExecutionProvider,
@@ -31,6 +31,12 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
     let base_path = env::current_dir()?;
+    let model_path = base_path
+        .join("ferritin-examples")
+        .join("examples")
+        .join("esm2-onnx")
+        .join("esm2_t6_8M_UR50D_onnx")
+        .join("model.onnx");
 
     // Create the ONNX Runtime environment, enabling CUDA execution providers for all sessions created in this process.
     ort::init()
@@ -38,13 +44,7 @@ fn main() -> Result<()> {
         .with_execution_providers([CUDAExecutionProvider::default().build()])
         .commit()?;
 
-    let esm_model = ESM2Models::ESM2_T6_8M;
-    // let esm_model = ESM2Models::ESM2_T12_35M;
-    // let esm_model = ESM2Models::ESM2_T30_150M;
-    // let esm_model = ESM2Models::ESM2_T33_650M;
-
-    let model_path = ESM2::load_model_path(esm_model)?;
-
+    println!("Current directory: {:?}", env::current_dir()?);
     let model = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level1)?
         .with_intra_threads(1)?
@@ -52,6 +52,7 @@ fn main() -> Result<()> {
 
     println!("Loading the Model and Tokenizer.......");
     let tokenizer = ESM2::load_tokenizer()?;
+
     let protein = args.protein_string.as_ref().unwrap().as_str();
     let tokens = tokenizer
         .encode(protein.to_string(), false)

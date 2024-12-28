@@ -1,5 +1,5 @@
 use anyhow::{Error as E, Result};
-use biomodel_base::{ESM2Models, ESM2};
+use biomodel_base::{AMPLIFYModels, AMPLIFY};
 use clap::Parser;
 use ndarray::Array2;
 use ort::{
@@ -16,7 +16,7 @@ struct Args {
     cpu: bool,
 
     /// Which ESM2 Model to use
-    #[arg(long, value_parser = ["8M", "35M", "150M", "650M", "3B", "15B"], default_value = "35M")]
+    #[arg(long, value_parser = ["120M", "350M"], default_value = "120M")]
     model_id: String,
 
     /// Protein String
@@ -34,16 +34,14 @@ fn main() -> Result<()> {
 
     // Create the ONNX Runtime environment, enabling CUDA execution providers for all sessions created in this process.
     ort::init()
-        .with_name("ESM2")
+        .with_name("AMPLIFY")
         .with_execution_providers([CUDAExecutionProvider::default().build()])
         .commit()?;
 
-    let esm_model = ESM2Models::ESM2_T6_8M;
-    // let esm_model = ESM2Models::ESM2_T12_35M;
-    // let esm_model = ESM2Models::ESM2_T30_150M;
-    // let esm_model = ESM2Models::ESM2_T33_650M;
+    let esm_model = AMPLIFYModels::AMP_120M;
+    // let esm_model = AMPLIFYModels::AMP_350M;
 
-    let model_path = ESM2::load_model_path(esm_model)?;
+    let model_path = AMPLIFY::load_model_path(esm_model)?;
 
     let model = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level1)?
@@ -51,7 +49,7 @@ fn main() -> Result<()> {
         .commit_from_file(model_path)?;
 
     println!("Loading the Model and Tokenizer.......");
-    let tokenizer = ESM2::load_tokenizer()?;
+    let tokenizer = AMPLIFY::load_tokenizer()?;
     let protein = args.protein_string.as_ref().unwrap().as_str();
     let tokens = tokenizer
         .encode(protein.to_string(), false)
