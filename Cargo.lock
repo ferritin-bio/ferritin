@@ -2562,6 +2562,8 @@ dependencies = [
  "candle-nn",
  "clap",
  "ferritin-bevy",
+ "ferritin-core",
+ "ferritin-onnx-models",
  "ferritin-plms",
  "ferritin-test-data",
  "ndarray",

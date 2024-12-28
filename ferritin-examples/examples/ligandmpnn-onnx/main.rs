@@ -1,8 +1,8 @@
 use anyhow::{Error as E, Result};
-use biomodel_base::{LigandMPNN, LigandMPNNModels};
 use candle_core::Device;
 use clap::Parser;
 use ferritin_core::{AtomCollection, StructureFeatures};
+use ferritin_onnx_models::{LigandMPNN, LigandMPNNModels};
 use ferritin_test_data::TestFile;
 use ndarray::{Array, Array2, Array4};
 use ndarray_safetensors::parse_tensors;

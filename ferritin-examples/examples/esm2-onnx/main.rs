@@ -1,6 +1,6 @@
 use anyhow::{Error as E, Result};
-use biomodel_base::{ESM2Models, ESM2};
 use clap::Parser;
+use ferritin_onnx_models::{ESM2Models, ESM2};
 use ndarray::Array2;
 use ort::{
     execution_providers::CUDAExecutionProvider,
