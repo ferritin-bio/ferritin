@@ -162,7 +162,14 @@ pub fn get_nearest_neighbours(
     let Y_expanded = Y.unsqueeze(0)?;
     let diff = &CB_expanded - &Y_expanded;
     let L2_AB = diff?.powf(2.0)?.sum(D::Minus1)?;
-    let L2_AB = L2_AB.mul(&mask_CBY)? + ((&mask_CBY * -1.0 + 1.0)? * 1000.0)?;
+
+    let complement_mask = mask_CBY.neg()? + 1.0;
+    // Then multiply by 1000
+    let padding = complement_mask? * 1000.0;
+    // Finally combine with the masked L2_AB
+    let L2_AB = L2_AB.mul(&mask_CBY)?.add(&padding?)?;
+
+    // let L2_AB = L2_AB.mul(&mask_CBY)? + ((&mask_CBY * -1.0 + 1.0)? * 1000.0)?;
 
     // Get nearest neighbors indices
     let nn_idx = L2_AB.arg_sort_last_dim(false)?;

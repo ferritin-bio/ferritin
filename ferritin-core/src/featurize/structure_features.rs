@@ -155,45 +155,24 @@ impl StructureFeatures for AtomCollection {
         Tensor::from_vec(atom37_data, (1, res_count, 37, 3), &device)
     }
 
-    // Extract ligand atom coordinates and properties
-    // So the final 4D shape is:
-    // - (1, num_residues, number_of_ligand_atoms, 3)
-    //   - 1: batch size
-    //   - num_residues: number of protein residues (from CB.shape[0])
-    //   - number_of_ligand_atoms: fixed number (16 in your case)
-    //   - 3: x,y,z coordinates
+    // The purpose of this function it to create 3 output tensors that relate
+    // key information about a protein sequence and ligands it interacts with.
     //
-    // 1. Input Y starts as (N_atoms, 3)
-    // 2. Key transformation steps:
-    // ```python
-    // # Creates (num_residues, N_atoms, 3) by repeating Y for each residue
-    // Y_r = Y[None, :, :].repeat(CB.shape[0], 1, 1)
-    // # Gathers nearest neighbors based on distances, shape becomes (num_residues, num_ligand_atoms, 3)
-    // Y_tmp = torch.gather(Y_r, 1, nn_idx[:, :, None].repeat(1, 1, 3))
-    // # Creates final Y with shape (num_residues, number_of_ligand_atoms, 3)
-    // Y = torch.zeros([CB.shape[0], number_of_ligand_atoms, 3], dtype=torch.float32, device=device)
-    // Y[:, :num_nn_update] = Y_tmp
-    // ```
-    // 3. Finally in the featurize function:
-    // ```python
-    // output_dict["Y"] = Y[None,]  # Adds batch dimension
-    // ```
-    // So the final 4D shape is:
-    // - (1, num_residues, number_of_ligand_atoms, 3)
-    //   - 1: batch size
-    //   - num_residues: number of protein residues (from CB.shape[0])
-    //   - number_of_ligand_atoms: fixed number (16 in your case)
-    //   - 3: x,y,z coordinates
-    // The function finds the nearest ligand atoms to each protein residue's CB atom, effectively creating a local chemical environment representation for each residue
+    // The outputs are:
+    //  - y: 4D tensor of dimensions (<batch=1>, <num_residues>, <number_of_ligand_atoms>, <coords=3>)
+    //  - y_t: 1D tensor of dimension = <num_residues>
+    //  - y_m: 3D tensor of dimensions: (<batch=1>, <num_residues>, <number_of_ligand_atoms>))
+    //
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
+        let number_of_ligand_atoms = 16;
+        let cutoff_for_score = 5.;
+        // keep only the non-protein, non-water residues that are heavy
         let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
             .iter_residues_all()
-            // keep only the non-protein, non-water residues
             .filter(|residue| {
                 let res_name = &residue.res_name;
                 !residue.is_amino_acid() && res_name != "HOH" && res_name != "WAT"
             })
-            // keep only the heavy atoms
             .flat_map(|residue| {
                 residue
                     .iter_atoms()
@@ -203,10 +182,9 @@ impl StructureFeatures for AtomCollection {
             })
             .multiunzip();
 
-        // Create coordinates tensor
+        // raw starting tensors
         let y = Tensor::from_slice(&coords.concat(), (coords.len(), 3), device)?;
-
-        // Create elements tensor
+        let y_m = Tensor::ones_like(&y)?;
         let y_t = Tensor::from_slice(
             &elements
                 .iter()
@@ -216,15 +194,20 @@ impl StructureFeatures for AtomCollection {
             device,
         )?;
 
-        // Create mask tensor (all ones in this case since we've already filtered)
-        let y_m = Tensor::ones_like(&y)?;
-
-        // get the C-beta tensor.
+        // get the C-beta coordinate tensro.
         let CB = self.create_CB(device)?;
+        let num_residues = CB.dim(0)?;
+        let mask = Tensor::zeros(num_residues, DType::F32, device)?;
+        let (y, y_t, y_m, d_xy) =
+            get_nearest_neighbours(&CB, &mask, &y, &y_t, &y_m, number_of_ligand_atoms)?;
 
-        // compute_nearest_neighbors()
-        let (y, y_t, y_m, D_XY) =
-            get_nearest_neighbours(&CB, &mask, &y, &y_t, &y_m, &number_of_ligand_atoms)?;
+        let distance_mask = d_xy.lt(cutoff_for_score)?;
+        let y_m_first = y_m.i((.., 0))?;
+        let mask_xy = distance_mask.mul(&mask)?.mul(&y_m_first)?;
+
+        let y = y.unsqueeze(0)?;
+        let y_t = y_t.unsqueeze(0)?;
+        let y_m = y_m.unsqueeze(0)?; // mask_xy??
 
         Ok((y, y_t, y_m))
     }

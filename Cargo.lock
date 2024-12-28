@@ -2541,6 +2541,7 @@ dependencies = [
 name = "ferritin-core"
 version = "0.1.0"
 dependencies = [
+ "candle-core",
  "ferritin-test-data",
  "itertools 0.13.0",
  "lazy_static",
