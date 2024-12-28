@@ -2569,6 +2569,8 @@ dependencies = [
  "ndarray",
  "ndarray-safetensors",
  "ort",
+ "pdbtbx",
+ "safetensors",
  "serde_json",
  "tokenizers 0.21.0",
 ]
