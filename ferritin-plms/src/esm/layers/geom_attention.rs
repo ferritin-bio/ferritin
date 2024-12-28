@@ -65,7 +65,7 @@ impl GeometricReasoningOriginalImpl {
 
         Ok(Self {
             c_s: *d_model,
-            v_heads: v_heads,
+            v_heads,
             num_vector_messages,
             mask_and_zero_frameless: *mask_and_zero_frameless,
             s_norm,

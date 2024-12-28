@@ -62,7 +62,7 @@ pub fn execute(
 
     let seed = exec.run_config.seed.unwrap_or_else(|| {
         let mut rng = rand::thread_rng();
-        rng.gen_range(0..99999) as i32
+        rng.gen_range(0..99999)
     });
 
     let temperature = exec.run_config.temperature.unwrap_or(0.1);

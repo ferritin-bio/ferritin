@@ -29,7 +29,7 @@ impl TransformerStack {
             d_model, n_layers, ..
         } = config;
 
-        let mut blocks = Vec::with_capacity(*n_layers as usize);
+        let mut blocks = Vec::with_capacity(*n_layers);
         for i in 0..*n_layers {
             blocks.push(UnifiedTransformerBlock::load(
                 vb.pp(format!("blocks.{}", i)),

@@ -1,3 +1,4 @@
+use candle_core::{DType, Device, IndexOp, Result, Tensor, D};
 use strum::{Display, EnumIter, EnumString};
 
 #[rustfmt::skip]
@@ -139,6 +140,52 @@ define_residues! {
     TRP: "TRP", 'W', 18, [0.0, 0.0], [AAAtom::N, AAAtom::CA, AAAtom::C, AAAtom::O, AAAtom::CB, AAAtom::CG, AAAtom::CD1, AAAtom::CD2, AAAtom::CE2, AAAtom::CE3, AAAtom::NE1, AAAtom::CZ2, AAAtom::CZ3, AAAtom::CH2],
     TYR: "TYR", 'Y', 19, [0.0, 0.0], [AAAtom::N, AAAtom::CA, AAAtom::C, AAAtom::O, AAAtom::CB, AAAtom::CG, AAAtom::CD1, AAAtom::CD2, AAAtom::CE1, AAAtom::CE2, AAAtom::CZ, AAAtom::OH, AAAtom::Unknown, AAAtom::Unknown],
     UNK: "UNK", 'X', 20, [0.0, 0.0], [AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown],
+}
+
+// Use CB to find nearest Ligand coords.
+pub fn get_nearest_neighbours(
+    CB: &Tensor,
+    mask: &Tensor,
+    Y: &Tensor,
+    Y_t: &Tensor,
+    Y_m: &Tensor,
+    number_of_ligand_atoms: i64,
+) -> Result<(Tensor, Tensor, Tensor, Tensor)> {
+    let device = CB.device();
+    let num_residues = CB.dim(0)?;
+    let num_ligand_atoms = Y.dim(0)?;
+    let xyz_dims = 3;
+    let mask_CBY = mask.unsqueeze(1)?.matmul(&Y_m.unsqueeze(0)?)?;
+
+    // Calculate L2 distances
+    let CB_expanded = CB.unsqueeze(1)?;
+    let Y_expanded = Y.unsqueeze(0)?;
+    let diff = &CB_expanded - &Y_expanded;
+    let L2_AB = diff?.powf(2.0)?.sum(D::Minus1)?;
+    let complement_mask = mask_CBY.neg()? + 1.0;
+    let padding = complement_mask? * 1000.0;
+    let L2_AB = L2_AB.mul(&mask_CBY)?.add(&padding?)?;
+
+    let nn_idx = L2_AB.arg_sort_last_dim(false)?;
+    let nn_idx = nn_idx.narrow(1, 0, number_of_ligand_atoms as usize)?;
+
+    let D_AB_closest = L2_AB.gather(&nn_idx, 1)?.i((.., 0))?.sqrt()?;
+    let Y_r = Y
+        .unsqueeze(0)?
+        .expand((num_residues, num_ligand_atoms, xyz_dims))?;
+    let Y_t_r = Y_t.unsqueeze(0)?.expand((num_residues, num_ligand_atoms))?;
+    let Y_m_r = Y_m.unsqueeze(0)?.expand((num_residues, num_ligand_atoms))?;
+    let nn_idx_expanded =
+        nn_idx
+            .unsqueeze(2)?
+            .expand((num_residues, number_of_ligand_atoms as usize, xyz_dims))?;
+
+    // Gather nearest neighbors
+    let Y = Y_r.gather(&nn_idx_expanded, 1)?;
+    let Y_t = Y_t_r.gather(&nn_idx, 1)?;
+    let Y_m = Y_m_r.gather(&nn_idx, 1)?;
+
+    Ok((Y, Y_t, Y_m, D_AB_closest))
 }
 
 #[cfg(test)]

@@ -7,10 +7,10 @@ license.workspace = true
 description.workspace = true
 
 [dependencies]
-pdbtbx.workspace = true
+candle-core.workspace = true
 itertools.workspace = true
-ndarray = { version = "0.16" }
 lazy_static = "1.5.0"
+pdbtbx.workspace = true
 strum = { version = "0.25", features = ["derive"] }
 
 [dev-dependencies]
