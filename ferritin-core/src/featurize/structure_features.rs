@@ -1,7 +1,7 @@
 //!  Protein->Tensor utiilities useful for Machine Learning
-use super::utilities::{aa1to_int, aa3to1, int_to_aa1, AAAtom};
+use super::utilities::{aa1to_int, aa3to1, cross_product, int_to_aa1, AAAtom};
 use crate::AtomCollection;
-use candle_core::{DType, Device, Error as CandleError, Result, Tensor};
+use candle_core::{DType, Device, Error as CandleError, IndexOp, Result, Tensor};
 use itertools::MultiUnzip;
 use pdbtbx::Element;
 use strum::IntoEnumIterator;
@@ -18,6 +18,9 @@ pub trait StructureFeatures {
 
     /// Convert amino acid sequence to numeric representation
     fn encode_amino_acids(&self, device: &Device) -> Result<Tensor>;
+
+    /// Convert amino acid sequence to numeric representation
+    fn create_CB(&self, device: &Device) -> Result<Tensor>;
 
     /// Get residue indices
     fn get_res_index(&self) -> Vec<u32>;
@@ -48,6 +51,55 @@ impl StructureFeatures for AtomCollection {
             .map(|res| aa1to_int(res));
 
         Ok(Tensor::from_iter(s, device)?.reshape((1, n))?)
+    }
+
+    /// Convert amino acid sequence to numeric representation
+    fn create_CB(&self, device: &Device) -> Result<Tensor> {
+        // N = input_dict["X"][:, 0, :]
+        //         CA = input_dict["X"][:, 1, :]
+        //         C = input_dict["X"][:, 2, :]
+        //         b = CA - N
+        //         c = C - CA
+        //         a = torch.cross(b, c, axis=-1)
+        //         CB = -0.58273431 * a + 0.56802827 * b - 0.54067466 * c + CA
+        //
+        let backbone = self.to_numeric_backbone_atoms(device)?;
+        // Extract N, CA, C coordinates
+        let n = backbone.i((.., 0, ..))?; // First atom (N)
+        let ca = backbone.i((.., 1, ..))?; // Second atom (CA)
+        let c = backbone.i((.., 2, ..))?; // Third atom (C)
+
+        // Constants for CB calculation
+        let a_coeff = -0.58273431_f64;
+        let b_coeff = 0.56802827_f64;
+        let c_coeff = -0.54067466_f64;
+
+        // Calculate vectors
+        let b = (&ca - &n)?; // CA - N
+        let c = (&c - &ca)?; // C - CA
+
+        // Manual cross product components
+        // a_x = b_y * c_z - b_z * c_y
+        // a_y = b_z * c_x - b_x * c_z
+        // a_z = b_x * c_y - b_y * c_x
+        let b_x = b.i((.., 0))?;
+        let b_y = b.i((.., 1))?;
+        let b_z = b.i((.., 2))?;
+        let c_x = c.i((.., 0))?;
+        let c_y = c.i((.., 1))?;
+        let c_z = c.i((.., 2))?;
+
+        let a_x = ((&b_y * &c_z)? - (&b_z * &c_y)?)?;
+        let a_y = ((&b_z * &c_x)? - (&b_x * &c_z)?)?;
+        let a_z = ((&b_x * &c_y)? - (&b_y * &c_x)?)?;
+
+        // Stack the cross product components back together
+        let a = Tensor::stack(&[&a_x, &a_y, &a_z], 1)?;
+
+        // Final CB calculation: -0.58273431 * a + 0.56802827 * b - 0.54067466 * c + CA
+        let cb = (&a * a_coeff)? + (&b * b_coeff)? + (&c * c_coeff)? + &ca;
+
+        Ok(cb?)
     }
 
     /// Get residue indices
@@ -103,9 +155,15 @@ impl StructureFeatures for AtomCollection {
         Tensor::from_vec(atom37_data, (1, res_count, 37, 3), &device)
     }
 
-    /// Extract ligand atom coordinates and properties
-    ///
-    /// 1. Input Y starts as (N_atoms, 3)
+    // Extract ligand atom coordinates and properties
+    // So the final 4D shape is:
+    // - (1, num_residues, number_of_ligand_atoms, 3)
+    //   - 1: batch size
+    //   - num_residues: number of protein residues (from CB.shape[0])
+    //   - number_of_ligand_atoms: fixed number (16 in your case)
+    //   - 3: x,y,z coordinates
+    //
+    // 1. Input Y starts as (N_atoms, 3)
     // 2. Key transformation steps:
     // ```python
     // # Creates (num_residues, N_atoms, 3) by repeating Y for each residue
@@ -144,6 +202,7 @@ impl StructureFeatures for AtomCollection {
                     .collect::<Vec<_>>()
             })
             .multiunzip();
+
         // Create coordinates tensor
         let y = Tensor::from_slice(&coords.concat(), (coords.len(), 3), device)?;
 
@@ -159,6 +218,13 @@ impl StructureFeatures for AtomCollection {
 
         // Create mask tensor (all ones in this case since we've already filtered)
         let y_m = Tensor::ones_like(&y)?;
+
+        // get the C-beta tensor.
+        let CB = self.create_CB(device);
+
+        let  (y, y_t, y_m, D_XY) = get_nearest_neighbours(
+            CB, mask, y, y_t, y_m, number_of_ligand_atoms
+        )
 
         Ok((y, y_t, y_m))
     }
