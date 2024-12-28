@@ -1,7 +1,7 @@
 use super::utilities::{aa1to_int, aa3to1, AAAtom};
 use crate::AtomCollection;
 use itertools::MultiUnzip;
-use ndarray::{Array, Array1, Array2, Array4};
+use ndarray::{Array, Array1, Array2, Array3, Array4};
 use pdbtbx::Element;
 use std::collections::{HashMap, HashSet};
 use strum::IntoEnumIterator;
@@ -104,9 +104,62 @@ impl StructureFeatures for AtomCollection {
         Array::from_shape_vec((1, res_count, 37, 3), atom37_data)
     }
 
+    // https://github.com/dauparas/LigandMPNN/blob/091ab1ff5fb4d13854cf6a7c41ec531e1d9d3e67/data_utils.py#L833
+    // try:
+    //     Y = np.array(other_atoms.getCoords(), dtype=np.float32)
+    //     Y_t = list(other_atoms.getElements())
+    //     Y_t = np.array(
+    //         [
+    //             element_dict[y_t.upper()] if y_t.upper() in element_list else 0
+    //             for y_t in Y_t
+    //         ],
+    //         dtype=np.int32,
+    //     )
+    //     Y_m = (Y_t != 1) * (Y_t != 0)
+
+    //     Y = Y[Y_m, :]
+    //     Y_t = Y_t[Y_m]
+    //     Y_m = Y_m[Y_m]
+    // except:
+    //     Y = np.zeros([1, 3], np.float32)
+    //     Y_t = np.zeros([1], np.int32)
+    //     Y_m = np.zeros([1], np.int32)
+
+    // Y = input_dict["Y"]
+    // Y_t = input_dict["Y_t"]
+    // Y_m = input_dict["Y_m"]
+    //
+    // output_dict["Y"] = Y[None,]
+    // output_dict["Y_t"] = Y_t[None,]
+    // output_dict["Y_m"] = Y_m[None,]
+    // if not use_atom_context:
+    //     output_dict["Y_m"] = 0.0 * output_dict["Y_m"]
+
+    // 5gb weights
+    //
+    // Name: ligand_coords, Type: Input {
+    //     name: "ligand_coords",
+    //     input_type: Tensor {
+    //         ty: Float32,
+    //         dimensions: [-1,-1,-1,3,],
+    //         dimension_symbols: [Some("batch",),Some("sequence",),Some("num_atoms",),None,],
+    //
+    // Name: ligand_types, Type: Input {
+    //     name: "ligand_types",
+    //     input_type: Tensor {
+    //         ty: Int64,
+    //         dimensions: [-1,-1,-1,],
+    //         dimension_symbols: [Some("batch"), Some("sequence"),Some("num_atoms"),],
+    //
+    // Name: ligand_mask, Type: Input {
+    // name: "ligand_mask",
+    // input_type: Tensor {
+    //     ty: Float32,
+    //     dimensions: [-1,-1,-1,],
+    //     dimension_symbols: [Some("batch",),Some("sequence",),Some("num_atoms",),],},
     fn to_numeric_ligand_atoms(
         &self,
-    ) -> Result<(Array2<f32>, Array1<f32>, Array2<f32>), Self::Error> {
+    ) -> Result<(Array4<f32>, Array1<i64>, Array3<f32>), Self::Error> {
         let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
             .iter_residues_all()
             .filter(|residue| {
@@ -124,10 +177,11 @@ impl StructureFeatures for AtomCollection {
 
         let n_atoms = coords.len();
         let coords_flat: Vec<f32> = coords.into_iter().flat_map(|[x, y, z]| [x, y, z]).collect();
-        let coords_array = Array::from_shape_vec((n_atoms, 3), coords_flat)?;
+        // this gets a 2D array. We also need a Batch array and a sequence array
+        let coords_array = Array::from_shape_vec((1, 1, n_atoms, 3), coords_flat)?;
 
         let elements_array =
-            Array1::from_vec(elements.iter().map(|e| e.atomic_number() as f32).collect());
+            Array1::from_vec(elements.iter().map(|e| e.atomic_number() as i64).collect());
 
         let mask_array = Array::ones((n_atoms, 3));
 
