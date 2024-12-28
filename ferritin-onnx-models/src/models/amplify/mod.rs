@@ -18,7 +18,7 @@
 //! - [Paper](https://www.biorxiv.org/content/10.1101/2024.09.23.614603v1)
 //!
 use anyhow::{anyhow, Result};
-use hf_hub::api::sync::Api;
+use candle_hf_hub::api::sync::Api;
 use std::path::PathBuf;
 use tokenizers::Tokenizer;
 

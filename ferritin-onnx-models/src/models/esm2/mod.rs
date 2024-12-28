@@ -1,7 +1,7 @@
 //! ESM2 Struct. Loads the hf tokenizer
 //!
 use anyhow::{anyhow, Result};
-use hf_hub::api::sync::Api;
+use candle_hf_hub::api::sync::Api;
 use std::path::PathBuf;
 use tokenizers::Tokenizer;
 
