@@ -2567,6 +2567,7 @@ dependencies = [
  "ferritin-plms",
  "ferritin-test-data",
  "ndarray",
+ "ndarray-safetensors",
  "ort",
  "serde_json",
  "tokenizers 0.21.0",

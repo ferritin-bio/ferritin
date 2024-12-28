@@ -22,6 +22,7 @@ ferritin-core = { path = "../ferritin-core" }
 ferritin-plms = { path = "../ferritin-plms" }
 ferritin-onnx-models = { path = "../ferritin-onnx-models" }
 ndarray-safetensors = "0.2"
+ndarray = "0.16"
 ort = "=2.0.0-rc.9"
 serde_json.workspace = true
 

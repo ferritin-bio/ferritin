@@ -1,6 +1,7 @@
 use anyhow::{Error as E, Result};
 use clap::Parser;
 use ferritin_onnx_models::{AMPLIFYModels, AMPLIFY};
+use ndarray::Array2;
 use ort::{
     execution_providers::CUDAExecutionProvider,
     session::{builder::GraphOptimizationLevel, Session},
