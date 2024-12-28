@@ -8,8 +8,6 @@
 //! - Geometric features like distances, angles
 //! - Chemical features like hydrophobicity, charge
 //! - Evolutionary features from MSA profiles
-mod ndarray_impl;
+// mod ndarray_impl;
+mod structure_features;
 mod utilities;
-
-pub use ndarray_impl::{ProteinFeatures, StructureFeatures};
-pub use utilities::{aa1to_int, aa3to1, int_to_aa1};
