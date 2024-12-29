@@ -178,7 +178,6 @@ fn main() -> Result<()> {
     let h_V = encoder_outputs["h_V"].try_extract_tensor::<f32>()?;
     let h_E = encoder_outputs["h_E"].try_extract_tensor::<f32>()?;
     let E_idx = encoder_outputs["E_idx"].try_extract_tensor::<i64>()?;
-
     let position_tensor = {
         let data = vec![10 as i64]; // Single value
         let array = ndarray::Array::from_shape_vec([1], data)?; // Shape [1]
@@ -189,8 +188,6 @@ fn main() -> Result<()> {
         let array = ndarray::Array::from_shape_vec([1], data)?; // Shape [1]
         Tensor::from_array(array)?
     };
-    println!("{:?}", h_V);
-
     let decoder_outputs = decoder_model.run(ort::inputs![
         "h_V" => h_V,
         "h_E" => h_E,
@@ -198,6 +195,18 @@ fn main() -> Result<()> {
         "position" => position_tensor,
         "temperature" => temp_tensor,
     ]?)?;
+
+    println!("Decoder Outputs:");
+    for (name, tensor) in decoder_outputs.iter() {
+        println!("Output {}: {:#?}", name, tensor);
+    }
+
+    // Decoder Outputs:
+    // Output logits: ValueRef {
+    //     inner: Value { inner: ValueInner { ptr: 0x0000600000499900,
+    //         dtype: Tensor {
+    //             ty: Float32,
+    //                 dimensions: [ 1, 21, ],
 
     Ok(())
 }
