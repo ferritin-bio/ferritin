@@ -1,5 +1,26 @@
-//! ESM2 Struct. Loads the hf tokenizer
+//! ESM2 Tokenizer. Models converted to ONNX format from [ESM2](https://github.com/facebookresearch/esm)
+//! and uploaded to HuggingFace hub. The tokenizer is included in this crate and loaded from
+//! memory using `tokenizer.json`. This is fairly minimal - for the full set of ESM2 models
+//! please see the ESM2 repository and the HuggingFace hub.
 //!
+//! # Models:
+//! * ESM2_T6_8M - small 6-layer protein language model
+//! * ESM2_T12_35M - medium 12-layer protein language model
+//! * ESM2_T30_150M - large 30-layer protein language model
+//!
+//! # Example
+//! ```no_run
+//! use anyhow::Result;
+//! use ferritin_onnx_models::ESM2;
+//!
+//! let tokenizer = ESM2::load_tokenizer()?;
+//! let text = "MLKLRV";
+//! let encoding = tokenizer.encode(text, false)?;
+//! let tokens = encoding.get_tokens();
+//! assert_eq!(tokens.len(), 6);
+//! assert_eq!(tokens, &["M", "L", "K", "L", "R", "V"]);
+//! ```
+
 use anyhow::{anyhow, Result};
 use candle_hf_hub::api::sync::Api;
 use std::path::PathBuf;

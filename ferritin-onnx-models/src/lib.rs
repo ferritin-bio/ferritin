@@ -1,3 +1,9 @@
+//! Ferritin Onnx Models
+//!
+//! This crate provides easy access to various ONNX models for protein and ligand prediction.
+//! The models are downloaded from HuggingFace and run using ONNX Runtime.
+//! Currently supports ESM2 and LigandMPNN models.
+//!
 pub mod models;
 pub mod utilities;
 

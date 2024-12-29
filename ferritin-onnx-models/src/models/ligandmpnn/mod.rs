@@ -1,3 +1,19 @@
+//! Module for running Ligand- and Protein-MPNN Models
+//!
+//! This module provides functionality for running LigandMPNN and ProteinMPNN models
+//! to predict amino acid sequences given protein structure coordinates and ligand information.
+//!
+//! The models are loaded from the Hugging Face model hub and executed using ONNX Runtime.
+//!
+//! # Examples
+//! ```no_run
+//! use ferritin_core::AtomCollection;
+//! use ferritin_onnx_models::LigandMPNN;
+//! let model = LigandMPNN::new().unwrap();
+//! let atom_collection = AtomCollection::new();
+//! let logits = model.run_model(atom_collection, 10, 0.1).unwrap();
+//! ```
+//!
 use crate::{ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64};
 use anyhow::Result;
 use candle_core::{Device, Tensor};
@@ -37,6 +53,24 @@ impl ModelType {
         }
     }
 }
+
+/// A deep learning model for predicting amino acid sequences from protein structure coordinates.
+///
+/// This model comes in two variants:
+/// * `Protein` - The original ProteinMPNN model for protein sequence design
+/// * `Ligand` - An extended version that considers ligand information
+///
+/// # Example
+/// ```no_run
+/// use ferritin_onnx_models::ModelType;
+/// let model_type = ModelType::Ligand;
+/// let paths = model_type.get_paths();
+/// ```
+///
+/// The models are loaded from pre-trained ONNX format files hosted on the Hugging Face model hub.
+/// Each model consists of an encoder and decoder component that work together to generate
+/// amino acid sequence predictions based on structural information.
+///
 pub struct LigandMPNN {
     session: SessionBuilder,
     encoder_path: PathBuf,
@@ -60,7 +94,6 @@ impl LigandMPNN {
             .with_name("LigandMPNN")
             .with_execution_providers([CUDAExecutionProvider::default().build()])
             .commit()?;
-
         Ok(Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level1)?
             .with_intra_threads(1)?)
@@ -69,7 +102,6 @@ impl LigandMPNN {
     fn load_model_paths(model_type: ModelType) -> Result<(PathBuf, PathBuf)> {
         let api = Api::new()?;
         let (repo_id, encoder_name, decoder_name) = model_type.get_paths();
-
         Ok((
             api.model(repo_id.to_string()).get(&encoder_name)?,
             api.model(repo_id.to_string()).get(&decoder_name)?,
