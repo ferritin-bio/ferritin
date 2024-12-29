@@ -7,7 +7,10 @@ use candle_hf_hub::api::sync::Api;
 use ferritin_core::{AtomCollection, StructureFeatures};
 use ort::{
     execution_providers::CUDAExecutionProvider,
-    session::{builder::GraphOptimizationLevel, Session},
+    session::{
+        builder::{GraphOptimizationLevel, SessionBuilder},
+        Session,
+    },
 };
 use std::path::PathBuf;
 
@@ -38,7 +41,7 @@ impl LigandMPNN {
         Ok((encoder_path, decoder_path))
     }
     /// Ac -> Logit Tensor
-    pub fn run_model(ac: AtomCollection, position: i32, temperature: f32) -> Result<Tensor> {
+    pub fn run_model(ac: AtomCollection, position: i64, temperature: f32) -> Result<Tensor> {
         ort::init()
             .with_name("LigandMPNN")
             .with_execution_providers([CUDAExecutionProvider::default().build()])
@@ -62,6 +65,7 @@ impl LigandMPNN {
         let lig_coords_array_nd = tensor_to_ndarray_f32(lig_coords_array)?;
         let lig_elements_array_nd = tensor_to_ndarray_i64(lig_elements_array)?;
         let lig_mask_array_nd = tensor_to_ndarray_f32(lig_mask_array)?;
+
         let encoder_outputs = encoder_model.run(ort::inputs![
             "coords" => data_nd,
             "ligand_coords" => lig_coords_array_nd,
@@ -72,12 +76,12 @@ impl LigandMPNN {
         let h_E = encoder_outputs["h_E"].try_extract_tensor::<f32>()?;
         let E_idx = encoder_outputs["E_idx"].try_extract_tensor::<i64>()?;
         let position_tensor = {
-            let data = vec![10 as i64];
+            let data = vec![position];
             let array = ndarray::Array::from_shape_vec([1], data)?;
             ort::value::Tensor::from_array(array)?
         };
         let temp_tensor = {
-            let data = vec![0.1 as f32]; // Single value
+            let data = vec![temperature];
             let array = ndarray::Array::from_shape_vec([1], data)?;
             ort::value::Tensor::from_array(array)?
         };
