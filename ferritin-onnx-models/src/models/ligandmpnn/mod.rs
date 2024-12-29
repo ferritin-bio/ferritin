@@ -17,49 +17,36 @@ type NdArrayF32 = ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<ndarray::IxDyn
 type NdArrayI64 = ArrayBase<ndarray::OwnedRepr<i64>, ndarray::Dim<ndarray::IxDynImpl>>;
 
 pub enum ModelType {
-    Protein {
-        repo: &'static str,
-        encoder: &'static str,
-        decoder: &'static str,
-    },
-    Ligand {
-        repo: &'static str,
-        encoder: &'static str,
-        decoder: &'static str,
-    },
+    Protein,
+    Ligand,
 }
 
+impl ModelType {
+    fn get_paths(&self) -> (&'static str, &'static str, &'static str) {
+        match self {
+            ModelType::Protein => (
+                "zcpbx/proteinmpnn-v48-030-onnx",
+                "protmpnn_encoder.onnx",
+                "protmpnn_decoder_step.onnx",
+            ),
+            ModelType::Ligand => (
+                "zcpbx/ligandmpnn-v32-030-25-onnx",
+                "ligand_encoder.onnx",
+                "ligand_decoder.onnx",
+            ),
+        }
+    }
+}
 pub struct LigandMPNN {
     session: SessionBuilder,
     encoder_path: PathBuf,
     decoder_path: PathBuf,
 }
 
-impl ModelType {
-    fn get_paths(&self) -> (String, String, String) {
-        match self {
-            Self::Protein {
-                repo,
-                encoder,
-                decoder,
-            } => (repo.to_string(), encoder.to_string(), decoder.to_string()),
-            Self::Ligand {
-                repo,
-                encoder,
-                decoder,
-            } => (repo.to_string(), encoder.to_string(), decoder.to_string()),
-        }
-    }
-}
-
 impl LigandMPNN {
     pub fn new() -> Result<Self> {
         let session = Self::create_session()?;
-        let (encoder_path, decoder_path) = Self::load_model_paths(ModelType::Ligand {
-            repo: "zcpbx/ligandmpnn-v32-030-25-onnx",
-            encoder: "ligand_encoder.onnx",
-            decoder: "ligand_decoder.onnx",
-        })?;
+        let (encoder_path, decoder_path) = Self::load_model_paths(ModelType::Ligand)?;
 
         Ok(Self {
             session,
@@ -84,8 +71,8 @@ impl LigandMPNN {
         let (repo_id, encoder_name, decoder_name) = model_type.get_paths();
 
         Ok((
-            api.model(repo_id.clone()).get(&encoder_name)?,
-            api.model(repo_id.clone()).get(&decoder_name)?,
+            api.model(repo_id.to_string()).get(&encoder_name)?,
+            api.model(repo_id.to_string()).get(&decoder_name)?,
         ))
     }
 

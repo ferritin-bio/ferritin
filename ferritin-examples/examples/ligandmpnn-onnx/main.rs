@@ -18,7 +18,9 @@ fn main() -> Result<()> {
     let (protfile, _handle) = TestFile::protein_01().create_temp()?;
     let (pdb, _) = pdbtbx::open(protfile).expect("PDB/CIF");
     let ac = AtomCollection::from(&pdb);
-    let logits = LigandMPNN::run_model(ac, 10, 0.1)?;
+
+    let model = LigandMPNN::new().unwrap();
+    let logits = model.run_model(ac, 10, 0.1).unwrap();
     println!("{:?}", logits);
 
     Ok(())
