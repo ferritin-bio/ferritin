@@ -150,6 +150,52 @@ impl LigandMPNN {
 
         Ok((h_V, h_E, E_idx))
     }
+    pub fn run_decoder(
+        h_V: ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<ndarray::IxDynImpl>>,
+        h_E: ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<ndarray::IxDynImpl>>,
+        E_idx: ArrayBase<ndarray::OwnedRepr<i64>, ndarray::Dim<ndarray::IxDynImpl>>,
+        temperature: f32,
+        position: i64,
+    ) -> Result<Tensor> {
+        ort::init()
+            .with_name("LigandMPNN")
+            .with_execution_providers([CUDAExecutionProvider::default().build()])
+            .commit()?;
+
+        let session_config = Session::builder()?
+            .with_optimization_level(GraphOptimizationLevel::Level1)?
+            .with_intra_threads(1)?;
+
+        let (encoder_path, decoder_path) =
+            LigandMPNN::load_model_path(LigandMPNNModels::LigandMPNN)?;
+        let encoder_model = session_config.clone().commit_from_file(&encoder_path)?;
+        let decoder_model = session_config.clone().commit_from_file(&decoder_path)?;
+
+        let position_tensor = {
+            let data = vec![position];
+            let array = ndarray::Array::from_shape_vec([1], data)?;
+            ort::value::Tensor::from_array(array)?
+        };
+        let temp_tensor = {
+            let data = vec![temperature];
+            let array = ndarray::Array::from_shape_vec([1], data)?;
+            ort::value::Tensor::from_array(array)?
+        };
+        let decoder_outputs = decoder_model.run(ort::inputs![
+            "h_V" => h_V,
+            "h_E" => h_E,
+            "E_idx" => E_idx,
+            "position" => position_tensor,
+            "temperature" => temp_tensor,
+        ]?)?;
+        let logits = decoder_outputs["logits"]
+            .try_extract_tensor::<f32>()?
+            .to_owned();
+
+        let logit_tensor = ndarray_to_tensor_f32(logits)?;
+
+        Ok(logit_tensor)
+    }
 }
 
 #[cfg(test)]
@@ -186,7 +232,28 @@ mod tests {
         let (protfile, _handle) = TestFile::protein_01().create_temp().unwrap();
         let (pdb, _) = pdbtbx::open(protfile).expect("PDB/CIF");
         let ac = AtomCollection::from(&pdb);
-        let (a, b, c) = LigandMPNN::run_encoder(ac).unwrap();
-        // assert_eq!(logits.dims2().unwrap(), (1, 21))
+        let (h_v, h_e, e_idx) = LigandMPNN::run_encoder(ac).unwrap();
+        assert_eq!(h_v.ndim(), 3);
+        assert_eq!(h_v.shape(), &[1, 154, 128]);
+        assert_eq!(h_e.ndim(), 4);
+        assert_eq!(h_e.shape(), &[1, 154, 16, 128]);
+        assert_eq!(e_idx.ndim(), 3);
+        assert_eq!(e_idx.shape(), &[1, 154, 16]);
+    }
+    #[test]
+    fn test_ligandmpnn_encode_then_decode() {
+        let (protfile, _handle) = TestFile::protein_01().create_temp().unwrap();
+        let (pdb, _) = pdbtbx::open(protfile).expect("PDB/CIF");
+        let ac = AtomCollection::from(&pdb);
+        let (h_v, h_e, e_idx) = LigandMPNN::run_encoder(ac).unwrap();
+        assert_eq!(h_v.ndim(), 3);
+        assert_eq!(h_v.shape(), &[1, 154, 128]);
+        assert_eq!(h_e.ndim(), 4);
+        assert_eq!(h_e.shape(), &[1, 154, 16, 128]);
+        assert_eq!(e_idx.ndim(), 3);
+        assert_eq!(e_idx.shape(), &[1, 154, 16]);
+
+        let logits = LigandMPNN::run_decoder(h_v, h_e, e_idx, 0.1, 1).unwrap();
+        assert_eq!(logits.dims2().unwrap(), (1, 21))
     }
 }
