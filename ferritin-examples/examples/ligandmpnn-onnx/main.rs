@@ -3,7 +3,8 @@ use candle_core::Device;
 use clap::Parser;
 use ferritin_core::{AtomCollection, StructureFeatures};
 use ferritin_onnx_models::{
-    tensor_to_ndarray_f32, tensor_to_ndarray_i64, LigandMPNN, LigandMPNNModels,
+    ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64, LigandMPNN,
+    LigandMPNNModels,
 };
 use ferritin_test_data::TestFile;
 use ort::{
@@ -155,17 +156,13 @@ fn main() -> Result<()> {
         println!("Output {}: {:#?}", name, tensor);
     }
 
-    let logits = decoder_outputs["logits"].try_extract_tensor::<f32>()?;
+    let logits = decoder_outputs["logits"]
+        .try_extract_tensor::<f32>()?
+        .to_owned();
     println!("Logits {:?} ", logits);
 
-    // let logit_tensor = ndarray_to_tensor(logits);
-
-    // Decoder Outputs:
-    // Output logits: ValueRef {
-    //     inner: Value { inner: ValueInner { ptr: 0x0000600000499900,
-    //         dtype: Tensor {
-    //             ty: Float32,
-    //                 dimensions: [ 1, 21, ],
+    let logit_tensor = ndarray_to_tensor_f32(logits);
+    println!("{:?}", logit_tensor);
 
     Ok(())
 }
