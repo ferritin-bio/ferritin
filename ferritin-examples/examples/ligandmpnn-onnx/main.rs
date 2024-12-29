@@ -69,10 +69,10 @@ fn main() -> Result<()> {
         .commit_from_file(encoder_path)?;
 
     // Print input information
-    println!("\nInputs:");
-    for input in &model.inputs {
-        println!("Name: {}, Type: {:#?}", input.name, input);
-    }
+    // println!("\nInputs:");
+    // for input in &model.inputs {
+    //     println!("Name: {}, Type: {:#?}", input.name, input);
+    // }
 
     // https://github.com/zachcp/ferritin/blob/main/ferritin-plms/src/ligandmpnn/ligandmpnn/configs.rs#L82
     println!("Loading the Model and Tokenizer.......");
@@ -103,6 +103,72 @@ fn main() -> Result<()> {
     // Print outputs
     for (name, tensor) in outputs.iter() {
         println!("Output {}: {:#?}", name, tensor);
+    }
+    // Output h_V: (Node/Vertex Features) [batch, num_nodes, node_feature_dim] [ 1, 154, 128,]
+    // Output h_E:  [batch num_edges, neighbors ,edge_feature_dim]  [ 1, 154, 16, 128,],
+    // Output E_idx: [ 1, 154, 16,]
+    for (name, tensor) in outputs.iter() {
+        println!("Output {}: ", name,);
+    }
+    // Output h_V: ValueRef {
+    //     inner: Value { inner: ValueInner {ptr: 0x0000600001b96c60,
+    //             dtype: Tensor {
+    //                 ty: Float32,
+    //                 dimensions: [ 1, 154, 128,],
+    //                 dimension_symbols: [None,None, None,],},}
+    // Output h_E: ValueRef {
+    //     inner: Value { inner: ValueInner {ptr: 0x0000600001b96d20,
+    //             dtype: Tensor {
+    //                 ty: Float32,
+    //                 dimensions: [ 1, 154, 16, 128,
+    //                 ],
+    //                 dimension_symbols: [ None, None, None, None,],},}
+    // Output E_idx: ValueRef {
+    //     inner: Value { inner: ValueInner {ptr: 0x0000600001b96c80,
+    //             dtype: Tensor {
+    //                 ty: Int64,
+    //                 dimensions: [ 1, 154, 16,],
+    //                 dimension_symbols: [None,None,None,],
+    //             },
+
+    let decoder_model = Session::builder()?
+        .with_optimization_level(GraphOptimizationLevel::Level1)?
+        .with_intra_threads(1)?
+        .commit_from_file(decoder_path)?;
+
+    // Name: h_V, Type: Input {
+    //     name: "h_V",
+    //     input_type: Tensor {
+    //         ty: Float32,
+    //         dimensions: [-1,-1,128,],
+    //         dimension_symbols: [Some("batch",),Some("sequence",),None,],
+    // Name: h_E, Type: Input {
+    //     name: "h_E",
+    //     input_type: Tensor {
+    //         ty: Float32,
+    //         dimensions: [-1,-1,16,128,],
+    //         dimension_symbols: [Some("batch",),Some("sequence",),None,None,],
+    // Name: E_idx, Type: Input {
+    //     name: "E_idx",
+    //     input_type: Tensor {
+    //         ty: Int64,
+    //         dimensions: [-1,-1,16,],
+    //         dimension_symbols: [Some("batch",),Some("sequence",),None,            ],
+
+    // Name: position, Type: Input {
+    //     name: "position",
+    //     input_type: Tensor {
+    //         ty: Int64, dimensions: [ 1,],
+
+    // Name: temperature, Type: Input {
+    //     name: "temperature",
+    //     input_type: Tensor {
+    //         ty: Float32, dimensions: [1,],
+
+    // Print input information
+    println!("\nDecoder Inputs:");
+    for input in &decoder_model.inputs {
+        println!("Name: {}, Type: {:#?}", input.name, input);
     }
 
     Ok(())
