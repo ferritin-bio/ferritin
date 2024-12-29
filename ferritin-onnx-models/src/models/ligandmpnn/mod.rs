@@ -38,7 +38,7 @@ pub enum ModelType {
 }
 
 impl ModelType {
-    pun fn get_paths(&self) -> (&'static str, &'static str, &'static str) {
+    pub fn get_paths(&self) -> (&'static str, &'static str, &'static str) {
         match self {
             ModelType::Protein => (
                 "zcpbx/proteinmpnn-v48-030-onnx",
