@@ -209,15 +209,17 @@ impl StructureFeatures for AtomCollection {
         );
         let (y, y_t, y_m, d_xy) =
             get_nearest_neighbours(&CB, &mask, &y, &y_t, &y_m, number_of_ligand_atoms)?;
-        println!(
-            "Output tensor dims - y: {:?}, y_t: {:?}, y_m: {:?}, d_xy: {:?}",
-            y.dims(),
-            y_t.dims(),
-            y_m.dims(),
-            d_xy.dims()
-        );
-        let distance_mask = d_xy.lt(cutoff_for_score)?;
+        // println!(
+        //     "Output tensor dims - y: {:?}, y_t: {:?}, y_m: {:?}, d_xy: {:?}",
+        //     y.dims(),
+        //     y_t.dims(),
+        //     y_m.dims(),
+        //     d_xy.dims()
+        // );
+
+        let distance_mask = d_xy.lt(cutoff_for_score)?.to_dtype(DType::F32)?;
         let y_m_first = y_m.i((.., 0))?;
+        let mask = mask.squeeze(0)?;
         let mask_xy = distance_mask.mul(&mask)?.mul(&y_m_first)?;
         let y = y.unsqueeze(0)?;
         let y_t = y_t.unsqueeze(0)?;
