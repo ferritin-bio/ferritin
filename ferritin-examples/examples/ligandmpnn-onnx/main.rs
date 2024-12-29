@@ -1,6 +1,5 @@
 use anyhow::{Error as E, Result};
 use candle_core::Device;
-use clap::Parser;
 use ferritin_core::{AtomCollection, StructureFeatures};
 use ferritin_onnx_models::{
     ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64, LigandMPNN,
@@ -9,63 +8,33 @@ use ferritin_onnx_models::{
 use ferritin_test_data::TestFile;
 use ort::{
     execution_providers::CUDAExecutionProvider,
-    session::{builder::GraphOptimizationLevel, Session, SessionInputs},
-    value::{Tensor, Value, ValueRef},
+    session::{builder::GraphOptimizationLevel, Session},
+    value::Tensor,
 };
-use std::env;
-
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Run on CPU rather than on GPU.
-    #[arg(long)]
-    cpu: bool,
-
-    /// Which ESM2 Model to use
-    #[arg(long, value_parser = ["8M", "35M", "150M", "650M", "3B", "15B"], default_value = "35M")]
-    model_id: String,
-
-    /// Protein String
-    #[arg(long)]
-    protein_string: Option<String>,
-
-    /// Path to a protein FASTA file
-    #[arg(long)]
-    protein_fasta: Option<std::path::PathBuf>,
-}
 
 fn main() -> Result<()> {
     let device = Device::Cpu;
-    let args = Args::parse();
-    let base_path = env::current_dir()?;
+    let lmpnn_model = LigandMPNNModels::LigandMPNN;
+    let (encoder_path, decoder_path) = LigandMPNN::load_model_path(lmpnn_model)?;
 
     ort::init()
         .with_name("LigandMPNN")
         .with_execution_providers([CUDAExecutionProvider::default().build()])
         .commit()?;
-    let lmpnn_model = LigandMPNNModels::LigandMPNN;
-    let (encoder_path, decoder_path) = LigandMPNN::load_model_path(lmpnn_model)?;
 
     let encoder_model = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level1)?
         .with_intra_threads(1)?
         .commit_from_file(encoder_path)?;
 
-    // Print input information
-    // println!("\nInputs:");
-    // for input in &model.inputs {
-    //     println!("Name: {}, Type: {:#?}", input.name, input);
-    // }
-
     // https://github.com/zachcp/ferritin/blob/main/ferritin-plms/src/ligandmpnn/ligandmpnn/configs.rs#L82
+
     println!("Loading the Model and Tokenizer.......");
     let (protfile, _handle) = TestFile::protein_01().create_temp()?;
     let (pdb, _) = pdbtbx::open(protfile).expect("PDB/CIF");
     let ac = AtomCollection::from(&pdb);
-    let s = ac
-        .encode_amino_acids(&device)
-        .expect("A complete convertion to locations");
 
+    println!("Creating the input Tensors.......");
     let x_bb = ac.to_numeric_backbone_atoms(&device)?;
     let (lig_coords_array, lig_elements_array, lig_mask_array) =
         ac.to_numeric_ligand_atoms(&device)?;
@@ -74,6 +43,7 @@ fn main() -> Result<()> {
     let lig_elements_array_nd = tensor_to_ndarray_i64(lig_elements_array)?;
     let lig_mask_array_nd = tensor_to_ndarray_f32(lig_mask_array)?;
 
+    println!("Runnning the Encoder Model.......");
     let encoder_outputs = encoder_model.run(ort::inputs![
         "coords" => data_nd,
         "ligand_coords" => lig_coords_array_nd,
@@ -81,55 +51,13 @@ fn main() -> Result<()> {
         "ligand_mask" => lig_mask_array_nd
     ]?)?;
 
-    println!("Starting the Outputs...");
-    println!("Model is run!");
-
-    // Print outputs
-    for (name, tensor) in encoder_outputs.iter() {
-        println!("Output {}: {:#?}", name, tensor);
-    }
-
-    println!("Begin Processing the Decoder.......");
+    println!("Spinning up the Dccoder Model.......");
     let decoder_model = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level1)?
         .with_intra_threads(1)?
         .commit_from_file(decoder_path)?;
 
-    // Name: h_V, Type: Input {
-    //     name: "h_V",
-    //     input_type: Tensor {
-    //         ty: Float32,
-    //         dimensions: [-1,-1,128,],
-    //         dimension_symbols: [Some("batch",),Some("sequence",),None,],
-    // Name: h_E, Type: Input {
-    //     name: "h_E",
-    //     input_type: Tensor {
-    //         ty: Float32,
-    //         dimensions: [-1,-1,16,128,],
-    //         dimension_symbols: [Some("batch",),Some("sequence",),None,None,],
-    // Name: E_idx, Type: Input {
-    //     name: "E_idx",
-    //     input_type: Tensor {
-    //         ty: Int64,
-    //         dimensions: [-1,-1,16,],
-    //         dimension_symbols: [Some("batch",),Some("sequence",),None,            ],
-
-    // Name: position, Type: Input {
-    //     name: "position",
-    //     input_type: Tensor {
-    //         ty: Int64, dimensions: [ 1,],
-
-    // Name: temperature, Type: Input {
-    //     name: "temperature",
-    //     input_type: Tensor {
-    //         ty: Float32, dimensions: [1,],
-
-    // Print input information
-    println!("\nDecoder Inputs:");
-    for input in &decoder_model.inputs {
-        println!("Name: {}, Type: {:#?}", input.name, input);
-    }
-
+    println!("Creating the Inpute to the Decoder.......");
     let h_V = encoder_outputs["h_V"].try_extract_tensor::<f32>()?;
     let h_E = encoder_outputs["h_E"].try_extract_tensor::<f32>()?;
     let E_idx = encoder_outputs["E_idx"].try_extract_tensor::<i64>()?;
@@ -138,11 +66,14 @@ fn main() -> Result<()> {
         let array = ndarray::Array::from_shape_vec([1], data)?; // Shape [1]
         Tensor::from_array(array)?
     };
+
+    println!("Temp and Position Are Hardcoded........");
     let temp_tensor = {
         let data = vec![0.1 as f32]; // Single value
-        let array = ndarray::Array::from_shape_vec([1], data)?; // Shape [1]
+        let array = ndarray::Array::from_shape_vec([1], data)?
         Tensor::from_array(array)?
     };
+
     let decoder_outputs = decoder_model.run(ort::inputs![
         "h_V" => h_V,
         "h_E" => h_E,
@@ -151,16 +82,12 @@ fn main() -> Result<()> {
         "temperature" => temp_tensor,
     ]?)?;
 
-    println!("Decoder Outputs:");
-    for (name, tensor) in decoder_outputs.iter() {
-        println!("Output {}: {:#?}", name, tensor);
-    }
-
+    println!("Decoder Outputs are logits.");
     let logits = decoder_outputs["logits"]
         .try_extract_tensor::<f32>()?
         .to_owned();
-    println!("Logits {:?} ", logits);
 
+    println!("Converted to Candle.");
     let logit_tensor = ndarray_to_tensor_f32(logits);
     println!("{:?}", logit_tensor);
 
