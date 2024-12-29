@@ -164,7 +164,7 @@ impl StructureFeatures for AtomCollection {
     //  - y_m: 3D tensor of dimensions: (<batch=1>, <num_residues>, <number_of_ligand_atoms>))
     //
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
-        let number_of_ligand_atoms = 16;
+        // Todo: fix this.
         let cutoff_for_score = 5.;
         // keep only the non-protein, non-water residues that are heavy
         let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
@@ -193,30 +193,12 @@ impl StructureFeatures for AtomCollection {
             (elements.len(),),
             device,
         )?;
-
-        println!("Before CB!");
-        // get the C-beta coordinate tensro.
         let CB = self.create_CB(device)?;
         let (batch, res_num, _coords) = CB.dims3()?;
+        let (number_of_ligand_atoms, _coords) = y.dims2()?;
         let mask = Tensor::zeros((batch, res_num), DType::F32, device)?;
-        println!(
-            "Input tensor dims - CB: {:?}, mask: {:?}, y: {:?}, y_t: {:?}, y_m: {:?}",
-            CB.dims(),
-            mask.dims(),
-            y.dims(),
-            y_t.dims(),
-            y_m.dims()
-        );
         let (y, y_t, y_m, d_xy) =
-            get_nearest_neighbours(&CB, &mask, &y, &y_t, &y_m, number_of_ligand_atoms)?;
-        // println!(
-        //     "Output tensor dims - y: {:?}, y_t: {:?}, y_m: {:?}, d_xy: {:?}",
-        //     y.dims(),
-        //     y_t.dims(),
-        //     y_m.dims(),
-        //     d_xy.dims()
-        // );
-
+            get_nearest_neighbours(&CB, &mask, &y, &y_t, &y_m, number_of_ligand_atoms as i64)?;
         let distance_mask = d_xy.lt(cutoff_for_score)?.to_dtype(DType::F32)?;
         let y_m_first = y_m.i((.., 0))?;
         let mask = mask.squeeze(0)?;
