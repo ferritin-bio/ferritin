@@ -174,11 +174,19 @@ mod tests {
             .ends_with("ligand_decoder.onnx"));
     }
     #[test]
-    fn test_ligandmpnn_encoding() {
+    fn test_ligandmpnn_encode_decode() {
         let (protfile, _handle) = TestFile::protein_01().create_temp().unwrap();
         let (pdb, _) = pdbtbx::open(protfile).expect("PDB/CIF");
         let ac = AtomCollection::from(&pdb);
         let logits = LigandMPNN::run_model(ac, 10, 0.1).unwrap();
         assert_eq!(logits.dims2().unwrap(), (1, 21))
+    }
+    #[test]
+    fn test_ligandmpnn_encoder() {
+        let (protfile, _handle) = TestFile::protein_01().create_temp().unwrap();
+        let (pdb, _) = pdbtbx::open(protfile).expect("PDB/CIF");
+        let ac = AtomCollection::from(&pdb);
+        let (a, b, c) = LigandMPNN::run_encoder(ac).unwrap();
+        // assert_eq!(logits.dims2().unwrap(), (1, 21))
     }
 }
