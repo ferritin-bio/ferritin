@@ -1,7 +1,5 @@
-//! ESM2 Struct. Loads the hf tokenizer
-//!
 use crate::{ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use candle_core::{Device, Tensor};
 use candle_hf_hub::api::sync::Api;
 use ferritin_core::{AtomCollection, StructureFeatures};
@@ -15,133 +13,152 @@ use ort::{
 };
 use std::path::PathBuf;
 
-pub enum LigandMPNNModels {
-    ProteinMPNN,
-    LigandMPNN,
+type NdArrayF32 = ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<ndarray::IxDynImpl>>;
+type NdArrayI64 = ArrayBase<ndarray::OwnedRepr<i64>, ndarray::Dim<ndarray::IxDynImpl>>;
+
+pub enum ModelType {
+    Protein {
+        repo: &'static str,
+        encoder: &'static str,
+        decoder: &'static str,
+    },
+    Ligand {
+        repo: &'static str,
+        encoder: &'static str,
+        decoder: &'static str,
+    },
 }
 
-pub struct LigandMPNN {}
+pub struct LigandMPNN {
+    session: SessionBuilder,
+    encoder_path: PathBuf,
+    decoder_path: PathBuf,
+}
+
+impl ModelType {
+    fn get_paths(&self) -> (String, String, String) {
+        match self {
+            Self::Protein {
+                repo,
+                encoder,
+                decoder,
+            } => (repo.to_string(), encoder.to_string(), decoder.to_string()),
+            Self::Ligand {
+                repo,
+                encoder,
+                decoder,
+            } => (repo.to_string(), encoder.to_string(), decoder.to_string()),
+        }
+    }
+}
 
 impl LigandMPNN {
-    pub fn load_model_path(model: LigandMPNNModels) -> Result<(PathBuf, PathBuf)> {
-        let api = Api::new().unwrap();
-        let (repo_id, encoder_filename, decoder_filename) = match model {
-            LigandMPNNModels::ProteinMPNN => (
-                "zcpbx/proteinmpnn-v48-030-onnx".to_string(),
-                "protmpnn_encoder.onnx",
-                "protmpnn_decoder_step.onnx",
-            ),
-            LigandMPNNModels::LigandMPNN => (
-                "zcpbx/ligandmpnn-v32-030-25-onnx".to_string(),
-                "ligand_encoder.onnx",
-                "ligand_decoder.onnx",
-            ),
-        };
-        let encoder_path = api.model(repo_id.clone()).get(encoder_filename).unwrap();
-        let decoder_path = api.model(repo_id).get(decoder_filename).unwrap();
-        Ok((encoder_path, decoder_path))
+    pub fn new() -> Result<Self> {
+        let session = Self::create_session()?;
+        let (encoder_path, decoder_path) = Self::load_model_paths(ModelType::Ligand {
+            repo: "zcpbx/ligandmpnn-v32-030-25-onnx",
+            encoder: "ligand_encoder.onnx",
+            decoder: "ligand_decoder.onnx",
+        })?;
+
+        Ok(Self {
+            session,
+            encoder_path,
+            decoder_path,
+        })
     }
-    /// Ac -> Logit Tensor
-    pub fn run_model(ac: AtomCollection, position: i64, temperature: f32) -> Result<Tensor> {
-        let (h_V, h_E, E_idx) = LigandMPNN::run_encoder(ac)?;
-        let logits = LigandMPNN::run_decoder(h_V, h_E, E_idx, temperature, position)?;
-        Ok(logits)
-    }
-    /// Ac -> Encoded Weights
-    pub fn run_encoder(
-        ac: AtomCollection,
-    ) -> Result<(
-        ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<ndarray::IxDynImpl>>,
-        ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<ndarray::IxDynImpl>>,
-        ArrayBase<ndarray::OwnedRepr<i64>, ndarray::Dim<ndarray::IxDynImpl>>,
-    )> {
+
+    fn create_session() -> Result<SessionBuilder> {
         ort::init()
             .with_name("LigandMPNN")
             .with_execution_providers([CUDAExecutionProvider::default().build()])
             .commit()?;
 
-        let session_config = Session::builder()?
+        Ok(Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level1)?
-            .with_intra_threads(1)?;
-
-        let (encoder_path, decoder_path) =
-            LigandMPNN::load_model_path(LigandMPNNModels::LigandMPNN)?;
-        let encoder_model = session_config.clone().commit_from_file(&encoder_path)?;
-
-        // https://github.com/zachcp/ferritin/blob/main/ferritin-plms/src/ligandmpnn/ligandmpnn/configs.rs#L82
-        let device = Device::Cpu;
-        let x_bb = ac.to_numeric_backbone_atoms(&device)?;
-        let (lig_coords_array, lig_elements_array, lig_mask_array) =
-            ac.to_numeric_ligand_atoms(&device)?;
-        let data_nd = tensor_to_ndarray_f32(x_bb)?;
-        let lig_coords_array_nd = tensor_to_ndarray_f32(lig_coords_array)?;
-        let lig_elements_array_nd = tensor_to_ndarray_i64(lig_elements_array)?;
-        let lig_mask_array_nd = tensor_to_ndarray_f32(lig_mask_array)?;
-
-        let encoder_outputs = encoder_model.run(ort::inputs![
-            "coords" => data_nd,
-            "ligand_coords" => lig_coords_array_nd,
-            "ligand_types" => lig_elements_array_nd,
-            "ligand_mask" => lig_mask_array_nd
-        ]?)?;
-        let h_V = encoder_outputs["h_V"]
-            .try_extract_tensor::<f32>()?
-            .to_owned();
-        let h_E = encoder_outputs["h_E"]
-            .try_extract_tensor::<f32>()?
-            .to_owned();
-        let E_idx = encoder_outputs["E_idx"]
-            .try_extract_tensor::<i64>()?
-            .to_owned();
-
-        Ok((h_V, h_E, E_idx))
+            .with_intra_threads(1)?)
     }
-    /// Encoded Weights -> Logits
+
+    fn load_model_paths(model_type: ModelType) -> Result<(PathBuf, PathBuf)> {
+        let api = Api::new()?;
+        let (repo_id, encoder_name, decoder_name) = model_type.get_paths();
+
+        Ok((
+            api.model(repo_id.clone()).get(&encoder_name)?,
+            api.model(repo_id.clone()).get(&decoder_name)?,
+        ))
+    }
+
+    pub fn run_model(&self, ac: AtomCollection, position: i64, temperature: f32) -> Result<Tensor> {
+        let (h_V, h_E, E_idx) = self.run_encoder(&ac)?;
+        self.run_decoder(h_V, h_E, E_idx, temperature, position)
+    }
+
+    pub fn run_encoder(&self, ac: &AtomCollection) -> Result<(NdArrayF32, NdArrayF32, NdArrayI64)> {
+        let device = Device::Cpu;
+        let encoder_model = self.session.clone().commit_from_file(&self.encoder_path)?;
+
+        let x_bb = ac.to_numeric_backbone_atoms(&device)?;
+        let (lig_coords, lig_elements, lig_mask) = ac.to_numeric_ligand_atoms(&device)?;
+        let coords_nd = tensor_to_ndarray_f32(x_bb)?;
+        let lig_coords_nd = tensor_to_ndarray_f32(lig_coords)?;
+        let lig_types_nd = tensor_to_ndarray_i64(lig_elements)?;
+        let lig_mask_nd = tensor_to_ndarray_f32(lig_mask)?;
+
+        let encoder_inputs = ort::inputs![
+            "coords" => coords_nd,
+            "ligand_coords" => lig_coords_nd,
+            "ligand_types" => lig_types_nd,
+            "ligand_mask" => lig_mask_nd
+        ]?;
+
+        let encoder_outputs = encoder_model.run(encoder_inputs)?;
+
+        Ok((
+            encoder_outputs["h_V"]
+                .try_extract_tensor::<f32>()?
+                .to_owned(),
+            encoder_outputs["h_E"]
+                .try_extract_tensor::<f32>()?
+                .to_owned(),
+            encoder_outputs["E_idx"]
+                .try_extract_tensor::<i64>()?
+                .to_owned(),
+        ))
+    }
+
     pub fn run_decoder(
-        h_V: ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<ndarray::IxDynImpl>>,
-        h_E: ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<ndarray::IxDynImpl>>,
-        E_idx: ArrayBase<ndarray::OwnedRepr<i64>, ndarray::Dim<ndarray::IxDynImpl>>,
+        &self,
+        h_V: NdArrayF32,
+        h_E: NdArrayF32,
+        E_idx: NdArrayI64,
         temperature: f32,
         position: i64,
     ) -> Result<Tensor> {
-        ort::init()
-            .with_name("LigandMPNN")
-            .with_execution_providers([CUDAExecutionProvider::default().build()])
-            .commit()?;
+        let decoder_model = self.session.clone().commit_from_file(&self.decoder_path)?;
 
-        let session_config = Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Level1)?
-            .with_intra_threads(1)?;
+        let position_tensor =
+            ort::value::Tensor::from_array(ndarray::Array::from_shape_vec([1], vec![position])?)?;
 
-        let (encoder_path, decoder_path) =
-            LigandMPNN::load_model_path(LigandMPNNModels::LigandMPNN)?;
-        let encoder_model = session_config.clone().commit_from_file(&encoder_path)?;
-        let decoder_model = session_config.clone().commit_from_file(&decoder_path)?;
+        let temp_tensor = ort::value::Tensor::from_array(ndarray::Array::from_shape_vec(
+            [1],
+            vec![temperature],
+        )?)?;
 
-        let position_tensor = {
-            let data = vec![position];
-            let array = ndarray::Array::from_shape_vec([1], data)?;
-            ort::value::Tensor::from_array(array)?
-        };
-        let temp_tensor = {
-            let data = vec![temperature];
-            let array = ndarray::Array::from_shape_vec([1], data)?;
-            ort::value::Tensor::from_array(array)?
-        };
-        let decoder_outputs = decoder_model.run(ort::inputs![
+        let decoder_inputs = ort::inputs![
             "h_V" => h_V,
             "h_E" => h_E,
             "E_idx" => E_idx,
             "position" => position_tensor,
             "temperature" => temp_tensor,
-        ]?)?;
+        ]?;
+
+        let decoder_outputs = decoder_model.run(decoder_inputs)?;
         let logits = decoder_outputs["logits"]
             .try_extract_tensor::<f32>()?
             .to_owned();
 
-        let logit_tensor = ndarray_to_tensor_f32(logits)?;
-
-        Ok(logit_tensor)
+        ndarray_to_tensor_f32(logits)
     }
 }
 
@@ -151,56 +168,35 @@ mod tests {
     use ferritin_test_data::TestFile;
     use pdbtbx;
 
-    #[test]
-    fn test_ligandmpnn_model_path() {
-        let (encoder_path, decoder_path) =
-            LigandMPNN::load_model_path(LigandMPNNModels::LigandMPNN).unwrap();
-        assert!(encoder_path.exists());
-        assert!(decoder_path.exists());
-        assert!(encoder_path
-            .to_str()
-            .unwrap()
-            .ends_with("ligand_encoder.onnx"));
-        assert!(decoder_path
-            .to_str()
-            .unwrap()
-            .ends_with("ligand_decoder.onnx"));
-    }
-    #[test]
-    fn test_ligandmpnn_encode_decode() {
+    fn setup_test_data() -> AtomCollection {
         let (protfile, _handle) = TestFile::protein_01().create_temp().unwrap();
         let (pdb, _) = pdbtbx::open(protfile).expect("PDB/CIF");
-        let ac = AtomCollection::from(&pdb);
-        let logits = LigandMPNN::run_model(ac, 10, 0.1).unwrap();
-        assert_eq!(logits.dims2().unwrap(), (1, 21))
+        AtomCollection::from(&pdb)
     }
-    #[test]
-    fn test_ligandmpnn_encoder() {
-        let (protfile, _handle) = TestFile::protein_01().create_temp().unwrap();
-        let (pdb, _) = pdbtbx::open(protfile).expect("PDB/CIF");
-        let ac = AtomCollection::from(&pdb);
-        let (h_v, h_e, e_idx) = LigandMPNN::run_encoder(ac).unwrap();
-        assert_eq!(h_v.ndim(), 3);
-        assert_eq!(h_v.shape(), &[1, 154, 128]);
-        assert_eq!(h_e.ndim(), 4);
-        assert_eq!(h_e.shape(), &[1, 154, 16, 128]);
-        assert_eq!(e_idx.ndim(), 3);
-        assert_eq!(e_idx.shape(), &[1, 154, 16]);
-    }
-    #[test]
-    fn test_ligandmpnn_encode_then_decode() {
-        let (protfile, _handle) = TestFile::protein_01().create_temp().unwrap();
-        let (pdb, _) = pdbtbx::open(protfile).expect("PDB/CIF");
-        let ac = AtomCollection::from(&pdb);
-        let (h_v, h_e, e_idx) = LigandMPNN::run_encoder(ac).unwrap();
-        assert_eq!(h_v.ndim(), 3);
-        assert_eq!(h_v.shape(), &[1, 154, 128]);
-        assert_eq!(h_e.ndim(), 4);
-        assert_eq!(h_e.shape(), &[1, 154, 16, 128]);
-        assert_eq!(e_idx.ndim(), 3);
-        assert_eq!(e_idx.shape(), &[1, 154, 16]);
 
-        let logits = LigandMPNN::run_decoder(h_v, h_e, e_idx, 0.1, 1).unwrap();
-        assert_eq!(logits.dims2().unwrap(), (1, 21))
+    #[test]
+    fn test_model_initialization() {
+        let model = LigandMPNN::new().unwrap();
+        assert!(model.encoder_path.exists());
+        assert!(model.decoder_path.exists());
+    }
+
+    #[test]
+    fn test_encoder_output_dimensions() {
+        let model = LigandMPNN::new().unwrap();
+        let ac = setup_test_data();
+        let (h_v, h_e, e_idx) = model.run_encoder(&ac).unwrap();
+
+        assert_eq!(h_v.shape(), &[1, 154, 128]);
+        assert_eq!(h_e.shape(), &[1, 154, 16, 128]);
+        assert_eq!(e_idx.shape(), &[1, 154, 16]);
+    }
+
+    #[test]
+    fn test_full_pipeline() {
+        let model = LigandMPNN::new().unwrap();
+        let ac = setup_test_data();
+        let logits = model.run_model(ac, 10, 0.1).unwrap();
+        assert_eq!(logits.dims2().unwrap(), (1, 21));
     }
 }
