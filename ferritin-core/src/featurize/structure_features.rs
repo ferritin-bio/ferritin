@@ -1,7 +1,7 @@
 //!  Protein->Tensor utiilities useful for Machine Learning
 use super::utilities::{aa1to_int, aa3to1, get_nearest_neighbours, int_to_aa1, AAAtom};
 use crate::AtomCollection;
-use candle_core::{DType, Device, Error as CandleError, IndexOp, Result, Tensor};
+use candle_core::{DType, Device, Error as CandleError, IndexOp, Result, Tensor, D};
 use itertools::MultiUnzip;
 use pdbtbx::Element;
 use strum::IntoEnumIterator;
@@ -53,7 +53,7 @@ impl StructureFeatures for AtomCollection {
         Ok(Tensor::from_iter(s, device)?.reshape((1, n))?)
     }
 
-    /// Convert amino acid sequence to numeric representation
+    /// Calcualte CB for each residue
     fn create_CB(&self, device: &Device) -> Result<Tensor> {
         // N = input_dict["X"][:, 0, :]
         //         CA = input_dict["X"][:, 1, :]
@@ -64,10 +64,12 @@ impl StructureFeatures for AtomCollection {
         //         CB = -0.58273431 * a + 0.56802827 * b - 0.54067466 * c + CA
         //
         let backbone = self.to_numeric_backbone_atoms(device)?;
+        let backbone = backbone.squeeze(0)?; // remove batch dim for calc
+
         // Extract N, CA, C coordinates
-        let n = backbone.i((.., 0, ..))?; // First atom (N)
-        let ca = backbone.i((.., 1, ..))?; // Second atom (CA)
-        let c = backbone.i((.., 2, ..))?; // Third atom (C)
+        let n = backbone.i((.., 0, ..))?;
+        let ca = backbone.i((.., 1, ..))?;
+        let c = backbone.i((.., 2, ..))?;
 
         // Constants for CB calculation
         let a_coeff = -0.58273431_f64;
@@ -92,14 +94,12 @@ impl StructureFeatures for AtomCollection {
         let a_x = ((&b_y * &c_z)? - (&b_z * &c_y)?)?;
         let a_y = ((&b_z * &c_x)? - (&b_x * &c_z)?)?;
         let a_z = ((&b_x * &c_y)? - (&b_y * &c_x)?)?;
-
-        // Stack the cross product components back together
-        let a = Tensor::stack(&[&a_x, &a_y, &a_z], 1)?;
+        let a = Tensor::stack(&[&a_x, &a_y, &a_z], D::Minus1)?;
 
         // Final CB calculation: -0.58273431 * a + 0.56802827 * b - 0.54067466 * c + CA
-        let cb = (&a * a_coeff)? + (&b * b_coeff)? + (&c * c_coeff)? + &ca;
-
-        Ok(cb?)
+        let cb = ((&a * a_coeff)? + (&b * b_coeff)? + (&c * c_coeff)? + &ca)?;
+        let cb = cb.unsqueeze(0)?;
+        Ok(cb)
     }
 
     /// Get residue indices
@@ -164,7 +164,7 @@ impl StructureFeatures for AtomCollection {
     //  - y_m: 3D tensor of dimensions: (<batch=1>, <num_residues>, <number_of_ligand_atoms>))
     //
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
-        let number_of_ligand_atoms = 16;
+        // Todo: fix this.
         let cutoff_for_score = 5.;
         // keep only the non-protein, non-water residues that are heavy
         let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
@@ -193,20 +193,18 @@ impl StructureFeatures for AtomCollection {
             (elements.len(),),
             device,
         )?;
-
-        // get the C-beta coordinate tensro.
         let CB = self.create_CB(device)?;
-        let num_residues = CB.dim(0)?;
-        let mask = Tensor::zeros(num_residues, DType::F32, device)?;
+        let (batch, res_num, _coords) = CB.dims3()?;
+        let (number_of_ligand_atoms, _coords) = y.dims2()?;
+        let mask = Tensor::zeros((batch, res_num), DType::F32, device)?;
         let (y, y_t, y_m, d_xy) =
-            get_nearest_neighbours(&CB, &mask, &y, &y_t, &y_m, number_of_ligand_atoms)?;
-
-        let distance_mask = d_xy.lt(cutoff_for_score)?;
+            get_nearest_neighbours(&CB, &mask, &y, &y_t, &y_m, number_of_ligand_atoms as i64)?;
+        let distance_mask = d_xy.lt(cutoff_for_score)?.to_dtype(DType::F32)?;
         let y_m_first = y_m.i((.., 0))?;
+        let mask = mask.squeeze(0)?;
         let mask_xy = distance_mask.mul(&mask)?.mul(&y_m_first)?;
-
         let y = y.unsqueeze(0)?;
-        let y_t = y_t.unsqueeze(0)?;
+        let y_t = y_t.to_dtype(DType::I64)?.unsqueeze(0)?;
         let y_m = y_m.unsqueeze(0)?; // mask_xy??
 
         Ok((y, y_t, y_m))

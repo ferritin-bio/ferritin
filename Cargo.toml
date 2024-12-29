@@ -14,6 +14,7 @@ members = [
     "ferritin-plms",
     "ferritin-examples",
     "ferritin-molviewspec",
+    "ferritin-onnx-models",
     "ferritin-pymol",
     "ferritin-test-data",
 ]
@@ -32,8 +33,9 @@ itertools = "0.13.0"
 once_cell = "1.20.2"
 pdbtbx = "0.12.0"
 rand = "0.8.5"
+safetensors = "0.4.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11.15"
-serde_json = "1.0.133"
+serde_json = "1.0.134"
 serde_repr = "0.1.19"
 tokenizers = { version = "0.21.0", default-features = false }

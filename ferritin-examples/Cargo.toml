@@ -13,14 +13,20 @@ metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 anyhow.workspace = true
 bevy = "0.15.0"
 candle-core.workspace = true
+candle-hf-hub.workspace = true
 candle-metal-kernels = { workspace = true, optional = true }
 candle-nn.workspace = true
 clap = { version = "4.5.23", features = ["derive"] }
-ferritin-plms = { path = "../ferritin-plms" }
 ferritin-bevy = { path = "../ferritin-bevy" }
-serde_json.workspace = true
+ferritin-core = { path = "../ferritin-core" }
+ferritin-plms = { path = "../ferritin-plms" }
+ferritin-onnx-models = { path = "../ferritin-onnx-models" }
+ndarray-safetensors = "0.2"
+ndarray = "0.16"
 ort = "=2.0.0-rc.9"
-ndarray = "0.16.1"
+pdbtbx.workspace = true
+safetensors.workspace = true
+serde_json.workspace = true
 
 
 [target.'cfg(target_os = "macos")'.features]

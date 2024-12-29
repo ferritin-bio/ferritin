@@ -1,5 +1,5 @@
 [package]
-name = "ferritin-bevy"
+name = "ferritin-onnx-models"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -7,10 +7,15 @@ license.workspace = true
 description.workspace = true
 
 [dependencies]
-bevy = "0.15.0"
-bon = "3.3.1"
+anyhow.workspace = true
+candle-core.workspace = true
+candle-hf-hub.workspace = true
+ndarray = "0.16"
+ndarray-safetensors = "0.2.0"
+ort = "=2.0.0-rc.9"
+safetensors.workspace = true
+tokenizers.workspace = true
 ferritin-core = { path = "../ferritin-core" }
-pdbtbx.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
