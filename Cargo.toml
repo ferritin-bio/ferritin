@@ -9,7 +9,7 @@ members = [
     "ferritin-plms",
     "ferritin-pymol",
     "ferritin-test-data",
-    "ferritin-tui",
+    # "ferritin-tui",
 ]
 resolver = "2"
 
