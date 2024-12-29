@@ -7,10 +7,11 @@ use ferritin_test_data::TestFile;
 use ndarray_safetensors::parse_tensors;
 use ort::{
     execution_providers::CUDAExecutionProvider,
-    session::{builder::GraphOptimizationLevel, Session},
-    value::Value,
+    session::{builder::GraphOptimizationLevel, Session, SessionInputs},
+    value::{Tensor, Value},
 };
 use safetensors::{serialize, SafeTensors};
+use std::collections::HashMap;
 use std::env;
 
 fn tensor_to_ndarray_f32(
@@ -57,13 +58,15 @@ fn main() -> Result<()> {
     let device = Device::Cpu;
     let args = Args::parse();
     let base_path = env::current_dir()?;
+
     ort::init()
         .with_name("LigandMPNN")
         .with_execution_providers([CUDAExecutionProvider::default().build()])
         .commit()?;
     let lmpnn_model = LigandMPNNModels::LigandMPNN;
     let (encoder_path, decoder_path) = LigandMPNN::load_model_path(lmpnn_model)?;
-    let model = Session::builder()?
+
+    let encoder_model = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level1)?
         .with_intra_threads(1)?
         .commit_from_file(encoder_path)?;
@@ -90,7 +93,7 @@ fn main() -> Result<()> {
     let lig_elements_array_nd = tensor_to_ndarray_i64(lig_elements_array)?;
     let lig_mask_array_nd = tensor_to_ndarray_f32(lig_mask_array)?;
 
-    let outputs = model.run(ort::inputs![
+    let encoder_outputs = encoder_model.run(ort::inputs![
         "coords" => data_nd,
         "ligand_coords" => lig_coords_array_nd,
         "ligand_types" => lig_elements_array_nd,
@@ -101,13 +104,13 @@ fn main() -> Result<()> {
     println!("Model is run!");
 
     // Print outputs
-    for (name, tensor) in outputs.iter() {
+    for (name, tensor) in encoder_outputs.iter() {
         println!("Output {}: {:#?}", name, tensor);
     }
     // Output h_V: (Node/Vertex Features) [batch, num_nodes, node_feature_dim] [ 1, 154, 128,]
     // Output h_E:  [batch num_edges, neighbors ,edge_feature_dim]  [ 1, 154, 16, 128,],
     // Output E_idx: [ 1, 154, 16,]
-    for (name, tensor) in outputs.iter() {
+    for (name, tensor) in encoder_outputs.iter() {
         println!("Output {}: ", name,);
     }
     // Output h_V: ValueRef {
@@ -131,6 +134,7 @@ fn main() -> Result<()> {
     //                 dimension_symbols: [None,None,None,],
     //             },
 
+    println!("Begin Processing the Decoder.......");
     let decoder_model = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level1)?
         .with_intra_threads(1)?
@@ -170,6 +174,30 @@ fn main() -> Result<()> {
     for input in &decoder_model.inputs {
         println!("Name: {}, Type: {:#?}", input.name, input);
     }
+
+    let h_V = encoder_outputs["h_V"].try_extract_tensor::<f32>()?;
+    let h_E = encoder_outputs["h_E"].try_extract_tensor::<f32>()?;
+    let E_idx = encoder_outputs["E_idx"].try_extract_tensor::<i64>()?;
+
+    let position_tensor = {
+        let data = vec![10 as i64]; // Single value
+        let array = ndarray::Array::from_shape_vec([1], data)?; // Shape [1]
+        Tensor::from_array(array)?
+    };
+    let temp_tensor = {
+        let data = vec![0.1 as f32]; // Single value
+        let array = ndarray::Array::from_shape_vec([1], data)?; // Shape [1]
+        Tensor::from_array(array)?
+    };
+    println!("{:?}", h_V);
+
+    let decoder_outputs = decoder_model.run(ort::inputs![
+        "h_V" => h_V,
+        "h_E" => h_E,
+        "E_idx" => E_idx,
+        "position" => position_tensor,
+        "temperature" => temp_tensor,
+    ]?)?;
 
     Ok(())
 }
