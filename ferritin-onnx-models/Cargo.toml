@@ -10,6 +10,7 @@ description.workspace = true
 anyhow.workspace = true
 candle-core.workspace = true
 candle-hf-hub.workspace = true
+ndarray = "0.16"
 ndarray-safetensors = "0.2.0"
 ort = "=2.0.0-rc.9"
 safetensors.workspace = true

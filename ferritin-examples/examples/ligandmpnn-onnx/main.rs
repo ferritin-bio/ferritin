@@ -2,37 +2,16 @@ use anyhow::{Error as E, Result};
 use candle_core::Device;
 use clap::Parser;
 use ferritin_core::{AtomCollection, StructureFeatures};
-use ferritin_onnx_models::{LigandMPNN, LigandMPNNModels};
+use ferritin_onnx_models::{
+    tensor_to_ndarray_f32, tensor_to_ndarray_i64, LigandMPNN, LigandMPNNModels,
+};
 use ferritin_test_data::TestFile;
-use ndarray_safetensors::parse_tensors;
 use ort::{
     execution_providers::CUDAExecutionProvider,
     session::{builder::GraphOptimizationLevel, Session, SessionInputs},
-    value::{Tensor, Value},
+    value::{Tensor, Value, ValueRef},
 };
-use safetensors::{serialize, SafeTensors};
-use std::collections::HashMap;
 use std::env;
-
-fn tensor_to_ndarray_f32(
-    tensor: candle_core::Tensor,
-) -> Result<ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::IxDyn>> {
-    let tmp_data = [("_", tensor)];
-    let st = serialize(tmp_data, &None)?;
-    let tensors = SafeTensors::deserialize(&st).unwrap();
-    let arrays = parse_tensors::<f32>(&tensors).unwrap();
-    Ok(arrays.into_iter().next().unwrap().1)
-}
-
-fn tensor_to_ndarray_i64(
-    tensor: candle_core::Tensor,
-) -> Result<ndarray::ArrayBase<ndarray::OwnedRepr<i64>, ndarray::IxDyn>> {
-    let tmp_data = [("_", tensor)];
-    let st = serialize(tmp_data, &None)?;
-    let tensors = SafeTensors::deserialize(&st).unwrap();
-    let arrays = parse_tensors::<i64>(&tensors).unwrap();
-    Ok(arrays.into_iter().next().unwrap().1)
-}
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -85,6 +64,7 @@ fn main() -> Result<()> {
     let s = ac
         .encode_amino_acids(&device)
         .expect("A complete convertion to locations");
+
     let x_bb = ac.to_numeric_backbone_atoms(&device)?;
     let (lig_coords_array, lig_elements_array, lig_mask_array) =
         ac.to_numeric_ligand_atoms(&device)?;
@@ -107,32 +87,6 @@ fn main() -> Result<()> {
     for (name, tensor) in encoder_outputs.iter() {
         println!("Output {}: {:#?}", name, tensor);
     }
-    // Output h_V: (Node/Vertex Features) [batch, num_nodes, node_feature_dim] [ 1, 154, 128,]
-    // Output h_E:  [batch num_edges, neighbors ,edge_feature_dim]  [ 1, 154, 16, 128,],
-    // Output E_idx: [ 1, 154, 16,]
-    for (name, tensor) in encoder_outputs.iter() {
-        println!("Output {}: ", name,);
-    }
-    // Output h_V: ValueRef {
-    //     inner: Value { inner: ValueInner {ptr: 0x0000600001b96c60,
-    //             dtype: Tensor {
-    //                 ty: Float32,
-    //                 dimensions: [ 1, 154, 128,],
-    //                 dimension_symbols: [None,None, None,],},}
-    // Output h_E: ValueRef {
-    //     inner: Value { inner: ValueInner {ptr: 0x0000600001b96d20,
-    //             dtype: Tensor {
-    //                 ty: Float32,
-    //                 dimensions: [ 1, 154, 16, 128,
-    //                 ],
-    //                 dimension_symbols: [ None, None, None, None,],},}
-    // Output E_idx: ValueRef {
-    //     inner: Value { inner: ValueInner {ptr: 0x0000600001b96c80,
-    //             dtype: Tensor {
-    //                 ty: Int64,
-    //                 dimensions: [ 1, 154, 16,],
-    //                 dimension_symbols: [None,None,None,],
-    //             },
 
     println!("Begin Processing the Decoder.......");
     let decoder_model = Session::builder()?
@@ -200,6 +154,11 @@ fn main() -> Result<()> {
     for (name, tensor) in decoder_outputs.iter() {
         println!("Output {}: {:#?}", name, tensor);
     }
+
+    let logits = decoder_outputs["logits"].try_extract_tensor::<f32>()?;
+    println!("Logits {:?} ", logits);
+
+    // let logit_tensor = ndarray_to_tensor(logits);
 
     // Decoder Outputs:
     // Output logits: ValueRef {
