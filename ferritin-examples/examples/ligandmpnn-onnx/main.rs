@@ -1,4 +1,4 @@
-use anyhow::{Error as E, Result};
+use anyhow::Result;
 use candle_core::Device;
 use ferritin_core::{AtomCollection, StructureFeatures};
 use ferritin_onnx_models::{
@@ -13,28 +13,29 @@ use ort::{
 };
 
 fn main() -> Result<()> {
-    let device = Device::Cpu;
-    let lmpnn_model = LigandMPNNModels::LigandMPNN;
-    let (encoder_path, decoder_path) = LigandMPNN::load_model_path(lmpnn_model)?;
+    let (encoder_path, decoder_path) = LigandMPNN::load_model_path(LigandMPNNModels::LigandMPNN)?;
 
     ort::init()
         .with_name("LigandMPNN")
         .with_execution_providers([CUDAExecutionProvider::default().build()])
         .commit()?;
 
-    let encoder_model = Session::builder()?
+    // Common session builder configuration
+    let session_config = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level1)?
-        .with_intra_threads(1)?
-        .commit_from_file(encoder_path)?;
+        .with_intra_threads(1)?;
+
+    let encoder_model = session_config.clone().commit_from_file(&encoder_path)?;
+    let decoder_model = session_config.clone().commit_from_file(&decoder_path)?;
 
     // https://github.com/zachcp/ferritin/blob/main/ferritin-plms/src/ligandmpnn/ligandmpnn/configs.rs#L82
-
     println!("Loading the Model and Tokenizer.......");
     let (protfile, _handle) = TestFile::protein_01().create_temp()?;
     let (pdb, _) = pdbtbx::open(protfile).expect("PDB/CIF");
     let ac = AtomCollection::from(&pdb);
 
     println!("Creating the input Tensors.......");
+    let device = Device::Cpu;
     let x_bb = ac.to_numeric_backbone_atoms(&device)?;
     let (lig_coords_array, lig_elements_array, lig_mask_array) =
         ac.to_numeric_ligand_atoms(&device)?;
@@ -51,16 +52,11 @@ fn main() -> Result<()> {
         "ligand_mask" => lig_mask_array_nd
     ]?)?;
 
-    println!("Spinning up the Dccoder Model.......");
-    let decoder_model = Session::builder()?
-        .with_optimization_level(GraphOptimizationLevel::Level1)?
-        .with_intra_threads(1)?
-        .commit_from_file(decoder_path)?;
-
     println!("Creating the Inpute to the Decoder.......");
     let h_V = encoder_outputs["h_V"].try_extract_tensor::<f32>()?;
     let h_E = encoder_outputs["h_E"].try_extract_tensor::<f32>()?;
     let E_idx = encoder_outputs["E_idx"].try_extract_tensor::<i64>()?;
+
     let position_tensor = {
         let data = vec![10 as i64]; // Single value
         let array = ndarray::Array::from_shape_vec([1], data)?; // Shape [1]
@@ -70,7 +66,7 @@ fn main() -> Result<()> {
     println!("Temp and Position Are Hardcoded........");
     let temp_tensor = {
         let data = vec![0.1 as f32]; // Single value
-        let array = ndarray::Array::from_shape_vec([1], data)?
+        let array = ndarray::Array::from_shape_vec([1], data)?;
         Tensor::from_array(array)?
     };
 
