@@ -1,7 +1,14 @@
 //! ESM2 Struct. Loads the hf tokenizer
 //!
+use crate::{ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64};
 use anyhow::{anyhow, Result};
+use candle_core::{Device, Tensor};
 use candle_hf_hub::api::sync::Api;
+use ferritin_core::{AtomCollection, StructureFeatures};
+use ort::{
+    execution_providers::CUDAExecutionProvider,
+    session::{builder::GraphOptimizationLevel, Session},
+};
 use std::path::PathBuf;
 
 pub enum LigandMPNNModels {
@@ -30,11 +37,66 @@ impl LigandMPNN {
         let decoder_path = api.model(repo_id).get(decoder_filename).unwrap();
         Ok((encoder_path, decoder_path))
     }
-    // pub fn load_tokenizer() -> Result<Tokenizer> {
-    //     let tokenizer_bytes = include_bytes!("tokenizer.json");
-    //     Tokenizer::from_bytes(tokenizer_bytes)
-    //         .map_err(|e| anyhow!("Failed to load tokenizer: {}", e))
-    // }
+    /// Ac -> Logit Tensor
+    pub fn run_model(ac: AtomCollection, position: i32, temperature: f32) -> Result<Tensor> {
+        ort::init()
+            .with_name("LigandMPNN")
+            .with_execution_providers([CUDAExecutionProvider::default().build()])
+            .commit()?;
+
+        let session_config = Session::builder()?
+            .with_optimization_level(GraphOptimizationLevel::Level1)?
+            .with_intra_threads(1)?;
+
+        let (encoder_path, decoder_path) =
+            LigandMPNN::load_model_path(LigandMPNNModels::LigandMPNN)?;
+        let encoder_model = session_config.clone().commit_from_file(&encoder_path)?;
+        let decoder_model = session_config.clone().commit_from_file(&decoder_path)?;
+
+        // https://github.com/zachcp/ferritin/blob/main/ferritin-plms/src/ligandmpnn/ligandmpnn/configs.rs#L82
+        let device = Device::Cpu;
+        let x_bb = ac.to_numeric_backbone_atoms(&device)?;
+        let (lig_coords_array, lig_elements_array, lig_mask_array) =
+            ac.to_numeric_ligand_atoms(&device)?;
+        let data_nd = tensor_to_ndarray_f32(x_bb)?;
+        let lig_coords_array_nd = tensor_to_ndarray_f32(lig_coords_array)?;
+        let lig_elements_array_nd = tensor_to_ndarray_i64(lig_elements_array)?;
+        let lig_mask_array_nd = tensor_to_ndarray_f32(lig_mask_array)?;
+        let encoder_outputs = encoder_model.run(ort::inputs![
+            "coords" => data_nd,
+            "ligand_coords" => lig_coords_array_nd,
+            "ligand_types" => lig_elements_array_nd,
+            "ligand_mask" => lig_mask_array_nd
+        ]?)?;
+        let h_V = encoder_outputs["h_V"].try_extract_tensor::<f32>()?;
+        let h_E = encoder_outputs["h_E"].try_extract_tensor::<f32>()?;
+        let E_idx = encoder_outputs["E_idx"].try_extract_tensor::<i64>()?;
+        let position_tensor = {
+            let data = vec![10 as i64];
+            let array = ndarray::Array::from_shape_vec([1], data)?;
+            ort::value::Tensor::from_array(array)?
+        };
+        let temp_tensor = {
+            let data = vec![0.1 as f32]; // Single value
+            let array = ndarray::Array::from_shape_vec([1], data)?;
+            ort::value::Tensor::from_array(array)?
+        };
+        let decoder_outputs = decoder_model.run(ort::inputs![
+            "h_V" => h_V,
+            "h_E" => h_E,
+            "E_idx" => E_idx,
+            "position" => position_tensor,
+            "temperature" => temp_tensor,
+        ]?)?;
+
+        let logits = decoder_outputs["logits"]
+            .try_extract_tensor::<f32>()?
+            .to_owned();
+
+        let logit_tensor = ndarray_to_tensor_f32(logits)?;
+
+        Ok(logit_tensor)
+    }
 }
 
 #[cfg(test)]
