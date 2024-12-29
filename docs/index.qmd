@@ -39,6 +39,11 @@ Native Rust access to pymol `pse` binary files.  [rust-docs](https://zachcp.gith
 
 Utilities for consuming and creating [molviewspec files](https://molstar.org/mol-view-spec/).  [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_molviewspec/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-molviewspec).
 
+### Ferritin-ONNX-Models
+
+Access to protein PLM via the ONNX runtime. [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_onnx_models/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-onnx-models).
+
+
 ### Ferritin-PLMs
 
 Utilities for working with protein language models. [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_plms/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-plms).
