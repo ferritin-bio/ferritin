@@ -5,14 +5,6 @@
 //!
 //! The models are loaded from the Hugging Face model hub and executed using ONNX Runtime.
 //!
-//! # Examples
-//! ```no_run
-//! use ferritin_core::AtomCollection;
-//! use ferritin_onnx_models::LigandMPNN;
-//! let model = LigandMPNN::new().unwrap();
-//! let atom_collection = AtomCollection::new();
-//! let logits = model.run_model(atom_collection, 10, 0.1).unwrap();
-//! ```
 //!
 use crate::{ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64};
 use anyhow::Result;

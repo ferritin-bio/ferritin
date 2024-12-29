@@ -8,18 +8,6 @@
 //! * ESM2_T12_35M - medium 12-layer protein language model
 //! * ESM2_T30_150M - large 30-layer protein language model
 //!
-//! # Example
-//! ```no_run
-//! use anyhow::Result;
-//! use ferritin_onnx_models::ESM2;
-//!
-//! let tokenizer = ESM2::load_tokenizer()?;
-//! let text = "MLKLRV";
-//! let encoding = tokenizer.encode(text, false)?;
-//! let tokens = encoding.get_tokens();
-//! assert_eq!(tokens.len(), 6);
-//! assert_eq!(tokens, &["M", "L", "K", "L", "R", "V"]);
-//! ```
 
 use anyhow::{anyhow, Result};
 use candle_hf_hub::api::sync::Api;
