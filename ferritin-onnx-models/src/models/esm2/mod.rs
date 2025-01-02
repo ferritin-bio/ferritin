@@ -86,9 +86,12 @@ impl ESM2 {
             .with_optimization_level(GraphOptimizationLevel::Level1)?
             .with_intra_threads(1)?)
     }
-    pub fn run_model(&self, sequence: &str) -> Result<(Tensor)> {
+    pub fn run_model(&self, sequence: &str) -> Result<Tensor> {
         let model = self.session.clone().commit_from_file(&self.model_path)?;
-        let tokens = self.tokenizer.encode(sequence, false)?;
+        let tokens = self
+            .tokenizer
+            .encode(sequence, false)
+            .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
         let token_ids = tokens.get_ids();
         let shape = (1, tokens.len());
         let mask_array: Array2<i64> = Array2::from_shape_vec(shape, vec![0; tokens.len()])?;
@@ -99,26 +102,36 @@ impl ESM2 {
         let outputs =
             model.run(ort::inputs!["input_ids" => tokens_array,"attention_mask" => mask_array]?)?;
         let logits = outputs["logits"].try_extract_tensor::<f32>()?.to_owned();
-        ndarray_to_tensor_f32(logits)
+        Ok(ndarray_to_tensor_f32(logits)?)
     }
+
     // Softmax and simplify
     pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<LogitPosition>> {
         let tensor = ops::log_softmax(tensor, D::Minus1)?;
         let data = tensor.to_vec3::<f32>()?;
-        data[0].iter().enumerate().flat_map(|(seq_pos, row)| {
-            row.iter().enumerate().map(move |(vocab_idx, &score)| {
-                Ok(LogitPosition {
-                    position: seq_pos,
-                    amino_acid: self.tokenizer.decode(&[vocab_idx as u32], false)?
-                        .chars()
-                        .next()
-                        .ok_or_else(|| anyhow!("Empty decoded string"))?,
-                    score,
-                })
-            })
-        }).collect()
-}
+        let shape = tensor.dims();
+        let mut logit_positions = Vec::new();
+        for seq_pos in 0..shape[1] {
+            for vocab_idx in 0..shape[2] {
+                let score = data[0][seq_pos][vocab_idx];
+                let amino_acid_char = self
+                    .tokenizer
+                    .decode(&[vocab_idx as u32], false)
+                    .map_err(|e| anyhow!("Failed to decode: {}", e))?
+                    .chars()
+                    .next()
+                    .ok_or_else(|| anyhow!("Empty decoded string"))?;
 
+                logit_positions.push(LogitPosition {
+                    position: seq_pos,
+                    amino_acid: amino_acid_char,
+                    score,
+                });
+            }
+        }
+        Ok(logit_positions)
+    }
+}
 
 #[cfg(test)]
 mod tests {
