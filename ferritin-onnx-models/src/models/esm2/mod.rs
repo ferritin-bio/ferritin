@@ -8,6 +8,7 @@
 //! * ESM2_T12_35M - medium 12-layer protein language model
 //! * ESM2_T30_150M - large 30-layer protein language model
 //!
+use super::super::utilities::ndarray_to_tensor_f32;
 use anyhow::{anyhow, Result};
 use candle_core::{Device, Tensor};
 use candle_hf_hub::api::sync::Api;
@@ -17,7 +18,7 @@ use ort::{
     execution_providers::CUDAExecutionProvider,
     session::{
         builder::{GraphOptimizationLevel, SessionBuilder},
-        Session,
+        output, Session,
     },
     value::Value,
 };
@@ -33,9 +34,15 @@ pub enum ESM2Models {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ESM2Output {
-    pub embeddings: Vec<Vec<f32>>, // Making it Vec<Vec> for serializability
-    pub shape: (usize, usize),     // Store original shape
+pub struct ESM2PerResidueLogits {
+    pub persequence: Vec<ESMResidueLogits>, // Making it Vec<Vec> for serializability
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ESMResidueLogits {
+    position: i32,
+    amino_acid: char,
+    amin_acid_prob: f32,
 }
 
 pub struct ESM2 {
@@ -84,24 +91,13 @@ impl ESM2 {
             .with_optimization_level(GraphOptimizationLevel::Level1)?
             .with_intra_threads(1)?)
     }
-    pub fn run_model(&self, sequence: &str) -> Result<()> {
-        let device = Device::Cpu;
+    pub fn run_model(&self, sequence: &str) -> Result<(Tensor)> {
         let model = self.session.clone().commit_from_file(&self.model_path)?;
-
-        // Tokenize input
         let tokens = self
             .tokenizer
             .encode(sequence, false)
             .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
-
         let token_ids = tokens.get_ids();
-
-        // Prepare input tensor
-        // let input_array =
-        //     ndarray::Array2::from_shape_vec((1, token_ids.len()), token_ids.to_vec())?
-        //         .mapv(|x| x as i64);
-
-        // since we are taking a single string we set the first <batch> dimension == 1.
         let shape = (1, tokens.len());
         let mask_array: Array2<i64> = Array2::from_shape_vec(shape, vec![0; tokens.len()])?;
         let tokens_array: Array2<i64> = Array2::from_shape_vec(
@@ -109,30 +105,12 @@ impl ESM2 {
             token_ids.iter().map(|&x| x as i64).collect::<Vec<_>>(),
         )?;
 
-        // Input name: input_ids
-        // Input type: Tensor { ty: Int64, dimensions: [-1, -1], dimension_symbols: [Some("batch_size"), Some("sequence_length")] }
-        // Input name: attention_mask
-        // Input type: Tensor { ty: Int64, dimensions: [-1, -1], dimension_symbols: [Some("batch_size"), Some("sequence_length")] }
-        for input in &model.inputs {
-            println!("Input name: {}", input.name);
-            println!("Input type: {:?}", input.input_type);
-        }
+        // Per residue logits
         let outputs =
             model.run(ort::inputs!["input_ids" => tokens_array,"attention_mask" => mask_array]?)?;
-
-        for (name, tensor) in outputs.iter() {
-            println!("Output name: {}", name);
-            if let Ok(tensor) = tensor.try_extract_tensor::<f32>() {
-                //     <Batch> <SeqLength> <Vocab>
-                // Shape: [1, 256, 33]
-                println!("Shape: {:?}", tensor.shape());
-                println!(
-                    "Sample values: {:?}",
-                    &tensor.view().as_slice().unwrap()[..5]
-                ); // First 5 values
-            }
-        }
-        Ok(())
+        let logits = outputs["logits"].try_extract_tensor::<f32>()?.to_owned();
+        let cand = ndarray_to_tensor_f32(logits)?;
+        Ok(cand)
     }
 }
 
