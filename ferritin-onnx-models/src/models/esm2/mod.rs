@@ -29,9 +29,9 @@ use tokenizers::Tokenizer;
 
 #[derive(Debug)]
 pub struct LogitPosition {
-    pub position: usize,       // Position in sequence
-    pub amino_acid_idx: usize, // Index in vocabulary (0-32)
-    pub score: f32,            // Logit score
+    pub position: usize,  // Position in sequence
+    pub amino_acid: char, // Index in vocabulary (0-32)
+    pub score: f32,       // Logit score
 }
 
 pub enum ESM2Models {
@@ -41,17 +41,17 @@ pub enum ESM2Models {
     // ESM2_T33_650M,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ESM2PerResidueLogits {
-    pub persequence: Vec<ESMResidueLogits>, // Making it Vec<Vec> for serializability
-}
+// #[derive(Debug, Serialize, Deserialize)]
+// pub struct ESM2PerResidueLogits {
+//     pub persequence: Vec<ESMResidueLogits>, // Making it Vec<Vec> for serializability
+// }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ESMResidueLogits {
-    position: i32,
-    amino_acid: char,
-    amin_acid_prob: f32,
-}
+// #[derive(Debug, Serialize, Deserialize)]
+// pub struct ESMResidueLogits {
+//     position: i32,
+//     amino_acid: char,
+//     amin_acid_prob: f32,
+// }
 
 pub struct ESM2 {
     session: SessionBuilder,
@@ -120,27 +120,30 @@ impl ESM2 {
         let cand = ndarray_to_tensor_f32(logits)?;
         Ok(cand)
     }
+    // Softmax and simplify
     pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<LogitPosition>> {
+        let tensor = ops::log_softmax(tensor, D::Minus1)?;
         let shape = tensor.dims();
         let mut logit_positions = Vec::new();
-
-        // Get the tensor data as a contiguous array
         let data = tensor.to_vec3::<f32>()?;
-
-        // Iterate through dimensions [1, 256, 33]
-        // Skip batch dimension (always 1 in this case)
         for seq_pos in 0..shape[1] {
             for vocab_idx in 0..shape[2] {
                 let score = data[0][seq_pos][vocab_idx];
+                let amino_acid_char = self
+                    .tokenizer
+                    .decode(&[vocab_idx as u32], false)
+                    .map_err(|e| anyhow!("Failed to decode: {}", e))?
+                    .chars()
+                    .next()
+                    .ok_or_else(|| anyhow!("Empty decoded string"))?;
 
                 logit_positions.push(LogitPosition {
                     position: seq_pos,
-                    amino_acid_idx: vocab_idx,
+                    amino_acid: amino_acid_char,
                     score,
                 });
             }
         }
-
         Ok(logit_positions)
     }
 }
