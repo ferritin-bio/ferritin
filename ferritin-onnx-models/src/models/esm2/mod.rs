@@ -10,9 +10,9 @@
 //!
 use super::super::utilities::ndarray_to_tensor_f32;
 use anyhow::{anyhow, Result};
-use candle_core::{Device, Tensor};
+use candle_core::{Tensor, D};
 use candle_hf_hub::api::sync::Api;
-use ferritin_core::AtomCollection;
+use candle_nn::ops;
 use ndarray::Array2;
 use ort::{
     execution_providers::CUDAExecutionProvider,
@@ -26,23 +26,18 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokenizers::Tokenizer;
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct LogitPosition {
+    pub position: usize,  // Position in sequence
+    pub amino_acid: char, // Index in vocabulary (0-32)
+    pub score: f32,       // Logit score
+}
+
 pub enum ESM2Models {
     ESM2_T6_8M,
     ESM2_T12_35M,
     ESM2_T30_150M,
     // ESM2_T33_650M,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ESM2PerResidueLogits {
-    pub persequence: Vec<ESMResidueLogits>, // Making it Vec<Vec> for serializability
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ESMResidueLogits {
-    position: i32,
-    amino_acid: char,
-    amin_acid_prob: f32,
 }
 
 pub struct ESM2 {
@@ -91,7 +86,7 @@ impl ESM2 {
             .with_optimization_level(GraphOptimizationLevel::Level1)?
             .with_intra_threads(1)?)
     }
-    pub fn run_model(&self, sequence: &str) -> Result<(Tensor)> {
+    pub fn run_model(&self, sequence: &str) -> Result<Tensor> {
         let model = self.session.clone().commit_from_file(&self.model_path)?;
         let tokens = self
             .tokenizer
@@ -104,13 +99,37 @@ impl ESM2 {
             shape,
             token_ids.iter().map(|&x| x as i64).collect::<Vec<_>>(),
         )?;
-
-        // Per residue logits
         let outputs =
             model.run(ort::inputs!["input_ids" => tokens_array,"attention_mask" => mask_array]?)?;
         let logits = outputs["logits"].try_extract_tensor::<f32>()?.to_owned();
-        let cand = ndarray_to_tensor_f32(logits)?;
-        Ok(cand)
+        Ok(ndarray_to_tensor_f32(logits)?)
+    }
+
+    // Softmax and simplify
+    pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<LogitPosition>> {
+        let tensor = ops::log_softmax(tensor, D::Minus1)?;
+        let data = tensor.to_vec3::<f32>()?;
+        let shape = tensor.dims();
+        let mut logit_positions = Vec::new();
+        for seq_pos in 0..shape[1] {
+            for vocab_idx in 0..shape[2] {
+                let score = data[0][seq_pos][vocab_idx];
+                let amino_acid_char = self
+                    .tokenizer
+                    .decode(&[vocab_idx as u32], false)
+                    .map_err(|e| anyhow!("Failed to decode: {}", e))?
+                    .chars()
+                    .next()
+                    .ok_or_else(|| anyhow!("Empty decoded string"))?;
+
+                logit_positions.push(LogitPosition {
+                    position: seq_pos,
+                    amino_acid: amino_acid_char,
+                    score,
+                });
+            }
+        }
+        Ok(logit_positions)
     }
 }
 
