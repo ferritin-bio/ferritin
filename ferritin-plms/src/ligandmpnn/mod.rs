@@ -9,7 +9,7 @@ pub mod configs;
 pub mod proteinfeatures;
 pub mod model;
 mod proteinfeaturesmodel;
-mod utilities;
+pub mod utilities;
 
 pub use proteinfeatures::LMPNNFeatures;
 pub use model::ProteinMPNN;

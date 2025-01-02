@@ -27,6 +27,7 @@ ort = "=2.0.0-rc.9"
 pdbtbx.workspace = true
 safetensors.workspace = true
 serde_json.workspace = true
+wonnx = "0.5.1"
 
 
 [target.'cfg(target_os = "macos")'.features]

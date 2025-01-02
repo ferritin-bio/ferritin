@@ -38,57 +38,14 @@ fn main() -> Result<()> {
         .with_execution_providers([CUDAExecutionProvider::default().build()])
         .commit()?;
 
-    let esm_model = ESM2Models::ESM2_T6_8M;
+    // let esm_model = ESM2Models::ESM2_T6_8M;
     // let esm_model = ESM2Models::ESM2_T12_35M;
     // let esm_model = ESM2Models::ESM2_T30_150M;
     // let esm_model = ESM2Models::ESM2_T33_650M;
 
-    let model_path = ESM2::load_model_path(esm_model)?;
-
-    let model = Session::builder()?
-        .with_optimization_level(GraphOptimizationLevel::Level1)?
-        .with_intra_threads(1)?
-        .commit_from_file(model_path)?;
-
-    println!("Loading the Model and Tokenizer.......");
-    let tokenizer = ESM2::load_tokenizer()?;
+    let esm_model = ESM2Models::ESM2_T6_8M;
+    let esm2 = ESM2::new(esm_model)?;
     let protein = args.protein_string.as_ref().unwrap().as_str();
-    let tokens = tokenizer
-        .encode(protein.to_string(), false)
-        .map_err(E::msg)?
-        .get_ids()
-        .iter()
-        .map(|&x| x as i64)
-        .collect::<Vec<_>>();
-
-    // since we are taking a single string we set the first <batch> dimension == 1.
-    let shape = (1, tokens.len());
-    let mask_array: Array2<i64> = Array2::from_shape_vec(shape, vec![0; tokens.len()])?;
-    let tokens_array: Array2<i64> = Array2::from_shape_vec(shape, tokens)?;
-
-    // Input name: input_ids
-    // Input type: Tensor { ty: Int64, dimensions: [-1, -1], dimension_symbols: [Some("batch_size"), Some("sequence_length")] }
-    // Input name: attention_mask
-    // Input type: Tensor { ty: Int64, dimensions: [-1, -1], dimension_symbols: [Some("batch_size"), Some("sequence_length")] }
-    for input in &model.inputs {
-        println!("Input name: {}", input.name);
-        println!("Input type: {:?}", input.input_type);
-    }
-    let outputs =
-        model.run(ort::inputs!["input_ids" => tokens_array,"attention_mask" => mask_array]?)?;
-    // Print output names and shapes
-    // Output name: logits
-    for (name, tensor) in outputs.iter() {
-        println!("Output name: {}", name);
-        if let Ok(tensor) = tensor.try_extract_tensor::<f32>() {
-            //     <Batch> <SeqLength> <Vocab>
-            // Shape: [1, 256, 33]
-            println!("Shape: {:?}", tensor.shape());
-            println!(
-                "Sample values: {:?}",
-                &tensor.view().as_slice().unwrap()[..5]
-            ); // First 5 values
-        }
-    }
+    esm2.run_model(protein)?;
     Ok(())
 }
