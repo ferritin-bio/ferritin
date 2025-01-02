@@ -30,20 +30,10 @@ struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let base_path = env::current_dir()?;
-
-    // Create the ONNX Runtime environment, enabling CUDA execution providers for all sessions created in this process.
-    // ort::init()
-    //     .with_name("ESM2")
-    //     .with_execution_providers([CUDAExecutionProvider::default().build()])
-    //     .commit()?;
-
-    // let esm_model = ESM2Models::ESM2_T6_8M;
+    let esm_model = ESM2Models::ESM2_T6_8M;
     // let esm_model = ESM2Models::ESM2_T12_35M;
     // let esm_model = ESM2Models::ESM2_T30_150M;
     // let esm_model = ESM2Models::ESM2_T33_650M;
-
-    let esm_model = ESM2Models::ESM2_T6_8M;
     let esm2 = ESM2::new(esm_model)?;
     let protein = args.protein_string.as_ref().unwrap().as_str();
     let logits = esm2.run_model(protein)?;
