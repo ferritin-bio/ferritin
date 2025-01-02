@@ -10,8 +10,9 @@
 //!
 use super::super::utilities::ndarray_to_tensor_f32;
 use anyhow::{anyhow, Result};
-use candle_core::{Device, Tensor};
+use candle_core::{Device, Tensor, D};
 use candle_hf_hub::api::sync::Api;
+use candle_nn::ops;
 use ferritin_core::AtomCollection;
 use ndarray::Array2;
 use ort::{
@@ -25,6 +26,13 @@ use ort::{
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokenizers::Tokenizer;
+
+#[derive(Debug)]
+pub struct LogitPosition {
+    pub position: usize,       // Position in sequence
+    pub amino_acid_idx: usize, // Index in vocabulary (0-32)
+    pub score: f32,            // Logit score
+}
 
 pub enum ESM2Models {
     ESM2_T6_8M,
@@ -111,6 +119,29 @@ impl ESM2 {
         let logits = outputs["logits"].try_extract_tensor::<f32>()?.to_owned();
         let cand = ndarray_to_tensor_f32(logits)?;
         Ok(cand)
+    }
+    pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<LogitPosition>> {
+        let shape = tensor.dims();
+        let mut logit_positions = Vec::new();
+
+        // Get the tensor data as a contiguous array
+        let data = tensor.to_vec3::<f32>()?;
+
+        // Iterate through dimensions [1, 256, 33]
+        // Skip batch dimension (always 1 in this case)
+        for seq_pos in 0..shape[1] {
+            for vocab_idx in 0..shape[2] {
+                let score = data[0][seq_pos][vocab_idx];
+
+                logit_positions.push(LogitPosition {
+                    position: seq_pos,
+                    amino_acid_idx: vocab_idx,
+                    score,
+                });
+            }
+        }
+
+        Ok(logit_positions)
     }
 }
 
