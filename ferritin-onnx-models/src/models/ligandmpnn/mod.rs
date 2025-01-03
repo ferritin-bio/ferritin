@@ -11,6 +11,7 @@ use anyhow::Result;
 use candle_core::{Device, Tensor};
 use candle_hf_hub::api::sync::Api;
 use ferritin_core::{AtomCollection, StructureFeatures};
+use ferritin_plms::types::PseudoProbability;
 use ndarray::ArrayBase;
 use ort::{
     execution_providers::CUDAExecutionProvider,
@@ -157,6 +158,12 @@ impl LigandMPNN {
             .to_owned();
         ndarray_to_tensor_f32(logits)
     }
+    pub fn get_single_logit(&self, temp: f32, position: i64) -> Result<Vec<PseudoProbability>> {
+        todo!()
+    }
+    pub fn get_all_logits(&self, temp: f32) -> Result<Vec<PseudoProbability>> {
+        todo!()
+    }
 }
 
 #[cfg(test)]
@@ -183,7 +190,6 @@ mod tests {
         let model = LigandMPNN::new().unwrap();
         let ac = setup_test_data();
         let (h_v, h_e, e_idx) = model.run_encoder(&ac).unwrap();
-
         assert_eq!(h_v.shape(), &[1, 154, 128]);
         assert_eq!(h_e.shape(), &[1, 154, 16, 128]);
         assert_eq!(e_idx.shape(), &[1, 154, 16]);
