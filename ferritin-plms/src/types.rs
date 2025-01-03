@@ -10,7 +10,7 @@ pub struct PseudoProbability {
 // Struct for Contact Maps
 pub struct ContactMap {
     position1: i32,
-    position1: i32,
+    position2: i32,
     pseudo_prob: f32,
     amino_acid: char,
 }

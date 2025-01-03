@@ -14,6 +14,7 @@
 //!
 //!
 pub use amplify::amplify::AMPLIFY;
+pub use amplify::amplify_runner::{AmplifyModels, AmplifyRunner};
 pub use amplify::config::AMPLIFYConfig;
 pub use amplify::outputs::ModelOutput;
 pub use esm::models::esmc::{ESMCConfig, ESMC};

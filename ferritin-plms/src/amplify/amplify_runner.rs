@@ -6,7 +6,7 @@ use super::super::types::{ContactMap, PseudoProbability};
 use super::amplify::AMPLIFY;
 use super::config::AMPLIFYConfig;
 use super::outputs::ModelOutput;
-use anyhow::Result;
+use anyhow::{Error as E, Result};
 use candle_core::{DType, Device, Tensor, D};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
@@ -19,8 +19,8 @@ pub enum AmplifyModels {
 impl AmplifyModels {
     pub fn get_model_files(model: Self) -> Result<(&str, &str)> {
         let (repo, rev) = match model {
-            AMP120M => ("chandar-lab/AMPLIFY_120M", "main"),
-            AMP35M => ("chandar-lab/AMPLIFY_350M", "main"),
+            AmplifyModels::AMP120M => ("chandar-lab/AMPLIFY_120M", "main"),
+            AmplifyModels::AMP350M => ("chandar-lab/AMPLIFY_350M", "main"),
         };
         Ok((repo, rev))
     }
@@ -67,7 +67,10 @@ impl AmplifyRunner {
         let encoded = self.model.forward(&token_ids, None, false, true)?;
         Ok(encoded)
     }
-    pub fn get_best_prediction(&self, prot_sequence: &str) -> Result<String> {
+    pub fn get_best_prediction(
+        &self,
+        prot_sequence: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let model_output = self.run_forward(prot_sequence)?;
         let predictions = model_output.logits.argmax(D::Minus1)?;
         let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
@@ -76,17 +79,23 @@ impl AmplifyRunner {
         Ok(decoded)
     }
     //
-    pub fn get_pseudo_probabilities(&self, prot_sequence: &str) -> Result<Vec<PseudoProbability>> {
+    pub fn get_pseudo_probabilities(&self, prot_sequence: &str) -> Result<()> {
         let model_output = self.run_forward(prot_sequence)?;
-
-        let predictions = model_output.logits.argmax(D::Minus1)?;
-
-        Ok(predictions)
+        let predictions = model_output.logits;
+        println!("{:?}", predictions);
         // let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
         // let decoded = self.tokenizer.decode(indices.as_slice(), true)?;
+        Ok(())
     }
+    // pub fn get_pseudo_probabilities(&self, prot_sequence: &str) -> Result<Vec<PseudoProbability>> {
+    //     let model_output = self.run_forward(prot_sequence)?;
+    //     let predictions = model_output.logits?;
+    //     Ok(predictions)
+    //     // let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
+    //     // let decoded = self.tokenizer.decode(indices.as_slice(), true)?;
+    // }
 
-    pub fn get_contact_map(&self, prot_sequence: &str) -> Result<Tensor> {
+    pub fn get_contact_map(&self, prot_sequence: &str) -> Result<Option<Tensor>> {
         let model_output = self.run_forward(prot_sequence)?;
         let contact_map = model_output.get_contact_map()?;
         Ok(contact_map)
