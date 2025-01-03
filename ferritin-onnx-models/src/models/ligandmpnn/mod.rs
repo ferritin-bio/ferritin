@@ -10,7 +10,9 @@ use crate::{ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64}
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use candle_hf_hub::api::sync::Api;
+use candle_nn::ops;
 use ferritin_core::{AtomCollection, StructureFeatures};
+use ferritin_plms::ligandmpnn::utilities::int_to_aa1;
 use ferritin_plms::types::PseudoProbability;
 use ndarray::ArrayBase;
 use ort::{
@@ -47,23 +49,6 @@ impl ModelType {
     }
 }
 
-/// A deep learning model for predicting amino acid sequences from protein structure coordinates.
-///
-/// This model comes in two variants:
-/// * `Protein` - The original ProteinMPNN model for protein sequence design
-/// * `Ligand` - An extended version that considers ligand information
-///
-/// # Example
-/// ```no_run
-/// use ferritin_onnx_models::ModelType;
-/// let model_type = ModelType::Ligand;
-/// let paths = model_type.get_paths();
-/// ```
-///
-/// The models are loaded from pre-trained ONNX format files hosted on the Hugging Face model hub.
-/// Each model consists of an encoder and decoder component that work together to generate
-/// amino acid sequence predictions based on structural information.
-///
 pub struct LigandMPNN {
     session: SessionBuilder,
     encoder_path: PathBuf,
@@ -158,10 +143,26 @@ impl LigandMPNN {
             .to_owned();
         ndarray_to_tensor_f32(logits)
     }
-    pub fn get_single_logit(&self, temp: f32, position: i64) -> Result<Vec<PseudoProbability>> {
-        todo!()
+    pub fn get_single_location(
+        &self,
+        ac: AtomCollection,
+        temp: f32,
+        position: i64,
+    ) -> Result<Vec<PseudoProbability>> {
+        let logits = self.run_model(ac, position, temp)?;
+        let logits = ops::softmax(&logits, 1)?;
+        let logits = logits.get(0)?.to_vec1()?;
+        let mut amino_acid_probs = Vec::new();
+        for i in 0..21 {
+            amino_acid_probs.push(PseudoProbability {
+                amino_acid: int_to_aa1(i),
+                pseudo_prob: logits[i as usize],
+                position: position as usize,
+            });
+        }
+        Ok(amino_acid_probs)
     }
-    pub fn get_all_logits(&self, temp: f32) -> Result<Vec<PseudoProbability>> {
+    pub fn get_all_locations(&self, temp: f32) -> Result<Vec<PseudoProbability>> {
         todo!()
     }
 }
