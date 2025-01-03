@@ -38,10 +38,6 @@ fn main() -> Result<()> {
     let protein = args.protein_string.as_ref().unwrap().as_str();
 
     let logits = esm2.run_model(protein)?;
-    // println!("Outputs: {:?}", logits);
-
     let normed = esm2.extract_logits(&logits)?;
-    println!("Normalized: {:?}", normed);
-
     Ok(())
 }

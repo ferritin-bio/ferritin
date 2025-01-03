@@ -104,8 +104,7 @@ impl ESM2 {
         )?;
         let outputs =
             model.run(ort::inputs!["input_ids" => tokens_array,"attention_mask" => mask_array]?)?;
-        let logits = outputs["logits"].try_extract_tensor::<f32>()?;
-        let logits = logits.to_owned();
+        let logits = outputs["logits"].try_extract_tensor::<f32>()?.to_owned();
         Ok(ndarray_to_tensor_f32(logits)?)
     }
 
@@ -113,6 +112,7 @@ impl ESM2 {
     pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<LogitPosition>> {
         let tensor = ops::softmax(tensor, D::Minus1)?;
         let data = tensor.to_vec3::<f32>()?;
+        println!("Data: {:?}", data);
         let shape = tensor.dims();
         let mut logit_positions = Vec::new();
         for seq_pos in 0..shape[1] {
