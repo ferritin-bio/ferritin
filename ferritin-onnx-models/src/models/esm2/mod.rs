@@ -13,25 +13,17 @@ use anyhow::{anyhow, Result};
 use candle_core::{Tensor, D};
 use candle_hf_hub::api::sync::Api;
 use candle_nn::ops;
+use ferritin_plms::types::PseudoProbability;
 use ndarray::Array2;
 use ort::{
     execution_providers::CUDAExecutionProvider,
     session::{
-        builder::{GraphOptimizationLevel, SessionBuilder}
-        , Session,
-    }
-    ,
+        builder::{GraphOptimizationLevel, SessionBuilder},
+        Session,
+    },
 };
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokenizers::Tokenizer;
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct LogitPosition {
-    pub position: usize,  // Position in sequence
-    pub amino_acid: char, // Index in vocabulary (0-32)
-    pub score: f32,       // Logit score
-}
 
 pub enum ESM2Models {
     ESM2_T6_8M,
@@ -51,7 +43,6 @@ impl ESM2 {
         let session = Self::create_session()?;
         let model_path = Self::load_model_path(model)?;
         let tokenizer = Self::load_tokenizer()?;
-
         Ok(Self {
             session,
             model_path,
@@ -67,7 +58,6 @@ impl ESM2 {
             // ESM2Models::ESM2_T33_650M => "zcpbx/esm2-t33-650M-UR50D-onnx",
         }
         .to_string();
-
         let model_path = api.model(repo_id).get("model.onnx")?;
         Ok(model_path)
     }
@@ -81,7 +71,6 @@ impl ESM2 {
             .with_name("ESM2")
             .with_execution_providers([CUDAExecutionProvider::default().build()])
             .commit()?;
-
         Ok(Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level1)?
             .with_intra_threads(1)?)
@@ -94,7 +83,6 @@ impl ESM2 {
             .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
         let token_ids = tokens.get_ids();
         let shape = (1, tokens.len());
-
         // Todo: Are we masking this correctly?
         let mask_array: Array2<i64> = Array2::from_shape_vec(shape, vec![1; tokens.len()])?;
         let tokens_array: Array2<i64> = Array2::from_shape_vec(
@@ -106,9 +94,8 @@ impl ESM2 {
         let logits = outputs["logits"].try_extract_tensor::<f32>()?.to_owned();
         Ok(ndarray_to_tensor_f32(logits)?)
     }
-
     // Softmax and simplify
-    pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<LogitPosition>> {
+    pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<PseudoProbability>> {
         let tensor = ops::softmax(tensor, D::Minus1)?;
         let data = tensor.to_vec3::<f32>()?;
         println!("Data: {:?}", data);
@@ -124,10 +111,10 @@ impl ESM2 {
                     .chars()
                     .next()
                     .ok_or_else(|| anyhow!("Empty decoded string"))?;
-                logit_positions.push(LogitPosition {
+                logit_positions.push(PseudoProbability {
                     position: seq_pos,
                     amino_acid: amino_acid_char,
-                    score,
+                    pseudo_prob: score,
                 });
             }
         }

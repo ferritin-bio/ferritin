@@ -2593,6 +2593,7 @@ dependencies = [
  "candle-hf-hub",
  "candle-nn",
  "ferritin-core",
+ "ferritin-plms",
  "ferritin-test-data",
  "ndarray",
  "ndarray-safetensors",
