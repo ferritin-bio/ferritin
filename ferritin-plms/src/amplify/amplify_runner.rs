@@ -6,9 +6,10 @@ use super::super::types::{ContactMap, PseudoProbability};
 use super::amplify::AMPLIFY;
 use super::config::AMPLIFYConfig;
 use super::outputs::ModelOutput;
-use anyhow::{Error as E, Result};
+use anyhow::{anyhow, Error as E, Result};
 use candle_core::{DType, Device, Tensor, D};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
+use candle_nn::ops;
 use candle_nn::VarBuilder;
 use tokenizers::Tokenizer;
 
@@ -82,7 +83,9 @@ impl AmplifyRunner {
     pub fn get_pseudo_probabilities(&self, prot_sequence: &str) -> Result<()> {
         let model_output = self.run_forward(prot_sequence)?;
         let predictions = model_output.logits;
-        println!("{:?}", predictions);
+        println!("{:?}", &predictions);
+        let outputs = self.extract_logits(&predictions)?;
+        println!("{:?}", &outputs);
         // let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
         // let decoded = self.tokenizer.decode(indices.as_slice(), true)?;
         Ok(())
@@ -99,5 +102,31 @@ impl AmplifyRunner {
         let model_output = self.run_forward(prot_sequence)?;
         let contact_map = model_output.get_contact_map()?;
         Ok(contact_map)
+    }
+
+    // Softmax and simplify
+    fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<PseudoProbability>> {
+        let tensor = ops::softmax(tensor, D::Minus1)?;
+        let data = tensor.to_vec3::<f32>()?;
+        let shape = tensor.dims();
+        let mut logit_positions = Vec::new();
+        for seq_pos in 0..shape[1] {
+            for vocab_idx in 0..shape[2] {
+                let score = data[0][seq_pos][vocab_idx];
+                let amino_acid_char = self
+                    .tokenizer
+                    .decode(&[vocab_idx as u32], false)
+                    .map_err(|e| anyhow!("Failed to decode: {}", e))?
+                    .chars()
+                    .next()
+                    .ok_or_else(|| anyhow!("Empty decoded string"))?;
+                logit_positions.push(PseudoProbability {
+                    position: seq_pos,
+                    amino_acid: amino_acid_char,
+                    pseudo_prob: score,
+                });
+            }
+        }
+        Ok(logit_positions)
     }
 }

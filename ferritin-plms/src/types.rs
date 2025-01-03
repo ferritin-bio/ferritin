@@ -1,16 +1,20 @@
 //! Types for Standardizing Outputs for Viz
 
+use serde::{Deserialize, Serialize};
+
 // Struct for Handling soft-maxxed logits
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PseudoProbability {
-    position: i32,
-    pseudo_prob: f32,
-    amino_acid: char,
+    pub position: usize,
+    pub pseudo_prob: f32,
+    pub amino_acid: char,
 }
 
 // Struct for Contact Maps
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ContactMap {
-    position1: i32,
-    position2: i32,
-    pseudo_prob: f32,
-    amino_acid: char,
+    pub position1: usize,
+    pub position2: usize,
+    pub pseudo_prob: f32,
+    pub amino_acid: char,
 }

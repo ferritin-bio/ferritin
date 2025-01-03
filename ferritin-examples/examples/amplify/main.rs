@@ -63,7 +63,6 @@ fn main() -> Result<()> {
     let args = Args::parse();
     let device = device(args.cpu)?;
     let amprunner = AmplifyRunner::load_model(AmplifyModels::AMP120M, device)?;
-
     let prot_sequence = args.protein_string.unwrap();
 
     // Runs the model and returns the full, manipulateable result
