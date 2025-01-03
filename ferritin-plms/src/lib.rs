@@ -14,6 +14,7 @@
 //!
 //!
 pub use amplify::amplify::AMPLIFY;
+pub use amplify::amplify_runner::{AmplifyModels, AmplifyRunner};
 pub use amplify::config::AMPLIFYConfig;
 pub use amplify::outputs::ModelOutput;
 pub use esm::models::esmc::{ESMCConfig, ESMC};
@@ -22,8 +23,8 @@ pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
 pub use ligandmpnn::proteinfeatures::LMPNNFeatures;
 
-//pub mod amplify;
+pub mod amplify;
 pub mod esm;
 pub mod esm2;
 pub mod ligandmpnn;
-mod amplify;
+mod types;
