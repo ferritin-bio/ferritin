@@ -1,6 +1,6 @@
 use super::attention::MultiHeadAttention;
 use super::geom_attention::GeometricReasoningOriginalImpl;
-use crate::esm::models::esmc::{ESMCConfig, Ffn_Type};
+use crate::esm::models::esmc::{ESMCConfig, FfnType};
 // use crate::esm::utils::structure::affine3d::Affine3D;
 use candle_core::{Module, Result, Tensor, D};
 use candle_nn::{self as nn, VarBuilder};
@@ -155,8 +155,8 @@ impl UnifiedTransformerBlock {
         let geom_attn = None;
 
         let ffn = match ffn_type {
-            Ffn_Type::SWIGLU => SwiGLU::load(vb.pp("ffn"), config)?,
-            _ => unimplemented!(), // Ffn_Type::GLU => unimplemented!(),
+            FfnType::SWIGLU => SwiGLU::load(vb.pp("ffn"), config)?,
+            _ => unimplemented!(), // FfnType::GLU => unimplemented!(),
         };
 
         Ok(Self {

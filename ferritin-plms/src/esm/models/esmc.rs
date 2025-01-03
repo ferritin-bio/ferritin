@@ -38,7 +38,7 @@ impl ESMTokenizer {
 }
 
 #[derive(Clone, Copy)]
-pub enum Ffn_Type {
+pub enum FfnType {
     SWIGLU,
     GLU,
 }
@@ -49,7 +49,7 @@ pub struct ESMCConfig {
     pub n_heads: usize,
     pub n_layers: usize,
     pub v_head_transformer: Option<usize>,
-    pub ffn_type: Ffn_Type,
+    pub ffn_type: FfnType,
     pub tokenizer: ESMTokenizer,
     // oringal above.
     pub use_plain_attn: bool,
@@ -80,7 +80,7 @@ impl ESMCConfig {
             n_heads: 15,
             n_layers: 30,
             v_head_transformer: None,
-            ffn_type: Ffn_Type::SWIGLU,
+            ffn_type: FfnType::SWIGLU,
             tokenizer: ESMTokenizer::Esm3OpenSmall,
             use_plain_attn: true,
             n_layers_geom: 1,

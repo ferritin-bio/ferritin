@@ -9,7 +9,6 @@ members = [
     "ferritin-plms",
     "ferritin-pymol",
     "ferritin-test-data",
-    # "ferritin-tui",
 ]
 resolver = "2"
 
@@ -29,7 +28,7 @@ candle-hf-hub = "0.3.3"
 candle-metal-kernels = "0.8.1"
 candle-nn = "0.8.1"
 candle-transformers = "0.8.1"
-itertools = "0.13.0"
+itertools = "0.14.0"
 once_cell = "1.20.2"
 pdbtbx = "0.12.0"
 rand = "0.8.5"

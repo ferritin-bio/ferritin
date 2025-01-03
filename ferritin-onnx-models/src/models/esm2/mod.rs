@@ -13,15 +13,14 @@ use anyhow::{anyhow, Result};
 use candle_core::{Tensor, D};
 use candle_hf_hub::api::sync::Api;
 use candle_nn::ops;
-use ndarray::s;
 use ndarray::Array2;
 use ort::{
     execution_providers::CUDAExecutionProvider,
     session::{
-        builder::{GraphOptimizationLevel, SessionBuilder},
-        output, Session,
-    },
-    value::Value,
+        builder::{GraphOptimizationLevel, SessionBuilder}
+        , Session,
+    }
+    ,
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -60,7 +59,7 @@ impl ESM2 {
         })
     }
     pub fn load_model_path(model: ESM2Models) -> Result<PathBuf> {
-        let api = Api::new().unwrap();
+        let api = Api::new()?;
         let repo_id = match model {
             ESM2Models::ESM2_T6_8M => "zcpbx/esm2-t6-8m-UR50D-onnx",
             ESM2Models::ESM2_T12_35M => "zcpbx/esm2-t12-35M-UR50D-onnx",
@@ -69,7 +68,7 @@ impl ESM2 {
         }
         .to_string();
 
-        let model_path = api.model(repo_id).get("model.onnx").unwrap();
+        let model_path = api.model(repo_id).get("model.onnx")?;
         Ok(model_path)
     }
     pub fn load_tokenizer() -> Result<Tokenizer> {

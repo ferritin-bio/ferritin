@@ -1,12 +1,6 @@
-use anyhow::{Error as E, Result};
+use anyhow::Result;
 use clap::Parser;
 use ferritin_onnx_models::{ESM2Models, ESM2};
-use ndarray::Array2;
-use ort::{
-    execution_providers::CUDAExecutionProvider,
-    session::{builder::GraphOptimizationLevel, Session},
-};
-use std::env;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

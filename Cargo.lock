@@ -2441,7 +2441,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2543,7 +2543,7 @@ version = "0.1.0"
 dependencies = [
  "candle-core",
  "ferritin-test-data",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "lazy_static",
  "pdbtbx",
  "strum",
@@ -2567,10 +2567,8 @@ dependencies = [
  "ferritin-plms",
  "ferritin-test-data",
  "ndarray",
- "ndarray-safetensors",
  "ort",
  "pdbtbx",
- "safetensors",
  "serde_json",
  "tokenizers 0.21.0",
 ]
@@ -2618,7 +2616,7 @@ dependencies = [
  "clap",
  "ferritin-core",
  "ferritin-test-data",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "pdbtbx",
  "rand",
  "serde",
@@ -2636,7 +2634,7 @@ dependencies = [
  "ferritin-core",
  "ferritin-molviewspec",
  "ferritin-test-data",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "once_cell",
  "pdbtbx",
  "serde",
@@ -3831,6 +3829,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3933,7 +3940,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -5491,7 +5498,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6058,15 +6065,16 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.14.0"
+version = "3.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28cce251fcbc87fac86a866eeb0d6c2d536fc16d06f184bb61aeae11aa4cee0c"
+checksum = "9a8a559c81686f576e8cd0290cd2a24a2a9ad80c98b3478856500fcbd7acd704"
 dependencies = [
  "cfg-if",
  "fastrand",
+ "getrandom",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6939,7 +6947,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
