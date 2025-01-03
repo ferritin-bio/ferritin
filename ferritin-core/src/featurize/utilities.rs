@@ -1,4 +1,4 @@
-use candle_core::{DType, Device, IndexOp, Result, Tensor, D};
+use candle_core::{IndexOp, Result, Tensor, D};
 use strum::{Display, EnumIter, EnumString};
 
 #[rustfmt::skip]
@@ -329,11 +329,7 @@ pub fn get_nearest_neighbours(
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use crate::ligandmpnn::proteinfeatures::LMPNNFeatures;
-    use crate::AtomCollection;
-    use ferritin_test_data::TestFile;
     use pdbtbx;
-    use pdbtbx::Element;
 
     #[test]
     fn test_residue_codes() {

@@ -1578,7 +1578,7 @@ dependencies = [
  "rand",
  "rand_distr",
  "rayon",
- "safetensors",
+ "safetensors 0.4.5",
  "thiserror",
  "ug",
  "ug-metal",
@@ -1601,7 +1601,7 @@ dependencies = [
  "image",
  "num-traits",
  "rayon",
- "safetensors",
+ "safetensors 0.4.5",
  "serde",
  "serde_json",
  "tokenizers 0.19.1",
@@ -1652,7 +1652,7 @@ dependencies = [
  "metal 0.27.0",
  "num-traits",
  "rayon",
- "safetensors",
+ "safetensors 0.4.5",
  "serde",
  "thiserror",
 ]
@@ -2543,7 +2543,7 @@ version = "0.1.0"
 dependencies = [
  "candle-core",
  "ferritin-test-data",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "lazy_static",
  "pdbtbx",
  "strum",
@@ -2567,10 +2567,8 @@ dependencies = [
  "ferritin-plms",
  "ferritin-test-data",
  "ndarray",
- "ndarray-safetensors",
  "ort",
  "pdbtbx",
- "safetensors",
  "serde_json",
  "tokenizers 0.21.0",
 ]
@@ -2600,7 +2598,7 @@ dependencies = [
  "ndarray-safetensors",
  "ort",
  "pdbtbx",
- "safetensors",
+ "safetensors 0.5.0",
  "serde",
  "tokenizers 0.21.0",
 ]
@@ -2618,7 +2616,7 @@ dependencies = [
  "clap",
  "ferritin-core",
  "ferritin-test-data",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "pdbtbx",
  "rand",
  "serde",
@@ -2636,7 +2634,7 @@ dependencies = [
  "ferritin-core",
  "ferritin-molviewspec",
  "ferritin-test-data",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "once_cell",
  "pdbtbx",
  "serde",
@@ -3831,6 +3829,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4231,7 +4238,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "943c8885f0fc3bf0c1ffab735d6cdb5d0d85b9de25cc4e2b8c002141761aa0fd"
 dependencies = [
  "ndarray",
- "safetensors",
+ "safetensors 0.4.5",
 ]
 
 [[package]]
@@ -5578,6 +5585,16 @@ name = "safetensors"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44560c11236a6130a46ce36c836a62936dc81ebf8c36a37947423571be0e55b6"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "safetensors"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f42137a36b409fd651fd467dda0ae61348e14612a7c4c8f602ea1528d00f049a"
 dependencies = [
  "serde",
  "serde_json",
