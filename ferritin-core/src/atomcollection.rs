@@ -301,7 +301,7 @@ mod tests {
         // Water count -> 139
         //
 
-        for res in ac.iter_residues_all() {
+        for _res in ac.iter_residues_all() {
             // println!("{:?}", res.res_name)
         }
     }
