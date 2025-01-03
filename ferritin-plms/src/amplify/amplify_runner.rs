@@ -86,10 +86,43 @@ impl AmplifyRunner {
         let outputs = self.extract_logits(&predictions)?;
         Ok(outputs)
     }
-    pub fn get_contact_map(&self, prot_sequence: &str) -> Result<Option<Tensor>> {
+    pub fn get_contact_map(&self, prot_sequence: &str) -> Result<Vec<ContactMap>> {
         let model_output = self.run_forward(prot_sequence)?;
-        let contact_map = model_output.get_contact_map()?;
-        Ok(contact_map)
+        let contact_map_tensor = model_output.get_contact_map()?;
+        let (res1, res2, attn) = contact_map_tensor.clone().unwrap().dims3()?;
+
+        // Note: we might want mean or average here.
+        let averaged = contact_map_tensor.clone().unwrap().max_keepdim(D::Minus1)?;
+        let (position1, position2, val) = averaged.dims3()?;
+        let data = averaged.to_vec3::<f32>()?;
+
+        let mut contacts = Vec::new();
+        for i in 0..position1 {
+            for j in 0..position2 {
+                for k in 0..val {
+                    contacts.push(ContactMap {
+                        position_1: i,
+                        amino_acid_1: self
+                            .tokenizer
+                            .decode(&[i as u32], true)
+                            .ok()
+                            .and_then(|s| s.chars().next())
+                            .unwrap_or('?'),
+                        position_2: j,
+                        amino_acid_2: self
+                            .tokenizer
+                            .decode(&[i as u32], true)
+                            .ok()
+                            .and_then(|s| s.chars().next())
+                            .unwrap_or('?'),
+                        contact_estimate: data[i][j][k],
+                        layer: 1,
+                    });
+                }
+            }
+        }
+
+        Ok(contacts)
     }
     // Softmax and simplify
     fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<PseudoProbability>> {

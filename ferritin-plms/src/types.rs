@@ -13,9 +13,10 @@ pub struct PseudoProbability {
 // Struct for Contact Maps
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ContactMap {
-    pub position1: usize,
-    pub position2: usize,
+    pub position_1: usize,
+    pub position_2: usize,
+    pub amino_acid_1: char,
+    pub amino_acid_2: char,
     pub layer: usize,
-    pub pseudo_prob: f32,
-    pub amino_acid: char,
+    pub contact_estimate: f32,
 }
