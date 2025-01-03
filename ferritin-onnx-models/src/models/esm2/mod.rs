@@ -109,11 +109,16 @@ impl ESM2 {
 
     // Softmax and simplify
     pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<LogitPosition>> {
+        println!(
+            "Input tensor before softmax: {:?}",
+            tensor.to_vec3::<f32>()?
+        );
         let tensor = ops::softmax(tensor, D::Minus1)?;
         let data = tensor.to_vec3::<f32>()?;
         println!("Data: {:?}", data);
         let shape = tensor.dims();
         let mut logit_positions = Vec::new();
+
         for seq_pos in 0..shape[1] {
             for vocab_idx in 0..shape[2] {
                 let score = data[0][seq_pos][vocab_idx];
