@@ -13,6 +13,7 @@ use anyhow::{anyhow, Result};
 use candle_core::{Tensor, D};
 use candle_hf_hub::api::sync::Api;
 use candle_nn::ops;
+use ndarray::s;
 use ndarray::Array2;
 use ort::{
     execution_providers::CUDAExecutionProvider,
@@ -94,31 +95,26 @@ impl ESM2 {
             .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
         let token_ids = tokens.get_ids();
         let shape = (1, tokens.len());
-        let mask_array: Array2<i64> = Array2::from_shape_vec(shape, vec![0; tokens.len()])?;
+
+        // Todo: Are we masking this correctly?
+        let mask_array: Array2<i64> = Array2::from_shape_vec(shape, vec![1; tokens.len()])?;
         let tokens_array: Array2<i64> = Array2::from_shape_vec(
             shape,
             token_ids.iter().map(|&x| x as i64).collect::<Vec<_>>(),
         )?;
         let outputs =
             model.run(ort::inputs!["input_ids" => tokens_array,"attention_mask" => mask_array]?)?;
-
-        let logits = outputs["logits"].try_extract_tensor::<f32>()?.to_owned();
-
+        let logits = outputs["logits"].try_extract_tensor::<f32>()?;
+        let logits = logits.to_owned();
         Ok(ndarray_to_tensor_f32(logits)?)
     }
 
     // Softmax and simplify
     pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<LogitPosition>> {
-        println!(
-            "Input tensor before softmax: {:?}",
-            tensor.to_vec3::<f32>()?
-        );
         let tensor = ops::softmax(tensor, D::Minus1)?;
         let data = tensor.to_vec3::<f32>()?;
-        println!("Data: {:?}", data);
         let shape = tensor.dims();
         let mut logit_positions = Vec::new();
-
         for seq_pos in 0..shape[1] {
             for vocab_idx in 0..shape[2] {
                 let score = data[0][seq_pos][vocab_idx];
@@ -129,7 +125,6 @@ impl ESM2 {
                     .chars()
                     .next()
                     .ok_or_else(|| anyhow!("Empty decoded string"))?;
-
                 logit_positions.push(LogitPosition {
                     position: seq_pos,
                     amino_acid: amino_acid_char,

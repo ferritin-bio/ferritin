@@ -36,11 +36,12 @@ fn main() -> Result<()> {
     // let esm_model = ESM2Models::ESM2_T33_650M;
     let esm2 = ESM2::new(esm_model)?;
     let protein = args.protein_string.as_ref().unwrap().as_str();
+
     let logits = esm2.run_model(protein)?;
     // println!("Outputs: {:?}", logits);
 
     let normed = esm2.extract_logits(&logits)?;
-    // println!("Normalized: {:?}", normed);
+    println!("Normalized: {:?}", normed);
 
     Ok(())
 }
