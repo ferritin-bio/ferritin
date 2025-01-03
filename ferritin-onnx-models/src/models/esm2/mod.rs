@@ -22,16 +22,8 @@ use ort::{
         Session,
     },
 };
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokenizers::Tokenizer;
-
-// #[derive(Debug, Deserialize, Serialize)]
-// pub struct LogitPosition {
-//     pub position: usize,  // Position in sequence
-//     pub amino_acid: char, // Index in vocabulary (0-32)
-//     pub score: f32,       // Logit score
-// }
 
 pub enum ESM2Models {
     ESM2_T6_8M,
