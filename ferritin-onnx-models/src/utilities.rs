@@ -34,7 +34,7 @@ pub fn tensor_to_ndarray_f32(
     let tmp_data = [("_", tensor)];
     let st = serialize(tmp_data, &None)?;
     let tensors = SafeTensors::deserialize(&st)?;
-    let arrays = parse_tensors::<f32>(&tensors)?;
+    let arrays = parse_tensors::<f32>(tensors)?;
     Ok(arrays.into_iter().next().unwrap().1)
 }
 
