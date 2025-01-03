@@ -17,7 +17,7 @@ pub enum AmplifyModels {
     AMP350M,
 }
 impl AmplifyModels {
-    pub fn get_model_files(model: Self) -> Result<(&str, &str)> {
+    pub fn get_model_files(model: Self) -> Result<(&'static str, &'static str)> {
         let (repo, rev) = match model {
             AmplifyModels::AMP120M => ("chandar-lab/AMPLIFY_120M", "main"),
             AmplifyModels::AMP350M => ("chandar-lab/AMPLIFY_350M", "main"),

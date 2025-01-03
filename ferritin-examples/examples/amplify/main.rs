@@ -13,7 +13,7 @@ pub const DTYPE: DType = DType::F32;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Run on CPU rather than on GPU.
-    #[arg(long)]
+    #[arg(long, default_value = "false")]
     cpu: bool,
 
     /// Which AMPLIFY Model to use, either '120M' or '350M'.
@@ -61,19 +61,19 @@ impl Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let device = Device::cpu;
-    let amprunner = AmplifyRunner::load_model(AmplifyModels::AMP120M, &device)?;
+    let device = device(args.cpu)?;
+    let amprunner = AmplifyRunner::load_model(AmplifyModels::AMP120M, device)?;
 
-    let prot_string = args.protein_string?;
+    let prot_sequence = args.protein_string.unwrap();
 
     // Runs the model and returns the full, manipulateable result
-    let outputs = amprunner.run_forward(prot_sequence);
+    let outputs = amprunner.run_forward(&prot_sequence);
     // Runs the model and returns the top hit from each logit
-    let top_hit = amprunner.get_best_prediction(prot_sequence);
+    let top_hit = amprunner.get_best_prediction(&prot_sequence);
     // Runs the model and returns the top probabilities
-    let get_probabilities = amprunner.get_pseudo_probabilities(prot_sequence);
+    let get_probabilities = amprunner.get_pseudo_probabilities(&prot_sequence);
     // Runs the model and returns the contactmap
-    let contact_map = amprunner.get_contact_map(prot_sequence);
+    let contact_map = amprunner.get_contact_map(&prot_sequence);
 
     Ok(())
 }
