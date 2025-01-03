@@ -13,25 +13,25 @@ use anyhow::{anyhow, Result};
 use candle_core::{Tensor, D};
 use candle_hf_hub::api::sync::Api;
 use candle_nn::ops;
+use ferritin_plms::types::PseudoProbability;
 use ndarray::Array2;
 use ort::{
     execution_providers::CUDAExecutionProvider,
     session::{
-        builder::{GraphOptimizationLevel, SessionBuilder}
-        , Session,
-    }
-    ,
+        builder::{GraphOptimizationLevel, SessionBuilder},
+        Session,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokenizers::Tokenizer;
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct LogitPosition {
-    pub position: usize,  // Position in sequence
-    pub amino_acid: char, // Index in vocabulary (0-32)
-    pub score: f32,       // Logit score
-}
+// #[derive(Debug, Deserialize, Serialize)]
+// pub struct LogitPosition {
+//     pub position: usize,  // Position in sequence
+//     pub amino_acid: char, // Index in vocabulary (0-32)
+//     pub score: f32,       // Logit score
+// }
 
 pub enum ESM2Models {
     ESM2_T6_8M,
@@ -108,7 +108,7 @@ impl ESM2 {
     }
 
     // Softmax and simplify
-    pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<LogitPosition>> {
+    pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<PseudoProbability>> {
         let tensor = ops::softmax(tensor, D::Minus1)?;
         let data = tensor.to_vec3::<f32>()?;
         println!("Data: {:?}", data);
@@ -124,10 +124,10 @@ impl ESM2 {
                     .chars()
                     .next()
                     .ok_or_else(|| anyhow!("Empty decoded string"))?;
-                logit_positions.push(LogitPosition {
+                logit_positions.push(PseudoProbability {
                     position: seq_pos,
                     amino_acid: amino_acid_char,
-                    score,
+                    pseudo_prob: score,
                 });
             }
         }

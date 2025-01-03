@@ -27,4 +27,4 @@ pub mod amplify;
 pub mod esm;
 pub mod esm2;
 pub mod ligandmpnn;
-mod types;
+pub mod types;
