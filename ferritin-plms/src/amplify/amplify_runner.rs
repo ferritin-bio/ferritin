@@ -89,7 +89,7 @@ impl AmplifyRunner {
     pub fn get_contact_map(&self, prot_sequence: &str) -> Result<Vec<ContactMap>> {
         let model_output = self.run_forward(prot_sequence)?;
         let contact_map_tensor = model_output.get_contact_map()?;
-        let (res1, res2, attn) = contact_map_tensor.clone().unwrap().dims3()?;
+        // let (res1, res2, attn) = contact_map_tensor.clone().unwrap().dims3()?;
 
         // Note: we might want mean or average here.
         let averaged = contact_map_tensor.clone().unwrap().max_keepdim(D::Minus1)?;
@@ -121,7 +121,6 @@ impl AmplifyRunner {
                 }
             }
         }
-
         Ok(contacts)
     }
     // Softmax and simplify
