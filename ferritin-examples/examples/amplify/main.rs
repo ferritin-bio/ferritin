@@ -37,9 +37,8 @@ fn main() -> Result<()> {
     // Runs the model and returns the top hit from each logit
     let top_hit = amprunner.get_best_prediction(&prot_sequence);
     // Runs the model and returns the top probabilities
-    let get_probabilities = amprunner.get_pseudo_probabilities(&prot_sequence);
+    let pseudo_probabilities = amprunner.get_pseudo_probabilities(&prot_sequence);
     // Runs the model and returns the contactmap
     let contact_map = amprunner.get_contact_map(&prot_sequence);
-
     Ok(())
 }
