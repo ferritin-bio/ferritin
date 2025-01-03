@@ -43,7 +43,6 @@ impl ESM2 {
         let session = Self::create_session()?;
         let model_path = Self::load_model_path(model)?;
         let tokenizer = Self::load_tokenizer()?;
-
         Ok(Self {
             session,
             model_path,
@@ -59,7 +58,6 @@ impl ESM2 {
             // ESM2Models::ESM2_T33_650M => "zcpbx/esm2-t33-650M-UR50D-onnx",
         }
         .to_string();
-
         let model_path = api.model(repo_id).get("model.onnx")?;
         Ok(model_path)
     }
@@ -73,7 +71,6 @@ impl ESM2 {
             .with_name("ESM2")
             .with_execution_providers([CUDAExecutionProvider::default().build()])
             .commit()?;
-
         Ok(Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level1)?
             .with_intra_threads(1)?)
@@ -86,7 +83,6 @@ impl ESM2 {
             .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
         let token_ids = tokens.get_ids();
         let shape = (1, tokens.len());
-
         // Todo: Are we masking this correctly?
         let mask_array: Array2<i64> = Array2::from_shape_vec(shape, vec![1; tokens.len()])?;
         let tokens_array: Array2<i64> = Array2::from_shape_vec(
@@ -98,7 +94,6 @@ impl ESM2 {
         let logits = outputs["logits"].try_extract_tensor::<f32>()?.to_owned();
         Ok(ndarray_to_tensor_f32(logits)?)
     }
-
     // Softmax and simplify
     pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<PseudoProbability>> {
         let tensor = ops::softmax(tensor, D::Minus1)?;
