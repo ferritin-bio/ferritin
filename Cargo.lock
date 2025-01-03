@@ -1578,7 +1578,7 @@ dependencies = [
  "rand",
  "rand_distr",
  "rayon",
- "safetensors 0.4.5",
+ "safetensors",
  "thiserror",
  "ug",
  "ug-metal",
@@ -1601,7 +1601,7 @@ dependencies = [
  "image",
  "num-traits",
  "rayon",
- "safetensors 0.4.5",
+ "safetensors",
  "serde",
  "serde_json",
  "tokenizers 0.19.1",
@@ -1652,7 +1652,7 @@ dependencies = [
  "metal 0.27.0",
  "num-traits",
  "rayon",
- "safetensors 0.4.5",
+ "safetensors",
  "serde",
  "thiserror",
 ]
@@ -2441,7 +2441,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2598,7 +2598,7 @@ dependencies = [
  "ndarray-safetensors",
  "ort",
  "pdbtbx",
- "safetensors 0.5.0",
+ "safetensors",
  "serde",
  "tokenizers 0.21.0",
 ]
@@ -3940,7 +3940,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -4238,7 +4238,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "943c8885f0fc3bf0c1ffab735d6cdb5d0d85b9de25cc4e2b8c002141761aa0fd"
 dependencies = [
  "ndarray",
- "safetensors 0.4.5",
+ "safetensors",
 ]
 
 [[package]]
@@ -5498,7 +5498,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5585,16 +5585,6 @@ name = "safetensors"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44560c11236a6130a46ce36c836a62936dc81ebf8c36a37947423571be0e55b6"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "safetensors"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f42137a36b409fd651fd467dda0ae61348e14612a7c4c8f602ea1528d00f049a"
 dependencies = [
  "serde",
  "serde_json",
@@ -6075,15 +6065,16 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.14.0"
+version = "3.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28cce251fcbc87fac86a866eeb0d6c2d536fc16d06f184bb61aeae11aa4cee0c"
+checksum = "9a8a559c81686f576e8cd0290cd2a24a2a9ad80c98b3478856500fcbd7acd704"
 dependencies = [
  "cfg-if",
  "fastrand",
+ "getrandom",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6956,7 +6947,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
