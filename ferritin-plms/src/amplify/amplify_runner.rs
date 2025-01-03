@@ -80,30 +80,17 @@ impl AmplifyRunner {
         Ok(decoded)
     }
     //
-    pub fn get_pseudo_probabilities(&self, prot_sequence: &str) -> Result<()> {
+    pub fn get_pseudo_probabilities(&self, prot_sequence: &str) -> Result<Vec<PseudoProbability>> {
         let model_output = self.run_forward(prot_sequence)?;
         let predictions = model_output.logits;
-        println!("{:?}", &predictions);
         let outputs = self.extract_logits(&predictions)?;
-        println!("{:?}", &outputs);
-        // let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
-        // let decoded = self.tokenizer.decode(indices.as_slice(), true)?;
-        Ok(())
+        Ok(outputs)
     }
-    // pub fn get_pseudo_probabilities(&self, prot_sequence: &str) -> Result<Vec<PseudoProbability>> {
-    //     let model_output = self.run_forward(prot_sequence)?;
-    //     let predictions = model_output.logits?;
-    //     Ok(predictions)
-    //     // let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
-    //     // let decoded = self.tokenizer.decode(indices.as_slice(), true)?;
-    // }
-
     pub fn get_contact_map(&self, prot_sequence: &str) -> Result<Option<Tensor>> {
         let model_output = self.run_forward(prot_sequence)?;
         let contact_map = model_output.get_contact_map()?;
         Ok(contact_map)
     }
-
     // Softmax and simplify
     fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<PseudoProbability>> {
         let tensor = ops::softmax(tensor, D::Minus1)?;

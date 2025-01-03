@@ -15,6 +15,7 @@ pub struct PseudoProbability {
 pub struct ContactMap {
     pub position1: usize,
     pub position2: usize,
+    pub layer: usize,
     pub pseudo_prob: f32,
     pub amino_acid: char,
 }
