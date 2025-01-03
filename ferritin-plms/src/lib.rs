@@ -22,8 +22,8 @@ pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
 pub use ligandmpnn::proteinfeatures::LMPNNFeatures;
 
-//pub mod amplify;
+pub mod amplify;
 pub mod esm;
 pub mod esm2;
 pub mod ligandmpnn;
-mod amplify;
+mod types;
