@@ -18,13 +18,13 @@ metal = [
 [dependencies]
 anyhow.workspace = true
 candle-core.workspace = true
-candle-hf-hub.workspace = true
 candle-metal-kernels = { workspace = true, optional = true }
 candle-nn.workspace = true
 candle-transformers.workspace = true
 clap = { version = "4.5", features = ["derive"] }
 ferritin-core = { path = "../ferritin-core" }
 ferritin-test-data = { path = "../ferritin-test-data" }
+hf-hub.workspace = true
 itertools.workspace = true
 pdbtbx.workspace = true
 rand.workspace = true

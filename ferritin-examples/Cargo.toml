@@ -13,7 +13,6 @@ metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 anyhow.workspace = true
 bevy = "0.15.1"
 candle-core.workspace = true
-candle-hf-hub.workspace = true
 candle-metal-kernels = { workspace = true, optional = true }
 candle-nn.workspace = true
 clap = { version = "4.5.23", features = ["derive"] }
@@ -21,6 +20,7 @@ ferritin-bevy = { path = "../ferritin-bevy" }
 ferritin-core = { path = "../ferritin-core" }
 ferritin-plms = { path = "../ferritin-plms" }
 ferritin-onnx-models = { path = "../ferritin-onnx-models" }
+hf-hub.workspace = true
 ndarray = "0.16"
 ort = "=2.0.0-rc.9"
 pdbtbx.workspace = true
@@ -39,8 +39,8 @@ tokenizers = { version = "0.21.0", default-features = false, features = [
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-candle-hf-hub = { workspace = true }
-tokenizers = { version = "0.21.0" }  # full features for non-wasm
+hf-hub.workspace = true
+tokenizers = { version = "0.21.0" } # full features for non-wasm
 
 
 [dev-dependencies]
