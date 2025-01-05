@@ -12,7 +12,7 @@ candle-core.workspace = true
 candle-nn.workspace = true
 candle-hf-hub.workspace = true
 ndarray = "0.16"
-ndarray-safetensors = "0.2.0"
+ndarray-safetensors = "0.2.1"
 ort = "=2.0.0-rc.9"
 safetensors.workspace = true
 serde.workspace = true

@@ -11,7 +11,7 @@ metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 
 [dependencies]
 anyhow.workspace = true
-bevy = "0.15.0"
+bevy = "0.15.1"
 candle-core.workspace = true
 candle-hf-hub.workspace = true
 candle-metal-kernels = { workspace = true, optional = true }
