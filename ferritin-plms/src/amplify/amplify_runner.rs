@@ -8,9 +8,9 @@ use super::config::AMPLIFYConfig;
 use super::outputs::ModelOutput;
 use anyhow::{anyhow, Error as E, Result};
 use candle_core::{DType, Device, Tensor, D};
-use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::ops;
 use candle_nn::VarBuilder;
+use hf_hub::{api::sync::Api, Repo, RepoType};
 use tokenizers::Tokenizer;
 
 pub enum AmplifyModels {

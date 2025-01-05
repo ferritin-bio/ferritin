@@ -1,8 +1,8 @@
 use anyhow::Result;
 use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device};
-use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use candle_nn::VarBuilder;
+use hf_hub::{api::sync::Api, Repo, RepoType};
 use ferritin_plms::{ESMCConfig, ESMC};
 
 // pub fn esmc_300m_202412(device: &Device) -> Result<Box<dyn Model>> {
