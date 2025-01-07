@@ -31,11 +31,37 @@ Collation of model info.
 
 # Fennec
 
-Local Application for running protein language models on ones own hardware.
+Local Application for running protein language models on ones own hardware. **Kick the [tires here](https://github.com/ferritin-bio/fennec/releases/tag/app-v0.1.0-dev)!**
+
+## Homepage
 
 ![](images/screen_01.png)
+
+## Residue Specific LigandMPNN Predictions
+
+- LigandMPNN weights converted to ONNX and stored on HFHub
+- Click Protein:
+    - encode the whole protein
+    - decode the predictions per-residue.
+- can optionally adjsut decode temperature
+- **only works for single chain proteins at the moment**
 ![](images/screen_02.png)
 ![](images/screen_03.png)
 ![](images/screen_04.png)
 ![](images/screen_05.png)
+
+
+## All Sequence Prediction
+
+Return predicted probabilites of sequences using masked sequence models ESM2 and AMPLIFY.
+
+![](images/screen_07.png)
+
+
+
+## Contact Map Predicition
+
+- Use AMPLIFY and return the attention heads.
+- calculate the pseudo-contact map/
+
 ![](images/screen_06.png)
