@@ -9,12 +9,16 @@ website:
   navbar:
     logo: ferritin.png
     left:
-      - href: index.qmd
-        text: home
-      - text: ferritin-rustdoc
-        href: doc/ferritin_core/index.html
+      - href: doc/ferritin_core/index.html
+        text: ferritin-rustdoc
       - text: blog
         href: posts/
+      - text: Related Projects
+        menu:
+          - text: Fennec
+            href: https://github.com/ferritin-bio/fennec
+          - text: Protein Language Models
+            href: https://github.com/ferritin-bio/protein-language-models
 
     right:
       - icon: github
