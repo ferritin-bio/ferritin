@@ -1563,9 +1563,9 @@ dependencies = [
 
 [[package]]
 name = "candle-core"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1e306c8a4276ba57ce9fac76d823cc8c8a7fca14bf222ac20ad8b12c4273152"
+checksum = "855dfedff437d2681d68e1f34ae559d88b0dd84aa5a6b63f2c8e75ebdd875bbf"
 dependencies = [
  "byteorder",
  "candle-metal-kernels",
@@ -1630,9 +1630,9 @@ dependencies = [
 
 [[package]]
 name = "candle-metal-kernels"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbc6621c7e2202f4f129bcc3185c2c6d4fa2fc6b8f3f2b07eaf7c06042910c83"
+checksum = "50fa64274a009a5d95c542b10bf3a4ea809bd394654c6ae99233bcc35b3a33ef"
 dependencies = [
  "metal 0.27.0",
  "once_cell",
@@ -1642,9 +1642,9 @@ dependencies = [
 
 [[package]]
 name = "candle-nn"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39d417059c44d719fd03a0f711ccfe148d341469c9273d4b5731ebe965b2c97e"
+checksum = "ddd3c6b2ee0dfd64af12ae5b07e4b7c517898981cdaeffcb10b71d7dd5c8f359"
 dependencies = [
  "candle-core",
  "candle-metal-kernels",
@@ -2529,7 +2529,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-bevy"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "bevy",
@@ -2541,7 +2541,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-cellscape"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "ferritin-core",
  "geo",
@@ -2551,7 +2551,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-core"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "candle-core",
  "ferritin-test-data",
@@ -2563,7 +2563,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-examples"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "bevy",
@@ -2588,7 +2588,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-molviewspec"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "chrono",
  "serde",
@@ -2599,7 +2599,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-onnx-models"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -2619,7 +2619,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-plms"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2643,7 +2643,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-pymol"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "bitflags 2.6.0",
  "clap",
@@ -2662,7 +2662,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-test-data"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "tempfile",
 ]
