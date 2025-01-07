@@ -20,7 +20,7 @@ website:
 
     right:
       - icon: github
-        href: https://github.com/zachcp/ferritin
+        href: https://github.com/ferritin-bio/ferritin
         aria-label: GitHub
 
 format:

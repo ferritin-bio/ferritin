@@ -2,4 +2,4 @@
 
 Protein utilities for Rust
 
-<img src="ferritin.png" width="320">
+<img src="ferritin.png" width="120">
