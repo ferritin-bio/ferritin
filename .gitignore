@@ -4,5 +4,5 @@
 .DS_Store
 
 
-ferritin-bevy/wasm-examples/
+crates/ferritin-bevy/wasm-examples/
 docs/doc

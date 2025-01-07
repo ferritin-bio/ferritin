@@ -1,14 +1,14 @@
 [workspace]
 members = [
-    "ferritin-bevy",
-    "ferritin-cellscape",
-    "ferritin-core",
-    "ferritin-examples",
-    "ferritin-molviewspec",
-    "ferritin-onnx-models",
-    "ferritin-plms",
-    "ferritin-pymol",
-    "ferritin-test-data",
+    "crates/ferritin-bevy",
+    "crates/ferritin-cellscape",
+    "crates/ferritin-core",
+    "crates/ferritin-examples",
+    "crates/ferritin-molviewspec",
+    "crates/ferritin-onnx-models",
+    "crates/ferritin-plms",
+    "crates/ferritin-pymol",
+    "crates/ferritin-test-data",
 ]
 resolver = "2"
 
@@ -26,6 +26,7 @@ candle-core = "0.8.1"
 candle-examples = "0.8.1"
 candle-metal-kernels = "0.8.1"
 candle-nn = "0.8.1"
+candle-onnx = "0.8.1"
 candle-transformers = "0.8.1"
 hf-hub = "0.4.1"
 itertools = "0.14.0"
