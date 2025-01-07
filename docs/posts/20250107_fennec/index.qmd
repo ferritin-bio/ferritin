@@ -7,7 +7,7 @@ categories: [rust, ai, proteins]
 image: "images/screen_06.png"
 ---
 
-This post is a quick announcemnet of updates to 3 projects and the creation of an umbrella organization
+This post is a quick announcement [fixed spelling] of updates to 3 projects and the creation of an umbrella organization
 to house them: [ferritin-bio](https://github.com/ferritin-bio)
 
 
@@ -18,7 +18,7 @@ Rust library for handling proteins.
 - Tagged a v.0.1
 - Candle-native AMPLIFY model
 - ONNX versions of LigandMPNN encoder, LigandMPNN decoder, and ESM2.
-- Conversion of PDB files to matrices that can be used for any of the three modesl above.
+- Conversion of PDB files to matrices that can be used for any of the three models [fixed spelling] above.
 
 # Protein-Language-Models
 
@@ -31,7 +31,7 @@ Collation of model info.
 
 # Fennec
 
-Local Application for running protein language models on ones own hardware. **Kick the [tires here](https://github.com/ferritin-bio/fennec/releases/tag/app-v0.1.0-dev)!**
+Local Application for running protein language models on one's [added apostrophe] own hardware. **Kick the [tires here](https://github.com/ferritin-bio/fennec/releases/tag/app-v0.1.0-dev)!**
 
 ## Homepage
 
@@ -43,7 +43,7 @@ Local Application for running protein language models on ones own hardware. **Ki
 - Click Protein:
     - encode the whole protein
     - decode the predictions per-residue.
-- can optionally adjsut decode temperature
+- can optionally adjust [fixed spelling] decode temperature
 - **only works for single chain proteins at the moment**
 ![](images/screen_02.png)
 ![](images/screen_03.png)
@@ -53,13 +53,13 @@ Local Application for running protein language models on ones own hardware. **Ki
 
 ## All Sequence Prediction
 
-Return predicted probabilites of sequences using masked sequence models ESM2 and AMPLIFY.
+Return predicted probabilities [fixed spelling] of sequences using masked sequence models ESM2 and AMPLIFY.
 
 ![](images/screen_07.png)
 
 
 
-## Contact Map Predicition
+## Contact Map Prediction [fixed spelling]
 
 - Use AMPLIFY and return the attention heads.
 - calculate the pseudo-contact map/
