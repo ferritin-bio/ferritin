@@ -1,0 +1,41 @@
+---
+title: "Fennec and Ferritin"
+description: "Releasing a v0.1.0"
+author: "Zachary Charlop-Powers"
+date: "2025-01-07"
+categories: [rust, ai, proteins]
+image: "images/screen_06.png"
+---
+
+This post is a quick announcemnet of updates to 3 projects and the creation of an umbrella organization
+to house them: [ferritin-bio](https://github.com/ferritin-bio)
+
+
+# Ferritin
+
+Rust library for handling proteins.
+
+- Tagged a v.0.1
+- Candle-native AMPLIFY model
+- ONNX versions of LigandMPNN encoder, LigandMPNN decoder, and ESM2.
+- Conversion of PDB files to matrices that can be used for any of the three modesl above.
+
+# Protein-Language-Models
+
+Collation of model info.
+
+- [Github Repo](https://github.com/ferritin-bio/protein-language-models)
+- [Dashboard](https://ferritin-bio.github.io/protein-language-models/)
+- [gSheet](https://docs.google.com/spreadsheets/d/1iJ7bPG81_yYITVQn-huoQonKTel7GBQ7AMM9AixQbH8/edit?gid=1996577388#gid=1996577388)
+
+
+# Fennec
+
+Local Application for running protein language models on ones own hardware.
+
+![](images/screen_01.png)
+![](images/screen_02.png)
+![](images/screen_03.png)
+![](images/screen_04.png)
+![](images/screen_05.png)
+![](images/screen_06.png)
