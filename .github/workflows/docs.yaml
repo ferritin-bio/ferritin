@@ -19,7 +19,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Install ALSA development package
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev protobuf-compiler
       - name: Configure cache
         uses: Swatinem/rust-cache@v2
       - name: Set up Quarto

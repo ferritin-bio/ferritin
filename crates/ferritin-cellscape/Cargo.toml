@@ -1,0 +1,13 @@
+[package]
+name = "ferritin-cellscape"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description.workspace = true
+
+[dependencies]
+ferritin-core = { path = "../ferritin-core" }
+pdbtbx = { workspace = true }
+geo.workspace = true
+svg.workspace = true

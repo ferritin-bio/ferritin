@@ -1,0 +1,17 @@
+[package]
+name = "ferritin-bevy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description.workspace = true
+
+[dependencies]
+bevy.workspace = true
+bon.workspace = true
+ferritin-core = { path = "../ferritin-core" }
+pdbtbx.workspace = true
+
+[dev-dependencies]
+anyhow.workspace = true
+ferritin-test-data = { path = "../ferritin-test-data" }

@@ -1,0 +1,71 @@
+[package]
+name = "ferritin-examples"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description.workspace = true
+
+[features]
+metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
+
+[dependencies]
+anyhow.workspace = true
+bevy = "0.15.1"
+candle-core.workspace = true
+candle-metal-kernels = { workspace = true, optional = true }
+candle-nn.workspace = true
+candle-onnx.workspace = true
+clap.workspace = true
+ferritin-bevy = { path = "../ferritin-bevy" }
+ferritin-core = { path = "../ferritin-core" }
+ferritin-plms = { path = "../ferritin-plms" }
+ferritin-onnx-models = { path = "../ferritin-onnx-models" }
+hf-hub.workspace = true
+ndarray.workspace = true
+ort.workspace = true
+pdbtbx.workspace = true
+serde_json.workspace = true
+
+
+[target.'cfg(target_os = "macos")'.features]
+metal = []
+
+[target.'cfg(target_os = "macos")'.dependencies]
+candle-metal-kernels.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokenizers = { version = "0.21.0", default-features = false, features = [
+    "unstable_wasm",
+] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+hf-hub.workspace = true
+tokenizers = { version = "0.21.0" } # full features for non-wasm
+
+
+[dev-dependencies]
+candle-examples.workspace = true
+ferritin-test-data = { path = "../ferritin-test-data" }
+
+
+[[example]]
+name = "bevy_basic_ball_and_stick"
+path = "examples/bevy/basic_ball_and_stick.rs"
+
+
+[[example]]
+name = "bevy_basic_putty"
+path = "examples/bevy/basic_putty.rs"
+
+[[example]]
+name = "bevy_basic_snapshot"
+path = "examples/bevy/basic_snapshot.rs"
+
+[[example]]
+name = "bevy_basic_spheres"
+path = "examples/bevy/basic_spheres.rs"
+
+[[example]]
+name = "bevy_screenshot"
+path = "examples/bevy/screenshot.rs"
