@@ -1,0 +1,67 @@
+---
+title: "Fennec and Ferritin"
+description: "Releasing a v0.1.0"
+author: "Zachary Charlop-Powers"
+date: "2025-01-07"
+categories: [rust, ai, proteins]
+image: "images/screen_06.png"
+---
+
+This post is a quick announcement [fixed spelling] of updates to 3 projects and the creation of an umbrella organization
+to house them: [ferritin-bio](https://github.com/ferritin-bio)
+
+
+# Ferritin
+
+Rust library for handling proteins.
+
+- Tagged a v.0.1
+- Candle-native AMPLIFY model
+- ONNX versions of LigandMPNN encoder, LigandMPNN decoder, and ESM2.
+- Conversion of PDB files to matrices that can be used for any of the three models [fixed spelling] above.
+
+# Protein-Language-Models
+
+Collation of model info.
+
+- [Github Repo](https://github.com/ferritin-bio/protein-language-models)
+- [Dashboard](https://ferritin-bio.github.io/protein-language-models/)
+- [gSheet](https://docs.google.com/spreadsheets/d/1iJ7bPG81_yYITVQn-huoQonKTel7GBQ7AMM9AixQbH8/edit?gid=1996577388#gid=1996577388)
+
+
+# Fennec
+
+Local Application for running protein language models on one's [added apostrophe] own hardware. **Kick the [tires here](https://github.com/ferritin-bio/fennec/releases/tag/app-v0.1.0-dev)!**
+
+## Homepage
+
+![](images/screen_01.png)
+
+## Residue Specific LigandMPNN Predictions
+
+- LigandMPNN weights converted to ONNX and stored on HFHub
+- Click Protein:
+    - encode the whole protein
+    - decode the predictions per-residue.
+- can optionally adjust [fixed spelling] decode temperature
+- **only works for single chain proteins at the moment**
+![](images/screen_02.png)
+![](images/screen_03.png)
+![](images/screen_04.png)
+![](images/screen_05.png)
+
+
+## All Sequence Prediction
+
+Return predicted probabilities [fixed spelling] of sequences using masked sequence models ESM2 and AMPLIFY.
+
+![](images/screen_07.png)
+
+
+
+## Contact Map Prediction [fixed spelling]
+
+- Use AMPLIFY and return the attention heads.
+- calculate the pseudo-contact map/
+
+![](images/screen_06.png)
