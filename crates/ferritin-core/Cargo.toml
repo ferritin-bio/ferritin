@@ -9,9 +9,9 @@ description.workspace = true
 [dependencies]
 candle-core.workspace = true
 itertools.workspace = true
-lazy_static = "1.5.0"
+lazy_static.workspace = true
 pdbtbx.workspace = true
-strum = { version = "0.26", features = ["derive"] }
+strum.workspace = true
 
 [dev-dependencies]
 ferritin-test-data = { path = "../ferritin-test-data" }

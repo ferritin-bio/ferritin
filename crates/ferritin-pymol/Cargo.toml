@@ -9,8 +9,8 @@ description.workspace = true
 [dependencies]
 ferritin-core = { path = "../ferritin-core" }
 ferritin-molviewspec = { path = "../ferritin-molviewspec" }
-clap = { version = "4.5.23", features = ["derive"] }
-serde-pickle = "1.2"
+clap.workspace = true
+serde-pickle.workspace = true
 serde_bytes = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

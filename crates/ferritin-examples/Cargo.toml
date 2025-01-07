@@ -16,14 +16,14 @@ candle-core.workspace = true
 candle-metal-kernels = { workspace = true, optional = true }
 candle-nn.workspace = true
 candle-onnx.workspace = true
-clap = { version = "4.5.23", features = ["derive"] }
+clap.workspace = true
 ferritin-bevy = { path = "../ferritin-bevy" }
 ferritin-core = { path = "../ferritin-core" }
 ferritin-plms = { path = "../ferritin-plms" }
 ferritin-onnx-models = { path = "../ferritin-onnx-models" }
 hf-hub.workspace = true
-ndarray = "0.16"
-ort = "=2.0.0-rc.9"
+ndarray.workspace = true
+ort.workspace = true
 pdbtbx.workspace = true
 serde_json.workspace = true
 
