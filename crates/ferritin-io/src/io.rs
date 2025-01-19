@@ -177,30 +177,31 @@ where
 mod tests {
     use super::*;
     use anyhow::Result;
-    // use crate::record::Definition;
     use ferritin_test_data::TestFile;
+    use std::fs::File;
+    use std::io::BufReader;
 
     #[test]
     fn test_basic_read() -> Result<()> {
-        let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        println!("{:?}", prot_file);
-
+        // basic buffer use
         let mut buf = Vec::new();
         let data = b"noodles\n";
         let mut reader = &data[..];
         buf.clear();
-
         let out = read_line(&mut reader, &mut buf)?;
         println!("{:?}", out);
-        // let reader = Reader::new();
+        assert_eq!(buf, b"noodles");
 
-        // let (pdb, _) = pdbtbx::open(prot_file).unwrap();
-        // let ac = AtomCollection::from(&pdb);
+        // Load Cif file
+        let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
+        println!("{:?}", prot_file);
+        let f = File::open(prot_file)?;
+        let mut reader = BufReader::new(f);
+        let mut buf = Vec::new();
+        let out = read_line(&mut reader, &mut buf)?;
+        println!("{:?}", out);
+        println!("{:?}", buf);
 
-        // let input = b"_cell.length_a  10.5";
-        // let mut reader = Reader::new(&input[..]);
-        // let mut record = Record::default();
-        // assert_eq!(reader.read_record(&mut record).unwrap(), 1);
         Ok(())
     }
 }
