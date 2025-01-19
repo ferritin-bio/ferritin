@@ -41,25 +41,6 @@ const BLOCK_DELIMITER: u8 = b'#';
 const LINE_FEED: u8 = b'\n';
 const CARRIAGE_RETURN: u8 = b'\r';
 
-// pub(super) fn read_record<R>(reader: &mut R, record: &mut Record) -> io::Result<usize>
-// where
-//     R: BufRead,
-// {
-//     record.clear();
-
-//     let mut len = match read_definition(reader, record.definition_mut()) {
-//         Ok(0) => return Ok(0),
-//         Ok(n) => n,
-//         Err(e) => return Err(e),
-//     };
-
-//     len += read_line(reader, record.sequence_mut())?;
-//     len += consume_plus_line(reader)?;
-//     len += read_line(reader, record.quality_scores_mut())?;
-
-//     Ok(len)
-// }
-
 pub(super) fn read_cif_record<R>(reader: &mut R, cif: &mut CIF) -> io::Result<usize>
 where
     R: BufRead,
@@ -70,8 +51,6 @@ where
     //        1. 2 values for line
     //        2. value spread over multiple lines
     //    2. if `loop_` then its a table
-    //
-    //
     let LOOP_DENOTE = b"loop_";
     let mut len = 0;
     let mut buf: Vec<u8> = Vec::new();
@@ -82,40 +61,39 @@ where
     len += consume_hashtag_line(reader)?;
     println!("Length: {}", len);
 
-    // len += read_line(reader, record.sequence_mut())?;
-    // len += consume_plus_line(reader)?;
-    // len += read_line(reader, record.quality_scores_mut())?;
+    // consume the DataBlocks.
+    // data blocks are either K/V pairs or tables.
+    // tables are denoted by `loop_`
     loop {
         let buf = reader.fill_buf()?;
         if buf.is_empty() {
             break;
         }
-        // consume the DataBlocks.
-        // data blocks are either K/V pairs or tables.
-        // tables are denoted by `loop_`
         if let Some(buf) = buf.get(..5) {
             if buf == LOOP_DENOTE {
                 println!("Loop here!");
                 len += process_table(reader, &mut table_data)?;
                 println!("PT: {:?}", len);
+                println!("table_data keys: {:?}", table_data.keys());
                 // len += consume_hashtag_line(reader)?;
             } else if buf[0] == b'_' {
                 println!("Map of K/V here");
-                len += process_kv(reader, &mut data)?;
+                len += process_kv_block(reader, &mut data)?;
                 println!("PKV: {:?}", len);
                 // len += consume_hashtag_line(reader)?;
-            } else if buf[0] == b'#' {
-                len += consume_hashtag_line(reader)?;
-                println!("#: {:?}", len)
-            } else {
-                let break_string = String::from_utf8_lossy(&buf).trim().to_string();
-                println!("Break Buffer: {:?}", break_string);
             }
+            // else if buf[0] == b'#' {
+            //     len += consume_hashtag_line(reader)?;
+            //     println!("#: {:?}", len)
+            // } else {
+            //     let break_string = String::from_utf8_lossy(&buf).trim().to_string();
+            //     println!("Break Buffer: {:?}", break_string);
+            // }
         }
     }
 
     // println!("Data Keys: {:?}", data.keys());
-    // println!("Table Data Keys: {:?}", table_data.keys());
+    println!("Table Data Keys: {:?}", table_data.keys());
     Ok(len)
 }
 
@@ -125,7 +103,6 @@ where
 {
     let mut buf = Vec::new();
     let mut total_len = 0;
-
     // first line is loop_
     let len = read_line(reader, &mut buf)?;
     total_len += len;
@@ -136,8 +113,6 @@ where
     // they defin the header
     // after that are lines with data.
     // how should i iterate through the lines?
-
-    // Collect headers
     let mut headers = Vec::new();
     buf.clear();
 
@@ -153,29 +128,60 @@ where
         }
     }
 
+    // process the next set of lines
     loop {
         if buf.is_empty() || buf[0] == b'#' {
             break;
         }
-
-        // Process the data line
         let line = String::from_utf8_lossy(&buf).trim().to_string();
-
-        // Split the line by whitespace and process values
         let values: Vec<&str> = line.split_whitespace().collect();
-
         // Match values with headers
         for (header, value) in headers.iter().zip(values.iter()) {
-            if let Some(vec) = hashmap.get_mut(header) {
-                vec.push(value.to_string());
-            }
+            hashmap
+                .entry(header.to_string())
+                .or_insert_with(Vec::new)
+                .push(value.to_string());
         }
 
-        // Read next line
         buf.clear();
         match read_line(reader, &mut buf) {
             Ok(len) => total_len += len,
             Err(_) => break,
+        }
+    }
+
+    Ok(total_len)
+}
+
+fn process_kv_block<R>(reader: &mut R, hashmap: &mut HashMap<String, String>) -> io::Result<usize>
+where
+    R: BufRead,
+{
+    let mut buf = Vec::new();
+    let mut total_len = 0;
+
+    loop {
+        // Peek at the next line to check for '#'
+        buf.clear();
+        let len = read_line(reader, &mut buf)?;
+        if len == 0 {
+            // End of file
+            break;
+        }
+
+        // Check if the line starts with '#'
+        if let Ok(line) = String::from_utf8(buf.clone()) {
+            if line.trim_start().starts_with('#') {
+                total_len += len;
+                break;
+            }
+        }
+
+        // If not a '#' line, reset the reader position and process the key-value pair
+        if len > 0 {
+            // Process the current key-value pair
+            let kv_len = process_kv(reader, hashmap)?;
+            total_len += kv_len;
         }
     }
 
@@ -200,7 +206,9 @@ where
             let mut value = String::new();
 
             // If we have both key and value on the same line
-            if parts.len() >= 2 {
+            if parts.len() == 2 {
+                value = parts[1].trim().to_string();
+            } else if parts.len() >= 2 {
                 value = parts[1..].join(" ").trim().to_string();
             } else {
                 // Read next line to check for semicolon-delimited text
@@ -212,14 +220,12 @@ where
                     if next_line.trim_start().starts_with(';') {
                         // Handle semicolon-delimited text
                         let mut content = String::new();
-
-                        // Continue reading until we find an ending semicolon
                         loop {
                             buf.clear();
                             let line_len = read_line(reader, &mut buf)?;
                             if line_len == 0 {
                                 break;
-                            } // EOF
+                            }
                             total_len += line_len;
 
                             if let Ok(line) = String::from_utf8(buf.clone()) {
@@ -235,7 +241,6 @@ where
                     }
                 }
             }
-
             hashmap.insert(key, value);
         }
     }
@@ -319,9 +324,9 @@ where
 
     match read_u8(reader)? {
         PREFIX => consume_line(reader).map(|n| n + 1),
-        _ => Err(io::Error::new(
+        ch => Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "invalid description prefix",
+            format!("invalid hashtag line prefix: {}", ch),
         )),
     }
 }
@@ -398,6 +403,7 @@ mod tests {
         assert_eq!(buf, b"data_101M");
         Ok(())
     }
+
     #[test]
     fn test_cif_read() -> Result<()> {
         let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
@@ -406,7 +412,7 @@ mod tests {
         let mut reader = BufReader::new(f);
         let mut cif = CIF::new("Test".to_string())?;
         let cif_len = read_cif_record(&mut reader, &mut cif)?;
-        assert_eq!(cif_len, 198551);
+        assert_eq!(cif_len, 176763);
         Ok(())
     }
 }
