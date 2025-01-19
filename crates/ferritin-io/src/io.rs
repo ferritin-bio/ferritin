@@ -4,32 +4,26 @@ use std::io::BufRead;
 struct File {
     version: String,
     encoder: String,
-    #[serde(rename = "dataBlocks")]
     data_blocks: Vec<DataBlock>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
 struct DataBlock {
     header: String,
     categories: Vec<Category>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
 struct Category {
     name: String,
-    #[serde(rename = "rowCount")]
     row_count: usize,
     columns: Vec<Column>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
 struct Column {
     name: String,
     data: Data,
     mask: Option<Data>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
 struct Data {
     data: Vec<u8>,
     encoding: Vec<String>,
