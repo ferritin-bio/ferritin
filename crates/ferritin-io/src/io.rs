@@ -72,38 +72,167 @@ where
     //    2. if `loop_` then its a table
     //
     //
-
     let LOOP_DENOTE = b"loop_";
     let mut len = 0;
     let mut buf: Vec<u8> = Vec::new();
+    let mut data: HashMap<String, String> = HashMap::new();
+    let mut table_data: HashMap<String, Vec<String>> = HashMap::new();
+
     len += read_line(reader, &mut buf)?;
     len += consume_hashtag_line(reader)?;
-
-    let src = reader.fill_buf()?;
-    if let Some(buf) = src.get(..5) {
-        if buf == LOOP_DENOTE {
-            println!("Loop here!");
-            // len += process_loop();
-        } else if buf[0] == b'_' {
-            println!("Map of K/V here");
-            // len += process_kv();
-        }
-    }
-
     println!("Length: {}", len);
-    println!("Buffer: {:?}", &buf);
-
-    // let mut len = match read_definition(reader, record.definition_mut()) {
-    //     Ok(0) => return Ok(0),
-    //     Ok(n) => n,
-    //     Err(e) => return Err(e),
-    // };
 
     // len += read_line(reader, record.sequence_mut())?;
     // len += consume_plus_line(reader)?;
     // len += read_line(reader, record.quality_scores_mut())?;
-
+    loop {
+        let buf = reader.fill_buf()?;
+        if buf.is_empty() {
+            break;
+        }
+        if let Some(buf) = buf.get(..5) {
+            if buf == LOOP_DENOTE {
+                println!("Loop here!");
+                len += process_table(reader, &mut table_data)?;
+                println!("PT: {:?}", len)
+            } else if buf[0] == b'_' {
+                println!("Map of K/V here");
+                len += process_kv(reader, &mut data)?;
+                println!("PKV: {:?}", len)
+            } else if buf[0] == b'#' {
+                len += consume_hashtag_line(reader)?;
+                println!("#: {:?}", len)
+            } else {
+                let break_string = String::from_utf8_lossy(&buf).trim().to_string();
+                println!("Break Buffer: {:?}", break_string);
+            }
+        }
+    }
     Ok(len)
+}
+
+fn process_table<R>(reader: &mut R, hashmap: &mut HashMap<String, Vec<String>>) -> io::Result<usize>
+where
+    R: BufRead,
+{
+    let mut buf = Vec::new();
+    let mut total_len = 0;
+
+    // first line is loop_
+    let len = read_line(reader, &mut buf)?;
+    total_len += len;
+    assert_eq!(buf, b"loop_");
+
+    // i now want to iterate through each line
+    // lines that start with `_` are field lines
+    // they defin the header
+    // after that are lines with data.
+    // how should i iterate through the lines?
+
+    // Collect headers
+    let mut headers = Vec::new();
+    buf.clear();
+
+    // Read headers (lines starting with '_')
+    loop {
+        if let Ok(len) = read_line(reader, &mut buf) {
+            if buf.is_empty() || buf[0] != b'_' {
+                break;
+            }
+            headers.push(String::from_utf8_lossy(&buf).trim().to_string());
+            total_len += len;
+            buf.clear();
+        }
+    }
+
+    loop {
+        if buf.is_empty() || buf[0] == b'#' {
+            break;
+        }
+
+        // Process the data line
+        let line = String::from_utf8_lossy(&buf).trim().to_string();
+
+        // Split the line by whitespace and process values
+        let values: Vec<&str> = line.split_whitespace().collect();
+
+        // Match values with headers
+        for (header, value) in headers.iter().zip(values.iter()) {
+            if let Some(vec) = hashmap.get_mut(header) {
+                vec.push(value.to_string());
+            }
+        }
+
+        // Read next line
+        buf.clear();
+        match read_line(reader, &mut buf) {
+            Ok(len) => total_len += len,
+            Err(_) => break,
+        }
+    }
+
+    Ok(total_len)
+}
+
+fn process_kv<R>(reader: &mut R, hashmap: &mut HashMap<String, String>) -> io::Result<usize>
+where
+    R: BufRead,
+{
+    let mut buf = Vec::new();
+    let mut total_len = 0;
+
+    // Read first line containing the key
+    let len = read_line(reader, &mut buf)?;
+    total_len += len;
+
+    if let Ok(line) = String::from_utf8(buf.clone()) {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if !parts.is_empty() {
+            let key = parts[0].trim().to_string();
+            let mut value = String::new();
+
+            // If we have both key and value on the same line
+            if parts.len() >= 2 {
+                value = parts[1..].join(" ").trim().to_string();
+            } else {
+                // Read next line to check for semicolon-delimited text
+                buf.clear();
+                let next_len = read_line(reader, &mut buf)?;
+                total_len += next_len;
+
+                if let Ok(next_line) = String::from_utf8(buf.clone()) {
+                    if next_line.trim_start().starts_with(';') {
+                        // Handle semicolon-delimited text
+                        let mut content = String::new();
+
+                        // Continue reading until we find an ending semicolon
+                        loop {
+                            buf.clear();
+                            let line_len = read_line(reader, &mut buf)?;
+                            if line_len == 0 {
+                                break;
+                            } // EOF
+                            total_len += line_len;
+
+                            if let Ok(line) = String::from_utf8(buf.clone()) {
+                                if line.trim_start().starts_with(';') {
+                                    break;
+                                }
+                                content.push_str(&line);
+                            }
+                        }
+                        value = content.trim().to_string();
+                    } else {
+                        value = next_line.trim().to_string();
+                    }
+                }
+            }
+
+            hashmap.insert(key, value);
+        }
+    }
+
+    Ok(total_len)
 }
 
 fn read_line<R>(reader: &mut R, buf: &mut Vec<u8>) -> io::Result<usize>
@@ -269,7 +398,6 @@ mod tests {
         let mut reader = BufReader::new(f);
         let mut cif = CIF::new("Test".to_string())?;
         read_cif_record(&mut reader, &mut cif);
-
         Ok(())
     }
 }
