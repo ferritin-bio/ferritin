@@ -90,15 +90,20 @@ where
         if buf.is_empty() {
             break;
         }
+        // consume the DataBlocks.
+        // data blocks are either K/V pairs or tables.
+        // tables are denoted by `loop_`
         if let Some(buf) = buf.get(..5) {
             if buf == LOOP_DENOTE {
                 println!("Loop here!");
                 len += process_table(reader, &mut table_data)?;
-                println!("PT: {:?}", len)
+                println!("PT: {:?}", len);
+                // len += consume_hashtag_line(reader)?;
             } else if buf[0] == b'_' {
                 println!("Map of K/V here");
                 len += process_kv(reader, &mut data)?;
-                println!("PKV: {:?}", len)
+                println!("PKV: {:?}", len);
+                // len += consume_hashtag_line(reader)?;
             } else if buf[0] == b'#' {
                 len += consume_hashtag_line(reader)?;
                 println!("#: {:?}", len)
@@ -108,6 +113,9 @@ where
             }
         }
     }
+
+    // println!("Data Keys: {:?}", data.keys());
+    // println!("Table Data Keys: {:?}", table_data.keys());
     Ok(len)
 }
 
@@ -397,7 +405,8 @@ mod tests {
         let f = File::open(prot_file)?;
         let mut reader = BufReader::new(f);
         let mut cif = CIF::new("Test".to_string())?;
-        read_cif_record(&mut reader, &mut cif);
+        let cif_len = read_cif_record(&mut reader, &mut cif)?;
+        assert_eq!(cif_len, 198551);
         Ok(())
     }
 }
