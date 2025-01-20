@@ -1,4 +1,4 @@
-use anyhow::{Error, Result};
+use polars::prelude::CsvReadOptions;
 use polars::prelude::*;
 use std::collections::HashMap;
 use std::io::{self, BufRead, Read};
@@ -49,8 +49,9 @@ impl CifBlock {
 const BLOCK_DELIMITER: u8 = b'#';
 const LINE_FEED: u8 = b'\n';
 const CARRIAGE_RETURN: u8 = b'\r';
+const LOOP_DENOTE: &[u8; 5] = b"loop_";
 
-pub(super) fn read_cif_record<R>(reader: &mut R, cif: &mut CifFile) -> io::Result<usize>
+pub(super) fn read_cif_record<R>(reader: &mut R, ciffile: &mut CifFile) -> io::Result<usize>
 where
     R: BufRead,
 {
@@ -60,20 +61,16 @@ where
     //        1. 2 values for line
     //        2. value spread over multiple lines
     //    2. if `loop_` then its a table
-    let LOOP_DENOTE = b"loop_";
+
     let mut len = 0;
     let mut buf: Vec<u8> = Vec::new();
-    let mut data: HashMap<String, String> = HashMap::new();
-    let mut table_data: HashMap<String, Vec<String>> = HashMap::new();
     len += read_line(reader, &mut buf)?;
 
-    let file_name = String::from_utf8(buf)
+    // todo: implement
+    let file_code = String::from_utf8(buf)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
-    let mut ciffile = CifFile::new(file_name);
-
     len += consume_hashtag_line(reader)?;
-    println!("Length: {}", len);
 
     // consume the DataBlocks.
     // data blocks are either K/V pairs or tables.
@@ -85,22 +82,14 @@ where
         }
         if let Some(buf) = buf.get(..5) {
             if buf == LOOP_DENOTE {
-                len += process_table(reader, &mut ciffile)?;
+                len += process_table(reader, ciffile)?;
             } else if buf[0] == b'_' {
-                len += process_kv_block(reader, &mut ciffile)?;
+                len += process_kv_block(reader, ciffile)?;
+            } else if buf[0] == b'#' {
+                len += consume_hashtag_line(reader)?;
             }
-
-            // else if buf[0] == b'#' {
-            //     len += consume_hashtag_line(reader)?;
-            //     println!("#: {:?}", len)
-            // } else {
-            //     let break_string = String::from_utf8_lossy(&buf).trim().to_string();
-            //     println!("Break Buffer: {:?}", break_string);
-            // }
         }
     }
-    // println!("Data Keys: {:?}", data.keys());
-    // println!("Table Data Keys: {:?}", table_data.keys());
     Ok(len)
 }
 
@@ -120,45 +109,72 @@ where
     let mut headers = Vec::new();
     buf.clear();
     loop {
-        if let Ok(len) = read_line(reader, &mut buf) {
-            if buf.is_empty() || buf[0] != b'_' {
-                break;
-            }
-            headers.push(String::from_utf8_lossy(&buf).trim().to_string());
-            total_len += len;
-            buf.clear();
-        }
-    }
-
-    // then the data
-    let mut series_vecs: HashMap<String, Vec<String>> = HashMap::new();
-    loop {
-        if buf.is_empty() || buf[0] == b'#' {
-            let table_name = { series_vecs.keys().next().unwrap().to_string() };
-            let series: Vec<Series> = series_vecs
-                .into_iter()
-                .map(|(name, data)| Series::new(name.as_str().into(), data))
-                .collect();
-
-            let df = DataFrame::from_iter(series);
-            let block = CifBlock::new(BlockType::MULTIPLE_VALUE, df);
-            cif.add_block(table_name.to_string(), block);
+        // Peek at the next line
+        if !reader.fill_buf()?.starts_with(b"_") {
             break;
         }
-        let line = String::from_utf8_lossy(&buf).trim().to_string();
-        let values: Vec<&str> = line.split_whitespace().collect();
-        for (header, value) in headers.iter().zip(values.iter()) {
-            series_vecs
-                .entry(header.to_string())
-                .or_insert_with(Vec::new)
-                .push(value.to_string());
-        }
+        let len = read_line(reader, &mut buf)?;
+        headers.push(String::from_utf8_lossy(&buf).trim().to_string());
+        total_len += len;
         buf.clear();
-        match read_line(reader, &mut buf) {
-            Ok(len) => total_len += len,
-            Err(_) => break,
-        }
     }
+    println!("Headers: {:?}", headers);
+
+    // then the data
+    let mut collected = Vec::new();
+    loop {
+        buf.clear();
+        let len = read_line(reader, &mut buf)?;
+        if len == 0 {
+            break; // EOF
+        }
+        let line = String::from_utf8_lossy(&buf).trim().to_string();
+        if line == "#" {
+            break;
+        }
+        collected.push(line);
+    }
+
+    let parse_opts = CsvParseOptions::default()
+        .with_separator(b' ')
+        .with_truncate_ragged_lines(true)
+        .with_quote_char(Some(b'\''));
+
+    fn collapse_whitespace(s: &str) -> String {
+        s.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+
+    // let table_text = &collected.join("\n");
+    let table_text = collected
+        .iter()
+        .map(|line| collapse_whitespace(line))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    println!("Table Text: \n {:?}", table_text);
+
+    // let header_names = Arc::from(
+    //     headers
+    //         .iter()
+    //         .map(|h| h.trim_start_matches('_').into())
+    //         .collect::<Box<[PlSmallStr]>>(), // Collect directly into Box<[T]>
+    // );
+
+    // println!("Header Names: \n {:?}", header_names);
+
+    let df = CsvReadOptions::default()
+        .with_has_header(false)
+        // .with_columns(Some(header_names))
+        .with_parse_options(parse_opts)
+        .into_reader_with_file_handle(std::io::Cursor::new(table_text))
+        .finish()
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+    println!("DF: {:?}", &df);
+
+    let table_name = headers[0].clone();
+    let block = CifBlock::new(BlockType::MULTIPLE_VALUE, df);
+    cif.add_block(table_name.to_string(), block);
     Ok(total_len)
 }
 
@@ -166,30 +182,22 @@ fn process_kv_block<R>(reader: &mut R, cif: &mut CifFile) -> io::Result<usize>
 where
     R: BufRead,
 {
-    let mut buf = Vec::new();
     let mut total_len = 0;
     let mut hashmap = HashMap::new();
+
     // loop through the KV block and add k/v pairs to the hashmap
     loop {
-        // Peek at the next line to check for '#'
-        buf.clear();
-        let len = read_line(reader, &mut buf)?;
+        // Peek at the next line without consuming it
+        let mut buf: Vec<u8> = Vec::new();
+        let len = reader.fill_buf()?.len();
         if len == 0 {
             break;
         }
-        // Check if the line starts with '#'
-        if let Ok(line) = String::from_utf8(buf.clone()) {
-            if line.trim_start().starts_with('#') {
-                total_len += len;
-                break;
-            }
+        if reader.fill_buf()?.starts_with(b"#") {
+            break;
         }
-        // If not a '#' line, reset the reader position and process the key-value pair
-        if len > 0 {
-            // Process the current key-value pair
-            let kv_len = process_kv(reader, &mut hashmap)?;
-            total_len += kv_len;
-        }
+        let kv_len = process_kv(reader, &mut hashmap)?;
+        total_len += kv_len;
     }
 
     let series: Vec<Series> = hashmap
@@ -203,7 +211,6 @@ where
     let table_name = series[0].name().to_string();
     let df = DataFrame::from_iter(series);
     let block = CifBlock::new(BlockType::SINGLE_VALUE, df);
-
     cif.add_block(table_name.to_string(), block);
     Ok(total_len)
 }
@@ -217,6 +224,8 @@ where
 
     // Read first line containing the key
     let len = read_line(reader, &mut buf)?;
+    assert_ne!(buf, b"loop_");
+
     total_len += len;
 
     if let Ok(line) = String::from_utf8(buf.clone()) {
@@ -229,7 +238,7 @@ where
             if parts.len() == 2 {
                 value = parts[1].trim().to_string();
             } else if parts.len() >= 2 {
-                value = parts[1..].join(" ").trim().to_string();
+                panic!("There should not be multiple parts ....{:?}", parts)
             } else {
                 // Read next line to check for semicolon-delimited text
                 buf.clear();
@@ -380,16 +389,6 @@ where
     pub fn new(inner: R) -> Self {
         Self { inner }
     }
-
-    // /// Reads a CIF record.
-    // pub fn read_record(&mut self, record: &mut Record) -> io::Result<usize> {
-    //     read_record(&mut self.inner, record)
-    // }
-
-    // /// Returns an iterator over records starting from the current stream position.
-    // pub fn records(&mut self) -> Records<'_, R> {
-    //     Records::new(self)
-    // }
 }
 
 #[cfg(test)]
@@ -429,33 +428,19 @@ mod tests {
         println!("{:?}", prot_file);
         let f = File::open(prot_file)?;
         let mut reader = BufReader::new(f);
-        // let mut cif = CIF::new("Test".to_string())?;
-        // let cif_len = read_cif_record(&mut reader, &mut cif)?;
+
+        let mut cif = CifFile::new("101M".to_string()); //
+        let cif_len = read_cif_record(&mut reader, &mut cif)?;
         // assert_eq!(cif_len, 176763);
+
+        assert_eq!(cif.name, "101M");
+        // hmm. sometimes 39 and sometimes 42? whaaat?
+        // assert_eq!(cif.data_blocks.len(), 42);
+
+        println!("Data Block Kets: {:?}", &cif.data_blocks.keys());
+        let table_01 = &cif.data_blocks.get("_entry.id").unwrap().data;
+        println!("{:?}", table_01);
+        assert_eq!(table_01.shape(), (2, 4));
         Ok(())
-
-        // // Example usage:
-        // fn process_cif_data() -> Result<CifFile> {
-        //     let mut cif = CifFile::new();
-
-        //     // Create a data block
-        //     let mut block = CifBlock::new();
-
-        //     // Add simple properties
-        //     block.add_property("_cell_length_a".to_string(), "10.5".to_string());
-
-        //     // Create a loop dataframe
-        //     let df = DataFrame::new(vec![
-        //         Series::new("atom_site_label", &["C1", "C2", "O1"]),
-        //         Series::new("atom_site_type_symbol", &["C", "C", "O"]),
-        //         Series::new("atom_site_fract_x", &[0.123, 0.456, 0.789]),
-        //     ])?;
-
-        //     block.add_loop(df);
-
-        //     cif.add_block("my_structure".to_string(), block);
-
-        //     Ok(cif)
-        // }
     }
 }

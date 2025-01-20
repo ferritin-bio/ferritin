@@ -9,8 +9,8 @@ description.workspace = true
 [dependencies]
 anyhow.workspace = true
 memchr.workspace = true
-polars.workspace = true
-
+# polars.workspace = true
+polars = { version = "0.45.1", features = ["csv", "polars-io"] }
 
 [dev-dependencies]
 ferritin-test-data = { path = "../ferritin-test-data" }
