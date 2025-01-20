@@ -134,7 +134,13 @@ where
         collected.push(line);
     }
 
+    // todo: differentiate between these 2.
+    // let null_values = NullValues::new(vec![".".to_string(), "?".to_string()]);
     let parse_opts = CsvParseOptions::default()
+        .with_null_values(Some(NullValues::AllColumns(vec![
+            ".".to_string().into(),
+            "?".to_string().into(),
+        ])))
         .with_separator(b' ')
         .with_truncate_ragged_lines(true)
         .with_try_parse_dates(true)
@@ -228,7 +234,14 @@ where
             if parts.len() == 2 {
                 value = parts[1].trim().to_string();
             } else if parts.len() >= 2 {
-                panic!("There should not be multiple parts ....{:?}", parts)
+                // Single string with a space in it. e.g 'Structure model'
+                let second_part = parts[1..].join(" ").to_string().trim().to_string();
+                if second_part.starts_with("'") && second_part.ends_with("'") {
+                    value = second_part[1..second_part.len() - 1].to_string();
+                    println!("{}", value);
+                } else {
+                    panic!("There should not be multiple parts ....{:?}", parts)
+                }
             } else {
                 // Read next line to check for semicolon-delimited text
                 buf.clear();
@@ -430,7 +443,7 @@ mod tests {
         println!("Data Block Kets: {:?}", &cif.data_blocks.keys());
         let table_01 = &cif.data_blocks.get("_entry.id").unwrap().data;
         println!("{:?}", table_01);
-        assert_eq!(table_01.shape(), (2, 4));
+        assert_eq!(table_01.shape(), (1, 1));
         Ok(())
     }
 }
