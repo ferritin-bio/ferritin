@@ -30,7 +30,6 @@ impl CifFile {
             data_blocks: HashMap::new(),
         }
     }
-
     fn add_block(&mut self, name: String, block: CifBlock) {
         self.data_blocks.insert(name, block);
     }
@@ -88,8 +87,9 @@ where
             if buf == LOOP_DENOTE {
                 len += process_table(reader, &mut ciffile)?;
             } else if buf[0] == b'_' {
-                len += process_kv_block(reader, &mut data)?;
+                len += process_kv_block(reader, &mut ciffile)?;
             }
+
             // else if buf[0] == b'#' {
             //     len += consume_hashtag_line(reader)?;
             //     println!("#: {:?}", len)
@@ -162,22 +162,21 @@ where
     Ok(total_len)
 }
 
-fn process_kv_block<R>(reader: &mut R, hashmap: &mut HashMap<String, String>) -> io::Result<usize>
+fn process_kv_block<R>(reader: &mut R, cif: &mut CifFile) -> io::Result<usize>
 where
     R: BufRead,
 {
     let mut buf = Vec::new();
     let mut total_len = 0;
-
+    let mut hashmap = HashMap::new();
+    // loop through the KV block and add k/v pairs to the hashmap
     loop {
         // Peek at the next line to check for '#'
         buf.clear();
         let len = read_line(reader, &mut buf)?;
         if len == 0 {
-            // End of file
             break;
         }
-
         // Check if the line starts with '#'
         if let Ok(line) = String::from_utf8(buf.clone()) {
             if line.trim_start().starts_with('#') {
@@ -185,15 +184,27 @@ where
                 break;
             }
         }
-
         // If not a '#' line, reset the reader position and process the key-value pair
         if len > 0 {
             // Process the current key-value pair
-            let kv_len = process_kv(reader, hashmap)?;
+            let kv_len = process_kv(reader, &mut hashmap)?;
             total_len += kv_len;
         }
     }
 
+    let series: Vec<Series> = hashmap
+        .into_iter()
+        .map(|(name, data)| {
+            Series::from_any_values(name.as_str().into(), &[data.as_str().into()], false)
+                .expect("Failed to create series")
+        })
+        .collect();
+
+    let table_name = series[0].name().to_string();
+    let df = DataFrame::from_iter(series);
+    let block = CifBlock::new(BlockType::SINGLE_VALUE, df);
+
+    cif.add_block(table_name.to_string(), block);
     Ok(total_len)
 }
 
