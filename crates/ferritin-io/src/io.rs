@@ -102,6 +102,7 @@ where
     let len = read_line(reader, &mut buf)?;
     total_len += len;
     assert_eq!(buf, b"loop_");
+
     // then the headers
     let mut headers = Vec::new();
     buf.clear();
@@ -114,7 +115,7 @@ where
         total_len += len;
         buf.clear();
     }
-    println!("Headers: {:?}", headers);
+
     // then the data
     let mut collected = Vec::new();
     loop {
@@ -159,10 +160,7 @@ where
 
     let table_name = process_header_name(&headers[0]);
     let trimmed_headers: Vec<&str> = headers.iter().map(|s| process_column_names(s)).collect();
-    df.set_column_names(trimmed_headers);
-    // println!("DF: {:?}", &df);
-
-    println!("TableName: {:?}", &table_name);
+    let _ = df.set_column_names(trimmed_headers);
     let block = CifBlock::new(BlockType::MULTIPLE_VALUE, df);
     cif.add_block(table_name.to_string(), block);
     Ok(total_len)
@@ -230,7 +228,6 @@ where
 {
     let mut buf = Vec::new();
     let mut total_len = 0;
-
     // Read first line containing the key
     let len = read_line(reader, &mut buf)?;
     assert_ne!(buf, b"loop_");
@@ -289,7 +286,6 @@ where
             hashmap.insert(key, value);
         }
     }
-
     Ok(total_len)
 }
 
