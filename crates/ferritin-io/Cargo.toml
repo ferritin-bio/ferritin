@@ -1,0 +1,16 @@
+[package]
+name = "ferritin-io"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+memchr.workspace = true
+# polars.workspace = true
+polars = { version = "0.45.1", features = ["csv", "polars-io"] }
+
+[dev-dependencies]
+ferritin-test-data = { path = "../ferritin-test-data" }
