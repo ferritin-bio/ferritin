@@ -1,14 +1,18 @@
-use polars::prelude::CsvReadOptions;
-use polars::prelude::*;
+use polars::prelude::{CsvParseOptions, CsvReadOptions, DataFrame, NullValues, SerReader, Series};
 use std::collections::HashMap;
 use std::io::{self, BufRead, Read};
 
 //  Constants --------------------------------------------------------------------------------
 
 const BLOCK_DELIMITER: u8 = b'#';
-const LINE_FEED: u8 = b'\n';
 const CARRIAGE_RETURN: u8 = b'\r';
+const LINE_FEED: u8 = b'\n';
 const LOOP_DENOTE: &[u8; 5] = b"loop_";
+const NULL_VALUES: [&str; 2] = [".", "?"];
+const QUOTE_CHAR: char = '\'';
+const SEMICOLON: char = ';';
+const SINGLE_QUOTE: char = '\'';
+const UNDERSCORE: char = '_';
 
 //  Cif Definition --------------------------------------------------------------------------------
 
@@ -101,13 +105,13 @@ where
     // first line is loop_
     let len = read_line(reader, &mut buf)?;
     total_len += len;
-    assert_eq!(buf, b"loop_");
+    assert_eq!(buf, LOOP_DENOTE);
 
     // then the headers
     let mut headers = Vec::new();
     buf.clear();
     loop {
-        if !reader.fill_buf()?.starts_with(b"_") {
+        if !reader.fill_buf()?.starts_with(&[UNDERSCORE as u8]) {
             break;
         }
         let len = read_line(reader, &mut buf)?;
@@ -132,16 +136,21 @@ where
         collected.push(line);
     }
 
+    const NULL_VALUE_DOT: &str = ".";
+    const NULL_VALUE_QUESTION: &str = "?";
+    const CSV_SEPARATOR: u8 = b' ';
+    const QUOTE_CHAR: u8 = b'\'';
+
     let parse_opts = CsvParseOptions::default()
         .with_null_values(Some(NullValues::AllColumns(vec![
             // todo: differentiate between these 2 types of NULL.
-            ".".to_string().into(),
-            "?".to_string().into(),
+            NULL_VALUE_DOT.to_string().into(),
+            NULL_VALUE_QUESTION.to_string().into(),
         ])))
-        .with_separator(b' ')
+        .with_separator(CSV_SEPARATOR)
         .with_truncate_ragged_lines(true)
         .with_try_parse_dates(true)
-        .with_quote_char(Some(b'\''));
+        .with_quote_char(Some(QUOTE_CHAR as u8));
 
     fn collapse_whitespace(s: &str) -> String {
         s.split_whitespace().collect::<Vec<_>>().join(" ")
