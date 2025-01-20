@@ -34,8 +34,8 @@ impl CifFile {
 }
 
 enum BlockType {
-    SINGLE_VALUE,
-    MULTIPLE_VALUE,
+    SingleValue,
+    MultipleValue,
 }
 
 struct CifBlock {
@@ -63,14 +63,14 @@ where
     //    1. if pure k/b add to the top-level dict.
     //        1. 2 values for line
     //        2. value spread over multiple lines
-    //    2. if `loop_` then its a table
+    //    2. if `loop_` then it is a table
 
     let mut len = 0;
     let mut buf: Vec<u8> = Vec::new();
     len += read_line(reader, &mut buf)?;
 
     // todo: implement
-    let file_code = String::from_utf8(buf)
+    let _file_code = String::from_utf8(buf)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
     len += consume_hashtag_line(reader)?;
@@ -171,7 +171,7 @@ where
     let table_name = process_header_name(&headers[0]);
     let trimmed_headers: Vec<&str> = headers.iter().map(|s| process_column_names(s)).collect();
     let _ = df.set_column_names(trimmed_headers);
-    let block = CifBlock::new(BlockType::MULTIPLE_VALUE, df);
+    let block = CifBlock::new(BlockType::MultipleValue, df);
     cif.add_block(table_name.to_string(), block);
     Ok(total_len)
 }
@@ -227,7 +227,7 @@ where
         })
         .collect();
     let df = DataFrame::from_iter(series);
-    let block = CifBlock::new(BlockType::SINGLE_VALUE, df);
+    let block = CifBlock::new(BlockType::SingleValue, df);
     cif.add_block(col_name.to_string(), block);
     Ok(total_len)
 }
