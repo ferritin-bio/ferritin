@@ -128,6 +128,7 @@ where
         if line == "#" {
             break;
         }
+        total_len += len;
         collected.push(line);
     }
 
@@ -248,7 +249,7 @@ where
                 let second_part = parts[1..].join(" ").to_string().trim().to_string();
                 if second_part.starts_with("'") && second_part.ends_with("'") {
                     value = second_part[1..second_part.len() - 1].to_string();
-                    println!("{}", value);
+                    // println!("{}", value);
                 } else {
                     panic!("There should not be multiple parts ....{:?}", parts)
                 }
@@ -372,6 +373,7 @@ where
 }
 
 //  CIF  Definition --------------------------------------------------------------------------------
+// Copying the noodles::fastq reader. Not sure if this is the best way...
 
 /// A Cif reader.
 pub struct Reader<R> {
@@ -419,17 +421,14 @@ mod tests {
         let mut reader = &data[..];
         buf.clear();
         let out = read_line(&mut reader, &mut buf)?;
-        println!("{:?}", out);
         assert_eq!(buf, b"noodles");
 
         // Test Cif Header
         let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        println!("{:?}", prot_file);
         let f = File::open(prot_file)?;
         let mut reader = BufReader::new(f);
         let mut buf = Vec::new();
         let out = read_line(&mut reader, &mut buf)?;
-        println!("{:?}", out);
         assert_eq!(buf, b"data_101M");
         Ok(())
     }
@@ -437,23 +436,53 @@ mod tests {
     #[test]
     fn test_cif_read() -> Result<()> {
         let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        println!("{:?}", prot_file);
         let f = File::open(prot_file)?;
         let mut reader = BufReader::new(f);
-
         let mut cif = CifFile::new("101M".to_string()); //
         let cif_len = read_cif_record(&mut reader, &mut cif)?;
-        // assert_eq!(cif_len, 176763);
-
+        assert_eq!(cif_len, 199869);
         assert_eq!(cif.name, "101M");
         // hmm. sometimes 39 and sometimes 42? whaaat?
         assert_eq!(cif.data_blocks.len(), 65);
 
         println!("Data Block Kets: {:?}", &cif.data_blocks.keys());
+
+        // Entry
         let table_01 = &cif.data_blocks.get("entry").unwrap().data;
         println!("{:?}", table_01);
         assert_eq!(table_01.shape(), (1, 1));
+        assert_eq!(table_01.get_column_names(), vec!["id"]);
 
+        // Entry
+        let table_02 = &cif.data_blocks.get("atom_site").unwrap().data;
+        println!("{:?}", table_02);
+        assert_eq!(table_02.shape(), (1413, 21));
+        assert_eq!(
+            table_02.get_column_names(),
+            vec![
+                "group_PDB",
+                "id",
+                "type_symbol",
+                "label_atom_id",
+                "label_alt_id",
+                "label_comp_id",
+                "label_asym_id",
+                "label_entity_id",
+                "label_seq_id",
+                "pdbx_PDB_ins_code",
+                "Cartn_x",
+                "Cartn_y",
+                "Cartn_z",
+                "occupancy",
+                "B_iso_or_equiv",
+                "pdbx_formal_charge",
+                "auth_seq_id",
+                "auth_comp_id",
+                "auth_asym_id",
+                "auth_atom_id",
+                "pdbx_PDB_model_num"
+            ]
+        );
         Ok(())
     }
 }
