@@ -109,7 +109,6 @@ where
     let mut headers = Vec::new();
     buf.clear();
     loop {
-        // Peek at the next line
         if !reader.fill_buf()?.starts_with(b"_") {
             break;
         }
@@ -144,8 +143,6 @@ where
     fn collapse_whitespace(s: &str) -> String {
         s.split_whitespace().collect::<Vec<_>>().join(" ")
     }
-
-    // let table_text = &collected.join("\n");
     let table_text = collected
         .iter()
         .map(|line| collapse_whitespace(line))
@@ -154,22 +151,14 @@ where
 
     println!("Table Text: \n {:?}", table_text);
 
-    // let header_names = Arc::from(
-    //     headers
-    //         .iter()
-    //         .map(|h| h.trim_start_matches('_').into())
-    //         .collect::<Box<[PlSmallStr]>>(), // Collect directly into Box<[T]>
-    // );
-
-    // println!("Header Names: \n {:?}", header_names);
-
-    let df = CsvReadOptions::default()
+    let mut df = CsvReadOptions::default()
         .with_has_header(false)
-        // .with_columns(Some(header_names))
         .with_parse_options(parse_opts)
         .into_reader_with_file_handle(std::io::Cursor::new(table_text))
         .finish()
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+    df.set_column_names(&headers);
 
     println!("DF: {:?}", &df);
 
