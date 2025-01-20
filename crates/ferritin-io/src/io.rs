@@ -138,6 +138,7 @@ where
     let parse_opts = CsvParseOptions::default()
         .with_separator(b' ')
         .with_truncate_ragged_lines(true)
+        .with_try_parse_dates(true)
         .with_quote_char(Some(b'\''));
 
     fn collapse_whitespace(s: &str) -> String {
