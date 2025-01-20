@@ -3,6 +3,13 @@ use polars::prelude::*;
 use std::collections::HashMap;
 use std::io::{self, BufRead, Read};
 
+//  Constants --------------------------------------------------------------------------------
+
+const BLOCK_DELIMITER: u8 = b'#';
+const LINE_FEED: u8 = b'\n';
+const CARRIAGE_RETURN: u8 = b'\r';
+const LOOP_DENOTE: &[u8; 5] = b"loop_";
+
 //  Cif Definition --------------------------------------------------------------------------------
 
 // Represent a CIF structure
@@ -10,19 +17,6 @@ struct CifFile {
     name: String,
     data_blocks: HashMap<String, CifBlock>,
 }
-
-enum BlockType {
-    SINGLE_VALUE,
-    MULTIPLE_VALUE,
-}
-
-// Simple key-value pairs
-// Loop data as dataframes
-struct CifBlock {
-    block_type: BlockType,
-    data: DataFrame,
-}
-
 impl CifFile {
     fn new(name: String) -> Self {
         CifFile {
@@ -35,6 +29,16 @@ impl CifFile {
     }
 }
 
+enum BlockType {
+    SINGLE_VALUE,
+    MULTIPLE_VALUE,
+}
+
+struct CifBlock {
+    block_type: BlockType,
+    data: DataFrame,
+}
+
 impl CifBlock {
     fn new(block_type: BlockType, data: DataFrame) -> Self {
         CifBlock {
@@ -45,11 +49,6 @@ impl CifBlock {
 }
 
 //  IO Fns  --------------------------------------------------------------------------------
-
-const BLOCK_DELIMITER: u8 = b'#';
-const LINE_FEED: u8 = b'\n';
-const CARRIAGE_RETURN: u8 = b'\r';
-const LOOP_DENOTE: &[u8; 5] = b"loop_";
 
 pub(super) fn read_cif_record<R>(reader: &mut R, ciffile: &mut CifFile) -> io::Result<usize>
 where
@@ -99,12 +98,10 @@ where
 {
     let mut buf = Vec::new();
     let mut total_len = 0;
-
     // first line is loop_
     let len = read_line(reader, &mut buf)?;
     total_len += len;
     assert_eq!(buf, b"loop_");
-
     // then the headers
     let mut headers = Vec::new();
     buf.clear();
@@ -118,7 +115,6 @@ where
         buf.clear();
     }
     println!("Headers: {:?}", headers);
-
     // then the data
     let mut collected = Vec::new();
     loop {
@@ -134,10 +130,9 @@ where
         collected.push(line);
     }
 
-    // todo: differentiate between these 2.
-    // let null_values = NullValues::new(vec![".".to_string(), "?".to_string()]);
     let parse_opts = CsvParseOptions::default()
         .with_null_values(Some(NullValues::AllColumns(vec![
+            // todo: differentiate between these 2 types of NULL.
             ".".to_string().into(),
             "?".to_string().into(),
         ])))
@@ -155,8 +150,6 @@ where
         .collect::<Vec<_>>()
         .join("\n");
 
-    println!("Table Text: \n {:?}", table_text);
-
     let mut df = CsvReadOptions::default()
         .with_has_header(false)
         .with_parse_options(parse_opts)
@@ -164,14 +157,29 @@ where
         .finish()
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
-    df.set_column_names(&headers);
+    let table_name = process_header_name(&headers[0]);
+    let trimmed_headers: Vec<&str> = headers.iter().map(|s| process_column_names(s)).collect();
+    df.set_column_names(trimmed_headers);
+    // println!("DF: {:?}", &df);
 
-    println!("DF: {:?}", &df);
-
-    let table_name = headers[0].clone();
+    println!("TableName: {:?}", &table_name);
     let block = CifBlock::new(BlockType::MULTIPLE_VALUE, df);
     cif.add_block(table_name.to_string(), block);
     Ok(total_len)
+}
+
+// eg. _table.column => table
+fn process_header_name(s: &str) -> &str {
+    s.split('.')
+        .next()
+        .unwrap_or(s)
+        .strip_prefix('_')
+        .unwrap_or(s)
+}
+
+// eg. _table.column => column
+fn process_column_names(s: &str) -> &str {
+    s.split('.').nth(1).unwrap_or(s)
 }
 
 fn process_kv_block<R>(reader: &mut R, cif: &mut CifFile) -> io::Result<usize>
@@ -196,18 +204,23 @@ where
         total_len += kv_len;
     }
 
+    let col_name = hashmap.keys().next().unwrap().clone();
+    let col_name = process_header_name(&col_name);
+
     let series: Vec<Series> = hashmap
         .into_iter()
         .map(|(name, data)| {
-            Series::from_any_values(name.as_str().into(), &[data.as_str().into()], false)
-                .expect("Failed to create series")
+            Series::from_any_values(
+                process_column_names(name.as_str()).into(),
+                &[data.as_str().into()],
+                false,
+            )
+            .expect("Failed to create series")
         })
         .collect();
-
-    let table_name = series[0].name().to_string();
     let df = DataFrame::from_iter(series);
     let block = CifBlock::new(BlockType::SINGLE_VALUE, df);
-    cif.add_block(table_name.to_string(), block);
+    cif.add_block(col_name.to_string(), block);
     Ok(total_len)
 }
 
@@ -438,12 +451,13 @@ mod tests {
 
         assert_eq!(cif.name, "101M");
         // hmm. sometimes 39 and sometimes 42? whaaat?
-        // assert_eq!(cif.data_blocks.len(), 42);
+        assert_eq!(cif.data_blocks.len(), 65);
 
         println!("Data Block Kets: {:?}", &cif.data_blocks.keys());
-        let table_01 = &cif.data_blocks.get("_entry.id").unwrap().data;
+        let table_01 = &cif.data_blocks.get("entry").unwrap().data;
         println!("{:?}", table_01);
         assert_eq!(table_01.shape(), (1, 1));
+
         Ok(())
     }
 }
