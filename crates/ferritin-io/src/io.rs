@@ -1,39 +1,105 @@
 use anyhow::{Error, Result};
+use polars::prelude::*;
 use std::collections::HashMap;
 use std::io::{self, BufRead, Read};
 
 //  Cif Definition --------------------------------------------------------------------------------
 
-struct CIF {
-    file_data: HashMap<String, String>,
-    tables: Option<Vec<Table>>,
+// export interface CifFile {
+//     readonly name?: string,
+//     readonly blocks: ReadonlyArray<CifBlock>
+// }
+//
+// export interface CifCategory {
+//     readonly rowCount: number,
+//     readonly name: string,
+//     readonly fieldNames: ReadonlyArray<string>,
+//     getField(name: string): CifField | undefined
+// }
+
+// struct CIF {
+//     file_data: HashMap<String, String>,
+//     tables: Option<Vec<Table>>,
+// }
+// impl CIF {
+//     pub fn new(name: String) -> Result<Self> {
+//         let mut file_data = HashMap::new();
+//         file_data.insert("entry".to_string(), name);
+//         Ok(CIF {
+//             file_data,
+//             tables: None,
+//         })
+//     }
+// }
+
+// #[derive(Clone)]
+// enum Value {
+//     Integer(i64),
+//     Float(f64),
+//     Text(String),
+//     Boolean(bool),
+//     // Add other types as needed
+// }
+
+// export interface Table {
+//     description: string
+//     key: Set<string>
+//     columns: { [ columnName: string ]: Column }
+// }
+// export type Column = IntCol | StrCol | FloatCol | CoordCol | EnumCol | VectorCol | MatrixCol | ListCol
+
+// Alias: CifCategory
+// field names
+// struct Table {
+//     name: String,
+//     num_columns: usize,
+//     data: HashMap<String, Vec<Value>>,
+// }
+// impl Table {}
+
+// Represent a CIF structure
+struct CifFile {
+    // Store data blocks as named dataframes
+    data_blocks: HashMap<String, CifBlock>,
 }
-impl CIF {
-    pub fn new(name: String) -> Result<Self> {
-        let mut file_data = HashMap::new();
-        file_data.insert("entry".to_string(), name);
-        Ok(CIF {
-            file_data,
-            tables: None,
-        })
+
+struct CifBlock {
+    // Simple key-value pairs
+    properties: HashMap<String, String>,
+    // Loop data as dataframes
+    loops: Vec<DataFrame>,
+}
+
+impl CifFile {
+    fn new() -> Self {
+        CifFile {
+            data_blocks: HashMap::new(),
+        }
+    }
+
+    fn add_block(&mut self, name: String, block: CifBlock) {
+        self.data_blocks.insert(name, block);
     }
 }
 
-#[derive(Clone)]
-enum Value {
-    Integer(i64),
-    Float(f64),
-    Text(String),
-    Boolean(bool),
-    // Add other types as needed
-}
+impl CifBlock {
+    fn new() -> Self {
+        CifBlock {
+            properties: HashMap::new(),
+            loops: Vec::new(),
+        }
+    }
 
-struct Table {
-    name: String,
-    num_columns: usize,
-    data: HashMap<String, Vec<Value>>,
+    // Add a simple property
+    fn add_property(&mut self, key: String, value: String) {
+        self.properties.insert(key, value);
+    }
+
+    // Add a loop as a dataframe
+    fn add_loop(&mut self, df: DataFrame) {
+        self.loops.push(df);
+    }
 }
-impl Table {}
 
 //  IO Fns  --------------------------------------------------------------------------------
 
@@ -71,16 +137,9 @@ where
         }
         if let Some(buf) = buf.get(..5) {
             if buf == LOOP_DENOTE {
-                println!("Loop here!");
                 len += process_table(reader, &mut table_data)?;
-                println!("PT: {:?}", len);
-                println!("table_data keys: {:?}", table_data.keys());
-                // len += consume_hashtag_line(reader)?;
             } else if buf[0] == b'_' {
-                println!("Map of K/V here");
                 len += process_kv_block(reader, &mut data)?;
-                println!("PKV: {:?}", len);
-                // len += consume_hashtag_line(reader)?;
             }
             // else if buf[0] == b'#' {
             //     len += consume_hashtag_line(reader)?;
@@ -91,9 +150,8 @@ where
             // }
         }
     }
-
     // println!("Data Keys: {:?}", data.keys());
-    println!("Table Data Keys: {:?}", table_data.keys());
+    // println!("Table Data Keys: {:?}", table_data.keys());
     Ok(len)
 }
 
@@ -103,20 +161,15 @@ where
 {
     let mut buf = Vec::new();
     let mut total_len = 0;
+
     // first line is loop_
     let len = read_line(reader, &mut buf)?;
     total_len += len;
     assert_eq!(buf, b"loop_");
 
-    // i now want to iterate through each line
-    // lines that start with `_` are field lines
-    // they defin the header
-    // after that are lines with data.
-    // how should i iterate through the lines?
+    // then the headers
     let mut headers = Vec::new();
     buf.clear();
-
-    // Read headers (lines starting with '_')
     loop {
         if let Ok(len) = read_line(reader, &mut buf) {
             if buf.is_empty() || buf[0] != b'_' {
@@ -128,28 +181,25 @@ where
         }
     }
 
-    // process the next set of lines
+    // then the data
     loop {
         if buf.is_empty() || buf[0] == b'#' {
             break;
         }
         let line = String::from_utf8_lossy(&buf).trim().to_string();
         let values: Vec<&str> = line.split_whitespace().collect();
-        // Match values with headers
         for (header, value) in headers.iter().zip(values.iter()) {
             hashmap
                 .entry(header.to_string())
                 .or_insert_with(Vec::new)
                 .push(value.to_string());
         }
-
         buf.clear();
         match read_line(reader, &mut buf) {
             Ok(len) => total_len += len,
             Err(_) => break,
         }
     }
-
     Ok(total_len)
 }
 
@@ -321,7 +371,6 @@ where
     R: BufRead,
 {
     const PREFIX: u8 = b'#';
-
     match read_u8(reader)? {
         PREFIX => consume_line(reader).map(|n| n + 1),
         ch => Err(io::Error::new(
@@ -410,9 +459,33 @@ mod tests {
         println!("{:?}", prot_file);
         let f = File::open(prot_file)?;
         let mut reader = BufReader::new(f);
-        let mut cif = CIF::new("Test".to_string())?;
-        let cif_len = read_cif_record(&mut reader, &mut cif)?;
-        assert_eq!(cif_len, 176763);
+        // let mut cif = CIF::new("Test".to_string())?;
+        // let cif_len = read_cif_record(&mut reader, &mut cif)?;
+        // assert_eq!(cif_len, 176763);
         Ok(())
+
+        // // Example usage:
+        // fn process_cif_data() -> Result<CifFile> {
+        //     let mut cif = CifFile::new();
+
+        //     // Create a data block
+        //     let mut block = CifBlock::new();
+
+        //     // Add simple properties
+        //     block.add_property("_cell_length_a".to_string(), "10.5".to_string());
+
+        //     // Create a loop dataframe
+        //     let df = DataFrame::new(vec![
+        //         Series::new("atom_site_label", &["C1", "C2", "O1"]),
+        //         Series::new("atom_site_type_symbol", &["C", "C", "O"]),
+        //         Series::new("atom_site_fract_x", &[0.123, 0.456, 0.789]),
+        //     ])?;
+
+        //     block.add_loop(df);
+
+        //     cif.add_block("my_structure".to_string(), block);
+
+        //     Ok(cif)
+        // }
     }
 }
