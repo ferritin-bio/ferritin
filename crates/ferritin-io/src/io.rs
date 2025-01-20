@@ -5,74 +5,28 @@ use std::io::{self, BufRead, Read};
 
 //  Cif Definition --------------------------------------------------------------------------------
 
-// export interface CifFile {
-//     readonly name?: string,
-//     readonly blocks: ReadonlyArray<CifBlock>
-// }
-//
-// export interface CifCategory {
-//     readonly rowCount: number,
-//     readonly name: string,
-//     readonly fieldNames: ReadonlyArray<string>,
-//     getField(name: string): CifField | undefined
-// }
-
-// struct CIF {
-//     file_data: HashMap<String, String>,
-//     tables: Option<Vec<Table>>,
-// }
-// impl CIF {
-//     pub fn new(name: String) -> Result<Self> {
-//         let mut file_data = HashMap::new();
-//         file_data.insert("entry".to_string(), name);
-//         Ok(CIF {
-//             file_data,
-//             tables: None,
-//         })
-//     }
-// }
-
-// #[derive(Clone)]
-// enum Value {
-//     Integer(i64),
-//     Float(f64),
-//     Text(String),
-//     Boolean(bool),
-//     // Add other types as needed
-// }
-
-// export interface Table {
-//     description: string
-//     key: Set<string>
-//     columns: { [ columnName: string ]: Column }
-// }
-// export type Column = IntCol | StrCol | FloatCol | CoordCol | EnumCol | VectorCol | MatrixCol | ListCol
-
-// Alias: CifCategory
-// field names
-// struct Table {
-//     name: String,
-//     num_columns: usize,
-//     data: HashMap<String, Vec<Value>>,
-// }
-// impl Table {}
-
 // Represent a CIF structure
 struct CifFile {
-    // Store data blocks as named dataframes
+    name: String,
     data_blocks: HashMap<String, CifBlock>,
 }
 
+enum BlockType {
+    SINGLE_VALUE,
+    MULTIPLE_VALUE,
+}
+
+// Simple key-value pairs
+// Loop data as dataframes
 struct CifBlock {
-    // Simple key-value pairs
-    properties: HashMap<String, String>,
-    // Loop data as dataframes
-    loops: Vec<DataFrame>,
+    block_type: BlockType,
+    data: DataFrame,
 }
 
 impl CifFile {
-    fn new() -> Self {
+    fn new(name: String) -> Self {
         CifFile {
+            name: name,
             data_blocks: HashMap::new(),
         }
     }
@@ -83,21 +37,11 @@ impl CifFile {
 }
 
 impl CifBlock {
-    fn new() -> Self {
+    fn new(block_type: BlockType, data: DataFrame) -> Self {
         CifBlock {
-            properties: HashMap::new(),
-            loops: Vec::new(),
+            block_type: block_type,
+            data: data,
         }
-    }
-
-    // Add a simple property
-    fn add_property(&mut self, key: String, value: String) {
-        self.properties.insert(key, value);
-    }
-
-    // Add a loop as a dataframe
-    fn add_loop(&mut self, df: DataFrame) {
-        self.loops.push(df);
     }
 }
 
@@ -107,7 +51,7 @@ const BLOCK_DELIMITER: u8 = b'#';
 const LINE_FEED: u8 = b'\n';
 const CARRIAGE_RETURN: u8 = b'\r';
 
-pub(super) fn read_cif_record<R>(reader: &mut R, cif: &mut CIF) -> io::Result<usize>
+pub(super) fn read_cif_record<R>(reader: &mut R, cif: &mut CifFile) -> io::Result<usize>
 where
     R: BufRead,
 {
@@ -122,8 +66,13 @@ where
     let mut buf: Vec<u8> = Vec::new();
     let mut data: HashMap<String, String> = HashMap::new();
     let mut table_data: HashMap<String, Vec<String>> = HashMap::new();
-
     len += read_line(reader, &mut buf)?;
+
+    let file_name = String::from_utf8(buf)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+    let mut ciffile = CifFile::new(file_name);
+
     len += consume_hashtag_line(reader)?;
     println!("Length: {}", len);
 
@@ -137,7 +86,7 @@ where
         }
         if let Some(buf) = buf.get(..5) {
             if buf == LOOP_DENOTE {
-                len += process_table(reader, &mut table_data)?;
+                len += process_table(reader, &mut ciffile)?;
             } else if buf[0] == b'_' {
                 len += process_kv_block(reader, &mut data)?;
             }
@@ -155,7 +104,7 @@ where
     Ok(len)
 }
 
-fn process_table<R>(reader: &mut R, hashmap: &mut HashMap<String, Vec<String>>) -> io::Result<usize>
+fn process_table<R>(reader: &mut R, cif: &mut CifFile) -> io::Result<usize>
 where
     R: BufRead,
 {
@@ -182,14 +131,24 @@ where
     }
 
     // then the data
+    let mut series_vecs: HashMap<String, Vec<String>> = HashMap::new();
     loop {
         if buf.is_empty() || buf[0] == b'#' {
+            let table_name = { series_vecs.keys().next().unwrap().to_string() };
+            let series: Vec<Series> = series_vecs
+                .into_iter()
+                .map(|(name, data)| Series::new(name.as_str().into(), data))
+                .collect();
+
+            let df = DataFrame::from_iter(series);
+            let block = CifBlock::new(BlockType::MULTIPLE_VALUE, df);
+            cif.add_block(table_name.to_string(), block);
             break;
         }
         let line = String::from_utf8_lossy(&buf).trim().to_string();
         let values: Vec<&str> = line.split_whitespace().collect();
         for (header, value) in headers.iter().zip(values.iter()) {
-            hashmap
+            series_vecs
                 .entry(header.to_string())
                 .or_insert_with(Vec::new)
                 .push(value.to_string());
