@@ -2848,7 +2848,6 @@ dependencies = [
  "ferritin-molviewspec",
  "ferritin-test-data",
  "itertools 0.14.0",
- "once_cell",
  "pdbtbx",
  "serde",
  "serde-pickle",

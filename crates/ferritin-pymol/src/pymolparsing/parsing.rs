@@ -45,7 +45,7 @@
 //! if (!m_tmpids[m_iter.getAtm()])
 //! m_id = m_retain_ids ? m_iter.getAtomInfo()->id : (m_id + 1);
 //!  m_tmpids[m_iter.getAtm()] = m_id;
-use crate::pymolparsing::colors::{Color, COLOR_SET};
+use crate::pymolparsing::colors::{Color, COLOR_SET, init_colors};
 use crate::pymolparsing::representation::RepBitmask;
 use ferritin_molviewspec::molviewspec::nodes::{ComponentExpression, ComponentSelector};
 use itertools::Itertools;
@@ -339,7 +339,8 @@ impl PyObject {
     /// get_color - note this currently works if there are
     /// no custom colors.
     pub fn get_color(&self) -> Color {
-        COLOR_SET
+        let colors = init_colors();
+        colors
             .get(self.color as usize)
             .expect("Index within bounds")
             .clone()
