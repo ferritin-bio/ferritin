@@ -17,8 +17,9 @@
 //! - Bond order information
 //!
 
-use lazy_static::lazy_static;
 use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
+
 #[rustfmt::skip]
 pub(crate) fn default_distance_range(a: &str, b: &str) -> (f32, f32) {
     match (a, b) {
@@ -71,10 +72,17 @@ pub(crate) fn default_distance_range(a: &str, b: &str) -> (f32, f32) {
     }
 }
 
+static AA_BONDS: OnceLock<HashMap<&'static str, Vec<(&'static str, &'static str, i32)>>> =
+    OnceLock::new();
+
 #[rustfmt::skip]
-lazy_static! {
-    // amino acids from ccd
-    static ref AA_BONDS: HashMap<&'static str, Vec<(&'static str, &'static str, i32)>> = {
+/// get_bonds_canonical20
+///
+/// This is the bond information for the 10 canonical
+/// AAs.  Data were obtained from the [CCD](https://www.wwpdb.org/data/ccd).
+///
+pub(crate) fn get_bonds_canonical20() -> &'static HashMap<&'static str, Vec<(&'static str, &'static str, i32)>> {
+    AA_BONDS.get_or_init(|| {
         let mut m = HashMap::new();
         m.insert("ALA", vec![
             ("C","O",2), ("C","OXT",1), ("C","CA",1), ("CA","CB",1), ("CA","HA",1),
@@ -201,38 +209,35 @@ lazy_static! {
             ("CA","N",1), ("H","N",1), ("H2","N",1), ("HXT","OXT",1)
         ]);
         m
-    };
+    })
 }
 
-/// get_bonds_canonical20
-///
-/// This is the bond information for the 10 canonical
-/// AAs.  Data were obtained from the [CCD](https://www.wwpdb.org/data/ccd).
-///
-pub(crate) fn get_bonds_canonical20(
-) -> &'static HashMap<&'static str, Vec<(&'static str, &'static str, i32)>> {
-    &AA_BONDS
+static AMINO_ACIDS: OnceLock<HashSet<&'static str>> = OnceLock::new();
+static CARBOHYDRATES: OnceLock<HashSet<&'static str>> = OnceLock::new();
+static NUCLEOTIDES: OnceLock<HashSet<&'static str>> = OnceLock::new();
+
+fn get_amino_acids() -> &'static HashSet<&'static str> {
+    AMINO_ACIDS.get_or_init(|| include_str!("ccddata/amino_acids.txt").lines().collect())
 }
 
-lazy_static! {
-    static ref AMINO_ACIDS: HashSet<&'static str> =
-        include_str!("ccddata/amino_acids.txt").lines().collect();
-    static ref CARBOHYDRATES: HashSet<&'static str> =
-        include_str!("ccddata/carbohydrates.txt").lines().collect();
-    static ref NUCLEOTIDES: HashSet<&'static str> =
-        include_str!("ccddata/nucleotides.txt").lines().collect();
+fn get_carbohydrates() -> &'static HashSet<&'static str> {
+    CARBOHYDRATES.get_or_init(|| include_str!("ccddata/carbohydrates.txt").lines().collect())
+}
+
+fn get_nucleotides() -> &'static HashSet<&'static str> {
+    NUCLEOTIDES.get_or_init(|| include_str!("ccddata/nucleotides.txt").lines().collect())
 }
 
 pub(crate) fn is_amino_acid(symbol: &str) -> bool {
-    AMINO_ACIDS.contains(symbol)
+    get_amino_acids().contains(symbol)
 }
 
 pub(crate) fn is_carbohydrate(symbol: &str) -> bool {
-    CARBOHYDRATES.contains(symbol)
+    get_carbohydrates().contains(symbol)
 }
 
 pub(crate) fn is_nucleotide(symbol: &str) -> bool {
-    NUCLEOTIDES.contains(symbol)
+    get_nucleotides().contains(symbol)
 }
 
 #[cfg(test)]

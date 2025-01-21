@@ -45,7 +45,6 @@ tokenizers = { version = "0.21.0" } # full features for non-wasm
 
 
 [dev-dependencies]
-candle-examples.workspace = true
 ferritin-test-data = { path = "../ferritin-test-data" }
 
 

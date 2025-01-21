@@ -1,10 +1,10 @@
-use candle_core::{Device, Result, Tensor};
-use std::collections::HashMap;
-use std::path::PathBuf;
 use crate::esm::models::esmc::ESMC;
 use crate::esm::tokenization::get_model_tokenizers;
 use crate::esm::utils::constants::models::{ESM3_OPEN_SMALL, ESMC_300M};
+use candle_core::{Device, Result, Tensor};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 // use huggingface_hub::snapshot_download;
 
@@ -37,24 +37,24 @@ pub fn esmc_300m_202412(device: &Device) -> Result<Box<dyn Model>> {
     Ok(Box::new(model))
 }
 
-lazy_static! {
-    static ref LOCAL_MODEL_REGISTRY: HashMap<&'static str, ModelBuilder> = {
-        let mut map = HashMap::new();
-        map.insert(ESM3_OPEN_SMALL, Box::new(esm3_sm_open_v0));
-        map.insert(
-            ESM3_STRUCTURE_ENCODER_V0,
-            Box::new(esm3_structure_encoder_v0),
-        );
-        map.insert(
-            ESM3_STRUCTURE_DECODER_V0,
-            Box::new(esm3_structure_decoder_v0),
-        );
-        map.insert(ESM3_FUNCTION_DECODER_V0, Box::new(esm3_function_decoder_v0));
-        map.insert(ESMC_600M, Box::new(esmc_600m_202412));
-        map.insert(ESMC_300M, Box::new(esmc_300m_202412));
-        map
-    };
-}
+// lazy_static! {
+//     static ref LOCAL_MODEL_REGISTRY: HashMap<&'static str, ModelBuilder> = {
+//         let mut map = HashMap::new();
+//         map.insert(ESM3_OPEN_SMALL, Box::new(esm3_sm_open_v0));
+//         map.insert(
+//             ESM3_STRUCTURE_ENCODER_V0,
+//             Box::new(esm3_structure_encoder_v0),
+//         );
+//         map.insert(
+//             ESM3_STRUCTURE_DECODER_V0,
+//             Box::new(esm3_structure_decoder_v0),
+//         );
+//         map.insert(ESM3_FUNCTION_DECODER_V0, Box::new(esm3_function_decoder_v0));
+//         map.insert(ESMC_600M, Box::new(esmc_600m_202412));
+//         map.insert(ESMC_300M, Box::new(esmc_300m_202412));
+//         map
+//     };
+// }
 
 pub fn load_local_model(model_name: &str, device: &Device) -> Result<Box<dyn Model>> {
     LOCAL_MODEL_REGISTRY
