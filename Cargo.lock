@@ -2744,7 +2744,6 @@ dependencies = [
  "candle-core",
  "ferritin-test-data",
  "itertools 0.14.0",
- "lazy_static",
  "pdbtbx",
  "strum",
 ]

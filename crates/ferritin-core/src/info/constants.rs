@@ -212,28 +212,20 @@ pub(crate) fn get_bonds_canonical20() -> &'static HashMap<&'static str, Vec<(&'s
     })
 }
 
-
 static AMINO_ACIDS: OnceLock<HashSet<&'static str>> = OnceLock::new();
 static CARBOHYDRATES: OnceLock<HashSet<&'static str>> = OnceLock::new();
 static NUCLEOTIDES: OnceLock<HashSet<&'static str>> = OnceLock::new();
 
-
 fn get_amino_acids() -> &'static HashSet<&'static str> {
-    AMINO_ACIDS.get_or_init(|| {
-        include_str!("ccddata/amino_acids.txt").lines().collect()
-    })
+    AMINO_ACIDS.get_or_init(|| include_str!("ccddata/amino_acids.txt").lines().collect())
 }
 
 fn get_carbohydrates() -> &'static HashSet<&'static str> {
-    CARBOHYDRATES.get_or_init(|| {
-        include_str!("ccddata/carbohydrates.txt").lines().collect()
-    })
+    CARBOHYDRATES.get_or_init(|| include_str!("ccddata/carbohydrates.txt").lines().collect())
 }
 
 fn get_nucleotides() -> &'static HashSet<&'static str> {
-    NUCLEOTIDES.get_or_init(|| {
-        include_str!("ccddata/nucleotides.txt").lines().collect()
-    })
+    NUCLEOTIDES.get_or_init(|| include_str!("ccddata/nucleotides.txt").lines().collect())
 }
 
 pub(crate) fn is_amino_acid(symbol: &str) -> bool {
@@ -245,8 +237,8 @@ pub(crate) fn is_carbohydrate(symbol: &str) -> bool {
 }
 
 pub(crate) fn is_nucleotide(symbol: &str) -> bool {
-
-
+    get_nucleotides().contains(symbol)
+}
 
 #[cfg(test)]
 mod tests {
