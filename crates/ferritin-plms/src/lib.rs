@@ -1,18 +1,12 @@
-//! ferritin-amplify
+//! ferritin-plms
 //!
-//!
-//! - [amplify model](https://github.com/chandar-lab/AMPLIFY)
-//! - [amplify hf - 120M](https://huggingface.co/chandar-lab/AMPLIFY_120M)
-//!
-//! To try and example of this model:
 //!
 //! ```shell
 //! cargo run --example amplify
 //! cargo run --example amplify --features metal
 //! ```
-//!
-//!
-//!
+use candle_core::utils::{cuda_is_available, metal_is_available};
+use candle_core::{Device, Result, Tensor};
 pub use amplify::amplify::AMPLIFY;
 pub use amplify::amplify_runner::{AmplifyModels, AmplifyRunner};
 pub use amplify::config::AMPLIFYConfig;
@@ -28,3 +22,28 @@ pub mod esm;
 pub mod esm2;
 pub mod ligandmpnn;
 pub mod types;
+
+
+
+
+pub fn device(cpu: bool) -> Result<Device> {
+    if cpu {
+        Ok(Device::Cpu)
+    } else if cuda_is_available() {
+        Ok(Device::new_cuda(0)?)
+    } else if metal_is_available() {
+        Ok(Device::new_metal(0)?)
+    } else {
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            println!(
+                "Running on CPU, to run on GPU(metal), build this example with `--features metal`"
+            );
+        }
+        #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+        {
+            println!("Running on CPU, to run on GPU, build this example with `--features cuda`");
+        }
+        Ok(Device::Cpu)
+    }
+}

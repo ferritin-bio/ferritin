@@ -1,8 +1,6 @@
-use anyhow::{Error as E, Result};
-use candle_core::DType;
-use candle_examples::device;
+use anyhow::Result;
 use clap::Parser;
-use ferritin_plms::{AmplifyModels, AmplifyRunner};
+use ferritin_plms::{AmplifyModels, AmplifyRunner,device};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

@@ -230,9 +230,6 @@ name = "anyhow"
 version = "1.0.95"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
-dependencies = [
- "backtrace",
-]
 
 [[package]]
 name = "approx"
@@ -1651,48 +1648,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "candle-examples"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bdceca3faa253f7140230f8eb9ac05ed0c10c7e33afeb9ee0d7fa6305a5d946"
-dependencies = [
- "anyhow",
- "candle-core",
- "candle-hf-hub",
- "candle-nn",
- "candle-transformers",
- "csv",
- "image",
- "num-traits",
- "rayon",
- "safetensors",
- "serde",
- "serde_json",
- "tokenizers 0.19.1",
-]
-
-[[package]]
-name = "candle-hf-hub"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca5f45ce8fe55a9e9246a3fc60000d7ed11b88a84d72f753488f7264ce04b102"
-dependencies = [
- "dirs",
- "futures",
- "http",
- "indicatif",
- "log",
- "num_cpus",
- "rand",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "ureq",
-]
-
-[[package]]
 name = "candle-metal-kernels"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2245,27 +2200,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "csv"
-version = "1.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acdc4883a9c96732e4733212c01447ebd805833b7275a73ca3ee080fd77afdaf"
-dependencies = [
- "csv-core",
- "itoa",
- "ryu",
- "serde",
-]
-
-[[package]]
-name = "csv-core"
-version = "0.1.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5efa2b3d7902f4b634a20cae3c9c4e6209dc4779feb6863329607560143efa70"
-dependencies = [
- "memchr",
-]
-
-[[package]]
 name = "ctrlc"
 version = "3.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2755,7 +2689,6 @@ dependencies = [
  "anyhow",
  "bevy",
  "candle-core",
- "candle-examples",
  "candle-metal-kernels",
  "candle-nn",
  "candle-onnx",
@@ -2770,7 +2703,7 @@ dependencies = [
  "ort",
  "pdbtbx",
  "serde_json",
- "tokenizers 0.21.0",
+ "tokenizers",
 ]
 
 [[package]]
@@ -2811,7 +2744,7 @@ dependencies = [
  "pdbtbx",
  "safetensors",
  "serde",
- "tokenizers 0.21.0",
+ "tokenizers",
 ]
 
 [[package]]
@@ -2835,7 +2768,7 @@ dependencies = [
  "serde_json",
  "strum",
  "tempfile",
- "tokenizers 0.21.0",
+ "tokenizers",
 ]
 
 [[package]]
@@ -3966,8 +3899,6 @@ dependencies = [
  "byteorder-lite",
  "num-traits",
  "png",
- "zune-core",
- "zune-jpeg",
 ]
 
 [[package]]
@@ -7201,37 +7132,6 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokenizers"
-version = "0.19.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e500fad1dd3af3d626327e6a3fe5050e664a6eaa4708b8ca92f1794aaf73e6fd"
-dependencies = [
- "aho-corasick",
- "derive_builder",
- "esaxx-rs",
- "getrandom",
- "itertools 0.12.1",
- "lazy_static",
- "log",
- "macro_rules_attribute",
- "monostate",
- "onig",
- "paste",
- "rand",
- "rayon",
- "rayon-cond",
- "regex",
- "regex-syntax 0.8.5",
- "serde",
- "serde_json",
- "spm_precompiled",
- "thiserror 1.0.69",
- "unicode-normalization-alignments",
- "unicode-segmentation",
- "unicode_categories",
-]
-
-[[package]]
-name = "tokenizers"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ecededfed68a69bc657e486510089e255e53c3d38cc7d4d59c8742668ca2cae"
@@ -8811,19 +8711,4 @@ checksum = "38ff0f21cfee8f97d94cef41359e0c89aa6113028ab0291aa8ca0038995a95aa"
 dependencies = [
  "cc",
  "pkg-config",
-]
-
-[[package]]
-name = "zune-core"
-version = "0.4.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f423a2c17029964870cfaabb1f13dfab7d092a62a29a89264f4d36990ca414a"
-
-[[package]]
-name = "zune-jpeg"
-version = "0.4.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99a5bab8d7dedf81405c4bb1f2b83ea057643d9cb28778cea9eecddeedd2e028"
-dependencies = [
- "zune-core",
 ]
