@@ -228,7 +228,7 @@ impl AtomCollection {
             .chain_ids
             .iter()
             .enumerate()
-            .filter(|(_, &ref chain)| chain == chain_id)
+            .filter(|&(_, &ref chain)| chain == chain_id)
             .map(|(i, _)| i)
             .collect();
         Selection::new(indices)

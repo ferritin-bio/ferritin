@@ -395,11 +395,11 @@ impl ProteinFeatures {
         Tensor::from_iter(mask_values, device)
     }
     pub fn update_mask(&mut self, tensor: Tensor) -> Result<()> {
-        if let Some(ref mask) = self.x_mask {
+        match self.x_mask { Some(ref mask) => {
             self.x_mask = Some(mask.mul(&tensor)?);
-        } else {
+        } _ => {
             self.x_mask = Some(tensor);
-        }
+        }}
         Ok(())
     }
     // Fixed Residue List --> Tensor of length 21

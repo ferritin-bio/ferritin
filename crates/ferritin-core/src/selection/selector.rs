@@ -55,7 +55,7 @@ impl<'a> AtomSelector<'a> {
             .get_elements()
             .iter()
             .enumerate()
-            .filter(|(_, &e)| e == element)
+            .filter(|&(_, &e)| e == element)
             .map(|(i, _)| i)
             .collect();
         self.current_selection = &self.current_selection & &Selection::new(element_selection);
@@ -99,7 +99,7 @@ impl<'a> AtomSelector<'a> {
             .get_coords()
             .iter()
             .enumerate()
-            .filter(|(_, &pos)| {
+            .filter(|&(_, &pos)| {
                 let dx = pos[0] - center[0];
                 let dy = pos[1] - center[1];
                 let dz = pos[2] - center[2];

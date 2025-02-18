@@ -482,7 +482,7 @@ impl AAAtom {
 }
 
 macro_rules! define_residues {
-    ($($name:ident: $code3:expr, $code1:expr, $idx:expr, $features:expr, $atoms14:expr),* $(,)?) => {
+    ($($name:ident: $code3:expr_2021, $code1:expr_2021, $idx:expr_2021, $features:expr_2021, $atoms14:expr_2021),* $(,)?) => {
         #[derive(Debug, Copy, Clone)]
         pub enum Residue {
             $($name),*
