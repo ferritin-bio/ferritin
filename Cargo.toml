@@ -22,18 +22,18 @@ edition = "2021"
 
 [workspace.dependencies]
 anyhow = "1.0"
-bevy = "0.15.2"
-bitflags = "2.8.0"
+bevy = "0.15.3"
+bitflags = "2.9.0"
 bon = "3.3.2"
 candle-core = "0.8.3"
 candle-metal-kernels = "0.8.3"
 candle-nn = "0.8.3"
 candle-onnx = "0.8.3"
 candle-transformers = "0.8.3"
-chrono = "0.4.39"
-clap = { version = "4.5.30", features = ["derive"] }
+chrono = "0.4.40"
+clap = { version = "4.5.31", features = ["derive"] }
 geo = "0.29.3"
-hf-hub = "0.4.1"
+hf-hub = "0.4.2"
 itertools = "0.14.0"
 memchr = "2.7.4"
 ndarray = "0.16"
@@ -46,7 +46,7 @@ safetensors = "0.4.5"
 serde = { version = "1.0", features = ["derive"] }
 serde-pickle = "1.2"
 serde_bytes = "0.11.15"
-serde_json = "1.0.138"
+serde_json = "1.0.139"
 serde_repr = "0.1.19"
 strum = { version = "0.26", features = ["derive"] }
 svg = "0.18.0"
