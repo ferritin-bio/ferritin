@@ -31,9 +31,10 @@
 //! CoordSetAtomToPDBStrVLA
 //! Variables:
 //! - m_iter: SeleCoordIterator m_iter;
+//!
 //! Atoms:
-//! how do we check for multiple objects?
-//! m_iter.obj defines the object. By number? by name?
+//!   how do we check for multiple objects?
+//!   m_iter.obj defines the object. By number? by name?
 //! - iterate through the coordinates
 //! - check for multi
 //! update transformation matrices
@@ -45,13 +46,13 @@
 //! if (!m_tmpids[m_iter.getAtm()])
 //! m_id = m_retain_ids ? m_iter.getAtomInfo()->id : (m_id + 1);
 //!  m_tmpids[m_iter.getAtm()] = m_id;
-use crate::pymolparsing::colors::{Color, COLOR_SET, init_colors};
+use crate::pymolparsing::colors::{Color, init_colors};
 use crate::pymolparsing::representation::RepBitmask;
 use ferritin_molviewspec::molviewspec::nodes::{ComponentExpression, ComponentSelector};
 use itertools::Itertools;
-use pdbtbx::{self, Element, Residue, PDB};
+use pdbtbx::{self, Element, PDB, Residue};
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_pickle::{from_value, Value};
+use serde_pickle::{Value, from_value};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
 /// AtomInfo
@@ -421,15 +422,15 @@ impl PyObjectMolecule {
 
         let atom = pdbtbx::Atom::new(
             atom_info.is_hetatm,     // hetero
-            serial_number,           // serial_number: Note: I am not sure that this is correct just yet.
-            atom_info.name.clone(),  // atom_name
-            x_coord.into(),          // x
-            y_coord.into(),          // y
-            z_coord.into(),          // z
-            0.0,                     // occupancy? Todo
-            atom_info.b,             // b-factor
+            serial_number, // serial_number: Note: I am not sure that this is correct just yet.
+            atom_info.name.clone(), // atom_name
+            x_coord.into(), // x
+            y_coord.into(), // y
+            z_coord.into(), // z
+            0.0,           // occupancy? Todo
+            atom_info.b,   // b-factor
             atom_info.elem.symbol(), // element
-            formal_charge,           // charge: todo: is this the right charge?
+            formal_charge, // charge: todo: is this the right charge?
         );
         atom.unwrap()
     }

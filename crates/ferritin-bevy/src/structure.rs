@@ -8,8 +8,8 @@ use super::ColorScheme;
 use bevy::log::tracing_subscriber::reload::Error;
 use bevy::math::Vec4;
 use bevy::prelude::{
-    default, Color, Component, Cylinder, Mesh, MeshBuilder, Meshable, Quat, Sphere,
-    StandardMaterial, Transform, Vec3,
+    Color, Component, Cylinder, Mesh, MeshBuilder, Meshable, Quat, Sphere, StandardMaterial,
+    Transform, Vec3, default,
 };
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::render::render_asset::RenderAssetUsages;
@@ -256,7 +256,7 @@ impl Structure {
             .iter_residues_aminoacid()
             .map(|residue| {
                 let ca = residue.find_atom_by_name("CA").expect("CA in all residues");
-                Vec3::from_array(ca.coords.clone())
+                Vec3::from_array(*ca.coords)
             })
             .collect();
         let curve = create_smooth_curve(&c_alphas, 3);

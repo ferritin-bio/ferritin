@@ -1,4 +1,4 @@
-use candle_core::{DType, Device, IndexOp, Result, Tensor, D};
+use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
 use candle_nn::encoding::one_hot;
 use strum::{Display, EnumIter, EnumString};
 
@@ -57,11 +57,11 @@ pub fn cat_neighbors_nodes(
         h_neighbors.dim(2)?, // 24
         h_neighbors.dim(3)?, // 128
     ))?;
-    let ten = Tensor::cat(
+
+    Tensor::cat(
         &[h_neighbors, h_nodes_gathered.to_dtype(DType::F32)?],
         D::Minus1,
-    );
-    ten
+    )
 }
 
 /// Retrieve the nearest Neighbor of a set of coordinates.

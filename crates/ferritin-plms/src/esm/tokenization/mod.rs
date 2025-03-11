@@ -1,7 +1,7 @@
 pub mod sequence_tokenizer;
-use crate::esm::utils::constants::models::{normalize_model_name, ESM3_OPEN_SMALL};
-use anyhow::{anyhow, Result};
-use sequence_tokenizer::{EsmSequenceTokenizer, EsmTokenizerBase};
+use crate::esm::utils::constants::models::{ESM3_OPEN_SMALL, normalize_model_name};
+use anyhow::{Result, anyhow};
+use sequence_tokenizer::EsmSequenceTokenizer;
 
 pub struct TokenizerCollection {
     pub sequence: EsmSequenceTokenizer,

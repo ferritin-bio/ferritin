@@ -8,6 +8,6 @@ pub fn execute(input: String, output: String) -> anyhow::Result<()> {
     let (pdb, _) = pdbtbx::open(input).expect("A PDB  or CIF file");
     let ac = AtomCollection::from(&pdb);
     let features = ac.featurize(&candle_core::Device::Cpu)?;
-    let _ = features.save_to_safetensor(&output)?;
+    features.save_to_safetensor(&output)?;
     Ok(())
 }

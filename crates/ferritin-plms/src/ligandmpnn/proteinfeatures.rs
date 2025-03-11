@@ -9,7 +9,7 @@
 //! - Chemical features like hydrophobicity, charge
 //! - Evolutionary features from MSA profiles
 
-use super::utilities::{aa1to_int, aa3to1, AAAtom};
+use super::utilities::{AAAtom, aa1to_int, aa3to1};
 use candle_core::{Device, Result, Tensor};
 use ferritin_core::AtomCollection;
 use itertools::MultiUnzip;
@@ -44,9 +44,9 @@ impl LMPNNFeatures for AtomCollection {
             .iter_residues_aminoacid()
             .map(|res| res.res_name)
             .map(|res| aa3to1(&res))
-            .map(|res| aa1to_int(res));
+            .map(aa1to_int);
 
-        Ok(Tensor::from_iter(s, device)?.reshape((1, n))?)
+        Tensor::from_iter(s, device)?.reshape((1, n))
     }
     // equivalent to protien MPNN's parse_PDB
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
@@ -119,7 +119,7 @@ impl LMPNNFeatures for AtomCollection {
             }
         }
         // Create tensor with shape [1,residues, 4, 3]
-        Tensor::from_vec(backbone_data, (1, res_count, 4, 3), &device)
+        Tensor::from_vec(backbone_data, (1, res_count, 4, 3), device)
     }
 
     /// create numeric Tensor of shape [<sequence-length>, 37, 3]
@@ -139,7 +139,7 @@ impl LMPNNFeatures for AtomCollection {
             }
         }
         // Create tensor with shape [residues, 37, 3]
-        Tensor::from_vec(atom37_data, (1, res_count, 37, 3), &device)
+        Tensor::from_vec(atom37_data, (1, res_count, 37, 3), device)
     }
 
     // create numeric tensor for ligands.
@@ -162,8 +162,8 @@ impl LMPNNFeatures for AtomCollection {
             .flat_map(|residue| {
                 residue
                     .iter_atoms()
-                    .filter(|atom| is_heavy_atom(&atom.element))
-                    .map(|atom| (*atom.coords, atom.element.clone()))
+                    .filter(|atom| is_heavy_atom(atom.element))
+                    .map(|atom| (*atom.coords, *atom.element))
                     .collect::<Vec<_>>()
             })
             .multiunzip();
@@ -395,11 +395,14 @@ impl ProteinFeatures {
         Tensor::from_iter(mask_values, device)
     }
     pub fn update_mask(&mut self, tensor: Tensor) -> Result<()> {
-        match self.x_mask { Some(ref mask) => {
-            self.x_mask = Some(mask.mul(&tensor)?);
-        } _ => {
-            self.x_mask = Some(tensor);
-        }}
+        match self.x_mask {
+            Some(ref mask) => {
+                self.x_mask = Some(mask.mul(&tensor)?);
+            }
+            _ => {
+                self.x_mask = Some(tensor);
+            }
+        }
         Ok(())
     }
     // Fixed Residue List --> Tensor of length 21
