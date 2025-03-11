@@ -69,10 +69,9 @@
 
 // // RUST_BACKTRACE=1 cargo run --example esm2-onnx-candle
 
-use anyhow::{anyhow, Result};
-use candle_core::{DType, Device, Tensor, D};
-use candle_onnx::onnx::tensor_shape_proto::dimension::Value::{DimParam, DimValue};
-use ferritin_onnx_models::{ESM2Models, ESM2};
+use anyhow::{Result, anyhow};
+use candle_core::{DType, Device, Tensor};
+use ferritin_onnx_models::{ESM2, ESM2Models};
 
 fn main() -> Result<()> {
     let sequence = "MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFESFGDLSTPDAVMGNPKVKAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPENFRLLGNVLVCVLAHHFGKEFTPPVQAAYQKVVAGVANALAHKYH";

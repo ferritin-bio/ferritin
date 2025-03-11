@@ -1,9 +1,9 @@
 use super::configs::ProteinMPNNConfig;
 use super::proteinfeatures::ProteinFeatures;
 use super::utilities::{compute_nearest_neighbors, cross_product, gather_edges, linspace};
-use candle_core::{DType, Device, Module, Result, Tensor, D};
+use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::encoding::one_hot;
-use candle_nn::{layer_norm, linear, LayerNorm, LayerNormConfig, Linear, VarBuilder};
+use candle_nn::{LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear};
 
 #[derive(Clone, Debug)]
 /// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L669
@@ -77,7 +77,7 @@ impl ProteinFeaturesModel {
             .to_dtype(DType::F32)? // Convert to F32 on CPU
             .reshape((1, 1, 1, self.num_rbf))?
             .to_device(device)?; // Move to Metal device after conversion
-                                 // Calculate width (σ)
+        // Calculate width (σ)
         let d_sigma = (D_MAX - D_MIN) / self.num_rbf as f64;
         let dims = d.dims();
         let d_expanded = d.unsqueeze(D::Minus1)?; // [N, N, C, 1]
@@ -85,7 +85,7 @@ impl ProteinFeaturesModel {
         let d_expanded_broadcast =
             d_expanded.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
         let d_sigma_tensor =
-            Tensor::new(&[d_sigma as f32], &device)?.broadcast_as(d_expanded_broadcast.shape())?;
+            Tensor::new(&[d_sigma as f32], device)?.broadcast_as(d_expanded_broadcast.shape())?;
         let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma_tensor)?;
         let rbf = diff.powf(2.0)?.neg()?.exp()?;
         Ok(rbf)
@@ -118,7 +118,7 @@ impl ProteinFeaturesModel {
         let squared_diff = diff.powf(2.0)?;
         let sum_squared_diff = squared_diff.sum(3)?;
         let d_a_b = (sum_squared_diff + 1e-6)?.sqrt()?;
-        let d_a_b_neighbors = gather_edges(&d_a_b.unsqueeze(D::Minus1)?, &e_idx)?;
+        let d_a_b_neighbors = gather_edges(&d_a_b.unsqueeze(D::Minus1)?, e_idx)?;
         let d_a_b_neighbors = d_a_b_neighbors.squeeze(D::Minus1)?;
         let rbf_a_b = self._rbf(&d_a_b_neighbors, device)?;
         Ok(rbf_a_b)
@@ -179,7 +179,7 @@ impl ProteinFeaturesModel {
         let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
         let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
 
-        let (d_neighbors, e_idx) = self._dist(&ca, &mask, self.augment_eps as f64)?;
+        let (d_neighbors, e_idx) = self._dist(&ca, mask, self.augment_eps as f64)?;
 
         let mut rbf_all = Vec::new();
         rbf_all.push(self._rbf(&d_neighbors, device)?);

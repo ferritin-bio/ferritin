@@ -1,5 +1,5 @@
 use super::modules::{ContactPredictionHead, ESM1bLayerNorm, RobertaLMHead, TransformerLayer};
-use candle_core::{Module, Result};
+use candle_core::Result;
 use candle_nn::{self as nn, VarBuilder};
 use serde::Deserialize;
 use tokenizers::Tokenizer;

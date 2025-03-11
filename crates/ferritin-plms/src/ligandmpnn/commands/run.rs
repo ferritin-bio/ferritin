@@ -1,4 +1,3 @@
-
 use crate::ligandmpnn::configs::{
     AABiasConfig, LigandMPNNConfig, MPNNExecConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig,
     ResidueControl, RunConfig,
@@ -61,8 +60,8 @@ pub fn execute(
         .unwrap_or(ModelTypes::ProteinMPNN);
 
     let seed = exec.run_config.seed.unwrap_or_else(|| {
-        let mut rng = rand::thread_rng();
-        rng.gen_range(0..99999)
+        let mut rng = rand::rng();
+        rng.random_range(0..99999)
     });
 
     let temperature = exec.run_config.temperature.unwrap_or(0.1);
@@ -116,7 +115,7 @@ pub fn execute(
     let model_sample = model.sample(&prot_features, temperature as f64, seed as u64)?;
     println!("{:?}", model_sample);
 
-    let _ = {
+    {
         // Create the output folders
         println!("Creating the Outputs");
         std::fs::create_dir_all(format!("{}/seqs", out_folder))?;
@@ -147,7 +146,7 @@ pub fn execute(
         // out_dict["seed"] = seed
         // out_dict["temperature"] = args.temperature
         let outfile = format!("{}/stats/stats.safetensors", out_folder);
-        model_sample.save_as_safetensors(outfile);
+        let _ = model_sample.save_as_safetensors(outfile);
     }
     Ok(())
 }

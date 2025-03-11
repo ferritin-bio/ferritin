@@ -644,7 +644,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_cli_command_run_example_27() {
-        let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
+        let (_pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
         let mut cmd = Command::cargo_bin("ferritin-ligandmpnn").unwrap();
 
@@ -665,7 +665,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_cli_command_run_example_28() {
-        let (pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
+        let (_pdbfile, _tmp) = TestFile::protein_03().create_temp().unwrap();
         let out_folder = tempfile::tempdir().unwrap().into_path();
         let mut cmd = Command::cargo_bin("ferritin-ligandmpnn").unwrap();
 

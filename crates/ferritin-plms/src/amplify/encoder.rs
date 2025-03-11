@@ -1,8 +1,8 @@
 use super::config::AMPLIFYConfig;
 use super::rotary::apply_rotary_emb;
-use candle_core::{Module, Result, Tensor, D};
+use candle_core::{D, Module, Result, Tensor};
 use candle_nn::{
-    linear_no_bias, ops::softmax_last_dim, rms_norm, Dropout, Linear, RmsNorm, VarBuilder,
+    Dropout, Linear, RmsNorm, VarBuilder, linear_no_bias, ops::softmax_last_dim, rms_norm,
 };
 
 /// An encoder block in the AMPLIFY transformer architecture.
@@ -93,7 +93,7 @@ impl EncoderBlock {
         let dims = x.dims();
         let batch_shape = &dims[..dims.len() - 1];
         // Reshape input to 2D: (batch_size, input_dim)
-        let x_flat = self.flatten_last_dim(&x)?;
+        let x_flat = self.flatten_last_dim(x)?;
         // Apply packed W1W2 linear transformation
         let w12_out = self.w12.forward(&x_flat)?;
         // Split the output into two halves (for SwiGLU activation)
@@ -123,7 +123,7 @@ impl EncoderBlock {
         value: &Tensor,
         attn_mask: Option<&Tensor>,
         dropout_p: f64,
-        is_causal: bool,
+        _is_causal: bool,
     ) -> Result<Tensor> {
         // Calculate attention scores
         let d_k = key.dim(key.dims().len() - 1)? as f64;
@@ -133,7 +133,7 @@ impl EncoderBlock {
 
         // Apply mask if provided
         if let Some(mask) = attn_mask {
-            let scores = scores.add(mask)?;
+            let _scores = scores.add(mask)?;
         }
         // Apply softmax
         let attn = softmax_last_dim(&scores)?;
@@ -179,7 +179,7 @@ impl EncoderBlock {
             self.config.num_attention_heads,
             self.d_head,
         ))?;
-        let (xq, xk) = apply_rotary_emb(&xq, &xk, &freqs_cis)?;
+        let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
         let dropout_prob = self.config.dropout_prob;
 
         // need to handle pad_mask better ....

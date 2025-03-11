@@ -1,4 +1,4 @@
-use candle_core::{Device, Result, Tensor, D};
+use candle_core::{D, Device, Result, Tensor};
 
 /// Precomputes frequency-based complex rotation matrices for rotary embeddings.
 ///
@@ -25,7 +25,7 @@ pub fn precompute_freqs_cis(head_dim: usize, seq_len: usize) -> Result<Tensor> {
     let freqs_cos = freqs.cos()?;
     let freqs_sin = freqs.sin()?;
 
-    Ok(Tensor::stack(&[freqs_cos, freqs_sin], D::Minus1)?)
+    Tensor::stack(&[freqs_cos, freqs_sin], D::Minus1)
 }
 
 pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<(Tensor, Tensor)> {
@@ -43,7 +43,7 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
         .unsqueeze(0)? // Add batch dim
         .unsqueeze(2)? // Add head dim
         .expand((b_sz, seq_len, h, half_headdim, complex_dim))?; // Expand to match input dimensions
-                                                                 // Define complex multiplication operation
+    // Define complex multiplication operation
     let complex_mul = |x: &Tensor| -> Result<Tensor> {
         let real = x.narrow(4, 0, 1)?.squeeze(4)?;
         let imag = x.narrow(4, 1, 1)?.squeeze(4)?;

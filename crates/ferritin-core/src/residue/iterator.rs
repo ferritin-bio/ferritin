@@ -4,8 +4,8 @@
 //! including utilities to extract and collect residues into new collections.
 //!
 use super::atoms::ResidueAtoms;
-use crate::selection::Selection;
 use crate::AtomCollection;
+use crate::selection::Selection;
 use std::iter::FromIterator;
 
 // Rest of the iterator implementation remains the same
@@ -69,7 +69,7 @@ impl<'a> FromIterator<ResidueAtoms<'a>> for AtomCollection {
                 res_ids.push(*residue.parent.get_res_id(i));
                 res_names.push(residue.parent.get_res_name(i).clone());
                 is_hetero.push(residue.parent.get_is_hetero(i));
-                elements.push(residue.parent.get_element(i).clone());
+                elements.push(*residue.parent.get_element(i));
                 atom_names.push(residue.parent.get_atom_name(i).clone());
                 chain_ids.push(residue.parent.get_chain_id(i).clone());
                 size += 1;
@@ -84,8 +84,8 @@ impl<'a> FromIterator<ResidueAtoms<'a>> for AtomCollection {
 
 #[cfg(test)]
 mod tests {
-    use crate::info::constants::is_amino_acid;
     use crate::AtomCollection;
+    use crate::info::constants::is_amino_acid;
     use ferritin_test_data::TestFile;
 
     #[test]

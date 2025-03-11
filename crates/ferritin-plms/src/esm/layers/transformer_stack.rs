@@ -33,7 +33,7 @@ impl TransformerStack {
         for i in 0..*n_layers {
             blocks.push(UnifiedTransformerBlock::load(
                 vb.pp(format!("blocks.{}", i)),
-                &config,
+                config,
                 i,
             )?);
         }

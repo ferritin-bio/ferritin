@@ -10,15 +10,15 @@ use super::proteinfeatures::ProteinFeatures;
 use super::proteinfeaturesmodel::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
 use candle_core::safetensors;
-use candle_core::{DType, Device, IndexOp, Module, Result, Tensor, D};
+use candle_core::{D, DType, Device, IndexOp, Module, Result, Tensor};
 use candle_nn::encoding::one_hot;
 use candle_nn::ops::{log_softmax, softmax};
-use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, LayerNorm, Linear, VarBuilder};
+use candle_nn::{Dropout, Embedding, LayerNorm, Linear, VarBuilder, embedding, layer_norm, linear};
 use candle_transformers::generation::LogitsProcessor;
 
 // refactoring common fn
 fn concat_node_tensors(h_v: &Tensor, h_e: &Tensor, e_idx: &Tensor) -> Result<Tensor> {
-    let h_ev = cat_neighbors_nodes(&h_v, h_e, e_idx)?;
+    let h_ev = cat_neighbors_nodes(h_v, h_e, e_idx)?;
     let h_v_expand = h_v.unsqueeze(D::Minus2)?;
     let expand_shape = [
         h_ev.dims()[0],
@@ -102,7 +102,7 @@ impl ScoreOutput {
             std::fs::create_dir_all(parent)?;
         }
 
-        safetensors::save(&tensors, &filename);
+        let _ = safetensors::save(&tensors, &filename);
         Ok(())
     }
 }
@@ -392,7 +392,7 @@ impl ProteinMPNN {
         let base_dtype = DType::F32;
         let mask = match features.get_sequence_mask() {
             Some(m) => m,
-            None => &Tensor::ones_like(&s_true)?,
+            None => &Tensor::ones_like(s_true)?,
         };
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
@@ -419,16 +419,15 @@ impl ProteinMPNN {
                     mask_attend
                 } else {
                     let (b, l) = mask.dims2()?;
-                    let ones = Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, &self.device)?;
-                    ones
+                    Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, &self.device)?
                 };
                 println!("Beginning the Encoding...");
-                for (_, layer) in self.encoder_layers.iter().enumerate() {
+                for layer in self.encoder_layers.iter() {
                     let (new_h_v, new_h_e) = layer.forward(
                         &h_v,
                         &h_e,
                         &e_idx,
-                        Some(&mask),
+                        Some(mask),
                         Some(&mask_attend),
                         Some(false),
                     )?;
@@ -558,7 +557,7 @@ impl ProteinMPNN {
                 for t_ in 0..l {
                     let t = decoding_order.i((.., t_))?;
                     let t_gather = t.unsqueeze(1)?; // Shape [B, 1]
-                                                    // Gather masks and bias
+                    // Gather masks and bias
                     let chain_mask_t = chain_mask.gather(&t_gather, 1)?.squeeze(1)?;
                     let mask_t = mask.gather(&t_gather, 1)?.squeeze(1)?.contiguous()?;
                     let bias_t = bias

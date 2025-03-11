@@ -5,9 +5,9 @@
 //! a structural unit in a protein or other macromolecule consisting of multiple atoms.
 //!
 use super::info::AtomInfo;
+use crate::AtomCollection;
 use crate::info::constants::{is_amino_acid, is_carbohydrate, is_nucleotide};
 use crate::selection::{AtomView, Selection};
-use crate::AtomCollection;
 use pdbtbx::Element;
 
 pub struct ResidueAtoms<'a> {
@@ -69,9 +69,9 @@ impl<'a> ResidueAtoms<'a> {
         if abs_idx < self.end_idx {
             Some(AtomInfo {
                 index: abs_idx,
-                coords: &self.parent.get_coord(abs_idx),
-                element: &self.parent.get_element(abs_idx),
-                atom_name: &self.parent.get_atom_name(abs_idx),
+                coords: self.parent.get_coord(abs_idx),
+                element: self.parent.get_element(abs_idx),
+                atom_name: self.parent.get_atom_name(abs_idx),
                 is_hetero: self.parent.get_is_hetero(abs_idx),
             })
         } else {
@@ -85,9 +85,9 @@ impl<'a> ResidueAtoms<'a> {
             .find(|&i| self.parent.get_atom_name(i) == name)
             .map(|i| AtomInfo {
                 index: i,
-                coords: &self.parent.get_coord(i),
-                element: &self.parent.get_element(i),
-                atom_name: &self.parent.get_atom_name(i),
+                coords: self.parent.get_coord(i),
+                element: self.parent.get_element(i),
+                atom_name: self.parent.get_atom_name(i),
                 is_hetero: self.parent.get_is_hetero(i),
             })
     }

@@ -24,7 +24,7 @@ struct CifFile {
 impl CifFile {
     fn new(name: String) -> Self {
         CifFile {
-            name: name,
+            name,
             data_blocks: HashMap::new(),
         }
     }
@@ -45,10 +45,7 @@ struct CifBlock {
 
 impl CifBlock {
     fn new(block_type: BlockType, data: DataFrame) -> Self {
-        CifBlock {
-            block_type: block_type,
-            data: data,
-        }
+        CifBlock { block_type, data }
     }
 }
 
@@ -200,7 +197,7 @@ where
     // loop through the KV block and add k/v pairs to the hashmap
     loop {
         // Peek at the next line without consuming it
-        let mut buf: Vec<u8> = Vec::new();
+        let mut _buf: Vec<u8> = Vec::new();
         let len = reader.fill_buf()?.len();
         if len == 0 {
             break;

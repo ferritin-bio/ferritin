@@ -1,7 +1,7 @@
 //!  Protein->Tensor utiilities useful for Machine Learning
-use super::utilities::{aa1to_int, aa3to1, get_nearest_neighbours, AAAtom};
+use super::utilities::{AAAtom, aa1to_int, aa3to1, get_nearest_neighbours};
 use crate::AtomCollection;
-use candle_core::{DType, Device, IndexOp, Result, Tensor, D};
+use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
 use itertools::MultiUnzip;
 use pdbtbx::Element;
 use strum::IntoEnumIterator;
@@ -37,7 +37,7 @@ pub trait StructureFeatures {
 
 impl StructureFeatures for AtomCollection {
     /// Convert amino acid sequence to numeric representation
-    fn decode_amino_acids(&self, device: &Device) -> Result<Tensor> {
+    fn decode_amino_acids(&self, _device: &Device) -> Result<Tensor> {
         todo!()
     }
 
@@ -202,7 +202,7 @@ impl StructureFeatures for AtomCollection {
         let distance_mask = d_xy.lt(cutoff_for_score)?.to_dtype(DType::F32)?;
         let y_m_first = y_m.i((.., 0))?;
         let mask = mask.squeeze(0)?;
-        let mask_xy = distance_mask.mul(&mask)?.mul(&y_m_first)?;
+        let _mask_xy = distance_mask.mul(&mask)?.mul(&y_m_first)?;
         let y = y.unsqueeze(0)?;
         let y_t = y_t.to_dtype(DType::I64)?.unsqueeze(0)?;
         let y_m = y_m.unsqueeze(0)?; // mask_xy??
