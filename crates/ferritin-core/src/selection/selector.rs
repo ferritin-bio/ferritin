@@ -15,7 +15,7 @@
 //!     .collect();               // Get the selected atoms
 //! # }
 //! ```
-use super::selection::Selection;
+use super::selections::Selection;
 use super::view::AtomView;
 use crate::AtomCollection;
 use pdbtbx::Element;

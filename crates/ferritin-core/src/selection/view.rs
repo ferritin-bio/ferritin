@@ -13,7 +13,7 @@
 //! - [`AtomIterator`] - An iterator over atoms in a view
 //!
 
-use super::selection::Selection;
+use super::selections::Selection;
 use crate::AtomCollection;
 use pdbtbx::Element;
 
