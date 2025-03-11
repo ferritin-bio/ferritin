@@ -1633,7 +1633,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_distr",
  "rayon",
- "safetensors 0.4.5",
+ "safetensors",
  "thiserror 1.0.69",
  "ug",
  "ug-metal",
@@ -1665,7 +1665,7 @@ dependencies = [
  "metal 0.27.0",
  "num-traits",
  "rayon",
- "safetensors 0.4.5",
+ "safetensors",
  "serde",
  "thiserror 1.0.69",
 ]
@@ -2744,7 +2744,7 @@ dependencies = [
  "ndarray-safetensors",
  "ort",
  "pdbtbx",
- "safetensors 0.5.3",
+ "safetensors",
  "serde",
  "tokenizers",
 ]
@@ -4586,12 +4586,12 @@ dependencies = [
 
 [[package]]
 name = "ndarray-safetensors"
-version = "0.3.0"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fd2eb0203bcd3c2a6c1a6f8e507d5dd98a30611abc111863343b7f120c27a94"
+checksum = "97bd60a800d7815326815ed98eed31414850eae276bb5935586140dd3ed4b333"
 dependencies = [
  "ndarray",
- "safetensors 0.5.3",
+ "safetensors",
 ]
 
 [[package]]
@@ -6644,16 +6644,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "safetensors"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc0cdb7198d738a111f6df8fef42cb175412c311d0c4ac9126ff4e550ad1a0e8"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7606,7 +7596,7 @@ dependencies = [
  "num-traits",
  "num_cpus",
  "rayon",
- "safetensors 0.4.5",
+ "safetensors",
  "serde",
  "thiserror 1.0.69",
  "tracing",
