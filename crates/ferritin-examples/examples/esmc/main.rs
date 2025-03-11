@@ -2,8 +2,8 @@ use anyhow::Result;
 use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
-use hf_hub::{api::sync::Api, Repo, RepoType};
-use ferritin_plms::{ESMCConfig, ESMC};
+use ferritin_plms::{ESMC, ESMCConfig};
+use hf_hub::{Repo, RepoType, api::sync::Api};
 
 // pub fn esmc_300m_202412(device: &Device) -> Result<Box<dyn Model>> {
 //     let tokenizer = get_model_tokenizers(ESM3_OPEN_SMALL)?.sequence;
@@ -37,7 +37,7 @@ fn main() -> Result<()> {
 
     let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, Device::Cpu);
     let config = ESMCConfig::esmc_300m();
-    let esmc = ESMC::load(vb.clone(), config)?;
+    let _esmc = ESMC::load(vb.clone(), config)?;
     // println!("ESMC Loaded: {}", esmc);
 
     // Error: cannot find tensor transformer.layer.attention.layer_norm.weight

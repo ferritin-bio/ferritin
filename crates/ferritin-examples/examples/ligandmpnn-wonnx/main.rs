@@ -23,14 +23,14 @@ fn process_pdb_bytes(pdb_bytes: &[u8]) -> Result<Vec<f32>> {
 fn main() -> Result<()> {
     println!("Loading the Model and Tokenizer.......");
 
-    let (protfile, mut handle) = TestFile::protein_01().create_temp()?;
+    let (_protfile, mut handle) = TestFile::protein_01().create_temp()?;
     // println!("{:?}", handle.bytes());
 
     // Read the entire file into a Vec<u8>
     let mut pdb_bytes = Vec::new();
     handle.read_to_end(&mut pdb_bytes)?;
 
-    let logits = process_pdb_bytes(&pdb_bytes);
+    let _logits = process_pdb_bytes(&pdb_bytes);
 
     Ok(())
 }

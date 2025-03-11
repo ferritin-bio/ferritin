@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use ferritin_onnx_models::{ESM2Models, ESM2};
+use ferritin_onnx_models::{ESM2, ESM2Models};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -32,6 +32,6 @@ fn main() -> Result<()> {
     let protein = args.protein_string.as_ref().unwrap().as_str();
 
     let logits = esm2.run_model(protein)?;
-    let normed = esm2.extract_logits(&logits)?;
+    let _normed = esm2.extract_logits(&logits)?;
     Ok(())
 }

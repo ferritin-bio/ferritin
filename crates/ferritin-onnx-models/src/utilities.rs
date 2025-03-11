@@ -1,10 +1,8 @@
 use anyhow::Result;
-use candle_core::{DType, Device, Tensor};
+use candle_core::{Device, Tensor};
 use ndarray;
-use ndarray_safetensors::{parse_tensors, TensorViewWithDataBuffer};
-use safetensors::{self as st, serialize, tensor::TensorView, Dtype as ST_Dtype, SafeTensors};
-
-use std::collections::HashMap;
+use ndarray_safetensors::{TensorViewWithDataBuffer, parse_tensors};
+use safetensors::{SafeTensors, serialize};
 
 // pub fn ndarray_to_tensor(tensor: ValueRef) -> Result<candle_core::Tensor> {
 //     let tmp_data = [("_", tensor)];

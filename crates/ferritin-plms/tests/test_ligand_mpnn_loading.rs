@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use candle_core::pickle::read_pth_tensor_info;
     use candle_core::pickle::PthTensors;
+    use candle_core::pickle::read_pth_tensor_info;
     use candle_core::{DType, Device, Error};
     use candle_nn::VarBuilder;
     use ferritin_plms::{ProteinMPNN, ProteinMPNNConfig};
@@ -33,7 +33,7 @@ mod tests {
             vb.contains_tensor("encoder_layers.0.norm1.bias")
         );
         let pconf = ProteinMPNNConfig::proteinmpnn();
-        let pmpnn = ProteinMPNN::load(vb, &pconf);
+        let _pmpnn = ProteinMPNN::load(vb, &pconf);
 
         Ok(())
     }
@@ -43,7 +43,7 @@ mod tests {
         let pth = PthTensors::new(mpnn_file, Some("model_state_dict"))?;
         let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, Device::Cpu);
         let pconf = ProteinMPNNConfig::proteinmpnn();
-        let pmpnn = ProteinMPNN::load(vb, &pconf);
+        let _pmpnn = ProteinMPNN::load(vb, &pconf);
         Ok(())
     }
 }

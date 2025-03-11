@@ -123,7 +123,7 @@ impl EncoderBlock {
         value: &Tensor,
         attn_mask: Option<&Tensor>,
         dropout_p: f64,
-        is_causal: bool,
+        _is_causal: bool,
     ) -> Result<Tensor> {
         // Calculate attention scores
         let d_k = key.dim(key.dims().len() - 1)? as f64;
