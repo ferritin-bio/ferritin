@@ -3,8 +3,8 @@ use candle_core::safetensors::load;
 use candle_core::{DType, Tensor};
 use candle_nn::VarBuilder;
 use clap::Parser;
-use ferritin_plms::{ESM2Config as Config, ESM2, device};
-use hf_hub::{api::sync::Api, Repo, RepoType};
+use ferritin_plms::{ESM2, ESM2Config as Config, device};
+use hf_hub::{Repo, RepoType, api::sync::Api};
 use tokenizers::Tokenizer;
 
 pub const DTYPE: DType = DType::F32;
@@ -67,7 +67,7 @@ impl Args {
 
         let tokenizer = ESM2::load_tokenizer()?;
         let protein = self.protein_string.as_ref().unwrap().as_str();
-        let encoded = tokenizer.encode(protein, false);
+        let _encoded = tokenizer.encode(protein, false);
 
         println!("Encoded.... and.....");
         let model = ESM2::load(vb, &config)?;
@@ -81,14 +81,14 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     println!("Loading the Model and Tokenizer.......");
-    let (model, tokenizer) = args.build_model_and_tokenizer()?;
+    let (_model, tokenizer) = args.build_model_and_tokenizer()?;
 
     // let device = &model.get_device();
     let device = device(false)?;
 
     let protein_sequences = if let Some(seq) = args.protein_string {
         vec![seq]
-    } else if let Some(fasta_path) = args.protein_fasta {
+    } else if let Some(_fasta_path) = args.protein_fasta {
         todo!("fasta processing unimplimented")
         // std::fs::read_to_string(fasta_path)?
     } else {
@@ -104,7 +104,7 @@ fn main() -> Result<()> {
             .get_ids()
             .to_vec();
 
-        let token_ids = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
+        let _token_ids = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
 
         println!("Encoding.......");
         // let encoded = model.forward(&token_ids, None, false, false)?;

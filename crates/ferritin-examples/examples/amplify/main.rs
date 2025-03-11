@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use ferritin_plms::{AmplifyModels, AmplifyRunner,device};
+use ferritin_plms::{AmplifyModels, AmplifyRunner, device};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -31,12 +31,12 @@ fn main() -> Result<()> {
     let prot_sequence = args.protein_string.unwrap();
 
     // Runs the model and returns the full, manipulateable result
-    let outputs = amprunner.run_forward(&prot_sequence);
+    let _outputs = amprunner.run_forward(&prot_sequence);
     // Runs the model and returns the top hit from each logit
-    let top_hit = amprunner.get_best_prediction(&prot_sequence);
+    let _top_hit = amprunner.get_best_prediction(&prot_sequence);
     // Runs the model and returns the top probabilities
-    let pseudo_probabilities = amprunner.get_pseudo_probabilities(&prot_sequence);
+    let _pseudo_probabilities = amprunner.get_pseudo_probabilities(&prot_sequence);
     // Runs the model and returns the contactmap
-    let contact_map = amprunner.get_contact_map(&prot_sequence);
+    let _contact_map = amprunner.get_contact_map(&prot_sequence);
     Ok(())
 }
