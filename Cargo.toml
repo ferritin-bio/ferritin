@@ -18,7 +18,7 @@ version = "0.2.0-dev"
 authors = ["Zach Charlop-Powers<zach.charlop.powers@gmail.com>"]
 description = "Protein Manipulaton and visualization tools"
 license = "MIT OR Apache-2.0"
-edition = "2021"
+edition = "2024"
 
 [workspace.dependencies]
 anyhow = "1.0"
