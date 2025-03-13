@@ -8,7 +8,7 @@ use super::bonds::{Bond, BondOrder};
 use super::info::constants::get_bonds_canonical20;
 use crate::residue::{ResidueAtoms, ResidueIter};
 use crate::selection::{AtomSelector, AtomView, Selection};
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 use pdbtbx::Element;
 
 /// Atom Collection
@@ -28,6 +28,8 @@ pub struct AtomCollection {
     atom_names: Vec<String>,
     chain_ids: Vec<String>,
     bonds: Option<Vec<Bond>>,
+    residue_start_indices: Option(Vec<usize>),
+    chain_start_indices: Option(Vec<usize>),
     // atom_type: Vec<String>,
     // // ... other fixed fields
     // dynamic_fields: HashMap<String, Vec<Box<dyn Any>>>,
@@ -62,6 +64,8 @@ impl AtomCollection {
             atom_names,
             chain_ids,
             bonds,
+            residue_start_indices: AtomCollection.get_residue_starts(),
+            chain_start_indices: AtomCollection.get_chain_starts(),
         }
     }
     pub fn calculate_displacement(&self) {
@@ -188,7 +192,7 @@ impl AtomCollection {
     }
     /// A new residue starts, either when the chain ID, residue ID,
     /// insertion code or residue name changes from one to the next atom.
-    pub(crate) fn get_residue_starts(&self) -> Vec<i64> {
+    fn get_residue_starts() -> Vec<i32> {
         let mut starts = vec![0];
 
         starts.extend(
@@ -205,6 +209,26 @@ impl AtomCollection {
                     },
                 ),
         );
+        starts
+    }
+
+
+    /// A new chain starts when the chain ID changes from one atom to the next.
+    fn get_chain_starts(&self) -> Vec<i32> {
+        let mut starts = vec![0];
+
+        starts.extend(
+            self.chain_ids
+                .iter()
+                .tuple_windows()
+                .enumerate()
+                .filter_map(|(i, (chain1, chain2))| {
+                    if chain1 != chain2 {
+                        Some(i + 1)
+                    } else {
+                        None
+                    }
+                });
         starts
     }
     pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {

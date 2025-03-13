@@ -18,6 +18,7 @@ mod featurize;
 mod info;
 mod residue;
 mod selection;
+mod views;
 
 pub use self::atomcollection::AtomCollection;
 pub use self::bonds::{Bond, BondOrder};
