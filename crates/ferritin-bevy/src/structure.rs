@@ -256,7 +256,7 @@ impl Structure {
             .iter_residues_aminoacid()
             .map(|residue| {
                 let ca = residue.find_atom_by_name("CA").expect("CA in all residues");
-                Vec3::from_array(*ca.coords)
+                Vec3::from_array(*ca.coords())
             })
             .collect();
         let curve = create_smooth_curve(&c_alphas, 3);

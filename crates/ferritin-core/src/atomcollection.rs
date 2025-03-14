@@ -340,9 +340,6 @@ impl AtomCollection {
             .filter(|residue| residue.is_amino_acid())
     }
 
-    // pub fn iter_residues_all(&self) -> ResidueIter {
-    //     ResidueIter::new(self, self.get_residue_starts())
-    // }
     // pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueAtoms> {
     //     self.iter_residues_all()
     //         .filter(|residue| residue.is_amino_acid())

@@ -76,9 +76,7 @@ fn load_initial_proteins(
         if let Ok((pdb, _errors)) = pdbtbx::open(file_path.to_str().unwrap_or_default()) {
             // Todo: revisit this portion about the right default visuals later on
             // by default lets only keep the amino acids.
-            let mut ac: AtomCollection = AtomCollection::from(&pdb)
-                .iter_residues_aminoacid()
-                .collect();
+            let mut ac: AtomCollection = AtomCollection::from(&pdb);
 
             // add the bonds back in as they are removed during the collection process above.
             ac.connect_via_residue_names();

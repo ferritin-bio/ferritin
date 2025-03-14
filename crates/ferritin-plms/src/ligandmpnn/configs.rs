@@ -100,7 +100,7 @@ impl MPNNExecConfig {
         // chain residues
         let chain_letters: Vec<String> = ac
             .iter_residues_aminoacid()
-            .map(|res| res.chain_id)
+            .map(|res| res.chain_id().to_string())
             .collect();
 
         // unique Chains

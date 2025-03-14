@@ -168,74 +168,20 @@ impl StructureFeatures for AtomCollection {
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
         // Todo: fix this.
         let cutoff_for_score = 5.;
-        // keep only the non-protein, non-water residues that are heavy
-        // let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
-        //     .iter_residues()
-        //     .filter(|residue| {
-        //         let res_name = &residue.residue_name();
-        //         !residue.is_amino_acid() && *res_name != "HOH" && *res_name != "WAT"
-        //     })
-        //     .flat_map(|residue| {
-        //         residue
-        //             .iter_atoms()
-        //             .filter(|atom| is_heavy_atom(&atom.element()))
-        //             .map(|atom| (*atom.coords(), atom.element()))
-        //             .collect::<Vec<_>>()
-        //     })
-        //     .multiunzip();
-
-        // let mut coords = Vec::new();
-        // let mut elements = Vec::new();
-
-        // for residue in self.iter_residues().filter(|residue| {
-        //     let res_name = residue.residue_name();
-        //     !residue.is_amino_acid() && res_name != "HOH" && res_name != "WAT"
-        // }) {
-        //     for atom in residue
-        //         .iter_atoms()
-        //         .filter(|atom| is_heavy_atom(&atom.element()))
-        //     {
-        //         coords.push(*atom.coords());
-        //         elements.push(atom.element());
-        //     }
-        // }
-
-        // let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
-        //     .iter_residues()
-        //     .filter(|residue| {
-        //         let res_name = residue.residue_name();
-        //         !residue.is_amino_acid() && res_name != "HOH" && res_name != "WAT"
-        //     })
-        //     .flat_map(|residue| {
-        //         // Collect into a Vec within the flat_map to avoid reference issues
-        //         let atoms: Vec<_> = residue
-        //             .iter_atoms()
-        //             .filter(|atom| is_heavy_atom(&atom.element()))
-        //             .map(|atom| (*atom.coords(), atom.element()))
-        //             .collect();
-        //         atoms
-        //     })
-        //     .multiunzip();
-
-        let mut coords = Vec::new();
-        let mut elements = Vec::new();
 
         // Iterate through residues one at a time
+        let mut coords = Vec::new();
+        let mut elements = Vec::new();
         for residue in self.iter_residues() {
-            // Filter the residue
             let res_name = residue.residue_name();
             if residue.is_amino_acid() || res_name == "HOH" || res_name == "WAT" {
                 continue;
             }
-
-            // Process all atoms from this single residue
-            // This is safe because we're not holding references across iterations
             let atoms: Vec<_> = residue
                 .iter_atoms()
                 .filter(|atom| is_heavy_atom(atom.element()))
                 .collect();
 
-            // Now extract and store coords and elements from these atoms
             for atom in atoms {
                 coords.push(*atom.coords());
                 elements.push(*atom.element());
