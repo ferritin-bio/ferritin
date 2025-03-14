@@ -81,3 +81,39 @@ impl<'a> ChainView<'a> {
     //     AtomView::new(self.data, selection)
     // }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::AtomCollection;
+    use ferritin_test_data::TestFile;
+
+    #[test]
+    fn test_chain_view() {
+        let (prot_file, _temp) = TestFile::protein_04().create_temp().unwrap();
+        let (pdb, _) = pdbtbx::open(prot_file).unwrap();
+        let mut ac = AtomCollection::from(&pdb);
+
+        // Calculate indices first
+        ac.calculate_chain_indices();
+
+        // Get chains
+        let chains: Vec<_> = ac.iter_chains().collect();
+        assert!(chains.len() > 0);
+
+        // Test first chain
+        let first_chain = &chains[0];
+        assert!(!first_chain.chain_id().is_empty());
+        assert!(first_chain.residue_count() > 0);
+
+        // Test residue iteration
+        let residues: Vec<_> = first_chain.iter_residues().collect();
+        assert_eq!(residues.len(), first_chain.residue_count());
+
+        // Test chain ID consistency
+        let chain_id = first_chain.chain_id();
+        for residue in residues {
+            assert_eq!(residue.chain_id(), chain_id);
+        }
+    }
+}
