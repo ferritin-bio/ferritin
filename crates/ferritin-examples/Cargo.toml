@@ -35,13 +35,13 @@ metal = []
 candle-metal-kernels.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-tokenizers = { version = "0.21.0", default-features = false, features = [
+tokenizers = { version = "0.21.1", default-features = false, features = [
     "unstable_wasm",
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 hf-hub.workspace = true
-tokenizers = { version = "0.21.0" } # full features for non-wasm
+tokenizers = { version = "0.21.1" } # full features for non-wasm
 
 
 [dev-dependencies]

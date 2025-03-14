@@ -6,6 +6,7 @@
 //! distances are supported.
 use super::bonds::{Bond, BondOrder};
 use super::info::constants::get_bonds_canonical20;
+use super::views::chain::ChainView;
 use crate::residue::{ResidueAtoms, ResidueIter};
 use crate::selection::{AtomSelector, AtomView, Selection};
 use itertools::{Itertools, izip};
@@ -68,6 +69,37 @@ impl AtomCollection {
             chain_start_indices: None,
         }
     }
+    // Calculate and cache chain start indices
+    pub fn calculate_chain_indices(&mut self) {
+        if self.chain_start_indices.is_none() {
+            // First ensure we have residue indices calculated
+            if self.residue_start_indices.is_none() {
+                let residue_starts = self.get_residue_starts();
+                self.residue_start_indices =
+                    Some(residue_starts.iter().map(|&idx| idx as i32).collect());
+            }
+
+            // Get chain starts as residue indices
+            let residue_starts = self.residue_start_indices.as_ref().unwrap();
+            let chain_starts: Vec<i32> = self
+                .get_chain_starts()
+                .iter()
+                .map(|&atom_idx| {
+                    // Find the residue index that contains this atom
+                    let residue_idx = residue_starts
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, &res_start)| res_start as usize <= atom_idx)
+                        .last()
+                        .map(|(i, _)| i as i32)
+                        .unwrap_or(0);
+                    residue_idx
+                })
+                .collect();
+
+            self.chain_start_indices = Some(chain_starts);
+        }
+    }
     pub fn calculate_displacement(&self) {
         // Measure the displacement vector, i.e. the vector difference, from
         // one array of atom coordinates to another array of coordinates.
@@ -108,6 +140,7 @@ impl AtomCollection {
         // return np.sqrt(vector_dot(diff, diff))
         unimplemented!()
     }
+
     pub fn connect_via_residue_names(&mut self) {
         if self.bonds.is_some() {
             println!("Bonds already in place. Not overwriting.");
@@ -212,6 +245,9 @@ impl AtomCollection {
         starts
     }
 
+    pub fn get_residue_start_indices(&self) -> Option<&Vec<i32>> {
+        self.residue_start_indices.as_ref()
+    }
     /// A new chain starts when the chain ID changes from one atom to the next.
     fn get_chain_starts(&self) -> Vec<usize> {
         let mut starts = vec![0];
@@ -230,9 +266,42 @@ impl AtomCollection {
 
         starts
     }
+
     pub fn iter_coords_and_elements(&self) -> impl Iterator<Item = (&[f32; 3], &Element)> {
         izip!(&self.coords, &self.elements)
     }
+
+    pub fn iter_chains(&self) -> impl Iterator<Item = ChainView<'_>> {
+        // Make sure indices are calculated
+        let chain_starts = match &self.chain_start_indices {
+            Some(indices) => indices.clone(), // Clone to avoid reference type issues
+            None => {
+                // This is suboptimal as it recalculates every time if not pre-calculated
+                // Default to a single chain if none calculated
+                vec![0]
+            }
+        };
+
+        (0..chain_starts.len()).map(move |i| {
+            let start_residue_idx = chain_starts[i] as usize;
+            let end_residue_idx = if i + 1 < chain_starts.len() {
+                chain_starts[i + 1] as usize
+            } else {
+                // If it's the last chain, go to the end of the structure
+                match &self.residue_start_indices {
+                    Some(indices) => indices.len(),
+                    None => self.size, // Fallback if residue indices not calculated
+                }
+            };
+
+            ChainView {
+                data: self,
+                start_residue_idx,
+                end_residue_idx,
+            }
+        })
+    }
+
     /// Iter_Residues Will Iterate Through the AtomCollection one Residue at a time.
     ///
     /// This is the base for any other residue filtration code.
@@ -310,7 +379,14 @@ mod tests {
     fn test_chain_iterator() {
         let (prot_file, _temp) = TestFile::protein_04().create_temp().unwrap();
         let (pdb, _) = pdbtbx::open(prot_file).unwrap();
-        let ac = AtomCollection::from(&pdb);
+        let mut ac = AtomCollection::from(&pdb);
+
+        // Calculate indices first
+        ac.calculate_chain_indices();
+
+        // Test chain iteration
+        let chains: Vec<_> = ac.iter_chains().collect();
+        assert_eq!(chains.len(), 2);
         assert_eq!(ac.get_size(), 2154);
     }
 }

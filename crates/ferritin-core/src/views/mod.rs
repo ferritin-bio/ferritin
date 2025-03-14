@@ -6,5 +6,5 @@
 //!
 
 // mod atom;
-mod chain;
+pub mod chain;
 // mod residue;
