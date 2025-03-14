@@ -112,9 +112,11 @@ impl StructureFeatures for AtomCollection {
     /// create numeric Tensor of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
+
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
+
         for residue in self.iter_residues_aminoacid() {
-            let resid = residue.res_id as usize;
+            let resid = residue.residue_id() as usize;
             let backbone_atoms = [
                 residue.find_atom_by_name("N"),
                 residue.find_atom_by_name("CA"),
@@ -168,9 +170,9 @@ impl StructureFeatures for AtomCollection {
         let cutoff_for_score = 5.;
         // keep only the non-protein, non-water residues that are heavy
         let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
-            .iter_residues_all()
+            .iter_residues()
             .filter(|residue| {
-                let res_name = &residue.res_name;
+                let res_name = &residue.res_name();
                 !residue.is_amino_acid() && res_name != "HOH" && res_name != "WAT"
             })
             .flat_map(|residue| {

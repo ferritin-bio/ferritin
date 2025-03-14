@@ -16,12 +16,12 @@ mod bonds;
 mod conversions;
 mod featurize;
 mod info;
-mod residue;
-mod selection;
+// mod residue;
+// mod selection;
 mod views;
 
 pub use self::atomcollection::AtomCollection;
 pub use self::bonds::{Bond, BondOrder};
 pub use self::featurize::StructureFeatures;
-pub use self::residue::ResidueAtoms;
-pub use self::selection::Selection;
+// pub use self::residue::ResidueAtoms;
+// pub use self::selection::Selection;

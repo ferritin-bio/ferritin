@@ -8,8 +8,8 @@ use super::bonds::{Bond, BondOrder};
 use super::info::constants::get_bonds_canonical20;
 use super::views::chain::ChainView;
 use super::views::residue::ResidueView;
-use crate::residue::{ResidueAtoms, ResidueIter};
-use crate::selection::{AtomSelector, AtomView, Selection};
+// use crate::residue::{ResidueAtoms, ResidueIter};
+// use crate::selection::{AtomSelector, AtomView, Selection};
 use itertools::{Itertools, izip};
 use pdbtbx::Element;
 
@@ -332,42 +332,52 @@ impl AtomCollection {
         Box::new(main_residues.chain(last_residue))
     }
 
+    /// Iterates over amino acid residues in the collection
+    ///
+    /// Returns a filtered iterator that only includes standard amino acid residues
+    pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueView<'_>> + '_ {
+        self.iter_residues().filter(|residue| residue.is_amino_acid())
+    }
+
+
+
+
     /// Iter_Residues Will Iterate Through the AtomCollection one Residue at a time.
     ///
     /// This is the base for any other residue filtration code.
-    pub fn iter_residues_all(&self) -> ResidueIter {
-        ResidueIter::new(self, self.get_residue_starts())
-    }
-    pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueAtoms> {
-        self.iter_residues_all()
-            .filter(|residue| residue.is_amino_acid())
-    }
-    pub fn select(&self) -> AtomSelector {
-        AtomSelector::new(self)
-    }
-    pub fn select_by_chain(&self, chain_id: &str) -> Selection {
-        let indices: Vec<usize> = self
-            .chain_ids
-            .iter()
-            .enumerate()
-            .filter(|&(_, &ref chain)| chain == chain_id)
-            .map(|(i, _)| i)
-            .collect();
-        Selection::new(indices)
-    }
-    pub fn select_by_residue(&self, res_name: &str) -> Selection {
-        let indices: Vec<usize> = self
-            .res_names
-            .iter()
-            .enumerate()
-            .filter(|(_, name)| name.as_str() == res_name)
-            .map(|(i, _)| i)
-            .collect();
-        Selection::new(indices)
-    }
-    pub fn view(&self, selection: Selection) -> AtomView {
-        AtomView::new(self, selection)
-    }
+    // pub fn iter_residues_all(&self) -> ResidueIter {
+    //     ResidueIter::new(self, self.get_residue_starts())
+    // }
+    // pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueAtoms> {
+    //     self.iter_residues_all()
+    //         .filter(|residue| residue.is_amino_acid())
+    // }
+    // pub fn select(&self) -> AtomSelector {
+    //     AtomSelector::new(self)
+    // }
+    // pub fn select_by_chain(&self, chain_id: &str) -> Selection {
+    //     let indices: Vec<usize> = self
+    //         .chain_ids
+    //         .iter()
+    //         .enumerate()
+    //         .filter(|&(_, &ref chain)| chain == chain_id)
+    //         .map(|(i, _)| i)
+    //         .collect();
+    //     Selection::new(indices)
+    // }
+    // pub fn select_by_residue(&self, res_name: &str) -> Selection {
+    //     let indices: Vec<usize> = self
+    //         .res_names
+    //         .iter()
+    //         .enumerate()
+    //         .filter(|(_, name)| name.as_str() == res_name)
+    //         .map(|(i, _)| i)
+    //         .collect();
+    //     Selection::new(indices)
+    // }
+    // pub fn view(&self, selection: Selection) -> AtomView {
+    //     AtomView::new(self, selection)
+    // }
 }
 
 #[cfg(test)]
