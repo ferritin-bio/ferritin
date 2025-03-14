@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "ferritin",
+    "crates/ferritin",
     "crates/ferritin-bevy",
     "crates/ferritin-cellscape",
     "crates/ferritin-core",

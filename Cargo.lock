@@ -2663,6 +2663,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferritin"
+version = "0.2.0-dev"
+dependencies = [
+ "ferritin-bevy",
+ "ferritin-cellscape",
+ "ferritin-core",
+ "ferritin-io",
+ "ferritin-molviewspec",
+ "ferritin-plms",
+ "ferritin-pymol",
+]
+
+[[package]]
 name = "ferritin-bevy"
 version = "0.2.0-dev"
 dependencies = [
@@ -2706,6 +2719,7 @@ dependencies = [
  "candle-nn",
  "candle-onnx",
  "clap",
+ "ferritin",
  "ferritin-bevy",
  "ferritin-core",
  "ferritin-onnx-models",

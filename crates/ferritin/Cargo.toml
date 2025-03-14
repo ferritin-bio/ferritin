@@ -7,12 +7,11 @@ license.workspace = true
 edition.workspace = true
 
 [features]
-default = ["core"]                                                         # Only include core and io by default
-core = ["dep:ferritin-core"]
+default = []                                                       # Only include core and io by default
 io = ["dep:ferritin-io"]
 bevy = ["dep:ferritin-bevy"]
 plms = ["dep:ferritin-plms"]
-full = ["core", "io", "bevy", "plms", "molviewspec", "cellscape", "pymol"]
+full = ["io", "bevy", "plms", "molviewspec", "cellscape", "pymol"]
 molviewspec = ["dep:ferritin-molviewspec"]
 cellscape = ["dep:ferritin-cellscape"]
 pymol = ["dep:ferritin-pymol"]
@@ -20,12 +19,12 @@ pymol = ["dep:ferritin-pymol"]
 
 [dependencies]
 # Core is always included
-ferritin-core = { path = "../crates/ferritin-core" }
+ferritin-core = { path = "../ferritin-core" }
 
 # Optional dependencies
-ferritin-io = { path = "../crates/ferritin-io", optional = true }
-ferritin-bevy = { path = "../crates/ferritin-bevy", optional = true }
-ferritin-plms = { path = "../crates/ferritin-plms", optional = true }
-ferritin-molviewspec = { path = "../crates/ferritin-molviewspec", optional = true }
-ferritin-cellscape = { path = "../crates/ferritin-cellscape", optional = true }
-ferritin-pymol = { path = "../crates/ferritin-pymol", optional = true }
+ferritin-io = { path = "../ferritin-io", optional = true }
+ferritin-bevy = { path = "../ferritin-bevy", optional = true }
+ferritin-plms = { path = "../ferritin-plms", optional = true }
+ferritin-molviewspec = { path = "../ferritin-molviewspec", optional = true }
+ferritin-cellscape = { path = "../ferritin-cellscape", optional = true }
+ferritin-pymol = { path = "../ferritin-pymol", optional = true }
