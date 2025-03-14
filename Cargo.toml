@@ -2,10 +2,10 @@
 members = [
     "crates/ferritin",
     "crates/ferritin-bevy",
-    "crates/ferritin-cellscape",
+    # "crates/ferritin-cellscape",
     "crates/ferritin-core",
     "crates/ferritin-examples",
-    "crates/ferritin-io",
+    # "crates/ferritin-io",
     "crates/ferritin-molviewspec",
     "crates/ferritin-onnx-models",
     "crates/ferritin-plms",
@@ -27,11 +27,11 @@ anyhow = "1.0"
 bevy = "0.15.3"
 bitflags = "2.9.0"
 bon = "3.4.0"
-candle-core = "0.8.3"
-candle-metal-kernels = "0.8.3"
-candle-nn = "0.8.3"
-candle-onnx = "0.8.3"
-candle-transformers = "0.8.3"
+candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", branch = "main" }
+candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels", branch = "main" }
+candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", branch = "main" }
+candle-onnx = { git = "https://github.com/huggingface/candle.git", package = "candle-onnx", branch = "main" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", branch = "main" }
 chrono = "0.4.40"
 clap = { version = "4.5.32", features = ["derive"] }
 geo = "0.29.3"
@@ -39,12 +39,12 @@ hf-hub = "0.4.2"
 itertools = "0.14.0"
 memchr = "2.7.4"
 ndarray = "0.16"
-ndarray-safetensors = "0.2"
+# ndarray-safetensors = "0.2"
 ort = "=2.0.0-rc.9"
 polars = { version = "0.46", features = ["csv", "polars-io"] }
 pdbtbx = "0.12.0"
 rand = "0.9.0"
-safetensors = "0.4.5"
+safetensors = "0.4.1"
 serde = { version = "1.0", features = ["derive"] }
 serde-pickle = "1.2"
 serde_bytes = "0.11.17"
@@ -53,6 +53,6 @@ serde_repr = "0.1.20"
 strum = { version = "0.27", features = ["derive"] }
 svg = "0.18.0"
 tempfile = "3.19.0"
-tokenizers = { version = "0.21.1", default-features = false }
+tokenizers = { version = "0.21.1", features = ["onig"] }
 urlencoding = "2.1.3"
 validator = { version = "0.20.0", features = ["derive"] }
