@@ -7,4 +7,4 @@
 
 // mod atom;
 pub mod chain;
-// mod residue;
+pub mod residue;

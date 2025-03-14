@@ -7,6 +7,7 @@
 use super::bonds::{Bond, BondOrder};
 use super::info::constants::get_bonds_canonical20;
 use super::views::chain::ChainView;
+use super::views::residue::ResidueView;
 use crate::residue::{ResidueAtoms, ResidueIter};
 use crate::selection::{AtomSelector, AtomView, Selection};
 use itertools::{Itertools, izip};
@@ -55,7 +56,7 @@ impl AtomCollection {
         chain_ids: Vec<String>,
         bonds: Option<Vec<Bond>>,
     ) -> Self {
-        AtomCollection {
+        let mut ac = AtomCollection {
             size,
             coords,
             res_ids,
@@ -67,7 +68,10 @@ impl AtomCollection {
             bonds,
             residue_start_indices: None,
             chain_start_indices: None,
-        }
+        };
+
+        ac.calculate_chain_indices();
+        ac
     }
     // Calculate and cache chain start indices
     pub fn calculate_chain_indices(&mut self) {
@@ -300,6 +304,28 @@ impl AtomCollection {
                 end_residue_idx,
             }
         })
+    }
+
+    // Add to AtomCollection implementation
+    pub fn iter_residues(&self) -> impl Iterator<Item = ResidueView<'_>> {
+        let residue_starts = self.get_residue_starts();
+        let atom_starts: Vec<usize> = residue_starts.iter().map(|&idx| idx as usize).collect();
+
+        (0..atom_starts.len() - 1)
+            .map(move |i| ResidueView::new(self, atom_starts[i], atom_starts[i + 1]))
+            .chain(
+                // Handle the last residue
+                if !atom_starts.is_empty() {
+                    let last_idx = atom_starts.len() - 1;
+                    Some(ResidueView::new(
+                        self,
+                        atom_starts[last_idx],
+                        self.get_size(),
+                    ))
+                } else {
+                    None
+                },
+            )
     }
 
     /// Iter_Residues Will Iterate Through the AtomCollection one Residue at a time.
