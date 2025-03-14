@@ -6,8 +6,8 @@
 use ferritin_core::AtomCollection;
 use geo::{BooleanOps, Coord, LineString, MultiPolygon, Point, Polygon};
 use std::f64::consts::PI;
-use svg::node::element::Path;
 use svg::Document;
+use svg::node::element::Path;
 
 // Traits -------------------------------------------------------------------------------------
 
@@ -85,7 +85,7 @@ impl StructureFlatten for AtomCollection {
                 let circles: Vec<Polygon<f64>> = residue
                     .iter_atoms()
                     .map(|atm| {
-                        let [x, y, _] = atm.coords;
+                        let [x, y, _] = atm.coords();
                         create_circle(&Point::new(*x as f64, *y as f64), radius)
                     })
                     .collect();

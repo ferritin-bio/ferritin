@@ -46,7 +46,7 @@ impl StructureFeatures for AtomCollection {
         let n = self.iter_residues_aminoacid().count();
         let s = self
             .iter_residues_aminoacid()
-            .map(|res| res.res_name)
+            .map(|res| res.residue_name().to_string())
             .map(|res| aa3to1(&res))
             .map(|res| aa1to_int(res));
 
@@ -105,16 +105,18 @@ impl StructureFeatures for AtomCollection {
     /// Get residue indices
     fn get_res_index(&self) -> Vec<u32> {
         self.iter_residues_aminoacid()
-            .map(|res| res.res_id as u32)
+            .map(|res| res.residue_id() as u32)
             .collect()
     }
 
     /// create numeric Tensor of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
+
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
+
         for residue in self.iter_residues_aminoacid() {
-            let resid = residue.res_id as usize;
+            let resid = residue.residue_id() as usize;
             let backbone_atoms = [
                 residue.find_atom_by_name("N"),
                 residue.find_atom_by_name("CA"),
@@ -123,7 +125,7 @@ impl StructureFeatures for AtomCollection {
             ];
             for (atom_idx, maybe_atom) in backbone_atoms.iter().enumerate() {
                 if let Some(atom) = maybe_atom {
-                    let [x, y, z] = atom.coords;
+                    let [x, y, z] = atom.coords();
                     let base_idx = (resid * 4 + atom_idx) * 3;
                     backbone_data[base_idx] = *x;
                     backbone_data[base_idx + 1] = *y;
@@ -143,7 +145,7 @@ impl StructureFeatures for AtomCollection {
         for (idx, residue) in self.iter_residues_aminoacid().enumerate() {
             for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
                 if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
-                    let [x, y, z] = atom.coords;
+                    let [x, y, z] = atom.coords();
                     let base_idx = (idx * 37 + atom_type as usize) * 3;
                     atom37_data[base_idx] = *x;
                     atom37_data[base_idx + 1] = *y;
@@ -166,21 +168,25 @@ impl StructureFeatures for AtomCollection {
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
         // Todo: fix this.
         let cutoff_for_score = 5.;
-        // keep only the non-protein, non-water residues that are heavy
-        let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
-            .iter_residues_all()
-            .filter(|residue| {
-                let res_name = &residue.res_name;
-                !residue.is_amino_acid() && res_name != "HOH" && res_name != "WAT"
-            })
-            .flat_map(|residue| {
-                residue
-                    .iter_atoms()
-                    .filter(|atom| is_heavy_atom(&atom.element))
-                    .map(|atom| (*atom.coords, atom.element.clone()))
-                    .collect::<Vec<_>>()
-            })
-            .multiunzip();
+
+        // Iterate through residues one at a time
+        let mut coords = Vec::new();
+        let mut elements = Vec::new();
+        for residue in self.iter_residues() {
+            let res_name = residue.residue_name();
+            if residue.is_amino_acid() || res_name == "HOH" || res_name == "WAT" {
+                continue;
+            }
+            let atoms: Vec<_> = residue
+                .iter_atoms()
+                .filter(|atom| is_heavy_atom(atom.element()))
+                .collect();
+
+            for atom in atoms {
+                coords.push(*atom.coords());
+                elements.push(*atom.element());
+            }
+        }
 
         // raw starting tensors
         let y = Tensor::from_slice(&coords.concat(), (coords.len(), 3), device)?;

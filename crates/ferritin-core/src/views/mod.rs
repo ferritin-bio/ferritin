@@ -5,6 +5,6 @@
 //! without copying data, using a struct-of-arrays underlying representation.
 //!
 
-// mod atom;
+pub mod atom;
 pub mod chain;
 pub mod residue;
