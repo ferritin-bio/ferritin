@@ -18,8 +18,8 @@ use ndarray::ArrayBase;
 use ort::{
     execution_providers::CUDAExecutionProvider,
     session::{
-        builder::{GraphOptimizationLevel, SessionBuilder},
         Session,
+        builder::{GraphOptimizationLevel, SessionBuilder},
     },
 };
 use std::path::PathBuf;
@@ -187,20 +187,26 @@ mod tests {
     }
 
     #[test]
-    fn test_encoder_output_dimensions() {
-        let model = LigandMPNN::new().unwrap();
+    fn test_encoder_output_dimensions() -> Result<()> {
+        let model = LigandMPNN::new()?;
         let ac = setup_test_data();
-        let (h_v, h_e, e_idx) = model.run_encoder(&ac).unwrap();
-        assert_eq!(h_v.shape(), &[1, 154, 128]);
+        let (h_v, h_e, e_idx) = model.run_encoder(&ac)?;
+        println!("h_v shape: {:?}", h_v.shape());
+        println!("h_e shape: {:?}", h_e.shape());
+        println!("e_idx shape: {:?}", e_idx.shape());
+
+        assert_eq!(h_v.shape(), &[1, 154, 128]); // gettingL: 4 ([1, 154, 4, 3])
         assert_eq!(h_e.shape(), &[1, 154, 16, 128]);
         assert_eq!(e_idx.shape(), &[1, 154, 16]);
+        Ok(())
     }
 
     #[test]
-    fn test_full_pipeline() {
+    fn test_full_pipeline() -> Result<()> {
         let model = LigandMPNN::new().unwrap();
         let ac = setup_test_data();
         let logits = model.run_model(ac, 10, 0.1).unwrap();
         assert_eq!(logits.dims2().unwrap(), (1, 21));
+        Ok(())
     }
 }
