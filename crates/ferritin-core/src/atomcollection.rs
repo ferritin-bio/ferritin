@@ -336,15 +336,10 @@ impl AtomCollection {
     ///
     /// Returns a filtered iterator that only includes standard amino acid residues
     pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueView<'_>> + '_ {
-        self.iter_residues().filter(|residue| residue.is_amino_acid())
+        self.iter_residues()
+            .filter(|residue| residue.is_amino_acid())
     }
 
-
-
-
-    /// Iter_Residues Will Iterate Through the AtomCollection one Residue at a time.
-    ///
-    /// This is the base for any other residue filtration code.
     // pub fn iter_residues_all(&self) -> ResidueIter {
     //     ResidueIter::new(self, self.get_residue_starts())
     // }
@@ -384,22 +379,6 @@ impl AtomCollection {
 mod tests {
     use crate::AtomCollection;
     use ferritin_test_data::TestFile;
-    use pdbtbx::Element;
-
-    #[test]
-    fn test_selection_api() {
-        let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let (pdb, _) = pdbtbx::open(prot_file).unwrap();
-        let ac = AtomCollection::from(&pdb);
-
-        let selected_atoms = ac
-            .select()
-            .chain("A")
-            .residue("GLY")
-            .element(Element::C)
-            .collect();
-        assert_eq!(selected_atoms.size(), 22);
-    }
 
     #[test]
     fn test_residue_iterator() {

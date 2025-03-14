@@ -1,3 +1,4 @@
+use super::atom::AtomView;
 use crate::AtomCollection;
 
 /// View representing a residue (amino acid, nucleotide, etc.) in the molecule.
@@ -51,10 +52,12 @@ impl<'a> ResidueView<'a> {
     //     self.data.get_is_hetero(self.start_atom_idx)
     // }
 
-    // // Get atoms by name within this residue
-    // pub fn get_atom_by_name(&self, name: &str) -> Option<usize> {
-    //     (self.start_atom_idx..self.end_atom_idx).find(|&i| self.data.get_atom_name(i) == name)
-    // }
+    // Get atom by name within this residue
+    pub fn find_atom_by_name(&self, name: &str) -> Option<AtomView<'a>> {
+        (self.start_atom_idx..self.end_atom_idx)
+            .find(|&i| self.data.get_atom_name(i) == name)
+            .map(|idx| AtomView::new(self.data, idx))
+    }
 }
 
 #[cfg(test)]
