@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/ferritin",
     "crates/ferritin-bevy",
     "crates/ferritin-cellscape",
     "crates/ferritin-core",
@@ -14,6 +15,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
+name = "ferritin"
 version = "0.2.0-dev"
 authors = ["Zach Charlop-Powers<zach.charlop.powers@gmail.com>"]
 description = "Protein Manipulaton and visualization tools"

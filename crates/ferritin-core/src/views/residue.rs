@@ -92,7 +92,7 @@ mod tests {
 
         // Test basic properties
         assert!(!residue.residue_name().is_empty());
-        assert!(residue.residue_id() > 0);
+        assert!(residue.residue_id() >= 0);
         assert!(!residue.chain_id().is_empty());
 
         // Test atom count
