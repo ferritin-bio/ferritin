@@ -19,8 +19,7 @@ impl<'a> ChainView<'a> {
         self.data.get_chain_id(first_atom_idx)
     }
 
-    // Add to ChainView implementation
-    pub fn iter_residues(&self) -> impl Iterator<Item = ResidueView<'_>> {
+    pub fn iter_residues(&self) -> Box<dyn Iterator<Item = ResidueView<'_>> + '_> {
         let residue_indices = self.data.get_residue_start_indices().unwrap();
 
         // Convert relevant section of residue indices to atom indices
@@ -31,24 +30,33 @@ impl<'a> ChainView<'a> {
             }
         }
 
-        // If we didn't reach the end of the structure, the end index is the next residue start
-        // Otherwise it's the end of the structure
+        // If the list is empty, return an empty iterator
+        if atom_indices.is_empty() {
+            return Box::new(std::iter::empty());
+        }
+
+        // Make a copy of the last atom index for use after we move atom_indices
+        let last_atom_idx = *atom_indices.last().unwrap();
+
+        // If we have indices but not reaching the end
         if self.end_residue_idx < residue_indices.len() {
-            (0..atom_indices.len() - 1)
-                .map(move |i| ResidueView::new(self.data, atom_indices[i], atom_indices[i + 1]))
+            // Create pairs of (start,end) for each residue
+            let iter = (0..atom_indices.len() - 1)
+                .map(move |i| ResidueView::new(self.data, atom_indices[i], atom_indices[i + 1]));
+            Box::new(iter)
         } else {
-            // Handle case where this chain extends to the end of the structure
-            (0..atom_indices.len() - 1)
-                .map(move |i| ResidueView::new(self.data, atom_indices[i], atom_indices[i + 1]))
-                .chain(if !atom_indices.is_empty() {
-                    Some(ResidueView::new(
-                        self.data,
-                        *atom_indices.last().unwrap(),
-                        self.data.get_size(),
-                    ))
-                } else {
-                    None
-                })
+            // For most residues
+            let main_residues = (0..atom_indices.len() - 1)
+                .map(move |i| ResidueView::new(self.data, atom_indices[i], atom_indices[i + 1]));
+
+            // For the last residue
+            let last_residue = std::iter::once(ResidueView::new(
+                self.data,
+                last_atom_idx,
+                self.data.get_size(),
+            ));
+
+            Box::new(main_residues.chain(last_residue))
         }
     }
 

@@ -307,25 +307,29 @@ impl AtomCollection {
     }
 
     // Add to AtomCollection implementation
-    pub fn iter_residues(&self) -> impl Iterator<Item = ResidueView<'_>> {
+    pub fn iter_residues(&self) -> Box<dyn Iterator<Item = ResidueView<'_>> + '_> {
         let residue_starts = self.get_residue_starts();
         let atom_starts: Vec<usize> = residue_starts.iter().map(|&idx| idx as usize).collect();
 
-        (0..atom_starts.len() - 1)
-            .map(move |i| ResidueView::new(self, atom_starts[i], atom_starts[i + 1]))
-            .chain(
-                // Handle the last residue
-                if !atom_starts.is_empty() {
-                    let last_idx = atom_starts.len() - 1;
-                    Some(ResidueView::new(
-                        self,
-                        atom_starts[last_idx],
-                        self.get_size(),
-                    ))
-                } else {
-                    None
-                },
-            )
+        // Check if we have residues
+        if atom_starts.is_empty() {
+            return Box::new(std::iter::empty());
+        }
+
+        // Get the last atom index before moving atom_starts
+        let last_idx = atom_starts.len() - 1;
+        let last_atom_idx = atom_starts[last_idx];
+        let atom_size = self.get_size();
+
+        // Create iterators for all but the last residue
+        let main_residues = (0..atom_starts.len() - 1)
+            .map(move |i| ResidueView::new(self, atom_starts[i], atom_starts[i + 1]));
+
+        // Handle the last residue separately - using the saved value
+        let last_residue = std::iter::once(ResidueView::new(self, last_atom_idx, atom_size));
+
+        // Chain the two iterators
+        Box::new(main_residues.chain(last_residue))
     }
 
     /// Iter_Residues Will Iterate Through the AtomCollection one Residue at a time.
