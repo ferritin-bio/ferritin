@@ -2,7 +2,6 @@
 use super::utilities::{AAAtom, aa1to_int, aa3to1, get_nearest_neighbours};
 use crate::AtomCollection;
 use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
-use itertools::MultiUnzip;
 use pdbtbx::Element;
 use strum::IntoEnumIterator;
 
@@ -53,7 +52,7 @@ impl StructureFeatures for AtomCollection {
         Ok(Tensor::from_iter(s, device)?.reshape((1, n))?)
     }
 
-    /// Calcualte CB for each residue
+    /// Calculate CB for each residue
     fn create_CB(&self, device: &Device) -> Result<Tensor> {
         // N = input_dict["X"][:, 0, :]
         //         CA = input_dict["X"][:, 1, :]
