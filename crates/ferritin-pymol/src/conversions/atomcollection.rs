@@ -1,5 +1,5 @@
+use crate::{PSEData, pymolparsing};
 use ferritin_core::{AtomCollection, Bond, BondOrder};
-use crate::{PSEData,pymolparsing};
 use itertools::Itertools;
 use pdbtbx::Element;
 
@@ -26,7 +26,7 @@ impl From<&PSEData> for AtomCollection {
 
         let bonds = pymol_bonds
             .iter()
-            .map(|b| Bond::new(b.index_1, b.index_2, BondOrder::match_bond(b.order)))
+            .map(|b| Bond::new(b.index_1, b.index_2, b.order))
             .collect();
 
         // pull out specific fields
@@ -67,8 +67,8 @@ impl From<&PSEData> for AtomCollection {
 
 #[cfg(test)]
 mod tests {
-    use ferritin_core::AtomCollection;
     use crate::PSEData;
+    use ferritin_core::AtomCollection;
     use ferritin_test_data::TestFile;
 
     #[test]

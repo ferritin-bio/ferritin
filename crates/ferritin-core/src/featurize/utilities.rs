@@ -1,4 +1,4 @@
-use candle_core::{IndexOp, Result, Tensor, D};
+use candle_core::{D, IndexOp, Result, Tensor};
 use strum::{Display, EnumIter, EnumString};
 
 #[rustfmt::skip]
@@ -261,6 +261,16 @@ define_residues! {
 //     Ok((Y, Y_t, Y_m, D_AB_closest))
 // }
 
+// todo: simplify the FN
+// // Consider breaking this into smaller functions with clearer purposes:
+// fn calculate_distances(coords1: &Tensor, coords2: &Tensor) -> Result<Tensor> {
+//     // Just distance calculation
+// }
+//
+// fn find_nearest(distances: &Tensor, k: usize) -> Result<Tensor> {
+//     // Just nearest neighbor finding
+// }
+//
 pub fn get_nearest_neighbours(
     CB: &Tensor,
     mask: &Tensor,
@@ -281,7 +291,7 @@ pub fn get_nearest_neighbours(
     let mask_CBY = mask.unsqueeze(1)?.matmul(&Y_m.unsqueeze(0)?)?;
     let CB_flat = CB.reshape((CB.dim(0)?, 1, 3))?; // [154, 1, 3]
     let Y_flat = Y.reshape((1, Y.dim(0)?, 3))?; // [1, 54, 3]
-                                                // Try broadcasting manually if needed
+    // Try broadcasting manually if needed
     let CB_broadcast = CB_flat.broadcast_as((CB.dim(0)?, Y.dim(0)?, 3))?; // [154, 54, 3]
     let Y_broadcast = Y_flat.broadcast_as((CB.dim(0)?, Y.dim(0)?, 3))?; // [154, 54, 3]
     let diff = CB_broadcast.sub(&Y_broadcast)?;
