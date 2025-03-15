@@ -2768,7 +2768,6 @@ dependencies = [
  "ndarray",
  "ort",
  "pdbtbx",
- "safetensors",
  "serde",
  "tokenizers",
 ]
