@@ -1,5 +1,6 @@
 use super::atom::AtomView;
 use crate::AtomCollection;
+use crate::info::constants::{is_amino_acid, is_carbohydrate, is_nucleotide};
 
 /// View representing a residue (amino acid, nucleotide, etc.) in the molecule.
 pub struct ResidueView<'a> {
@@ -25,15 +26,17 @@ impl<'a> ResidueView<'a> {
         self.data.get_chain_id(self.start_atom_idx)
     }
 
-    #[rustfmt::skip]
     pub fn is_amino_acid(&self) -> bool {
-        // Standard amino acid check
-        let name = self.residue_name();
-        matches!(
-            name,
-            "ALA" | "ARG" | "ASN" | "ASP" | "CYS" | "GLN" | "GLU" | "GLY" | "HIS" | "ILE" |
-            "LEU" | "LYS" | "MET" | "PHE" | "PRO" | "SER" | "THR" | "TRP" | "TYR" | "VAL"
-        )
+        is_amino_acid(self.residue_name())
+    }
+
+    // Add methods for other residue types
+    pub fn is_nucleotide(&self) -> bool {
+        is_nucleotide(self.residue_name())
+    }
+
+    pub fn is_carbohydrate(&self) -> bool {
+        is_carbohydrate(self.residue_name())
     }
 
     pub fn iter_atoms(&self) -> impl Iterator<Item = AtomView<'_>> + '_ {

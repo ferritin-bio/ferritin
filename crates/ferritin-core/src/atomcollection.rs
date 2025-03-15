@@ -172,11 +172,13 @@ impl AtomCollection {
                     // Create all possible bond combinations
                     for &i in &atom_indices1 {
                         for &j in &atom_indices2 {
-                            bonds.push(Bond::new(
-                                i as i32,
-                                j as i32,
-                                BondOrder::match_bond(bond_type),
-                            ));
+                            bonds.push(Bond::new(i as i32, j as i32, bond_type));
+                            // bonds.push(Bond::new(
+                            //     i as i32,
+                            //     j as i32,
+                            //     BondOrder::match_bond(bond_type),
+                            // ))
+                            // ;
                         }
                     }
                 }
@@ -396,14 +398,11 @@ mod tests {
         let (prot_file, _temp) = TestFile::protein_04().create_temp().unwrap();
         let (pdb, _) = pdbtbx::open(prot_file).unwrap();
         let mut ac = AtomCollection::from(&pdb);
-
-        // Calculate indices first
         ac.calculate_chain_indices();
 
         // Test chain iteration
         let chains: Vec<_> = ac.iter_chains().collect();
         assert_eq!(chains.len(), 2);
-        // Check chain IDs
         assert_eq!(chains[0].chain_id(), "A");
         assert_eq!(chains[1].chain_id(), "B");
 
@@ -423,10 +422,7 @@ mod tests {
         let (pdb, _) = pdbtbx::open(prot_file).unwrap();
         let ac = AtomCollection::from(&pdb);
 
-        // Test residue iteration
         let residues: Vec<_> = ac.iter_residues().collect();
-
-        // Verify residue count
         assert!(!residues.is_empty());
 
         // Check the first residue
@@ -464,7 +460,6 @@ mod tests {
         for residue in &residues {
             assert_eq!(residue.chain_id(), chain_id);
         }
-
         // The number of residues should match chain's residue count
         assert_eq!(residues.len(), first_chain.residue_count());
     }
