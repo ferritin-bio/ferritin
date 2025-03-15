@@ -2726,8 +2726,6 @@ dependencies = [
  "ferritin-plms",
  "ferritin-test-data",
  "hf-hub",
- "ndarray",
- "ort",
  "pdbtbx",
  "serde_json",
  "tokenizers",
@@ -2768,7 +2766,6 @@ dependencies = [
  "ndarray",
  "ort",
  "pdbtbx",
- "serde",
  "tokenizers",
 ]
 

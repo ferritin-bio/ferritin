@@ -31,8 +31,6 @@ ferritin-core = { path = "../ferritin-core" }
 ferritin-plms = { path = "../ferritin-plms" }
 ferritin-onnx-models = { path = "../ferritin-onnx-models" }
 hf-hub.workspace = true
-ndarray.workspace = true
-ort.workspace = true
 pdbtbx.workspace = true
 serde_json.workspace = true
 
