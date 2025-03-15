@@ -27,11 +27,11 @@ anyhow = "1.0"
 bevy = "0.15.3"
 bitflags = "2.9.0"
 bon = "3.4.0"
-candle-core = { git = "https://github.com/huggingface/candle.git", package = "candle-core", branch = "main" }
-candle-metal-kernels = { git = "https://github.com/huggingface/candle.git", package = "candle-metal-kernels", branch = "main" }
-candle-nn = { git = "https://github.com/huggingface/candle.git", package = "candle-nn", branch = "main" }
-candle-onnx = { git = "https://github.com/huggingface/candle.git", package = "candle-onnx", branch = "main" }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", package = "candle-transformers", branch = "main" }
+candle-core = "0.8.4"
+candle-metal-kernels = "0.8.4"
+candle-nn = "0.8.4"
+candle-onnx = "0.8.4"
+candle-transformers = "0.8.4"
 chrono = "0.4.40"
 clap = { version = "4.5.32", features = ["derive"] }
 geo = "0.29.3"

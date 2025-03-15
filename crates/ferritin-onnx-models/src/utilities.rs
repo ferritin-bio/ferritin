@@ -1,60 +1,6 @@
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use ndarray;
-// use ndarray_safetensors::{TensorViewWithDataBuffer, parse_tensors};
-// use safetensors::{SafeTensors, serialize};
-
-// pub fn ndarray_to_tensor(tensor: ValueRef) -> Result<candle_core::Tensor> {
-//     let tmp_data = [("_", tensor)];
-//     let st = serialize(tmp_data, &None)?;
-//     let tensors = SafeTensors::deserialize(&st).unwrap();
-//     let arrays = parse_tensors::<i64>(&tensors).unwrap();
-//     Ok(arrays.into_iter().next().unwrap().1)
-// }
-
-// pub fn ndarray_to_tensor_f32(
-//     arr: ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::IxDyn>,
-// ) -> Result<Tensor> {
-//     let data = vec![("arr", TensorViewWithDataBuffer::new(&arr))];
-//     let serialized_data = safetensors::serialize(data, &None).unwrap();
-//     let tensor_hash = candle_core::safetensors::load_buffer(&serialized_data, &Device::Cpu)?;
-//     Ok(tensor_hash
-//         .get("arr")
-//         .ok_or(anyhow::anyhow!("array not found"))?
-//         .clone())
-// }
-
-// pub fn ndarray_to_tensor_i64(
-//     arr: ndarray::ArrayBase<ndarray::OwnedRepr<i64>, ndarray::IxDyn>,
-// ) -> Result<Tensor> {
-//     let data = vec![("arr", TensorViewWithDataBuffer::new(&arr))];
-//     let serialized_data = safetensors::serialize(data, &None).unwrap();
-//     let tensor_hash = candle_core::safetensors::load_buffer(&serialized_data, &Device::Cpu)?;
-//     Ok(tensor_hash
-//         .get("arr")
-//         .ok_or(anyhow::anyhow!("array not found"))?
-//         .clone())
-// }
-
-// pub fn tensor_to_ndarray_f32(
-//     tensor: candle_core::Tensor,
-// ) -> Result<ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::IxDyn>> {
-//     let tmp_data = [("_", tensor)];
-//     let st = serialize(tmp_data, &None)?;
-//     let tensors = SafeTensors::deserialize(&st).unwrap();
-//     let arrays = parse_tensors::<f32>(&tensors).unwrap();
-//     Ok(arrays.into_iter().next().unwrap().1)
-// }
-
-// pub fn tensor_to_ndarray_i64(
-//     tensor: candle_core::Tensor,
-// ) -> Result<ndarray::ArrayBase<ndarray::OwnedRepr<i64>, ndarray::IxDyn>> {
-//     let tmp_data = [("_", tensor)];
-//     let st = serialize(tmp_data, &None)?;
-//     let tensors = SafeTensors::deserialize(&st).unwrap();
-//     let arrays = parse_tensors::<i64>(&tensors).unwrap();
-//     Ok(arrays.into_iter().next().unwrap().1)
-// }
 
 pub fn ndarray_to_tensor_f32(
     arr: ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::IxDyn>,
@@ -62,6 +8,7 @@ pub fn ndarray_to_tensor_f32(
     // Get shape from ndarray
     let shape: Vec<usize> = arr.shape().to_vec();
 
+    println!("Shape: {:?}", shape);
     // Get raw bytes from ndarray (converting f32 values to bytes)
     let raw_data = arr
         .as_slice()
@@ -83,28 +30,16 @@ pub fn ndarray_to_tensor_f32(
 pub fn tensor_to_ndarray_f32(
     tensor: candle_core::Tensor,
 ) -> Result<ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::IxDyn>> {
-    // Get raw bytes from tensor
-    let raw_data = tensor
-        .to_vec1::<f32>()?
-        .as_slice()
-        .iter()
-        .flat_map(|&x| x.to_ne_bytes())
-        .collect::<Vec<u8>>();
+    // Get shape from tensor
+    let shape = tensor.dims().to_vec();
 
-    // Create ndarray shape
-    let shape = tensor.dims();
+    // Flatten the tensor (safely handles multi-dimensional tensors)
+    let flattened = tensor.flatten_all()?;
 
-    // Convert raw bytes back to f32 values
-    let f32_data: Vec<f32> = raw_data
-        .chunks_exact(4)
-        .map(|chunk| {
-            let mut bytes = [0u8; 4];
-            bytes.copy_from_slice(chunk);
-            f32::from_ne_bytes(bytes)
-        })
-        .collect();
+    // Get the data as a 1D vector (now appropriate since we flattened it)
+    let f32_data = flattened.to_vec1::<f32>()?;
 
-    // Create ndarray from data
+    // Create ndarray from data with original shape
     ndarray::Array::from_shape_vec(ndarray::IxDyn(&shape), f32_data)
         .map_err(|e| anyhow::anyhow!("Failed to create ndarray: {}", e))
 }
@@ -112,11 +47,16 @@ pub fn tensor_to_ndarray_f32(
 pub fn tensor_to_ndarray_i64(
     tensor: candle_core::Tensor,
 ) -> Result<ndarray::ArrayBase<ndarray::OwnedRepr<i64>, ndarray::IxDyn>> {
-    // Get values from tensor
+    // Get shape from tensor
     let shape = tensor.dims().to_vec();
-    let i64_data = tensor.to_vec1::<i64>()?;
 
-    // Create ndarray from data
+    // Flatten the tensor
+    let flattened = tensor.flatten_all()?;
+
+    // Get the data as a 1D vector
+    let i64_data = flattened.to_vec1::<i64>()?;
+
+    // Create ndarray from data with original shape
     ndarray::Array::from_shape_vec(ndarray::IxDyn(&shape), i64_data)
         .map_err(|e| anyhow::anyhow!("Failed to create ndarray: {}", e))
 }

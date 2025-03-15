@@ -1618,8 +1618,9 @@ dependencies = [
 
 [[package]]
 name = "candle-core"
-version = "0.8.3"
-source = "git+https://github.com/huggingface/candle.git?branch=main#c930ab7e1a234f02a0f49350bf38f03f45e53757"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06ccf5ee3532e66868516d9b315f73aec9f34ea1a37ae98514534d458915dbf1"
 dependencies = [
  "byteorder",
  "candle-metal-kernels",
@@ -1642,8 +1643,9 @@ dependencies = [
 
 [[package]]
 name = "candle-metal-kernels"
-version = "0.8.3"
-source = "git+https://github.com/huggingface/candle.git?branch=main#c930ab7e1a234f02a0f49350bf38f03f45e53757"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52c85c21827c28db94e7112e364abe7e0cf8d2b022c014edf08642be6b94f21e"
 dependencies = [
  "metal 0.27.0",
  "once_cell",
@@ -1653,8 +1655,9 @@ dependencies = [
 
 [[package]]
 name = "candle-nn"
-version = "0.8.3"
-source = "git+https://github.com/huggingface/candle.git?branch=main#c930ab7e1a234f02a0f49350bf38f03f45e53757"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be1160c3b63f47d40d91110a3e1e1e566ae38edddbbf492a60b40ffc3bc1ff38"
 dependencies = [
  "candle-core",
  "candle-metal-kernels",
@@ -1669,8 +1672,9 @@ dependencies = [
 
 [[package]]
 name = "candle-onnx"
-version = "0.8.3"
-source = "git+https://github.com/huggingface/candle.git?branch=main#c930ab7e1a234f02a0f49350bf38f03f45e53757"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d8e1b5113bc7cf40371e78f5123fe428c9d47ad84869082246d2c40b12699cf"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -1680,8 +1684,9 @@ dependencies = [
 
 [[package]]
 name = "candle-transformers"
-version = "0.8.3"
-source = "git+https://github.com/huggingface/candle.git?branch=main#c930ab7e1a234f02a0f49350bf38f03f45e53757"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94a0900d49f8605e0e7e6693a1f560e6271279de98e5fa369e7abf3aac245020"
 dependencies = [
  "byteorder",
  "candle-core",
