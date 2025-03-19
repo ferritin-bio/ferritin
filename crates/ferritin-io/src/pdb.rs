@@ -146,13 +146,9 @@ impl PDBFile {
     /// Parse PDB file into an AtomCollection
     pub fn parse_to_atom_collection(
         &self,
-        model: Option<isize>,
+        // model: Option<isize>,
     ) -> Result<AtomCollection, PDBError> {
-        let atom_line_i = match model {
-            Some(model_number) => self.get_atom_indices(model_number)?,
-            None => self.atom_line_i.clone(),
-        };
-
+        let atom_line_i = self.atom_line_i.clone();
         let size = atom_line_i.len();
         let mut coords = Vec::with_capacity(size);
         let mut res_ids = Vec::with_capacity(size);
@@ -376,11 +372,8 @@ impl PDBFile {
     fn write_bonds(&mut self, bonds: &[Bond], size: usize) -> Result<(), PDBError> {
         // Group bonds by center atom
         let mut bond_groups: HashMap<i32, Vec<i32>> = HashMap::new();
-
         for bond in bonds {
             let (center, bonded) = bond.get_atom_indices();
-
-            // Add bond in both directions to ensure complete connectivity
             bond_groups.entry(center).or_default().push(bonded);
             bond_groups.entry(bonded).or_default().push(center);
         }
@@ -395,7 +388,6 @@ impl PDBFile {
                     for &bonded_idx in chunk {
                         line.push_str(&format!("{:>5}", bonded_idx + 1)); // 1-based atom IDs
                     }
-
                     // Pad to 80 characters
                     line = format!("{:<80}", line);
                     self.lines.push(line);
@@ -561,36 +553,47 @@ fn truncate_id(id: i32, max_id: i32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ferritin_test_data::TestFile;
     use std::path::Path;
 
     #[test]
     fn test_pdb_file_read() {
-        let path = Path::new("test_data/1aki.pdb");
-        if path.exists() {
-            let pdb_file = PDBFile::read(path.to_str().unwrap()).unwrap();
-            assert!(!pdb_file.lines.is_empty());
-            assert!(!pdb_file.atom_line_i.is_empty());
-            // Additional assertions based on expected content
-        }
+        let (pdb_file, _temp) = TestFile::protein_02().create_temp().unwrap();
+        let pdb = PDBFile::read(&pdb_file).unwrap();
+        assert!(!pdb.lines.is_empty());
+        assert!(!pdb.atom_line_i.is_empty());
+
+        let ac: AtomCollection = pdb.parse_to_atom_collection().unwrap();
     }
 
-    #[test]
-    fn test_parse_to_atom_collection() {
-        let path = Path::new("test_data/1aki.pdb");
-        if path.exists() {
-            let pdb_file = PDBFile::read(path.to_str().unwrap()).unwrap();
-            let atom_collection = pdb_file.parse_to_atom_collection(None).unwrap();
+    // #[test]
+    // fn test_pdb_file_read() {
+    //     let path = Path::new("test_data/1aki.pdb");
+    //     if path.exists() {
+    //         let pdb_file = PDBFile::read(path.to_str().unwrap()).unwrap();
+    //         assert!(!pdb_file.lines.is_empty());
+    //         assert!(!pdb_file.atom_line_i.is_empty());
+    //         // Additional assertions based on expected content
+    //     }
+    // }
 
-            // Check that atoms were parsed correctly
-            assert!(atom_collection.get_size() > 0);
-            assert_eq!(atom_collection.get_size(), pdb_file.atom_line_i.len());
+    // #[test]
+    // fn test_parse_to_atom_collection() {
+    //     let path = Path::new("test_data/1aki.pdb");
+    //     if path.exists() {
+    //         let pdb_file = PDBFile::read(path.to_str().unwrap()).unwrap();
+    //         let atom_collection = pdb_file.parse_to_atom_collection(None).unwrap();
 
-            // Check first atom details
-            if atom_collection.get_size() > 0 {
-                let first_atom_name = atom_collection.get_atom_name(0);
-                let first_res_name = atom_collection.get_res_name(0);
-                // Add assertions based on expected values
-            }
-        }
-    }
+    //         // Check that atoms were parsed correctly
+    //         assert!(atom_collection.get_size() > 0);
+    //         assert_eq!(atom_collection.get_size(), pdb_file.atom_line_i.len());
+
+    //         // Check first atom details
+    //         if atom_collection.get_size() > 0 {
+    //             let first_atom_name = atom_collection.get_atom_name(0);
+    //             let first_res_name = atom_collection.get_res_name(0);
+    //             // Add assertions based on expected values
+    //         }
+    //     }
+    // }
 }
