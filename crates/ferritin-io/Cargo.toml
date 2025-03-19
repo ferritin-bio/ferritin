@@ -8,6 +8,7 @@ description.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+ferritin-core = { path = "../ferritin-core" }
 memchr.workspace = true
 pdbtbx.workspace = true
 # polars = { workspace = true, features = ["csv", "polars-io"] }

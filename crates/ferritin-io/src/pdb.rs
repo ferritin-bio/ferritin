@@ -3,12 +3,10 @@
 //! Adapted from: https://github.com/biotite-dev/fastpdb/tree/main
 //! Converted to use native Rust structures instead of Python/NumPy bindings.
 
-use ferritin_core::atomcollection::AtomCollection;
-use ferritin_core::bonds::{Bond, BondOrder};
+use ferritin_core::{AtomCollection, Bond, BondOrder};
 use pdbtbx::Element;
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use std::fs;
@@ -195,20 +193,19 @@ impl PDBFile {
             // Parse element
             let element_str = line[76..78].trim();
             let element = if element_str.is_empty() {
-                // Try to deduce element from atom name
                 let atom_name = line[12..16].trim();
                 if atom_name.len() >= 1 {
                     let first_char = atom_name.chars().next().unwrap();
                     if first_char.is_alphabetic() && !first_char.is_numeric() {
-                        Element::from_str(&first_char.to_string()).unwrap_or(Element::Unknown)
+                        Element::from_symbol(&first_char.to_string()).unwrap()
                     } else {
-                        Element::Unknown
+                        Element::H // todo: fix
                     }
                 } else {
-                    Element::Unknown
+                    Element::H // todo: fix
                 }
             } else {
-                Element::from_str(element_str).unwrap_or(Element::Unknown)
+                Element::from_symbol(element_str).unwrap()
             };
             elements.push(element);
 
