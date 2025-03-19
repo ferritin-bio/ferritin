@@ -1,0 +1,605 @@
+//! Low-level PDB file parsing and writing.
+//!
+//! Adapted from: https://github.com/biotite-dev/fastpdb/tree/main
+//! Converted to use native Rust structures instead of Python/NumPy bindings.
+
+use ferritin_core::atomcollection::AtomCollection;
+use ferritin_core::bonds::{Bond, BondOrder};
+use pdbtbx::Element;
+use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::convert::TryInto;
+use std::error::Error;
+use std::fmt;
+use std::fs;
+use std::str::FromStr;
+
+/// Custom error types for PDB parsing operations
+#[derive(Debug)]
+pub enum PDBError {
+    InvalidFile(String),
+    IOError(std::io::Error),
+    ValueError(String),
+    OSError(String),
+}
+
+impl fmt::Display for PDBError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PDBError::InvalidFile(msg) => write!(f, "Invalid PDB file: {}", msg),
+            PDBError::IOError(err) => write!(f, "IO error: {}", err),
+            PDBError::ValueError(msg) => write!(f, "Value error: {}", msg),
+            PDBError::OSError(msg) => write!(f, "OS error: {}", msg),
+        }
+    }
+}
+
+impl Error for PDBError {}
+
+impl From<std::io::Error> for PDBError {
+    fn from(err: std::io::Error) -> Self {
+        PDBError::IOError(err)
+    }
+}
+
+/// This is a low-level abstraction of a PDB file.
+/// The struct is able to parse coordinates, models, bonds etc. from lines of text and vice versa.
+pub struct PDBFile {
+    /// Lines of text from the PDB file.
+    pub lines: Vec<String>,
+    model_start_i: Vec<usize>,
+    atom_line_i: Vec<usize>,
+}
+
+impl PDBFile {
+    /// Create a new [`PDBFile`].
+    /// The lines of text are given to `lines`.
+    /// An empty `Vec` represents an empty PDB file.
+    pub fn new(lines: Vec<String>) -> Self {
+        let mut pdb_file = PDBFile {
+            lines,
+            model_start_i: Vec::new(),
+            atom_line_i: Vec::new(),
+        };
+        pdb_file.index_models_and_atoms();
+        pdb_file
+    }
+
+    /// Read a [`PDBFile`] from a file.
+    /// The file is indicated by its file path as `String`.
+    pub fn read(file_path: &str) -> Result<Self, PDBError> {
+        let contents = fs::read_to_string(file_path)
+            .map_err(|_| PDBError::OSError(format!("'{}' cannot be read", file_path)))?;
+        let lines = contents
+            .lines()
+            .map(|line| format!("{:<80}", line))
+            .collect();
+        let mut pdb_file = PDBFile {
+            lines,
+            model_start_i: Vec::new(),
+            atom_line_i: Vec::new(),
+        };
+        pdb_file.index_models_and_atoms();
+        Ok(pdb_file)
+    }
+
+    /// Get indices to the start positions of all models in the file.
+    pub fn get_model_start_indices(&self) -> Vec<usize> {
+        self.model_start_i.clone()
+    }
+
+    /// Get indices to all `ATOM` and `HETATM` records in the file.
+    pub fn get_atom_line_indices(&self) -> Vec<usize> {
+        self.atom_line_i.clone()
+    }
+
+    /// Get the number of models contained in the file.
+    pub fn get_model_count(&self) -> usize {
+        self.model_start_i.len()
+    }
+
+    /// Parse the given `REMARK` record of the PDB file to obtain its content as strings
+    pub fn parse_remark(&self, number: i64) -> Result<Option<Vec<String>>, PDBError> {
+        const CONTENT_START_COLUMN: usize = 11;
+
+        if number < 0 || number > 999 {
+            return Err(PDBError::ValueError(
+                "The number must be in range 0-999".to_string(),
+            ));
+        }
+        let remark_string = format!("REMARK {:>3}", number);
+        let mut remark_lines: Vec<String> = self
+            .lines
+            .iter()
+            .filter(|line| line.starts_with(&remark_string))
+            .map(|line| line[CONTENT_START_COLUMN..].to_owned())
+            .collect();
+        match remark_lines.len() {
+            0 => Ok(None),
+            // Remove first empty line
+            _ => {
+                remark_lines.remove(0);
+                Ok(Some(remark_lines))
+            }
+        }
+    }
+
+    /// Parse the `CRYST1` record of the PDB file to obtain the unit cell lengths
+    /// and angles (in degrees).
+    pub fn parse_box(&self) -> Result<Option<(f32, f32, f32, f32, f32, f32)>, PDBError> {
+        for line in self.lines.iter() {
+            if line.starts_with("CRYST1") {
+                if line.len() < 80 {
+                    return Err(PDBError::InvalidFile("Line is too short".to_string()));
+                }
+                let len_a = parse_number(&line[6..15])?;
+                let len_b = parse_number(&line[15..24])?;
+                let len_c = parse_number(&line[24..33])?;
+                let alpha = parse_number(&line[33..40])?;
+                let beta = parse_number(&line[40..47])?;
+                let gamma = parse_number(&line[47..54])?;
+                return Ok(Some((len_a, len_b, len_c, alpha, beta, gamma)));
+            }
+        }
+        // File has no 'CRYST1' record
+        Ok(None)
+    }
+
+    /// Parse PDB file into an AtomCollection
+    pub fn parse_to_atom_collection(
+        &self,
+        model: Option<isize>,
+    ) -> Result<AtomCollection, PDBError> {
+        let atom_line_i = match model {
+            Some(model_number) => self.get_atom_indices(model_number)?,
+            None => self.atom_line_i.clone(),
+        };
+
+        let size = atom_line_i.len();
+        let mut coords = Vec::with_capacity(size);
+        let mut res_ids = Vec::with_capacity(size);
+        let mut res_names = Vec::with_capacity(size);
+        let mut is_hetero = Vec::with_capacity(size);
+        let mut elements = Vec::with_capacity(size);
+        let mut atom_names = Vec::with_capacity(size);
+        let mut chain_ids = Vec::with_capacity(size);
+        let mut atom_ids = Vec::with_capacity(size);
+
+        for &line_i in &atom_line_i {
+            let line = &self.lines[line_i];
+            if line.len() < 80 {
+                return Err(PDBError::InvalidFile("Line is too short".to_string()));
+            }
+
+            // Parse coordinates
+            let x = parse_float_from_string(line, 30, 38)?;
+            let y = parse_float_from_string(line, 38, 46)?;
+            let z = parse_float_from_string(line, 46, 54)?;
+            coords.push([x, y, z]);
+
+            // Parse chain ID
+            chain_ids.push(line[21..22].trim().to_string());
+
+            // Parse residue ID
+            res_ids.push(parse_number::<i32>(&line[22..26])?);
+
+            // Parse residue name
+            res_names.push(line[17..20].trim().to_string());
+
+            // Parse hetero flag
+            is_hetero.push(!line.starts_with("ATOM"));
+
+            // Parse atom name
+            atom_names.push(line[12..16].trim().to_string());
+
+            // Parse element
+            let element_str = line[76..78].trim();
+            let element = if element_str.is_empty() {
+                // Try to deduce element from atom name
+                let atom_name = line[12..16].trim();
+                if atom_name.len() >= 1 {
+                    let first_char = atom_name.chars().next().unwrap();
+                    if first_char.is_alphabetic() && !first_char.is_numeric() {
+                        Element::from_str(&first_char.to_string()).unwrap_or(Element::Unknown)
+                    } else {
+                        Element::Unknown
+                    }
+                } else {
+                    Element::Unknown
+                }
+            } else {
+                Element::from_str(element_str).unwrap_or(Element::Unknown)
+            };
+            elements.push(element);
+
+            // Parse atom ID
+            atom_ids.push(parse_number::<i32>(&line[6..11])?);
+        }
+
+        // Create the atom collection
+        let mut atom_collection = AtomCollection::new(
+            size, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids,
+            None, // Bonds will be handled separately
+        );
+
+        // Parse bonds if available
+        let bonds = self.parse_bonds(&atom_ids)?;
+        if !bonds.is_empty() {
+            atom_collection = AtomCollection::new(
+                size,
+                coords,
+                res_ids,
+                res_names,
+                is_hetero,
+                elements,
+                atom_names,
+                chain_ids,
+                Some(bonds),
+            );
+        }
+
+        Ok(atom_collection)
+    }
+
+    /// Parse bonds from CONECT records
+    fn parse_bonds(&self, atom_ids: &[i32]) -> Result<Vec<Bond>, PDBError> {
+        // Mapping from atom ids to indices in an AtomArray
+        let mut atom_id_to_index: HashMap<i32, i32> = HashMap::new();
+        for (i, &id) in atom_ids.iter().enumerate() {
+            atom_id_to_index.insert(id, i as i32);
+        }
+
+        let mut bonds: Vec<Bond> = Vec::new();
+        for line in self.lines.iter() {
+            if line.starts_with("CONECT") && line.len() >= 16 {
+                // Extract ID of center atom
+                if let Ok(center_id) = parse_number::<i32>(&line[6..11]) {
+                    if let Some(&center_index) = atom_id_to_index.get(&center_id) {
+                        // Iterate over atom IDs bonded to center atom
+                        for i in (11..31).step_by(5) {
+                            if i + 5 > line.len() {
+                                break;
+                            }
+
+                            if let Ok(bonded_id) = parse_number::<i32>(&line[i..i + 5]) {
+                                if let Some(&bonded_index) = atom_id_to_index.get(&bonded_id) {
+                                    bonds.push(Bond::new(
+                                        center_index,
+                                        bonded_index,
+                                        BondOrder::Single,
+                                    ));
+                                }
+                            } else {
+                                // No more bonded atoms
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(bonds)
+    }
+
+    /// Write the `CRYST1` record to this [`PDBFile`] based on the given unit cell parameters.
+    pub fn write_box(
+        &mut self,
+        len_a: f32,
+        len_b: f32,
+        len_c: f32,
+        alpha: f32,
+        beta: f32,
+        gamma: f32,
+    ) {
+        self.lines.push(format!(
+            "CRYST1{:>9.3}{:>9.3}{:>9.3}{:>7.2}{:>7.2}{:>7.2} P 1           1          ",
+            len_a, len_b, len_c, alpha, beta, gamma
+        ));
+    }
+
+    /// Write data from an AtomCollection to this PDBFile
+    pub fn write_atom_collection(
+        &mut self,
+        atom_collection: &AtomCollection,
+        as_multiple_models: bool,
+    ) -> Result<(), PDBError> {
+        let size = atom_collection.get_size();
+        let coords = atom_collection.get_coords();
+
+        // For single model mode, just write all atoms
+        if !as_multiple_models {
+            for i in 0..size {
+                let atom_line = format!(
+                    "{:6}{:>5} {:4} {:>3} {:1}{:>4}{:1}   {:>8.3}{:>8.3}{:>8.3}{:>6.2}{:>6.2}          {:>2}  ",
+                    if atom_collection.get_is_hetero(i) {
+                        "HETATM"
+                    } else {
+                        "ATOM"
+                    },
+                    i + 1, // Atom ID
+                    center_atom_name(
+                        atom_collection.get_atom_name(i),
+                        atom_collection.get_element(i)
+                    ),
+                    atom_collection.get_res_name(i),
+                    atom_collection.get_chain_id(i),
+                    atom_collection.get_res_id(i),
+                    " ", // Insertion code
+                    coords[i][0],
+                    coords[i][1],
+                    coords[i][2],
+                    1.00, // Occupancy
+                    0.00, // B-factor
+                    atom_collection.get_element(i).to_string(),
+                );
+                self.lines.push(atom_line);
+            }
+        } else {
+            // For multiple model mode, add MODEL/ENDMDL records
+            // Note: This is a simplification that assumes a single model in the AtomCollection
+            // In a real implementation, you'd need to handle multiple models in the collection
+            self.lines.push(format!("MODEL {:>8}", 1));
+            for i in 0..size {
+                let atom_line = format!(
+                    "{:6}{:>5} {:4} {:>3} {:1}{:>4}{:1}   {:>8.3}{:>8.3}{:>8.3}{:>6.2}{:>6.2}          {:>2}  ",
+                    if atom_collection.get_is_hetero(i) {
+                        "HETATM"
+                    } else {
+                        "ATOM"
+                    },
+                    i + 1, // Atom ID
+                    center_atom_name(
+                        atom_collection.get_atom_name(i),
+                        atom_collection.get_element(i)
+                    ),
+                    atom_collection.get_res_name(i),
+                    atom_collection.get_chain_id(i),
+                    atom_collection.get_res_id(i),
+                    " ", // Insertion code
+                    coords[i][0],
+                    coords[i][1],
+                    coords[i][2],
+                    1.00, // Occupancy
+                    0.00, // B-factor
+                    atom_collection.get_element(i).to_string(),
+                );
+                self.lines.push(atom_line);
+            }
+            self.lines.push(String::from("ENDMDL"));
+        }
+
+        // Add bonds if available
+        if let Some(bonds) = atom_collection.get_bonds() {
+            self.write_bonds(bonds, size)?;
+        }
+
+        // Update the model and atom indices
+        self.index_models_and_atoms();
+
+        Ok(())
+    }
+
+    /// Write bonds to CONECT records
+    fn write_bonds(&mut self, bonds: &[Bond], size: usize) -> Result<(), PDBError> {
+        // Group bonds by center atom
+        let mut bond_groups: HashMap<i32, Vec<i32>> = HashMap::new();
+
+        for bond in bonds {
+            let center = bond.get_atom1();
+            let bonded = bond.get_atom2();
+
+            // Add bond in both directions to ensure complete connectivity
+            bond_groups.entry(center).or_default().push(bonded);
+            bond_groups.entry(bonded).or_default().push(center);
+        }
+
+        // Write CONECT records
+        for center_idx in 0..size as i32 {
+            if let Some(bonded_atoms) = bond_groups.get(&center_idx) {
+                // We can only write up to 4 bonds per CONECT record
+                for chunk in bonded_atoms.chunks(4) {
+                    let mut line = format!("CONECT{:>5}", center_idx + 1); // 1-based atom IDs
+
+                    for &bonded_idx in chunk {
+                        line.push_str(&format!("{:>5}", bonded_idx + 1)); // 1-based atom IDs
+                    }
+
+                    // Pad to 80 characters
+                    line = format!("{:<80}", line);
+                    self.lines.push(line);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Index lines in the file that correspond to starts of new models and to
+    /// `ATOM` or `HETATM` records.
+    /// Must be called after the content of the file has been changed.
+    fn index_models_and_atoms(&mut self) {
+        self.atom_line_i = self
+            .lines
+            .iter()
+            .enumerate()
+            .filter(|(_i, line)| line.starts_with("ATOM") || line.starts_with("HETATM"))
+            .map(|(i, _line)| i)
+            .collect();
+        self.model_start_i = self
+            .lines
+            .iter()
+            .enumerate()
+            .filter(|(_i, line)| line.starts_with("MODEL"))
+            .map(|(i, _line)| i)
+            .collect();
+        // It could be an empty file or a file with a single model,
+        // where the 'MODEL' line is missing
+        if self.model_start_i.is_empty() && !self.atom_line_i.is_empty() {
+            self.model_start_i = vec![0]
+        }
+    }
+
+    /// Get indices to `ATOM` and `HETATM` records within the given model number.
+    fn get_atom_indices(&self, model: isize) -> Result<Vec<usize>, PDBError> {
+        // Find the model index corresponding to the given model number
+        let model_i: isize;
+        match model.cmp(&0) {
+            Ordering::Greater => model_i = model - 1,
+            Ordering::Less => model_i = self.model_start_i.len() as isize + model,
+            Ordering::Equal => {
+                return Err(PDBError::ValueError(
+                    "Model index must not be 0".to_string(),
+                ));
+            }
+        };
+        if model_i >= self.model_start_i.len() as isize || model_i < 0 {
+            return Err(PDBError::ValueError(format!(
+                "The file has {} models, the given model {} does not exist",
+                self.model_start_i.len(),
+                model
+            )));
+        }
+
+        // Get the start and stop line index for this model index
+        let (model_start, model_stop) = match model_i.cmp(&(self.model_start_i.len() as isize - 1))
+        {
+            Ordering::Less => (
+                self.model_start_i[model_i as usize],
+                self.model_start_i[(model_i + 1) as usize],
+            ),
+            // Last model -> Model reaches to end of file
+            Ordering::Equal => (self.model_start_i[model_i as usize], self.lines.len()),
+            // This case was excluded above
+            _ => panic!("This branch should not be reached"),
+        };
+
+        // Get the atom records within these line boundaries
+        Ok(self
+            .atom_line_i
+            .iter()
+            .copied()
+            .filter(|i| *i >= model_start && *i < model_stop)
+            .collect())
+    }
+
+    /// Get the number of atoms in each model of the PDB file.
+    /// An error is returned if the number of atoms per model differ from each other.
+    fn get_model_length(&self) -> Result<usize, PDBError> {
+        let n_models = self.model_start_i.len();
+        let mut length: Option<usize> = None;
+        for model_i in 0..n_models {
+            let model_start: usize = self.model_start_i[model_i];
+            let model_stop: usize = if model_i + 1 < n_models {
+                self.model_start_i[model_i + 1]
+            } else {
+                self.lines.len()
+            };
+            let model_length = self
+                .atom_line_i
+                .iter()
+                .filter(|&line_i| *line_i >= model_start && *line_i < model_stop)
+                .count();
+            match length {
+                None => length = Some(model_length),
+                Some(l) => {
+                    if model_length != l {
+                        return Err(PDBError::InvalidFile(
+                            "Inconsistent number of models".to_string(),
+                        ));
+                    }
+                }
+            };
+        }
+
+        match length {
+            None => panic!("Length cannot be 'None'"),
+            Some(l) => Ok(l),
+        }
+    }
+}
+
+/// Center atom name for proper PDB formatting
+/// If the element is a single character, the atom name needs to be centered differently
+fn center_atom_name(atom_name: &str, element: &Element) -> String {
+    if element.to_string().len() == 1 && atom_name.len() < 4 {
+        format!(" {:<3}", atom_name)
+    } else {
+        format!("{:<4}", atom_name)
+    }
+}
+
+/// Parse a string into a number.
+/// Returns a `PDBError` if the parsing fails.
+#[inline(always)]
+fn parse_number<T: FromStr>(string: &str) -> Result<T, PDBError> {
+    string.trim().parse().map_err(|_| {
+        PDBError::InvalidFile(format!(
+            "'{}' cannot be parsed into a number",
+            string.trim()
+        ))
+    })
+}
+
+/// Parse a float from a specific region of a string
+fn parse_float_from_string(line: &str, start: usize, stop: usize) -> Result<f32, PDBError> {
+    if start >= line.len() || stop > line.len() || start >= stop {
+        return Err(PDBError::InvalidFile("Invalid string range".to_string()));
+    }
+
+    line[start..stop].trim().parse().map_err(|_| {
+        PDBError::InvalidFile(format!(
+            "'{}' cannot be parsed into a float",
+            line[start..stop].trim()
+        ))
+    })
+}
+
+/// If a given `id` exceeds `max_id` the returned ID restarts counting at 1.
+/// Otherwise, `id` is returned.
+/// This function is necessary, because there is a maximum number for atom and residue IDs in
+/// PDB files.
+#[inline(always)]
+fn truncate_id(id: i32, max_id: i32) -> i32 {
+    if id < 0 {
+        return id;
+    }
+    ((id - 1) % max_id) + 1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_pdb_file_read() {
+        let path = Path::new("test_data/1aki.pdb");
+        if path.exists() {
+            let pdb_file = PDBFile::read(path.to_str().unwrap()).unwrap();
+            assert!(!pdb_file.lines.is_empty());
+            assert!(!pdb_file.atom_line_i.is_empty());
+            // Additional assertions based on expected content
+        }
+    }
+
+    #[test]
+    fn test_parse_to_atom_collection() {
+        let path = Path::new("test_data/1aki.pdb");
+        if path.exists() {
+            let pdb_file = PDBFile::read(path.to_str().unwrap()).unwrap();
+            let atom_collection = pdb_file.parse_to_atom_collection(None).unwrap();
+
+            // Check that atoms were parsed correctly
+            assert!(atom_collection.get_size() > 0);
+            assert_eq!(atom_collection.get_size(), pdb_file.atom_line_i.len());
+
+            // Check first atom details
+            if atom_collection.get_size() > 0 {
+                let first_atom_name = atom_collection.get_atom_name(0);
+                let first_res_name = atom_collection.get_res_name(0);
+                // Add assertions based on expected values
+            }
+        }
+    }
+}
