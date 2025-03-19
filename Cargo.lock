@@ -2556,6 +2556,7 @@ name = "ferritin-io"
 version = "0.2.0-dev"
 dependencies = [
  "anyhow",
+ "ferritin-core",
  "ferritin-test-data",
  "memchr",
  "pdbtbx",

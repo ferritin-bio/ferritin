@@ -213,27 +213,22 @@ impl PDBFile {
             atom_ids.push(parse_number::<i32>(&line[6..11])?);
         }
 
-        // Create the atom collection
-        let mut atom_collection = AtomCollection::new(
-            size, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids,
-            None, // Bonds will be handled separately
-        );
-
         // Parse bonds if available
         let bonds = self.parse_bonds(&atom_ids)?;
-        if !bonds.is_empty() {
-            atom_collection = AtomCollection::new(
-                size,
-                coords,
-                res_ids,
-                res_names,
-                is_hetero,
-                elements,
-                atom_names,
-                chain_ids,
-                Some(bonds),
-            );
-        }
+        let bonds = self.parse_bonds(&atom_ids)?;
+        let bonds_option = if bonds.is_empty() { None } else { Some(bonds) };
+
+        let atom_collection = AtomCollection::new(
+            size,
+            coords,
+            res_ids,
+            res_names,
+            is_hetero,
+            elements,
+            atom_names,
+            chain_ids,
+            bonds_option,
+        );
 
         Ok(atom_collection)
     }
@@ -383,8 +378,7 @@ impl PDBFile {
         let mut bond_groups: HashMap<i32, Vec<i32>> = HashMap::new();
 
         for bond in bonds {
-            let center = bond.get_atom1();
-            let bonded = bond.get_atom2();
+            let (center, bonded) = bond.get_atom_indices();
 
             // Add bond in both directions to ensure complete connectivity
             bond_groups.entry(center).or_default().push(bonded);
