@@ -554,8 +554,8 @@ fn truncate_id(id: i32, max_id: i32) -> i32 {
 mod tests {
     use super::*;
     use crate::AtomCollection;
+    use crate::info::elements::Element;
     use ferritin_test_data::TestFile;
-    use pdbtbx::{self, Element};
 
     #[test]
     fn test_pdb_file_read() {

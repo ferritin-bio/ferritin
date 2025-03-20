@@ -1,13 +1,9 @@
 use anyhow::Result;
 use bevy::prelude::*;
-use ferritin_bevy::{
-    ColorScheme, RenderOptions, Structure, StructurePlugin, StructureSettings, ToRerun,
-};
+use ferritin_bevy::{ColorScheme, RenderOptions, Structure, ToRerun};
 use ferritin_core::load_structure;
 use ferritin_test_data::TestFile;
-use rerun::demo_util::color_spiral;
-use rerun::{self as rr, Mesh3D};
-use std::f32::consts::TAU;
+use rerun::Mesh3D;
 
 fn main() -> Result<()> {
     // start Rerun
