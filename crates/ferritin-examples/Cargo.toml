@@ -9,12 +9,10 @@ description.workspace = true
 [features]
 default = []
 metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
-io = ["ferritin/io"]
 bevy = ["ferritin/bevy"]
 plms = ["ferritin/plms"]
-all = ["io", "bevy", "plms", "molviewspec", "cellscape", "pymol"]
+all = ["bevy", "plms", "molviewspec", "pymol"]
 molviewspec = ["ferritin/molviewspec"]
-cellscape = ["ferritin/cellscape"]
 pymol = ["ferritin/pymol"]
 
 [dependencies]

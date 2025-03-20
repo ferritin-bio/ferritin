@@ -85,14 +85,13 @@ impl<'a> ChainView<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AtomCollection;
+    use crate::{AtomCollection, load_structure};
     use ferritin_test_data::TestFile;
 
     #[test]
     fn test_chain_view() {
         let (prot_file, _temp) = TestFile::protein_04().create_temp().unwrap();
-        let (pdb, _) = pdbtbx::open(prot_file).unwrap();
-        let mut ac = AtomCollection::from(&pdb);
+        let mut ac = load_structure(prot_file).unwrap();
 
         // Calculate indices first
         ac.calculate_chain_indices();

@@ -3,7 +3,7 @@
 //! Adapted from: https://github.com/biotite-dev/fastpdb/tree/main
 //! Converted to use native Rust structures instead of Python/NumPy bindings.
 
-use ferritin_core::{AtomCollection, Bond, BondOrder};
+use crate::{AtomCollection, Bond, BondOrder};
 use pdbtbx::Element;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -65,9 +65,10 @@ impl PDBFile {
 
     /// Read a [`PDBFile`] from a file.
     /// The file is indicated by its file path as `String`.
-    pub fn read(file_path: &str) -> Result<Self, PDBError> {
-        let contents = fs::read_to_string(file_path)
-            .map_err(|_| PDBError::OSError(format!("'{}' cannot be read", file_path)))?;
+    pub fn read<P: AsRef<std::path::Path>>(file_path: P) -> Result<Self, PDBError> {
+        let path = file_path.as_ref();
+        let contents = fs::read_to_string(path)
+            .map_err(|_| PDBError::OSError(format!("'{}' cannot be read", path.display())))?;
         let lines = contents
             .lines()
             .map(|line| format!("{:<80}", line))
@@ -210,7 +211,6 @@ impl PDBFile {
         }
 
         // Parse bonds if available
-        let bonds = self.parse_bonds(&atom_ids)?;
         let bonds = self.parse_bonds(&atom_ids)?;
         let bonds_option = if bonds.is_empty() { None } else { Some(bonds) };
 
@@ -553,7 +553,9 @@ fn truncate_id(id: i32, max_id: i32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AtomCollection;
     use ferritin_test_data::TestFile;
+    use pdbtbx::{self, Element};
 
     #[test]
     fn test_pdb_file_read() {
@@ -571,4 +573,50 @@ mod tests {
             ["A", "B", "C", "B", "C", "A", "B", "C"]
         );
     }
+
+    // #[test]
+    // fn test_pdb_from() {
+    //     let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
+    //     let (pdb_data, _) = pdbtbx::open(prot_file).unwrap();
+    //     assert_eq!(pdb_data.atom_count(), 1413);
+
+    //     // check Atom Collection Numbers
+    //     let ac = AtomCollection::from(&pdb_data);
+    //     assert_eq!(ac.get_coords().len(), 1413);
+    //     assert_eq!(ac.get_bonds().unwrap().len(), 1095);
+
+    //     // 338 Residues
+    //     let res_ids: Vec<i32> = ac.get_resids().into_iter().cloned().unique().collect();
+    //     let res_max = res_ids.iter().max().unwrap();
+    //     assert_eq!(res_max, &338);
+
+    //     // Check resnames
+    //     let res_names: Vec<String> = ac
+    //         .get_resnames()
+    //         .into_iter()
+    //         .cloned()
+    //         .unique()
+    //         .sorted()
+    //         .collect();
+    //     assert_eq!(
+    //         res_names,
+    //         [
+    //             "ALA", "ARG", "ASN", "ASP", "GLN", "GLU", "GLY", "HEM", "HIS", "HOH", "ILE", "LEU",
+    //             "LYS", "MET", "NBN", "PHE", "PRO", "SER", "SO4", "THR", "TRP", "TYR", "VAL"
+    //         ]
+    //     );
+
+    //     // Take a peek at the unique elements
+    //     let elements: Vec<Element> = ac
+    //         .get_elements()
+    //         .into_iter()
+    //         .cloned()
+    //         .unique()
+    //         .sorted()
+    //         .collect();
+    //     assert_eq!(
+    //         elements,
+    //         [Element::C, Element::N, Element::O, Element::S, Element::Fe,]
+    //     );
+    // }
 }

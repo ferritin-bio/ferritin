@@ -13,11 +13,12 @@
 //!
 mod atomcollection;
 mod bonds;
-mod conversions;
 mod featurize;
 mod info;
+mod io;
 mod views;
 
 pub use self::atomcollection::AtomCollection;
 pub use self::bonds::{Bond, BondOrder};
 pub use self::featurize::StructureFeatures;
+pub use self::io::load_structure;

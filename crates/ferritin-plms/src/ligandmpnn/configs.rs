@@ -21,7 +21,7 @@ use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use clap::ValueEnum;
-use ferritin_core::AtomCollection;
+use ferritin_core::{AtomCollection, load_structure};
 use ferritin_test_data::TestFile;
 
 /// Responsible for taking CLI args and returning the Features and Model
@@ -84,8 +84,7 @@ impl MPNNExecConfig {
         let base_dtype = DType::F32;
 
         // init the Protein Features
-        let (pdb, _) = pdbtbx::open(self.protein_inputs.clone()).expect("A PDB  or CIF file");
-        let ac = AtomCollection::from(&pdb);
+        let ac = load_structure(self.protein_inputs.clone()).unwrap();
 
         let s = ac
             .encode_amino_acids(&device)

@@ -339,7 +339,6 @@ pub fn get_nearest_neighbours(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pdbtbx;
 
     #[test]
     fn test_residue_codes() {

@@ -2489,7 +2489,6 @@ dependencies = [
  "ferritin-bevy",
  "ferritin-cellscape",
  "ferritin-core",
- "ferritin-io",
  "ferritin-molviewspec",
  "ferritin-plms",
  "ferritin-pymol",
@@ -2521,6 +2520,7 @@ dependencies = [
 name = "ferritin-core"
 version = "0.2.0-dev"
 dependencies = [
+ "anyhow",
  "candle-core",
  "ferritin-test-data",
  "itertools 0.14.0",
@@ -2549,17 +2549,6 @@ dependencies = [
  "pdbtbx",
  "serde_json",
  "tokenizers",
-]
-
-[[package]]
-name = "ferritin-io"
-version = "0.2.0-dev"
-dependencies = [
- "anyhow",
- "ferritin-core",
- "ferritin-test-data",
- "memchr",
- "pdbtbx",
 ]
 
 [[package]]

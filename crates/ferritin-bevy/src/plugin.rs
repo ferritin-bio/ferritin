@@ -3,7 +3,7 @@
 //! Over time this would be a good candidate for factoring out
 use super::{ColorScheme, RenderOptions, Structure};
 use bevy::prelude::*;
-use ferritin_core::AtomCollection;
+use ferritin_core::{AtomCollection, load_structure};
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -73,28 +73,26 @@ fn load_initial_proteins(
             continue;
         }
 
-        if let Ok((pdb, _errors)) = pdbtbx::open(file_path.to_str().unwrap_or_default()) {
-            // Todo: revisit this portion about the right default visuals later on
-            // by default lets only keep the amino acids.
-            let mut ac: AtomCollection = AtomCollection::from(&pdb);
+        // Todo: revisit this portion about the right default visuals later on
+        // by default lets only keep the amino acids.
+        let mut ac: AtomCollection = load_structure(file_path).unwrap();
 
-            // add the bonds back in as they are removed during the collection process above.
-            ac.connect_via_residue_names();
+        // add the bonds back in as they are removed during the collection process above.
+        ac.connect_via_residue_names();
 
-            let structure = Structure::builder()
-                .pdb(ac)
-                .rendertype(settings.render_type.clone())
-                .color_scheme(settings.color_scheme.clone())
-                .material(settings.material.clone())
-                .build();
+        let structure = Structure::builder()
+            .pdb(ac)
+            .rendertype(settings.render_type.clone())
+            .color_scheme(settings.color_scheme.clone())
+            .material(settings.material.clone())
+            .build();
 
-            let mesh = structure.to_mesh();
-            let material = structure.get_material();
+        let mesh = structure.to_mesh();
+        let material = structure.get_material();
 
-            commands.spawn((
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(materials.add(material)),
-            ));
-        }
+        commands.spawn((
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(materials.add(material)),
+        ));
     }
 }

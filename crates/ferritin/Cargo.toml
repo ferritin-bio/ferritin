@@ -7,11 +7,10 @@ license.workspace = true
 edition.workspace = true
 
 [features]
-default = []                                                       # Only include core and io by default
-io = ["dep:ferritin-io"]
+default = []
 bevy = ["dep:ferritin-bevy"]
 plms = ["dep:ferritin-plms"]
-full = ["io", "bevy", "plms", "molviewspec", "cellscape", "pymol"]
+full = ["bevy", "plms", "molviewspec", "pymol"]
 molviewspec = ["dep:ferritin-molviewspec"]
 cellscape = ["dep:ferritin-cellscape"]
 pymol = ["dep:ferritin-pymol"]
@@ -22,7 +21,6 @@ pymol = ["dep:ferritin-pymol"]
 ferritin-core = { path = "../ferritin-core" }
 
 # Optional dependencies
-ferritin-io = { path = "../ferritin-io", optional = true }
 ferritin-bevy = { path = "../ferritin-bevy", optional = true }
 ferritin-plms = { path = "../ferritin-plms", optional = true }
 ferritin-molviewspec = { path = "../ferritin-molviewspec", optional = true }
