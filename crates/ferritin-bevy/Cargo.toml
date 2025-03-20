@@ -12,7 +12,7 @@ bon.workspace = true
 ferritin-core = { path = "../ferritin-core" }
 itertools.workspace = true
 pdbtbx.workspace = true
-rerun = { version = "0.22.1", features = ["native_viewer"] }
+rerun.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true

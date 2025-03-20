@@ -54,7 +54,21 @@ fn main() -> Result<()> {
 
     let mesh: Mesh = structure.to_mesh();
     let rerun_mesh: Mesh3D = mesh.to_rerun().unwrap();
-    rec.log("protein/structure/solic", &rerun_mesh)?;
+    rec.log("protein/structure/solid", &rerun_mesh)?;
+
+    // Add another
+    rec.log(
+        "protein/structure/putty",
+        &Structure::builder()
+            .pdb(ac.clone())
+            .material(chalky.clone())
+            .rendertype(RenderOptions::Putty)
+            .color_scheme(ColorScheme::ByAtomType)
+            .build()
+            .to_mesh()
+            .to_rerun()
+            .unwrap(),
+    )?;
 
     // gram the main thread
     rerun::native_viewer::show(main_thread_token, storage.take())?;
