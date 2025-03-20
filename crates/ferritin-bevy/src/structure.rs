@@ -172,7 +172,7 @@ impl Structure {
             let helix_z = rise_per_residue * residue_idx;
 
             // Transform to align with protein backbone
-            let (axis, up) = calculate_helix_orientation(helix_atoms, residue_idx);
+            let (axis, up) = Structure::calculate_helix_orientation(*helix_atoms, residue_idx);
             let right = axis.cross(up).normalize();
 
             // Generate ribbon vertices
@@ -268,7 +268,7 @@ impl Structure {
             };
 
             // Get backbone position
-            let pos = Structure::interpolate_position(sheet_atoms, residue_idx);
+            let pos = Structure::interpolate_position(*sheet_atoms, residue_idx);
 
             // Calculate peptide plane orientation
             let (strand_dir, normal) =
@@ -564,10 +564,10 @@ impl Structure {
 
     // Function to generate loop mesh (thin tube connecting structured elements)
     fn generate_loop_mesh(backbone_atoms: &[BackboneAtoms], segment: &[usize]) -> Mesh {
-        let mut positions = Vec::new();
-        let mut normals = Vec::new();
-        let mut indices = Vec::new();
-        let mut colors = Vec::new();
+        let mut positions: Vec<[f32; 3]> = Vec::new();
+        let mut normals: Vec<[f32; 3]> = Vec::new();
+        let mut indices: Vec<u32> = Vec::new();
+        let mut colors: Vec<[f32; 4]> = Vec::new();
 
         // Parameters for loop
         let tube_radius = 0.2; // Thin tube for loops (Å)
@@ -607,7 +607,7 @@ impl Structure {
         // For a basic implementation, assign secondary structures
         // In practice, this would use proper secondary structure detection
         // or read secondary structure from the PDB file if available
-        let secondary_structures = Structure::detect_secondary_structures(&backbone_atoms);
+        let secondary_structures = Structure::detect_secondary_structure(&backbone_atoms);
 
         // Create combined mesh from all segments
         let mut combined_mesh =
@@ -623,7 +623,7 @@ impl Structure {
                 }
                 SecondaryStructure::Loop => {
                     Structure::generate_loop_mesh(&backbone_atoms, &segment)
-                } // Similar to putty but thinner
+                }
             };
 
             combined_mesh.merge(&segment_mesh);
