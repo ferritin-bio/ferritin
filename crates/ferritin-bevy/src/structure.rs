@@ -31,6 +31,13 @@ pub enum RenderOptions {
     Putty,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum SecondaryStructure {
+    Helix,
+    Sheet,
+    Loop,
+}
+
 /// Define Everything Needed to render
 #[derive(Builder, Component)]
 pub struct Structure {
@@ -56,12 +63,249 @@ impl Structure {
     pub fn get_material(&self) -> StandardMaterial {
         self.material.clone()
     }
+    fn create_smooth_curve(points: &[Vec3], segments: usize) -> Vec<Vec3> {
+        let mut curve_points = Vec::new();
+
+        for i in 0..points.len() - 1 {
+            let p0 = if i == 0 { points[0] } else { points[i - 1] };
+            let p1 = points[i];
+            let p2 = points[i + 1];
+            let p3 = if i + 2 >= points.len() {
+                points[points.len() - 1]
+            } else {
+                points[i + 2]
+            };
+
+            for t in 0..segments {
+                let t = t as f32 / segments as f32;
+                let pos = Structure::catmull_rom(p0, p1, p2, p3, t);
+                curve_points.push(pos);
+            }
+        }
+
+        curve_points
+    }
+
+    /// Catmull-Rom spline interpolation
+    fn catmull_rom(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: f32) -> Vec3 {
+        let t2 = t * t;
+        let t3 = t2 * t;
+        let v0 = (p2 - p0) * 0.5;
+        let v1 = (p3 - p1) * 0.5;
+
+        (2.0 * p1 - 2.0 * p2 + v0 + v1) * t3
+            + (-3.0 * p1 + 3.0 * p2 - 2.0 * v0 - v1) * t2
+            + v0 * t
+            + p1
+    }
+
+    /// Generate a mesh around the curve
+    fn generate_tube_mesh(curve: &[Vec3], radius: f32, segments: usize) -> Mesh {
+        let mut positions = Vec::new();
+        let mut normals = Vec::new();
+        let mut uvs = Vec::new();
+        let mut indices = Vec::new();
+        // Generate circles around each point
+        for (i, &center) in curve.iter().enumerate() {
+            let forward = if i < curve.len() - 1 {
+                (curve[i + 1] - center).normalize()
+            } else {
+                (center - curve[i - 1]).normalize()
+            };
+            let right = if forward.abs_diff_eq(Vec3::Y, 0.01) {
+                Vec3::X
+            } else {
+                forward.cross(Vec3::Y).normalize()
+            };
+            let up = forward.cross(right);
+            // Create vertices around the circle
+            for j in 0..segments {
+                let angle = (j as f32 / segments as f32) * std::f32::consts::TAU;
+                let x = angle.cos();
+                let y = angle.sin();
+                let pos = center + (right * x + up * y) * radius;
+                let normal = (pos - center).normalize();
+                positions.push([pos.x, pos.y, pos.z]);
+                normals.push([normal.x, normal.y, normal.z]);
+                uvs.push([
+                    i as f32 / (curve.len() - 1) as f32,
+                    j as f32 / segments as f32,
+                ]);
+            }
+        }
+        // Generate indices for triangles
+        for i in 0..curve.len() - 1 {
+            for j in 0..segments {
+                let next_j = (j + 1) % segments;
+                let current_ring = i * segments;
+                let next_ring = (i + 1) * segments;
+                indices.push(current_ring + j);
+                indices.push(next_ring + j);
+                indices.push(current_ring + next_j);
+                indices.push(current_ring + next_j);
+                indices.push(next_ring + j);
+                indices.push(next_ring + next_j);
+            }
+        }
+
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+        mesh.insert_indices(Indices::U32(indices.iter().map(|&i| i as u32).collect()));
+        mesh
+    }
+
+    // A simplified secondary structure detection based on CA geometry
+    // In a real implementation, this would use established algorithms like DSSP
+    fn detect_secondary_structure(ca_positions: &[Vec3]) -> Vec<SecondaryStructure> {
+        let mut sec_structures = vec![SecondaryStructure::Loop; ca_positions.len()];
+
+        // Simplified approach: check distances between i and i+3/i+4 residues
+        for i in 0..ca_positions.len() {
+            if i + 3 < ca_positions.len() {
+                let dist = (ca_positions[i] - ca_positions[i + 3]).length();
+                if dist < 6.0 && dist > 4.5 {
+                    // Approximate helix criteria
+                    sec_structures[i] = SecondaryStructure::Helix;
+                }
+            }
+        }
+
+        // Smooth out single residue assignments
+        let mut smoothed = sec_structures.clone();
+        for i in 1..sec_structures.len() - 1 {
+            if sec_structures[i - 1] == sec_structures[i + 1]
+                && sec_structures[i] != sec_structures[i - 1]
+            {
+                smoothed[i] = sec_structures[i - 1];
+            }
+        }
+
+        smoothed
+    }
+
+    fn generate_cartoon_mesh(curve: &[Vec3], sec_structures: &[SecondaryStructure]) -> Mesh {
+        let mut positions = Vec::new();
+        let mut normals = Vec::new();
+        let mut uvs = Vec::new();
+        let mut indices = Vec::new();
+
+        // Control how many segments around the tube
+        let segments = 16;
+
+        // Generate cross-section profiles for each point in the curve
+        for (i, &center) in curve.iter().enumerate() {
+            // Get secondary structure type and use it to determine radius and shape
+            let sec_type = if i < sec_structures.len() {
+                sec_structures[i]
+            } else {
+                // Interpolate for in-between points
+                SecondaryStructure::Loop
+            };
+
+            // Calculate tangent direction
+            let forward = if i < curve.len() - 1 {
+                (curve[i + 1] - center).normalize()
+            } else {
+                (center - curve[i - 1]).normalize()
+            };
+
+            // Calculate normal and binormal for the tube
+            let right = if forward.abs_diff_eq(Vec3::Y, 0.01) {
+                Vec3::X
+            } else {
+                forward.cross(Vec3::Y).normalize()
+            };
+            let up = forward.cross(right);
+
+            // Determine tube profile based on secondary structure
+            for j in 0..segments {
+                let angle = (j as f32 / segments as f32) * std::f32::consts::TAU;
+                let (x, y) = match sec_type {
+                    SecondaryStructure::Helix => {
+                        // Cylindrical profile for helices
+                        let radius = 1.2;
+                        (angle.cos() * radius, angle.sin() * radius)
+                    }
+                    SecondaryStructure::Sheet => {
+                        // Flattened profile for sheets
+                        let width = 2.0;
+                        let height = 0.5;
+                        (angle.cos() * width, angle.sin() * height)
+                    }
+                    SecondaryStructure::Loop => {
+                        // Thin tube for loops
+                        let radius = 0.6;
+                        (angle.cos() * radius, angle.sin() * radius)
+                    }
+                };
+
+                let pos = center + (right * x + up * y);
+                let normal = (pos - center).normalize();
+
+                positions.push([pos.x, pos.y, pos.z]);
+                normals.push([normal.x, normal.y, normal.z]);
+                uvs.push([i as f32 / curve.len() as f32, j as f32 / segments as f32]);
+            }
+        }
+
+        // Generate triangle indices
+        for i in 0..curve.len() - 1 {
+            for j in 0..segments {
+                let next_j = (j + 1) % segments;
+                let current_ring = i * segments;
+                let next_ring = (i + 1) * segments;
+
+                // Two triangles form a quad between consecutive rings
+                indices.push(current_ring + j);
+                indices.push(next_ring + j);
+                indices.push(current_ring + next_j);
+
+                indices.push(current_ring + next_j);
+                indices.push(next_ring + j);
+                indices.push(next_ring + next_j);
+            }
+        }
+
+        // Create the final mesh
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+        mesh.insert_indices(Indices::U32(indices.iter().map(|&i| i as u32).collect()));
+
+        mesh
+    }
+
     fn render_wireframe(&self) -> Mesh {
         todo!()
     }
     fn render_cartoon(&self) -> Mesh {
-        todo!()
+        // A simple secondary structure enum
+
+        // Extract CA positions
+        let ca_positions: Vec<Vec3> = self
+            .pdb
+            .iter_residues_aminoacid()
+            .filter_map(|residue| {
+                let ca = residue.find_atom_by_name("CA")?;
+                Some(Vec3::from_array(*ca.coords()))
+            })
+            .collect();
+        // Determine secondary structure for each residue (simplified approach)
+        // In a real implementation, we would use a proper secondary structure assignment algorithm
+        let sec_structures = Structure::detect_secondary_structure(&ca_positions);
+
+        // Create a smooth curve through CA atoms
+        let curve = Structure::create_smooth_curve(&ca_positions, 3);
+
+        // Generate tube with varying radius/shape based on secondary structure
+        let tube_mesh = Structure::generate_cartoon_mesh(&curve, &sec_structures);
+
+        tube_mesh
     }
+
     fn render_ballandstick(&self) -> Mesh {
         let radius = 0.5;
         let mut combined_mesh = self
@@ -156,100 +400,6 @@ impl Structure {
                 acc
             })
             .unwrap()
-    }
-
-    fn create_smooth_curve(points: &[Vec3], segments: usize) -> Vec<Vec3> {
-        let mut curve_points = Vec::new();
-
-        for i in 0..points.len() - 1 {
-            let p0 = if i == 0 { points[0] } else { points[i - 1] };
-            let p1 = points[i];
-            let p2 = points[i + 1];
-            let p3 = if i + 2 >= points.len() {
-                points[points.len() - 1]
-            } else {
-                points[i + 2]
-            };
-
-            for t in 0..segments {
-                let t = t as f32 / segments as f32;
-                let pos = Structure::catmull_rom(p0, p1, p2, p3, t);
-                curve_points.push(pos);
-            }
-        }
-
-        curve_points
-    }
-
-    /// Catmull-Rom spline interpolation
-    fn catmull_rom(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: f32) -> Vec3 {
-        let t2 = t * t;
-        let t3 = t2 * t;
-
-        let v0 = (p2 - p0) * 0.5;
-        let v1 = (p3 - p1) * 0.5;
-
-        (2.0 * p1 - 2.0 * p2 + v0 + v1) * t3
-            + (-3.0 * p1 + 3.0 * p2 - 2.0 * v0 - v1) * t2
-            + v0 * t
-            + p1
-    }
-
-    /// Generate a mesh around the curve
-    fn generate_tube_mesh(curve: &[Vec3], radius: f32, segments: usize) -> Mesh {
-        let mut positions = Vec::new();
-        let mut normals = Vec::new();
-        let mut uvs = Vec::new();
-        let mut indices = Vec::new();
-        // Generate circles around each point
-        for (i, &center) in curve.iter().enumerate() {
-            let forward = if i < curve.len() - 1 {
-                (curve[i + 1] - center).normalize()
-            } else {
-                (center - curve[i - 1]).normalize()
-            };
-            let right = if forward.abs_diff_eq(Vec3::Y, 0.01) {
-                Vec3::X
-            } else {
-                forward.cross(Vec3::Y).normalize()
-            };
-            let up = forward.cross(right);
-            // Create vertices around the circle
-            for j in 0..segments {
-                let angle = (j as f32 / segments as f32) * std::f32::consts::TAU;
-                let x = angle.cos();
-                let y = angle.sin();
-                let pos = center + (right * x + up * y) * radius;
-                let normal = (pos - center).normalize();
-                positions.push([pos.x, pos.y, pos.z]);
-                normals.push([normal.x, normal.y, normal.z]);
-                uvs.push([
-                    i as f32 / (curve.len() - 1) as f32,
-                    j as f32 / segments as f32,
-                ]);
-            }
-        }
-        // Generate indices for triangles
-        for i in 0..curve.len() - 1 {
-            for j in 0..segments {
-                let next_j = (j + 1) % segments;
-                let current_ring = i * segments;
-                let next_ring = (i + 1) * segments;
-                indices.push(current_ring + j);
-                indices.push(next_ring + j);
-                indices.push(current_ring + next_j);
-                indices.push(current_ring + next_j);
-                indices.push(next_ring + j);
-                indices.push(next_ring + next_j);
-            }
-        }
-
-        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-        mesh.insert_indices(Indices::U32(indices.iter().map(|&i| i as u32).collect()));
-        mesh
     }
 
     fn render_putty(&self) -> Result<Mesh, Error> {

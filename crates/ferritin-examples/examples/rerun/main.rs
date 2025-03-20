@@ -70,6 +70,20 @@ fn main() -> Result<()> {
             .unwrap(),
     )?;
 
+    // Add Cartoon
+    rec.log(
+        "protein/structure/cartoon",
+        &Structure::builder()
+            .pdb(ac.clone())
+            .material(chalky.clone())
+            .rendertype(RenderOptions::Cartoon)
+            .color_scheme(ColorScheme::ByAtomType)
+            .build()
+            .to_mesh()
+            .to_rerun()
+            .unwrap(),
+    )?;
+
     // gram the main thread
     rerun::native_viewer::show(main_thread_token, storage.take())?;
 
