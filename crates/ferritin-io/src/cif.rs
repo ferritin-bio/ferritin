@@ -310,7 +310,6 @@ impl CIFFile {
                 category.columns = loop_columns;
                 category.data = loop_data;
             }
-
             if let Some(block) = &mut current_data_block {
                 block.categories.insert(category.name.clone(), category);
             }
