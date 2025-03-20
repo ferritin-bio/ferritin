@@ -13,14 +13,17 @@ pub fn load_structure<P: AsRef<Path>>(file_path: P) -> Result<AtomCollection> {
         .ok_or_else(|| anyhow::anyhow!("File has no extension"))?
         .to_lowercase();
 
-    match extension.as_str() {
-        "pdb" => Ok(pdb::PDBFile::read(path)
+    let mut ac = match extension.as_str() {
+        "pdb" => pdb::PDBFile::read(path)
             .context("Failed to read PDB file")?
             .parse_to_atom_collection()
-            .context("Failed to parse PDB file to atom collection")?),
-        "cif" => Ok(cif::CIFFile::read(path)?.parse_to_atom_collection()?),
-        _ => Err(anyhow::anyhow!("Unsupported file extension: {}", extension)),
-    }
+            .context("Failed to parse PDB file to atom collection")?,
+        "cif" => cif::CIFFile::read(path)?.parse_to_atom_collection()?,
+        _ => return Err(anyhow::anyhow!("Unsupported file extension: {}", extension)),
+    };
+
+    ac.connect_via_residue_names();
+    Ok(ac)
 }
 
 #[cfg(test)]
