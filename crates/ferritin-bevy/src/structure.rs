@@ -38,6 +38,15 @@ enum SecondaryStructure {
     Loop,
 }
 
+// Structure to hold residue information needed for cartoon rendering
+struct BackboneAtoms {
+    ca: Vec3, // Alpha carbon
+    n: Vec3,  // Nitrogen
+    c: Vec3,  // Carbonyl carbon
+    o: Vec3,  // Carbonyl oxygen (for orientation)
+    residue_index: usize,
+}
+
 /// Define Everything Needed to render
 #[derive(Builder, Component)]
 pub struct Structure {
@@ -97,6 +106,281 @@ impl Structure {
             + (-3.0 * p1 + 3.0 * p2 - 2.0 * v0 - v1) * t2
             + v0 * t
             + p1
+    }
+
+    // Function to extract backbone atoms for proper orientation
+    fn extract_backbone_atoms(pdb: &AtomCollection) -> Vec<BackboneAtoms> {
+        let mut backbone_data = Vec::new();
+
+        for residue in pdb.iter_residues_aminoacid() {
+            if let (Some(ca), Some(n), Some(c), Some(o)) = (
+                residue.find_atom_by_name("CA"),
+                residue.find_atom_by_name("N"),
+                residue.find_atom_by_name("C"),
+                residue.find_atom_by_name("O"),
+            ) {
+                backbone_data.push(BackboneAtoms {
+                    ca: Vec3::from_array(*ca.coords()),
+                    n: Vec3::from_array(*n.coords()),
+                    c: Vec3::from_array(*c.coords()),
+                    o: Vec3::from_array(*o.coords()),
+                    residue_index: residue.index(),
+                });
+            }
+        }
+
+        backbone_data
+    }
+
+    // Function to generate alpha helix mesh
+    fn generate_alpha_helix_mesh(backbone_atoms: &[BackboneAtoms], segment: &[usize]) -> Mesh {
+        let mut positions = Vec::new();
+        let mut normals = Vec::new();
+        let mut indices = Vec::new();
+        let mut colors = Vec::new();
+
+        // Parameters for alpha helix
+        let radius = 2.3; // Helix radius (Å)
+        let rise_per_residue = 1.5; // Rise per residue (Å)
+        let residues_per_turn = 3.6; // Standard alpha helix
+        let ribbon_width = 0.6; // Width of the ribbon (Å)
+        let segments_per_residue = 4; // Smoothness
+
+        // Generate the helix backbone
+        let helix_atoms: Vec<&BackboneAtoms> = segment
+            .iter()
+            .filter_map(|idx| backbone_atoms.iter().find(|a| a.residue_index == *idx))
+            .collect();
+
+        if helix_atoms.len() < 2 {
+            return Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
+        }
+
+        // Create a smooth helical path
+        let total_segments = helix_atoms.len() * segments_per_residue;
+        for i in 0..total_segments {
+            let t = i as f32 / total_segments as f32;
+            let residue_idx = t * (helix_atoms.len() - 1) as f32;
+            let angle = residue_idx * 2.0 * std::f32::consts::PI / residues_per_turn;
+
+            // Interpolate position along the helix axis
+            let base_pos = interpolate_position(helix_atoms, residue_idx);
+
+            // Calculate helix position with proper spiral
+            let helix_x = radius * angle.cos();
+            let helix_y = radius * angle.sin();
+            let helix_z = rise_per_residue * residue_idx;
+
+            // Transform to align with protein backbone
+            let (axis, up) = calculate_helix_orientation(helix_atoms, residue_idx);
+            let right = axis.cross(up).normalize();
+
+            // Generate ribbon vertices
+            let pos_inner =
+                base_pos + (right * helix_x + up * helix_y) * (radius - ribbon_width / 2.0);
+            let pos_outer =
+                base_pos + (right * helix_x + up * helix_y) * (radius + ribbon_width / 2.0);
+
+            positions.push([pos_inner.x, pos_inner.y, pos_inner.z]);
+            positions.push([pos_outer.x, pos_outer.y, pos_outer.z]);
+
+            // Calculate normals (pointing outward from helix axis)
+            let normal = (right * helix_x + up * helix_y).normalize();
+            normals.push([normal.x, normal.y, normal.z]);
+            normals.push([normal.x, normal.y, normal.z]);
+
+            // Add colors - could be based on secondary structure
+            let color = [1.0, 0.7, 0.7, 1.0]; // Example color for helix
+            colors.push(color);
+            colors.push(color);
+        }
+
+        // Generate indices for triangles
+        for i in 0..total_segments - 1 {
+            let i0 = i * 2;
+            let i1 = i0 + 1;
+            let i2 = i0 + 2;
+            let i3 = i0 + 3;
+
+            indices.push(i0 as u32);
+            indices.push(i2 as u32);
+            indices.push(i1 as u32);
+
+            indices.push(i1 as u32);
+            indices.push(i2 as u32);
+            indices.push(i3 as u32);
+        }
+
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+        mesh.insert_attribute(
+            Mesh::ATTRIBUTE_COLOR,
+            colors
+                .iter()
+                .map(|&c| Vec4::new(c[0], c[1], c[2], c[3]))
+                .collect::<Vec<_>>(),
+        );
+        mesh.insert_indices(Indices::U32(indices));
+
+        mesh
+    }
+
+    // Function to generate beta sheet mesh (flat arrow-shaped ribbon)
+    fn generate_beta_sheet_mesh(backbone_atoms: &[BackboneAtoms], segment: &[usize]) -> Mesh {
+        let mut positions = Vec::new();
+        let mut normals = Vec::new();
+        let mut indices = Vec::new();
+        let mut colors = Vec::new();
+
+        // Parameters for beta sheet
+        let ribbon_width = 1.5; // Width of beta strand (Å)
+        let arrow_width = 2.5; // Width at arrow tip (Å)
+        let segments_per_residue = 2; // Smoothness
+
+        // Extract atoms for this sheet segment
+        let sheet_atoms: Vec<&BackboneAtoms> = segment
+            .iter()
+            .filter_map(|idx| backbone_atoms.iter().find(|a| a.residue_index == *idx))
+            .collect();
+
+        if sheet_atoms.len() < 2 {
+            return Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
+        }
+
+        // Generate the sheet backbone and ribbon
+        let total_segments = sheet_atoms.len() * segments_per_residue;
+        for i in 0..total_segments {
+            let t = i as f32 / (total_segments - 1) as f32;
+            let residue_idx = t * (sheet_atoms.len() - 1) as f32;
+
+            // Calculate ribbon width - wider at the end for arrow shape
+            let is_arrow_tip = i >= total_segments - segments_per_residue;
+            let width = if is_arrow_tip {
+                arrow_width * (i - (total_segments - segments_per_residue)) as f32
+                    / segments_per_residue as f32
+                    + ribbon_width
+                        * (1.0
+                            - (i - (total_segments - segments_per_residue)) as f32
+                                / segments_per_residue as f32)
+            } else {
+                ribbon_width
+            };
+
+            // Get backbone position
+            let pos = Structure::interpolate_position(sheet_atoms, residue_idx);
+
+            // Calculate peptide plane orientation
+            let (strand_dir, normal) =
+                Structure::calculate_sheet_orientation(sheet_atoms, residue_idx);
+            let side_dir = strand_dir.cross(normal).normalize();
+
+            // Generate ribbon vertices on both sides of backbone
+            let half_width = width / 2.0;
+            let pos_left = pos - side_dir * half_width;
+            let pos_right = pos + side_dir * half_width;
+
+            positions.push([pos_left.x, pos_left.y, pos_left.z]);
+            positions.push([pos_right.x, pos_right.y, pos_right.z]);
+
+            // Use peptide plane normal for both vertices
+            normals.push([normal.x, normal.y, normal.z]);
+            normals.push([normal.x, normal.y, normal.z]);
+
+            // Add colors - could be based on secondary structure
+            let color = [0.7, 0.7, 1.0, 1.0]; // Example color for sheet
+            colors.push(color);
+            colors.push(color);
+        }
+
+        // Generate indices for triangles
+        for i in 0..total_segments - 1 {
+            let i0 = i * 2;
+            let i1 = i0 + 1;
+            let i2 = i0 + 2;
+            let i3 = i0 + 3;
+
+            indices.push(i0 as u32);
+            indices.push(i2 as u32);
+            indices.push(i1 as u32);
+
+            indices.push(i1 as u32);
+            indices.push(i2 as u32);
+            indices.push(i3 as u32);
+        }
+
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+        mesh.insert_attribute(
+            Mesh::ATTRIBUTE_COLOR,
+            colors
+                .iter()
+                .map(|&c| Vec4::new(c[0], c[1], c[2], c[3]))
+                .collect::<Vec<_>>(),
+        );
+        mesh.insert_indices(Indices::U32(indices));
+
+        mesh
+    }
+
+    // Utility functions for orientation and interpolation
+    fn interpolate_position(atoms: &[&BackboneAtoms], residue_idx: f32) -> Vec3 {
+        let idx = residue_idx.floor() as usize;
+        let frac = residue_idx - idx as f32;
+
+        if idx >= atoms.len() - 1 {
+            return atoms.last().unwrap().ca;
+        }
+
+        atoms[idx].ca * (1.0 - frac) + atoms[idx + 1].ca * frac
+    }
+
+    fn calculate_helix_orientation(atoms: &[&BackboneAtoms], residue_idx: f32) -> (Vec3, Vec3) {
+        let idx = residue_idx.floor() as usize;
+
+        if idx >= atoms.len() - 1 {
+            return Structure::calculate_peptide_plane(atoms.last().unwrap());
+        }
+
+        let (axis1, up1) = Structure::calculate_peptide_plane(atoms[idx]);
+        let (axis2, up2) = Structure::calculate_peptide_plane(atoms[idx + 1]);
+
+        let frac = residue_idx - idx as f32;
+        let axis = axis1 * (1.0 - frac) + axis2 * frac;
+        let up = up1 * (1.0 - frac) + up2 * frac;
+
+        (axis.normalize(), up.normalize())
+    }
+
+    fn calculate_sheet_orientation(atoms: &[&BackboneAtoms], residue_idx: f32) -> (Vec3, Vec3) {
+        let idx = residue_idx.floor() as usize;
+
+        if idx >= atoms.len() - 1 {
+            return Structure::calculate_peptide_plane(atoms.last().unwrap());
+        }
+
+        // For beta sheets, we want the ribbon to be perpendicular to the peptide plane
+        let (strand_dir1, normal1) = Structure::calculate_peptide_plane(atoms[idx]);
+        let (strand_dir2, normal2) = Structure::calculate_peptide_plane(atoms[idx + 1]);
+
+        let frac = residue_idx - idx as f32;
+        let strand_dir = strand_dir1 * (1.0 - frac) + strand_dir2 * frac;
+        let normal = normal1 * (1.0 - frac) + normal2 * frac;
+
+        (strand_dir.normalize(), normal.normalize())
+    }
+
+    fn calculate_peptide_plane(atom: &BackboneAtoms) -> (Vec3, Vec3) {
+        // Direction along strand (C->CA)
+        let strand_dir = (atom.ca - atom.c).normalize();
+
+        // Peptide plane normal (using N, CA, C, O to define plane)
+        let plane_vec1 = atom.ca - atom.n;
+        let plane_vec2 = atom.c - atom.ca;
+        let normal = plane_vec1.cross(plane_vec2).normalize();
+
+        (strand_dir, normal)
     }
 
     /// Generate a mesh around the curve
@@ -278,32 +562,74 @@ impl Structure {
         mesh
     }
 
+    // Function to generate loop mesh (thin tube connecting structured elements)
+    fn generate_loop_mesh(backbone_atoms: &[BackboneAtoms], segment: &[usize]) -> Mesh {
+        let mut positions = Vec::new();
+        let mut normals = Vec::new();
+        let mut indices = Vec::new();
+        let mut colors = Vec::new();
+
+        // Parameters for loop
+        let tube_radius = 0.2; // Thin tube for loops (Å)
+        let tube_segments = 8; // Cross-section circle segments
+        let curve_segments = 3; // Segments between residues for smooth curve
+
+        // Extract atoms for this loop segment
+        let loop_atoms: Vec<&BackboneAtoms> = segment
+            .iter()
+            .filter_map(|idx| backbone_atoms.iter().find(|a| a.residue_index == *idx))
+            .collect();
+
+        if loop_atoms.len() < 2 {
+            return Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
+        }
+
+        // Create CA positions
+        let ca_positions: Vec<Vec3> = loop_atoms.iter().map(|atom| atom.ca).collect();
+
+        // Create a smooth curve through CA atoms
+        let curve_points = Structure::create_smooth_curve(&ca_positions, curve_segments);
+
+        // Generate tube mesh around the curve
+        let tube_mesh = Structure::generate_tube_mesh(&curve_points, tube_radius, tube_segments);
+
+        // For loops, we simply generate a thin tube following the CA trace
+        Structure::generate_tube_mesh(&curve_points, tube_radius, tube_segments)
+    }
+
     fn render_wireframe(&self) -> Mesh {
         todo!()
     }
     fn render_cartoon(&self) -> Mesh {
-        // A simple secondary structure enum
+        // Main implementation
+        let backbone_atoms = Structure::extract_backbone_atoms(&self.pdb);
 
-        // Extract CA positions
-        let ca_positions: Vec<Vec3> = self
-            .pdb
-            .iter_residues_aminoacid()
-            .filter_map(|residue| {
-                let ca = residue.find_atom_by_name("CA")?;
-                Some(Vec3::from_array(*ca.coords()))
-            })
-            .collect();
-        // Determine secondary structure for each residue (simplified approach)
-        // In a real implementation, we would use a proper secondary structure assignment algorithm
-        let sec_structures = Structure::detect_secondary_structure(&ca_positions);
+        // For a basic implementation, assign secondary structures
+        // In practice, this would use proper secondary structure detection
+        // or read secondary structure from the PDB file if available
+        let secondary_structures = Structure::detect_secondary_structures(&backbone_atoms);
 
-        // Create a smooth curve through CA atoms
-        let curve = Structure::create_smooth_curve(&ca_positions, 3);
+        // Create combined mesh from all segments
+        let mut combined_mesh =
+            Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
 
-        // Generate tube with varying radius/shape based on secondary structure
-        let tube_mesh = Structure::generate_cartoon_mesh(&curve, &sec_structures);
+        for (structure_type, segment) in secondary_structures {
+            let segment_mesh = match structure_type {
+                SecondaryStructure::AlphaHelix => {
+                    Structure::generate_alpha_helix_mesh(&backbone_atoms, &segment)
+                }
+                SecondaryStructure::BetaSheet => {
+                    Structure::generate_beta_sheet_mesh(&backbone_atoms, &segment)
+                }
+                SecondaryStructure::Loop => {
+                    Structure::generate_loop_mesh(&backbone_atoms, &segment)
+                } // Similar to putty but thinner
+            };
 
-        tube_mesh
+            combined_mesh.merge(&segment_mesh);
+        }
+
+        combined_mesh
     }
 
     fn render_ballandstick(&self) -> Mesh {
