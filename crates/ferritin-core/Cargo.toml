@@ -10,7 +10,6 @@ description.workspace = true
 anyhow.workspace = true
 candle-core.workspace = true
 itertools.workspace = true
-pdbtbx.workspace = true
 strum.workspace = true
 
 [dev-dependencies]

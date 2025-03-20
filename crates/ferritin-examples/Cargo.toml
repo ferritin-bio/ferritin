@@ -29,8 +29,7 @@ ferritin-core = { path = "../ferritin-core" }
 ferritin-plms = { path = "../ferritin-plms" }
 ferritin-onnx-models = { path = "../ferritin-onnx-models" }
 hf-hub.workspace = true
-pdbtbx.workspace = true
-rerun.workspace = true
+rerun = { workspace = true, features = ["native_viewer"] }
 serde_json.workspace = true
 
 [target.'cfg(target_os = "macos")'.features]

@@ -3,8 +3,8 @@
 //! Adapted from: https://github.com/biotite-dev/fastpdb/tree/main
 //! Converted to use native Rust structures instead of Python/NumPy bindings.
 
+use crate::info::elements::Element;
 use crate::{AtomCollection, Bond, BondOrder};
-use pdbtbx::Element;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;

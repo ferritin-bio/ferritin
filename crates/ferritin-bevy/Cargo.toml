@@ -11,7 +11,6 @@ bevy.workspace = true
 bon.workspace = true
 ferritin-core = { path = "../ferritin-core" }
 itertools.workspace = true
-pdbtbx.workspace = true
 rerun.workspace = true
 
 [dev-dependencies]

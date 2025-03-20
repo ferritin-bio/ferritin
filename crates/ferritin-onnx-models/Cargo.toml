@@ -20,4 +20,3 @@ ferritin-plms = { path = "../ferritin-plms" }
 [dev-dependencies]
 anyhow.workspace = true
 ferritin-test-data = { path = "../ferritin-test-data" }
-pdbtbx.workspace = true

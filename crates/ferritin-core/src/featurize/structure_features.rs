@@ -1,8 +1,8 @@
 //!  Protein->Tensor utiilities useful for Machine Learning
 use super::utilities::{AAAtom, aa1to_int, aa3to1, get_nearest_neighbours};
 use crate::AtomCollection;
+use crate::info::elements::Element;
 use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
-use pdbtbx::Element;
 use strum::IntoEnumIterator;
 
 // Helper Fns --------------------------------------
