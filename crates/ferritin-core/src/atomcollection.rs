@@ -4,12 +4,10 @@
 //! and residue information. Additional data like bonds can be added post-instantiation.
 //! The data for residues within this collection can be iterated through. Other useful queries like inter-atomic
 //! distances are supported.
-use super::bonds::{Bond, BondOrder};
+use super::bonds::Bond;
 use super::info::constants::get_bonds_canonical20;
 use super::views::chain::ChainView;
 use super::views::residue::ResidueView;
-// use crate::residue::{ResidueAtoms, ResidueIter};
-// use crate::selection::{AtomSelector, AtomView, Selection};
 use itertools::{Itertools, izip};
 use pdbtbx::Element;
 
@@ -32,16 +30,6 @@ pub struct AtomCollection {
     bonds: Option<Vec<Bond>>,
     residue_start_indices: Option<Vec<i32>>,
     chain_start_indices: Option<Vec<i32>>,
-    // atom_type: Vec<String>,
-    // // ... other fixed fields
-    // dynamic_fields: HashMap<String, Vec<Box<dyn Any>>>,
-    // //         self.add_annotation("chain_id", dtype="U4")
-    // self.add_annotation("res_id", dtype=int)
-    // self.add_annotation("ins_code", dtype="U1")  <- what is this?
-    // self.add_annotation("res_name", dtype="U5")
-    // self.add_annotation("hetero", dtype=bool)
-    // self.add_annotation("atom_name", dtype="U6")
-    // self.add_annotation("element", dtype="U2")
 }
 
 impl AtomCollection {
@@ -76,7 +64,6 @@ impl AtomCollection {
     // Calculate and cache chain start indices
     pub fn calculate_chain_indices(&mut self) {
         if self.chain_start_indices.is_none() {
-            // First ensure we have residue indices calculated
             if self.residue_start_indices.is_none() {
                 let residue_starts = self.get_residue_starts();
                 self.residue_start_indices =
@@ -173,12 +160,6 @@ impl AtomCollection {
                     for &i in &atom_indices1 {
                         for &j in &atom_indices2 {
                             bonds.push(Bond::new(i as i32, j as i32, bond_type));
-                            // bonds.push(Bond::new(
-                            //     i as i32,
-                            //     j as i32,
-                            //     BondOrder::match_bond(bond_type),
-                            // ))
-                            // ;
                         }
                     }
                 }
