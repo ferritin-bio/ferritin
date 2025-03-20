@@ -13,10 +13,9 @@
 //!
 mod atomcollection;
 mod bonds;
-mod io;
-// mod conversions;
 mod featurize;
 mod info;
+mod io;
 mod views;
 
 pub use self::atomcollection::AtomCollection;

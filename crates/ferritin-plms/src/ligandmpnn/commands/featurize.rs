@@ -1,7 +1,6 @@
 use crate::ligandmpnn::proteinfeatures::LMPNNFeatures;
 use candle_core;
-use ferritin_core::AtomCollection;
-use pdbtbx;
+use ferritin_core::{AtomCollection, load_structure};
 
 // src/commands/command1.rs
 pub fn execute(input: String, output: String) -> anyhow::Result<()> {

@@ -10,7 +10,7 @@ use crate::{ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64}
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use candle_nn::ops;
-use ferritin_core::{AtomCollection, StructureFeatures};
+use ferritin_core::{AtomCollection, StructureFeatures, load_structure};
 use ferritin_plms::ligandmpnn::utilities::int_to_aa1;
 use ferritin_plms::types::PseudoProbability;
 use hf_hub::api::sync::Api;
@@ -175,8 +175,7 @@ mod tests {
 
     fn setup_test_data() -> AtomCollection {
         let (protfile, _handle) = TestFile::protein_01().create_temp().unwrap();
-        let (pdb, _) = pdbtbx::open(protfile).expect("PDB/CIF");
-        AtomCollection::from(&pdb)
+        load_structure(protfile).unwrap()
     }
 
     #[test]
