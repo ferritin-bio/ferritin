@@ -554,7 +554,6 @@ fn truncate_id(id: i32, max_id: i32) -> i32 {
 mod tests {
     use super::*;
     use ferritin_test_data::TestFile;
-    use std::path::Path;
 
     #[test]
     fn test_pdb_file_read() {
