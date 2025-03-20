@@ -17,7 +17,7 @@ use pdbtbx::Element;
 ///
 /// it strives to be simple, high performance, and extensible using
 /// traits.
-///
+#[derive(Clone)]
 pub struct AtomCollection {
     size: usize,
     coords: Vec<[f32; 3]>,

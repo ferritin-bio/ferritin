@@ -10,8 +10,15 @@ use rerun::{self as rr, Mesh3D};
 use std::f32::consts::TAU;
 
 fn main() -> Result<()> {
-    let (molfile, _handle) = TestFile::protein_01().create_temp()?;
+    // start Rerun
+    let (rec, storage) = rerun::RecordingStreamBuilder::new("rerun_protein_rendering").memory()?;
+    let main_thread_token = rerun::MainThreadToken::i_promise_i_am_on_the_main_thread();
 
+    // Load the structure
+    let (molfile, _handle) = TestFile::protein_01().create_temp()?;
+    let ac = load_structure(molfile).unwrap();
+
+    // Define a few materials
     let chalky = StandardMaterial {
         base_color: Color::srgb(0.4, 0.4, 0.4), // Light gray color
         perceptual_roughness: 1.0,              // Maximum roughness for a matte look
@@ -25,40 +32,31 @@ fn main() -> Result<()> {
         ..default()                             // Use defaults for other properties
     };
 
-    let ac = load_structure(molfile).unwrap();
+    // Add one strucutre
     let structure = Structure::builder()
-        .pdb(ac)
-        .material(chalky)
+        .pdb(ac.clone())
+        .material(chalky.clone())
         .rendertype(RenderOptions::BallAndStick)
         .color_scheme(ColorScheme::ByAtomType)
         .build();
 
     let mesh: Mesh = structure.to_mesh();
-
     let rerun_mesh: Mesh3D = mesh.to_rerun().unwrap();
+    rec.log("protein/structure/ball_and_stick", &rerun_mesh)?;
 
-    let (rec, storage) = rerun::RecordingStreamBuilder::new("rerun_protein_rendering").memory()?;
-    let main_thread_token = rerun::MainThreadToken::i_promise_i_am_on_the_main_thread();
+    // Add another
+    let structure = Structure::builder()
+        .pdb(ac.clone())
+        .material(chalky.clone())
+        .rendertype(RenderOptions::Solid)
+        .color_scheme(ColorScheme::ByAtomType)
+        .build();
 
-    // const NUM_POINTS: usize = 100;
-    // let (points1, colors1) = color_spiral(NUM_POINTS, 2.0, 0.02, 0.0, 0.1);
-    // let (points2, colors2) = color_spiral(NUM_POINTS, 2.0, 0.02, TAU * 0.5, 0.1);
+    let mesh: Mesh = structure.to_mesh();
+    let rerun_mesh: Mesh3D = mesh.to_rerun().unwrap();
+    rec.log("protein/structure/solic", &rerun_mesh)?;
 
-    // rec.log(
-    //     "dna/structure/left",
-    //     &rerun::Points3D::new(points1.iter().copied())
-    //         .with_colors(colors1)
-    //         .with_radii([0.08]),
-    // )?;
-    // rec.log(
-    //     "dna/structure/right",
-    //     &rerun::Points3D::new(points2.iter().copied())
-    //         .with_colors(colors2)
-    //         .with_radii([0.08]),
-    // )?;
-
-    rec.log("protein/structure/exmaple", &rerun_mesh)?;
-
+    // gram the main thread
     rerun::native_viewer::show(main_thread_token, storage.take())?;
 
     Ok(())

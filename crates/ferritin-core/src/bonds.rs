@@ -2,7 +2,7 @@
 ///
 /// Struct for creating Bonds of type [BondOrder]
 ///
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Bond {
     atom1: i32,
     atom2: i32,

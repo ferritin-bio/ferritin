@@ -106,10 +106,10 @@ impl ToRerun<Option<rerun::archetypes::Mesh3D>> for Mesh {
                 mesh = mesh.with_vertex_colors(colors.iter().map(|[r, g, b, a]| {
                     // TODO(cmc): is this sRGB? linear? etc?
                     rerun::Color::from_unmultiplied_rgba(
-                        (r / 255.0) as u8,
-                        (g / 255.0) as u8,
-                        (b / 255.0) as u8,
-                        (a / 255.0) as u8,
+                        (r * 255.0) as u8,
+                        (g * 255.0) as u8,
+                        (b * 255.0) as u8,
+                        (a * 255.0) as u8,
                     )
                 }));
             }
