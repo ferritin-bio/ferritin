@@ -124,7 +124,7 @@ impl Structure {
                     n: Vec3::from_array(*n.coords()),
                     c: Vec3::from_array(*c.coords()),
                     o: Vec3::from_array(*o.coords()),
-                    residue_index: residue.index(),
+                    residue_index: residue.residue_id() as usize,
                 });
             }
         }
@@ -164,7 +164,7 @@ impl Structure {
             let angle = residue_idx * 2.0 * std::f32::consts::PI / residues_per_turn;
 
             // Interpolate position along the helix axis
-            let base_pos = interpolate_position(helix_atoms, residue_idx);
+            let base_pos = Structure::interpolate_position(&helix_atoms, residue_idx);
 
             // Calculate helix position with proper spiral
             let helix_x = radius * angle.cos();
@@ -172,7 +172,7 @@ impl Structure {
             let helix_z = rise_per_residue * residue_idx;
 
             // Transform to align with protein backbone
-            let (axis, up) = Structure::calculate_helix_orientation(*helix_atoms, residue_idx);
+            let (axis, up) = Structure::calculate_helix_orientation(&helix_atoms, residue_idx);
             let right = axis.cross(up).normalize();
 
             // Generate ribbon vertices
@@ -268,11 +268,11 @@ impl Structure {
             };
 
             // Get backbone position
-            let pos = Structure::interpolate_position(*sheet_atoms, residue_idx);
+            let pos = Structure::interpolate_position(&sheet_atoms, residue_idx);
 
             // Calculate peptide plane orientation
             let (strand_dir, normal) =
-                Structure::calculate_sheet_orientation(sheet_atoms, residue_idx);
+                Structure::calculate_sheet_orientation(&sheet_atoms, residue_idx);
             let side_dir = strand_dir.cross(normal).normalize();
 
             // Generate ribbon vertices on both sides of backbone
@@ -590,9 +590,6 @@ impl Structure {
         // Create a smooth curve through CA atoms
         let curve_points = Structure::create_smooth_curve(&ca_positions, curve_segments);
 
-        // Generate tube mesh around the curve
-        let tube_mesh = Structure::generate_tube_mesh(&curve_points, tube_radius, tube_segments);
-
         // For loops, we simply generate a thin tube following the CA trace
         Structure::generate_tube_mesh(&curve_points, tube_radius, tube_segments)
     }
@@ -603,32 +600,147 @@ impl Structure {
     fn render_cartoon(&self) -> Mesh {
         // Main implementation
         let backbone_atoms = Structure::extract_backbone_atoms(&self.pdb);
+        println!("Backbone atoms found: {}", backbone_atoms.len());
 
-        // For a basic implementation, assign secondary structures
-        // In practice, this would use proper secondary structure detection
-        // or read secondary structure from the PDB file if available
-        let secondary_structures = Structure::detect_secondary_structure(&backbone_atoms);
+        // Extract CA positions for secondary structure detection
+        let ca_positions: Vec<Vec3> = backbone_atoms.iter().map(|atom| atom.ca).collect();
+        println!("CA positions extracted: {}", ca_positions.len());
+
+        // Detect secondary structures - returns Vec<SecondaryStructure>
+        let secondary_structures = Structure::detect_secondary_structure(&ca_positions);
+
+        println!(
+            "Secondary structures detected: {}",
+            secondary_structures.len()
+        );
+        println!(
+            "Secondary structure types: {:?}",
+            secondary_structures
+                .iter()
+                .fold([0, 0, 0], |mut counts, &ss| {
+                    match ss {
+                        SecondaryStructure::Helix => counts[0] += 1,
+                        SecondaryStructure::Sheet => counts[1] += 1,
+                        SecondaryStructure::Loop => counts[2] += 1,
+                    }
+                    counts
+                })
+        );
 
         // Create combined mesh from all segments
         let mut combined_mesh =
             Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
 
-        for (structure_type, segment) in secondary_structures {
-            let segment_mesh = match structure_type {
-                SecondaryStructure::AlphaHelix => {
-                    Structure::generate_alpha_helix_mesh(&backbone_atoms, &segment)
-                }
-                SecondaryStructure::BetaSheet => {
-                    Structure::generate_beta_sheet_mesh(&backbone_atoms, &segment)
-                }
-                SecondaryStructure::Loop => {
-                    Structure::generate_loop_mesh(&backbone_atoms, &segment)
-                }
-            };
+        // First, group the secondary structures into segments of the same type
+        let mut segments: Vec<(SecondaryStructure, Vec<usize>)> = Vec::new();
+        let mut current_type = secondary_structures[0];
+        let mut current_segment = vec![0];
 
-            combined_mesh.merge(&segment_mesh);
+        for i in 1..secondary_structures.len() {
+            if secondary_structures[i] == current_type {
+                current_segment.push(i);
+            } else {
+                segments.push((current_type, current_segment.clone()));
+                current_type = secondary_structures[i];
+                current_segment = vec![i];
+            }
         }
 
+        println!("Segments identified: {}", segments.len());
+
+        // Add the last segment
+        if !current_segment.is_empty() {
+            segments.push((current_type, current_segment));
+        }
+
+        // // Now iterate through the segments and generate appropriate meshes
+        // for (structure_type, segment) in segments {
+        //     let segment_mesh = match structure_type {
+        //         SecondaryStructure::Helix => {
+        //             Structure::generate_alpha_helix_mesh(&backbone_atoms, &segment)
+        //         }
+        //         SecondaryStructure::Sheet => {
+        //             Structure::generate_beta_sheet_mesh(&backbone_atoms, &segment)
+        //         }
+        //         SecondaryStructure::Loop => {
+        //             Structure::generate_loop_mesh(&backbone_atoms, &segment)
+        //         }
+        //     };
+
+        //     combined_mesh.merge(&segment_mesh);
+        // }
+
+        let mut valid_meshes = Vec::new();
+
+        // Now iterate through the segments and generate appropriate meshes
+        for (i, (structure_type, segment)) in segments.iter().enumerate() {
+            println!(
+                "Processing segment {} of type {:?} with {} residues",
+                i,
+                structure_type,
+                segment.len()
+            );
+            println!(
+                "Segment indices: {:?}",
+                &segment[0..std::cmp::min(5, segment.len())]
+            );
+
+            // Check if segment indices are valid
+            // let valid_indices = segment.iter().all(|&idx| idx < backbone_atoms.len());
+            // println!("All segment indices valid: {}", valid_indices);
+
+            let segment_mesh = match structure_type {
+                SecondaryStructure::Helix => {
+                    Structure::generate_alpha_helix_mesh(&backbone_atoms, segment)
+                }
+                SecondaryStructure::Sheet => {
+                    Structure::generate_beta_sheet_mesh(&backbone_atoms, segment)
+                }
+                SecondaryStructure::Loop => Structure::generate_loop_mesh(&backbone_atoms, segment),
+            };
+
+            println!(
+                "After generating segment mesh, vertex count: {}",
+                segment_mesh.count_vertices()
+            );
+
+            // Only merge if we have vertices
+            if segment_mesh.count_vertices() > 0 {
+                valid_meshes.push(segment_mesh);
+            }
+        }
+
+        // If we have any valid meshes, combine them
+        if valid_meshes.is_empty() {
+            println!("No valid meshes found!");
+            // Return an empty mesh since we couldn't generate anything
+            return Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
+        }
+
+        // Start with the first mesh
+        let mut combined_mesh = valid_meshes[0].clone();
+        println!(
+            "Starting with mesh of {} vertices",
+            combined_mesh.count_vertices()
+        );
+
+        // Merge the rest
+        for (i, mesh) in valid_meshes.iter().enumerate().skip(1) {
+            println!("Merging mesh {} with {} vertices", i, mesh.count_vertices());
+            let before_count = combined_mesh.count_vertices();
+            combined_mesh.merge(mesh);
+            let after_count = combined_mesh.count_vertices();
+            println!(
+                "After merge: {} vertices (added {})",
+                after_count,
+                after_count - before_count
+            );
+        }
+
+        println!(
+            "Final combined mesh vertices: {}",
+            combined_mesh.count_vertices()
+        );
         combined_mesh
     }
 
@@ -757,6 +869,21 @@ mod tests {
         assert_eq!(structure.pdb.get_size(), 2154);
         let mesh = structure.to_mesh();
         assert_eq!(mesh.count_vertices(), 779748);
+        Ok(())
+    }
+
+    #[test]
+    fn test_pdb_to_mesh_cartoon() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let ac = load_structure(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(ac)
+            .rendertype(RenderOptions::Cartoon)
+            .build();
+
+        assert_eq!(structure.pdb.get_size(), 2154);
+        let mesh = structure.to_mesh();
+        assert!(mesh.count_vertices() > 0);
         Ok(())
     }
 }
