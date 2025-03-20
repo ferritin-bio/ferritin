@@ -564,36 +564,12 @@ mod tests {
         assert!(!pdb.atom_line_i.is_empty());
 
         let ac: AtomCollection = pdb.parse_to_atom_collection().unwrap();
+        assert_eq!(ac.get_size(), 1356);
+        assert_eq!(
+            ac.iter_chains()
+                .map(|c| c.chain_id().to_string())
+                .collect::<Vec<_>>(),
+            ["A", "B", "C", "B", "C", "A", "B", "C"]
+        );
     }
-
-    // #[test]
-    // fn test_pdb_file_read() {
-    //     let path = Path::new("test_data/1aki.pdb");
-    //     if path.exists() {
-    //         let pdb_file = PDBFile::read(path.to_str().unwrap()).unwrap();
-    //         assert!(!pdb_file.lines.is_empty());
-    //         assert!(!pdb_file.atom_line_i.is_empty());
-    //         // Additional assertions based on expected content
-    //     }
-    // }
-
-    // #[test]
-    // fn test_parse_to_atom_collection() {
-    //     let path = Path::new("test_data/1aki.pdb");
-    //     if path.exists() {
-    //         let pdb_file = PDBFile::read(path.to_str().unwrap()).unwrap();
-    //         let atom_collection = pdb_file.parse_to_atom_collection(None).unwrap();
-
-    //         // Check that atoms were parsed correctly
-    //         assert!(atom_collection.get_size() > 0);
-    //         assert_eq!(atom_collection.get_size(), pdb_file.atom_line_i.len());
-
-    //         // Check first atom details
-    //         if atom_collection.get_size() > 0 {
-    //             let first_atom_name = atom_collection.get_atom_name(0);
-    //             let first_res_name = atom_collection.get_res_name(0);
-    //             // Add assertions based on expected values
-    //         }
-    //     }
-    // }
 }
