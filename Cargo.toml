@@ -5,7 +5,6 @@ members = [
     # "crates/ferritin-cellscape",
     "crates/ferritin-core",
     "crates/ferritin-examples",
-    # "crates/ferritin-io",
     "crates/ferritin-molviewspec",
     "crates/ferritin-onnx-models",
     "crates/ferritin-plms",
