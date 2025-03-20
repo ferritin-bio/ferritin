@@ -547,7 +547,7 @@ define_residues! {
 mod tests {
     use super::*;
     use crate::ligandmpnn::proteinfeatures::LMPNNFeatures;
-    use ferritin_core::AtomCollection;
+    use ferritin_core::{AtomCollection, load_structure};
     use ferritin_test_data::TestFile;
     use pdbtbx;
     use pdbtbx::Element;
@@ -583,8 +583,7 @@ mod tests {
     fn test_atom_backbone_tensor() {
         let device = Device::Cpu;
         let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
-        let ac = AtomCollection::from(&pdb);
+        let ac = load_structure(pdb_file).unwrap();
         let ac_backbone_tensor: Tensor = ac.to_numeric_backbone_atoms(&device).expect("REASON");
         // batch size of 1;154 residues; N/CA/C/O; positions
         assert_eq!(ac_backbone_tensor.dims(), &[1, 154, 4, 3]);
@@ -628,8 +627,7 @@ mod tests {
     fn test_all_atom37_tensor() {
         let device = Device::Cpu;
         let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
-        let ac = AtomCollection::from(&pdb);
+        let ac = load_structure(pdb_file).unwrap();
         let ac_backbone_tensor: Tensor = ac.to_numeric_atom37(&device).expect("REASON");
         // batch size of 1154 residues; all atoms; positions
         assert_eq!(ac_backbone_tensor.dims(), &[1, 154, 37, 3]);
@@ -710,8 +708,7 @@ mod tests {
     fn test_ligand_tensor() {
         let device = Device::Cpu;
         let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
-        let ac = AtomCollection::from(&pdb);
+        let ac = load_structure(pdb_file).unwrap();
         let (ligand_coords, ligand_elements, _) =
             ac.to_numeric_ligand_atoms(&device).expect("REASON");
 
@@ -756,8 +753,7 @@ mod tests {
     fn test_backbone_tensor() {
         let device = Device::Cpu;
         let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let (pdb, _) = pdbtbx::open(pdb_file).unwrap();
-        let ac = AtomCollection::from(&pdb);
+        let ac = load_structure(pdb_file).unwrap();
         let xyz_37 = ac
             .to_numeric_atom37(&device)
             .expect("XYZ creation for all-atoms");

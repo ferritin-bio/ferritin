@@ -5,8 +5,7 @@ use pdbtbx;
 
 // src/commands/command1.rs
 pub fn execute(input: String, output: String) -> anyhow::Result<()> {
-    let (pdb, _) = pdbtbx::open(input).expect("A PDB  or CIF file");
-    let ac = AtomCollection::from(&pdb);
+    let ac = load_structure(input).unwrap();
     let features = ac.featurize(&candle_core::Device::Cpu)?;
     features.save_to_safetensor(&output)?;
     Ok(())
