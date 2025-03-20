@@ -65,9 +65,10 @@ impl PDBFile {
 
     /// Read a [`PDBFile`] from a file.
     /// The file is indicated by its file path as `String`.
-    pub fn read(file_path: &str) -> Result<Self, PDBError> {
-        let contents = fs::read_to_string(file_path)
-            .map_err(|_| PDBError::OSError(format!("'{}' cannot be read", file_path)))?;
+    pub fn read<P: AsRef<std::path::Path>>(file_path: P) -> Result<Self, PDBError> {
+        let path = file_path.as_ref();
+        let contents = fs::read_to_string(path)
+            .map_err(|_| PDBError::OSError(format!("'{}' cannot be read", path.display())))?;
         let lines = contents
             .lines()
             .map(|line| format!("{:<80}", line))
@@ -210,7 +211,6 @@ impl PDBFile {
         }
 
         // Parse bonds if available
-        let bonds = self.parse_bonds(&atom_ids)?;
         let bonds = self.parse_bonds(&atom_ids)?;
         let bonds_option = if bonds.is_empty() { None } else { Some(bonds) };
 

@@ -107,10 +107,11 @@ impl CIFFile {
     }
 
     /// Read a [`CIFFile`] from a file.
-    /// The file is indicated by its file path as `String`.
-    pub fn read(file_path: &str) -> Result<Self, CIFError> {
-        let content = fs::read_to_string(file_path)
-            .map_err(|_| CIFError::OSError(format!("'{}' cannot be read", file_path)))?;
+    /// The file is indicated by its file path.
+    pub fn read<P: AsRef<std::path::Path>>(file_path: P) -> Result<Self, CIFError> {
+        let path = file_path.as_ref();
+        let content = fs::read_to_string(path)
+            .map_err(|_| CIFError::OSError(format!("'{}' cannot be read", path.display())))?;
         Self::new(content)
     }
 
@@ -586,92 +587,6 @@ impl CIFFile {
 
         Ok(bonds)
     }
-
-    /// Write data from an AtomCollection to a CIF file format
-    pub fn write_atom_collection(
-        &mut self,
-        atom_collection: &AtomCollection,
-    ) -> Result<(), CIFError> {
-        let size = atom_collection.get_size();
-        let coords = atom_collection.get_coords();
-
-        // Create a new CIF content
-        let mut content = String::new();
-
-        // Add data block header
-        content.push_str("data_structure\n\n");
-
-        // Add _cell category if box parameters are available
-        // (not implemented in this basic version)
-
-        // Add atom_site loop
-        content.push_str("loop_\n");
-        content.push_str("_atom_site.id\n");
-        content.push_str("_atom_site.type_symbol\n");
-        content.push_str("_atom_site.label_atom_id\n");
-        content.push_str("_atom_site.label_comp_id\n");
-        content.push_str("_atom_site.label_asym_id\n");
-        content.push_str("_atom_site.label_seq_id\n");
-        content.push_str("_atom_site.Cartn_x\n");
-        content.push_str("_atom_site.Cartn_y\n");
-        content.push_str("_atom_site.Cartn_z\n");
-        content.push_str("_atom_site.occupancy\n");
-        content.push_str("_atom_site.B_iso_or_equiv\n");
-        content.push_str("_atom_site.group_PDB\n");
-
-        // Add atom data
-        for i in 0..size {
-            content.push_str(&format!(
-                "{} {} {} {} {} {} {:.3} {:.3} {:.3} {:.2} {:.2} {}\n",
-                i + 1, // Atom ID
-                atom_collection.get_element(i),
-                atom_collection.get_atom_name(i),
-                atom_collection.get_res_name(i),
-                atom_collection.get_chain_id(i),
-                atom_collection.get_res_id(i),
-                coords[i][0],
-                coords[i][1],
-                coords[i][2],
-                1.00, // Occupancy
-                0.00, // B-factor
-                if atom_collection.get_is_hetero(i) {
-                    "HETATM"
-                } else {
-                    "ATOM"
-                }
-            ));
-        }
-
-        // Add bond information if available
-        if let Some(bonds) = atom_collection.get_bonds() {
-            content.push_str("\n# Bond information\n");
-            content.push_str("loop_\n");
-            content.push_str("_struct_conn.id\n");
-            content.push_str("_struct_conn.conn_type_id\n");
-            content.push_str("_struct_conn.ptnr1_atom_id\n");
-            content.push_str("_struct_conn.ptnr2_atom_id\n");
-
-            for (i, bond) in bonds.iter().enumerate() {
-                let (atom1, atom2) = bond.get_atom_indices();
-                content.push_str(&format!(
-                    "bond_{} covale {} {}\n",
-                    i + 1,
-                    atom1 + 1, // 1-based atom IDs
-                    atom2 + 1
-                ));
-            }
-        }
-
-        // Update raw content
-        self.raw_content = content;
-
-        // Re-parse the content to update the internal structure
-        self.data_blocks.clear();
-        self.current_block = 0;
-        self.parse_content()?;
-
-        Ok(())
-    }
 }
 
 /// Clean a CIF value (remove quotes, handle special values)
@@ -703,6 +618,8 @@ mod tests {
         let (cif_file, _temp) = TestFile::protein_01().create_temp().unwrap();
         let cif = CIFFile::read(&cif_file).unwrap();
         assert!(cif.data_blocks.len() > 0);
+
+        // check conversion
         let ac: AtomCollection = cif.parse_to_atom_collection().unwrap();
         assert_eq!(ac.get_size(), 1413);
     }
