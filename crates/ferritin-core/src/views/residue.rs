@@ -66,14 +66,13 @@ impl<'a> ResidueView<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AtomCollection;
+    use crate::load_structure;
     use ferritin_test_data::TestFile;
 
     #[test]
     fn test_residue_view_properties() {
         let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let (pdb, _) = pdbtbx::open(prot_file).unwrap();
-        let ac = AtomCollection::from(&pdb);
+        let ac = load_structure(prot_file).unwrap();
 
         // Create a simple residue view for testing
         let residue = ResidueView::new(&ac, 0, 10); // First 10 atoms as a test

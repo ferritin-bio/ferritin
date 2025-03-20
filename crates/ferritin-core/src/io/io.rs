@@ -1,7 +1,7 @@
-use super::cif;
-use super::pdb;
+use crate::AtomCollection;
+use crate::io::cif;
+use crate::io::pdb;
 use anyhow::{Context, Result};
-use ferritin_core::AtomCollection;
 use std::path::Path;
 
 //

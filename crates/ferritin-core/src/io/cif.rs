@@ -2,9 +2,9 @@
 //!
 //! Handles parsing of mmCIF/CIF files into atomic structures.
 
-use ferritin_core::{AtomCollection, Bond, BondOrder};
+use crate::{AtomCollection, Bond};
 use pdbtbx::Element;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fs;
