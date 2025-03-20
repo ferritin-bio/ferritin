@@ -31,7 +31,7 @@ candle-metal-kernels = "0.8.4"
 candle-nn = "0.8.4"
 candle-onnx = "0.8.4"
 candle-transformers = "0.8.4"
-chrono = "0.4.40"
+chrono = "0.4.39"
 clap = { version = "4.5.32", features = ["derive"] }
 geo = "0.29.3"
 hf-hub = "0.4.2"

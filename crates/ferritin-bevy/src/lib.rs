@@ -13,8 +13,11 @@
 //! - Support for multiple visualization styles
 //!
 pub mod colors;
+pub mod conversions;
 pub mod plugin;
 pub mod structure;
+
 pub use colors::ColorScheme;
+pub use conversions::ToRerun;
 pub use plugin::{StructurePlugin, StructureSettings};
 pub use structure::{RenderOptions, Structure};

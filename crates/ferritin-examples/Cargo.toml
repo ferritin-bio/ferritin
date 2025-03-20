@@ -31,6 +31,7 @@ ferritin-onnx-models = { path = "../ferritin-onnx-models" }
 hf-hub.workspace = true
 pdbtbx.workspace = true
 serde_json.workspace = true
+rerun = "0.22.1"
 
 
 [target.'cfg(target_os = "macos")'.features]
