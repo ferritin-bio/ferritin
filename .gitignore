@@ -4,5 +4,5 @@
 .DS_Store
 
 
-crates/ferritin-bevy/wasm-examples/
+crates/ferritin-structure-mesh/wasm-examples/
 docs/doc

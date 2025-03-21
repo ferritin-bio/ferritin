@@ -28,7 +28,7 @@ PLMs (Protein Language Models) integration for ferritin.
 
 Cell visualization and analysis tools for ferritin.
 
-## [ferritin-bevy](./ferritin-bevy)
+## [ferritin-bevy](./ferritin-structure-mesh)
 
 Bevy game engine integration for ferritin.
 

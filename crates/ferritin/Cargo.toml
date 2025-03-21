@@ -8,9 +8,9 @@ edition.workspace = true
 
 [features]
 default = []
-bevy = ["dep:ferritin-bevy"]
+mesh = ["dep:ferritin-structure-mesh"]
 plms = ["dep:ferritin-plms"]
-full = ["bevy", "plms", "molviewspec"]
+full = ["mesh", "plms", "molviewspec"]
 molviewspec = ["dep:ferritin-molviewspec"]
 # cellscape = ["dep:ferritin-cellscape"]
 # pymol = ["dep:ferritin-pymol"]
@@ -21,7 +21,7 @@ molviewspec = ["dep:ferritin-molviewspec"]
 ferritin-core = { path = "../ferritin-core" }
 
 # Optional dependencies
-ferritin-bevy = { path = "../ferritin-bevy", optional = true }
+ferritin-structure-mesh = { path = "../ferritin-structure-mesh", optional = true }
 ferritin-plms = { path = "../ferritin-plms", optional = true }
 ferritin-molviewspec = { path = "../ferritin-molviewspec", optional = true }
 # ferritin-cellscape = { path = "../ferritin-cellscape", optional = true }
