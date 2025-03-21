@@ -1,7 +1,5 @@
-// use super::atom::AtomView;
 use super::residue::ResidueView;
 use crate::AtomCollection;
-// use crate::selection::Selection;
 
 /// View representing a molecular chain.
 pub struct ChainView<'a> {
@@ -84,8 +82,7 @@ impl<'a> ChainView<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{AtomCollection, load_structure};
+    use crate::load_structure;
     use ferritin_test_data::TestFile;
 
     #[test]

@@ -357,7 +357,7 @@ impl AtomCollection {
 
 #[cfg(test)]
 mod tests {
-    use crate::{AtomCollection, load_structure};
+    use crate::load_structure;
     use ferritin_test_data::TestFile;
 
     #[test]
@@ -405,7 +405,7 @@ mod tests {
     #[test]
     fn test_atom_collection_iter_residues() {
         let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let mut ac = load_structure(prot_file).unwrap();
+        let ac = load_structure(prot_file).unwrap();
 
         let residues: Vec<_> = ac.iter_residues().collect();
         assert!(!residues.is_empty());

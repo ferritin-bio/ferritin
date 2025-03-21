@@ -420,7 +420,7 @@ impl std::fmt::Display for Element {
     }
 }
 
-impl std::convert::TryFrom<&str> for Element {
+impl TryFrom<&str> for Element {
     type Error = &'static str;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {

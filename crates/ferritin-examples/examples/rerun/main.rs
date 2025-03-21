@@ -12,7 +12,7 @@ fn main() -> Result<()> {
 
     // Load the structure
     let (molfile, _handle) = TestFile::protein_01().create_temp()?;
-    let ac = load_structure(molfile).unwrap();
+    let ac = load_structure(molfile)?;
 
     // Define a few materials
     let chalky = StandardMaterial {

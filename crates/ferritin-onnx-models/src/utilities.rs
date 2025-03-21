@@ -18,7 +18,7 @@ pub fn ndarray_to_tensor_f32(
 }
 
 pub fn tensor_to_ndarray_f32(
-    tensor: candle_core::Tensor,
+    tensor: Tensor,
 ) -> Result<ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::IxDyn>> {
     let shape = tensor.dims().to_vec();
     let flattened = tensor.flatten_all()?;
@@ -28,7 +28,7 @@ pub fn tensor_to_ndarray_f32(
 }
 
 pub fn tensor_to_ndarray_i64(
-    tensor: candle_core::Tensor,
+    tensor: Tensor,
 ) -> Result<ndarray::ArrayBase<ndarray::OwnedRepr<i64>, ndarray::IxDyn>> {
     let shape = tensor.dims().to_vec();
     let flattened = tensor.flatten_all()?;

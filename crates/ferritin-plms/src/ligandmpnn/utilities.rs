@@ -1,4 +1,4 @@
-use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
+use candle_core::{DType, Device, IndexOp, Result, Tensor, D};
 use candle_nn::encoding::one_hot;
 use strum::{Display, EnumIter, EnumString};
 
@@ -548,7 +548,7 @@ mod tests {
     use super::*;
     use crate::ligandmpnn::proteinfeatures::LMPNNFeatures;
     use ferritin_core::info::elements::Element;
-    use ferritin_core::{AtomCollection, load_structure};
+    use ferritin_core::load_structure;
     use ferritin_test_data::TestFile;
 
     #[test]
