@@ -1,6 +1,6 @@
 # AMPLIFY
 
-My initial attempts to convert AMPLIFY ran into issue related to complex scalar nubmers in the
+My initial attempts to convert AMPLIFY ran into issue related to complex scalar numbers in the
 rotary encoding.
 
 ```sh
