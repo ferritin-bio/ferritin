@@ -1,6 +1,6 @@
-use crate::info::elements::Element;
 use crate::{PSEData, pymolparsing};
-use ferritin_core::{AtomCollection, Bond, BondOrder};
+use ferritin_core::info::elements::Element;
+use ferritin_core::{AtomCollection, Bond};
 use itertools::Itertools;
 
 impl From<&PSEData> for AtomCollection {

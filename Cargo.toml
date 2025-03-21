@@ -8,7 +8,7 @@ members = [
     "crates/ferritin-molviewspec",
     "crates/ferritin-onnx-models",
     "crates/ferritin-plms",
-    "crates/ferritin-pymol",
+    # "crates/ferritin-pymol",c
     "crates/ferritin-test-data",
 ]
 resolver = "2"
