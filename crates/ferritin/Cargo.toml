@@ -17,7 +17,6 @@ molviewspec = ["dep:ferritin-molviewspec"]
 
 
 [dependencies]
-# Core is always included
 ferritin-core = { path = "../ferritin-core" }
 
 # Optional dependencies
