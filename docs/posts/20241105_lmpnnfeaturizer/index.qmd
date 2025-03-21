@@ -45,7 +45,7 @@ pub trait LMPNNFeatures {
 /// Essential Tensors are Aligned Coordinates of Atoms by Atom Type
 pub struct ProteinFeatures {
     s: Tensor,   // protein amino acids as i32 Tensor
-    x: Tensor,   // protein co-oords by residue [1, #res, 37, 4]
+    x: Tensor,   // protein coords by residue [1, #res, 37, 4]
     y: Tensor,   // ligand coords
     y_t: Tensor, // encoded ligand atom names
     ...

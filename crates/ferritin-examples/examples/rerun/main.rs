@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bevy::prelude::*;
-use ferritin_bevy::{ColorScheme, RenderOptions, Structure, ToRerun};
+use ferritin_structure_mesh::{ColorScheme, RenderOptions, Structure, ToRerun};
 use ferritin_core::load_structure;
 use ferritin_test_data::TestFile;
 use rerun::Mesh3D;

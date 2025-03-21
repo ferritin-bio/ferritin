@@ -117,13 +117,13 @@ let pmatrix = protein_tokenizer.encode(&["METVALMETVAL".to_string()], Some(20), 
 In addition to the weights and tokenizer as mentioned above, I also had access to the
 pytorch source code and model info on [github][AmplifyGH]. There are only 3 files and
 I was able to use Claude to get a decent first pass conversion between pytorch and Candle.
-The major issues I encouter are related to:
+The major issues I encounter are related to:
 
 1. Hallucinating/inferring pytorch methods that don't exist in Candle. This led to some spelunking
 in the Candle source code and my first [PR to the Candle repo](https://github.com/huggingface/candle/pull/2553).
 2. Differences in idioms - e.g. Candle uses enums like `D::Minus1` to specify some dimensions and never accepts `-1`.
 3. Direct python->rust translations that feel or look clunky. These sometimes can be addressed with a few rounds of
-`Can you write this more idiomatically?` or `what would this code look like if it used iterators?` or otehr prompts to get Claude to rustize the code.
+`Can you write this more idiomatically?` or `what would this code look like if it used iterators?` or other prompts to get Claude to rustize the code.
 
 So my initial test was to get a `Load` function so that I could load the weights into an
 appropriately shaped Model, as specified by source code and model weights.
@@ -163,7 +163,7 @@ mapped/mimicked. I won't get into all of the bits but did run into a bit of trou
 
 - **Rotational Embeddings**. I didn't know what those were or how they work. And they do some funky things
  with dimensions. I ended up using Claude heavily to iterate on possible translations but I
- am not sure I have it right and this is the most likley place I've failed to replicate the architecture if
+ am not sure I have it right and this is the most likely place I've failed to replicate the architecture if
  my tests against the pytorch model don't pass.
 - **Xformers**.The Amplify team used [xformers](https://github.com/facebookresearch/xformers) in a few places
 for optimizations.  In the feed-forward part of the network,  in the SWIGLU activation step, and in a memory efficient

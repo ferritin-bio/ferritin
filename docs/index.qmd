@@ -25,7 +25,7 @@ Protein utilities for Rust
 
 ### Ferritin-Core
 
-Data structures and algorithims to work with proteins. [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_core/). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-core).
+Data structures and algorithms to work with proteins. [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_core/). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-core).
 
 
 ### Ferritin-MolViewSpec

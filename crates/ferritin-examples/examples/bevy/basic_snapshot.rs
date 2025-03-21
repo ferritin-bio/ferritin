@@ -7,7 +7,7 @@ use bevy::{
     window::SystemCursorIcon,
     winit::cursor::CursorIcon,
 };
-use ferritin_bevy::{ColorScheme, RenderOptions, StructurePlugin, StructureSettings};
+use ferritin_structure_mesh::{ColorScheme, RenderOptions, StructurePlugin, StructureSettings};
 use ferritin_test_data::TestFile;
 
 fn main() -> Result<()> {

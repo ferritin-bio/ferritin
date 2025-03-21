@@ -130,7 +130,7 @@ pub struct PyObjectMolecule {
     ....
 }
 
-// note heterogenous data especially Strings
+// note heterogeneous data especially Strings
 pub struct AtomInfo {
     pub resv: i32,
     pub chain: String,
@@ -152,14 +152,14 @@ pub struct CoordSet {
 It was interesting to me that a recent and growing python package, [biotite][biotite], has a similar organization style in its use of `AtomArrays`
 to store atom info in Numpy Arrays.  I'd also watched Andrew Kelly's talk on [data oriented design][andrew-dod] which is a strong pitch for
 making software fast by paying attention to it's memory layout. Sounds good. After googling around a bit I saw a few Struct-of-Array libraries but it seems
-that most people just kind of roll their own - e.g. use vectors of homogenous data in their struct types and handle the index themselves. Thats what
+that most people just kind of roll their own - e.g. use vectors of homogenous data in their struct types and handle the index themselves. That's what
 `AtomCollection` ended up being.
 
 
 ### Thats Fast ... and also ergonomic.
 
 I think this library should be relatively quick if I end up using packed data, use iteration, and avoid copying.
-At least thats what the Rust world seems to indicate. We'll see.  One other thing I wanted is something simple
+At least that's what the Rust world seems to indicate. We'll see.  One other thing I wanted is something simple
 and ergonomic.  If you read the code in [biotite][biotite] one can't help but be impressed at how well organized,
 cohesive and simple the code is.  I contrast this with the pymol code which has acquired multiple decades of indirections
 and lots and lots of indirections. So the plan is to try to keep the high level API smooth and nice and hide away any complexity while
