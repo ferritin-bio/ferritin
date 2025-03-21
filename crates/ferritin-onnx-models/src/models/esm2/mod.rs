@@ -9,8 +9,8 @@
 //! * ESM2_T30_150M - large 30-layer protein language model
 //!
 use super::super::utilities::ndarray_to_tensor_f32;
-use anyhow::{anyhow, Result};
-use candle_core::{Tensor, D};
+use anyhow::{Result, anyhow};
+use candle_core::{D, Tensor};
 use candle_nn::ops;
 use ferritin_plms::types::PseudoProbability;
 use hf_hub::api::sync::Api;
@@ -18,8 +18,8 @@ use ndarray::Array2;
 use ort::{
     execution_providers::CUDAExecutionProvider,
     session::{
-        builder::{GraphOptimizationLevel, SessionBuilder},
         Session,
+        builder::{GraphOptimizationLevel, SessionBuilder},
     },
 };
 use std::path::PathBuf;

@@ -2,9 +2,9 @@ use crate::esm::utils::constants::esm3::SEQUENCE_VOCAB;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokenizers::models::bpe::{BpeBuilder, BPE};
-use tokenizers::processors::template::{Template, TemplateProcessing};
+use tokenizers::models::bpe::{BPE, BpeBuilder};
 use tokenizers::processors::PostProcessorWrapper;
+use tokenizers::processors::template::{Template, TemplateProcessing};
 use tokenizers::{AddedToken, Tokenizer};
 
 pub trait EsmTokenizerBase {

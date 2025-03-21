@@ -6,11 +6,11 @@ use super::super::types::{ContactMap, PseudoProbability};
 use super::amplify::AMPLIFY;
 use super::config::AMPLIFYConfig;
 use super::outputs::ModelOutput;
-use anyhow::{anyhow, Error as E, Result};
-use candle_core::{DType, Device, Tensor, D};
-use candle_nn::ops;
+use anyhow::{Error as E, Result, anyhow};
+use candle_core::{D, DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use hf_hub::{api::sync::Api, Repo, RepoType};
+use candle_nn::ops;
+use hf_hub::{Repo, RepoType, api::sync::Api};
 use tokenizers::Tokenizer;
 
 pub enum AmplifyModels {

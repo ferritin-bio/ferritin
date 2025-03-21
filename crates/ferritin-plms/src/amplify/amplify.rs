@@ -13,8 +13,8 @@ use super::config::AMPLIFYConfig;
 use super::encoder::EncoderBlock;
 use super::outputs::ModelOutput;
 use super::rotary::precompute_freqs_cis;
-use candle_core::{Device, Module, Result, Tensor, D};
-use candle_nn::{embedding, linear, rms_norm, Embedding, Linear, RmsNorm, VarBuilder};
+use candle_core::{D, Device, Module, Result, Tensor};
+use candle_nn::{Embedding, Linear, RmsNorm, VarBuilder, embedding, linear, rms_norm};
 use tokenizers::Tokenizer;
 
 /// The AMPLIFY model
