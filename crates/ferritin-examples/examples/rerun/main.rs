@@ -1,13 +1,9 @@
 use anyhow::Result;
 use bevy::prelude::*;
-use ferritin_bevy::{
-    ColorScheme, RenderOptions, Structure, StructurePlugin, StructureSettings, ToRerun,
-};
+use ferritin_bevy::{ColorScheme, RenderOptions, Structure, ToRerun};
 use ferritin_core::load_structure;
 use ferritin_test_data::TestFile;
-use rerun::demo_util::color_spiral;
-use rerun::{self as rr, Mesh3D};
-use std::f32::consts::TAU;
+use rerun::Mesh3D;
 
 fn main() -> Result<()> {
     // start Rerun
@@ -63,6 +59,20 @@ fn main() -> Result<()> {
             .pdb(ac.clone())
             .material(chalky.clone())
             .rendertype(RenderOptions::Putty)
+            .color_scheme(ColorScheme::ByAtomType)
+            .build()
+            .to_mesh()
+            .to_rerun()
+            .unwrap(),
+    )?;
+
+    // Add Cartoon
+    rec.log(
+        "protein/structure/cartoon",
+        &Structure::builder()
+            .pdb(ac.clone())
+            .material(chalky.clone())
+            .rendertype(RenderOptions::Cartoon)
             .color_scheme(ColorScheme::ByAtomType)
             .build()
             .to_mesh()

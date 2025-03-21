@@ -8,8 +8,8 @@ use super::bonds::Bond;
 use super::info::constants::get_bonds_canonical20;
 use super::views::chain::ChainView;
 use super::views::residue::ResidueView;
+use crate::info::elements::Element;
 use itertools::{Itertools, izip};
-use pdbtbx::Element;
 
 /// Atom Collection
 ///

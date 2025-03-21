@@ -3,8 +3,8 @@
 //! Adapted from: https://github.com/biotite-dev/fastpdb/tree/main
 //! Converted to use native Rust structures instead of Python/NumPy bindings.
 
+use crate::info::elements::Element;
 use crate::{AtomCollection, Bond, BondOrder};
-use pdbtbx::Element;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
@@ -554,8 +554,8 @@ fn truncate_id(id: i32, max_id: i32) -> i32 {
 mod tests {
     use super::*;
     use crate::AtomCollection;
+    use crate::info::elements::Element;
     use ferritin_test_data::TestFile;
-    use pdbtbx::{self, Element};
 
     #[test]
     fn test_pdb_file_read() {

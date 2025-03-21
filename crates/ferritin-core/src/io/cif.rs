@@ -2,8 +2,8 @@
 //!
 //! Handles parsing of mmCIF/CIF files into atomic structures.
 
+use crate::info::elements::Element;
 use crate::{AtomCollection, Bond};
-use pdbtbx::Element;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;

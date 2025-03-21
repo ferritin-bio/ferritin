@@ -1,7 +1,7 @@
 use crate::{PSEData, pymolparsing};
-use ferritin_core::{AtomCollection, Bond, BondOrder};
+use ferritin_core::info::elements::Element;
+use ferritin_core::{AtomCollection, Bond};
 use itertools::Itertools;
-use pdbtbx::Element;
 
 impl From<&PSEData> for AtomCollection {
     fn from(pse_data: &PSEData) -> Self {

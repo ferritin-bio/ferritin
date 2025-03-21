@@ -2,7 +2,7 @@
 //!
 //! This module defines the color mapping used for rendering.
 use bevy::prelude::Color;
-use pdbtbx::Element;
+use ferritin_core::info::elements::Element;
 
 /// Represents different color schemes for rendering atoms.
 #[derive(Clone)]

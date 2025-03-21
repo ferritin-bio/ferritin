@@ -11,9 +11,9 @@ default = []
 metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 bevy = ["ferritin/bevy"]
 plms = ["ferritin/plms"]
-all = ["bevy", "plms", "molviewspec", "pymol"]
+all = ["bevy", "plms", "molviewspec"]
 molviewspec = ["ferritin/molviewspec"]
-pymol = ["ferritin/pymol"]
+# pymol = ["ferritin/pymol"]
 
 [dependencies]
 ferritin = { path = "../ferritin", default-features = false }
@@ -29,10 +29,8 @@ ferritin-core = { path = "../ferritin-core" }
 ferritin-plms = { path = "../ferritin-plms" }
 ferritin-onnx-models = { path = "../ferritin-onnx-models" }
 hf-hub.workspace = true
-pdbtbx.workspace = true
+rerun = { workspace = true, features = ["native_viewer"] }
 serde_json.workspace = true
-rerun = "0.22.1"
-
 
 [target.'cfg(target_os = "macos")'.features]
 metal = []
@@ -57,7 +55,6 @@ ferritin-test-data = { path = "../ferritin-test-data" }
 [[example]]
 name = "bevy_basic_ball_and_stick"
 path = "examples/bevy/basic_ball_and_stick.rs"
-
 
 [[example]]
 name = "bevy_basic_putty"

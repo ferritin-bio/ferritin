@@ -14,7 +14,7 @@ use ferritin_molviewspec::molviewspec::nodes::{self as mvsnodes, ColorNamesT, St
 use pdbtbx::PDB;
 use serde::{Deserialize, Serialize};
 use serde_bytes;
-use serde_pickle::de::{from_reader, DeOptions};
+use serde_pickle::de::{DeOptions, from_reader};
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;

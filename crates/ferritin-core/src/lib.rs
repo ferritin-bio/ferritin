@@ -14,7 +14,7 @@
 mod atomcollection;
 mod bonds;
 mod featurize;
-mod info;
+pub mod info;
 mod io;
 mod views;
 

@@ -547,10 +547,9 @@ define_residues! {
 mod tests {
     use super::*;
     use crate::ligandmpnn::proteinfeatures::LMPNNFeatures;
+    use ferritin_core::info::elements::Element;
     use ferritin_core::{AtomCollection, load_structure};
     use ferritin_test_data::TestFile;
-    use pdbtbx;
-    use pdbtbx::Element;
 
     #[test]
     fn test_residue_codes() {

@@ -1,5 +1,5 @@
 use crate::AtomCollection;
-use pdbtbx::Element;
+use crate::info::elements::Element;
 
 pub struct AtomView<'a> {
     pub(crate) data: &'a AtomCollection,

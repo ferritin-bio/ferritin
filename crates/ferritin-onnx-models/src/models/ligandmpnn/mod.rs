@@ -171,7 +171,6 @@ impl LigandMPNN {
 mod tests {
     use super::*;
     use ferritin_test_data::TestFile;
-    use pdbtbx;
 
     fn setup_test_data() -> AtomCollection {
         let (protfile, _handle) = TestFile::protein_01().create_temp().unwrap();

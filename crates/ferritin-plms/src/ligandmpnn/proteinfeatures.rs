@@ -12,8 +12,8 @@
 use super::utilities::{AAAtom, aa1to_int, aa3to1};
 use candle_core::{Device, Result, Tensor};
 use ferritin_core::AtomCollection;
+use ferritin_core::info::elements::Element;
 use itertools::MultiUnzip;
-use pdbtbx::Element;
 use std::collections::{HashMap, HashSet};
 use strum::IntoEnumIterator;
 
