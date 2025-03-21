@@ -23,14 +23,14 @@ edition = "2024"
 
 [workspace.dependencies]
 anyhow = "1.0"
-bevy = "0.15.3"
+bevy = "0.16.0-rc.1"
 bon = "3.5.1"
 candle-core = "0.8.4"
 candle-metal-kernels = "0.8.4"
 candle-nn = "0.8.4"
 candle-onnx = "0.8.4"
 candle-transformers = "0.8.4"
-chrono = "0.4.40"
+chrono = ">0.4.22, <0.4.40"
 clap = { version = "4.5.32", features = ["derive"] }
 hf-hub = "0.4.2"
 itertools = "0.14.0"
