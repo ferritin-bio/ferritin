@@ -3781,7 +3781,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin"
-version = "0.2.0-dev"
+version = "0.3.0-dev"
 dependencies = [
  "ferritin-core",
  "ferritin-molviewspec",
@@ -3791,7 +3791,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-core"
-version = "0.2.0-dev"
+version = "0.3.0-dev"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -3802,7 +3802,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-examples"
-version = "0.2.0-dev"
+version = "0.3.0-dev"
 dependencies = [
  "anyhow",
  "bevy",
@@ -3825,7 +3825,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-molviewspec"
-version = "0.2.0-dev"
+version = "0.3.0-dev"
 dependencies = [
  "chrono",
  "serde",
@@ -3836,7 +3836,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-onnx-models"
-version = "0.2.0-dev"
+version = "0.3.0-dev"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -3852,7 +3852,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-plms"
-version = "0.2.0-dev"
+version = "0.3.0-dev"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -3875,7 +3875,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-structure-mesh"
-version = "0.2.0-dev"
+version = "0.3.0-dev"
 dependencies = [
  "anyhow",
  "bevy",
@@ -3888,7 +3888,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-test-data"
-version = "0.2.0-dev"
+version = "0.3.0-dev"
 dependencies = [
  "tempfile",
 ]

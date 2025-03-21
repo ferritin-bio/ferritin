@@ -15,7 +15,7 @@ resolver = "2"
 
 [workspace.package]
 name = "ferritin"
-version = "0.2.0-dev"
+version = "0.3.0-dev"
 authors = ["Zach Charlop-Powers<zach.charlop.powers@gmail.com>"]
 description = "Protein Manipulaton and visualization tools"
 license = "MIT OR Apache-2.0"
@@ -45,4 +45,3 @@ tempfile = "3.19.1"
 tokenizers = { version = "0.21.1", features = ["onig"] }
 urlencoding = "2.1.3"
 validator = { version = "0.20.0", features = ["derive"] }
-
