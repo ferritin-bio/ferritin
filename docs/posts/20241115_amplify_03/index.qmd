@@ -21,7 +21,7 @@ Internally I am using `candle_hf_hub` which will download and cache the model we
 `~/.cache/huggingface/hub`. See [cache docs](https://huggingface.co/docs/datasets/en/cache)
 :::
 
-Core API in palce
+Core API in place
 
 ```rust
 use ferritin_featurizers::Amplify;

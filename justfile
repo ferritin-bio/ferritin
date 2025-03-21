@@ -1,16 +1,16 @@
 
 build:
-    cargo build -p  ferritin-core -p  ferritin-pymol  -p ferritin-bevy
+    cargo build -p  ferritin-core -p ferritin-structure-mesh
 
 
 # convert all PSEs to msvj folders
 convert: build
-    for file in docs/examples/*.pse; do \
+   for file in docs/examples/*.pse; do \
         ./target/debug/ferritin-pymol --psefile "$file" --outputdir "${file%.*}"; \
     done
 
 
-docs: convert
+docs: build
     # generate and copy rust docs
     cargo doc --workspace --no-deps
     cp -r target/doc/  docs/doc
@@ -21,7 +21,7 @@ serve: docs
     quarto preview docs
 
 clean:
-    cargo clean -p  ferritin-core -p  ferritin-pymol  -p ferritin-bevy
+    cargo clean -p ferritin-core  -p ferritin-structure-mesh
     cargo clean --doc
     rm -rf docs/doc/
     rm -rf docs/examples/example

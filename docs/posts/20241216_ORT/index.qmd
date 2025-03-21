@@ -11,7 +11,7 @@ image: "images/trend-banner.png"
 # Switch to ORT
 
 The initial goals of ferritin were to 1) learn Rust, 2) learn/understand protein deep learning model internals sufficiently to 3) develop fast, reliable, cross-platform inference tools in Rust.
-Heres what I've come up with: you can run it as follows:
+Here's what I've come up with: you can run it as follows:
 
 
 ```sh
@@ -52,7 +52,7 @@ What you may be able to discern from above:
 2. Model has been converted to an ONNX file.
 3. That ONNX file can be interpreted and run in a variety of contexts and the backends are maintained by [consortia](https://onnx.ai) that is supported by the tech giants.
 4. I am re-using the ESM2 tokenizer.
-5. ONNX conversions reults in a defined INPUT/OUTPUT interface. in this case:
+5. ONNX conversions results in a defined INPUT/OUTPUT interface. in this case:
   - Inputs: The sequence tensor and the mask tensor (as i64).
   - Outputs: logits in the dimensions of `[<batch>, <seqlength>, <vocab_size>]`
 

@@ -1,4 +1,4 @@
-//!  Protein->Tensor utiilities useful for Machine Learning
+//!  Protein->Tensor utilities useful for Machine Learning
 use super::utilities::{AAAtom, aa1to_int, aa3to1, get_nearest_neighbours};
 use crate::AtomCollection;
 use crate::info::elements::Element;
@@ -10,7 +10,7 @@ fn is_heavy_atom(element: &Element) -> bool {
     !matches!(element, Element::H | Element::He)
 }
 
-///. Trait defining Protein->Tensor utiilities useful for Machine Learning
+///. Trait defining Protein->Tensor utilities useful for Machine Learning
 pub trait StructureFeatures {
     /// Convert amino acid sequence to numeric representation
     fn decode_amino_acids(&self, device: &Device) -> Result<Tensor>;

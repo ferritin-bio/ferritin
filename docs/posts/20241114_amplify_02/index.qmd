@@ -12,7 +12,7 @@ image: "images/runpod.png"
 # Intro
 
 In the previous post I had created the Candle version of the Amplify pytorch model. However, when
-I started to use it It was immedietly clear that my model was wrong. This post briefly recounts
+I started to use it It was immediately clear that my model was wrong. This post briefly recounts
 the troubleshooting process to get the models to reach parity as measured
 by identical outputs in the sequence encoding and attention weight outputs.
 
@@ -49,11 +49,11 @@ the related PRs are at the bottom. The code in the gist may also be helpful to s
 - spin up GPU
 - setup remote dev env
 - clone HF repo locally
-- get intial tests running for Candle and Pytorch
+- get initial tests running for Candle and Pytorch
 - add print statements in both and watch where the divergence happens
 
 
-## Code Walkthough / Steppin
+## Code Walkthrough
 
 ### Freqs_Cis
 
@@ -142,12 +142,12 @@ FFN_FINAL.: torch.Size([1, 48, 640])
 
 ### I spot an Issue
 
-Tranpose!
+Transpose!
 
 ```python
 if x.is_cuda:
     # Input and output are of dimension (B, M, H, K) where B is the batch size, M the sequence length,
-    # H the number of heads, and K the embeding size per head
+    # H the number of heads, and K the embedding size per head
     attn = memory_efficient_attention(
         query=xq,
         key=xk,
@@ -173,7 +173,7 @@ else:
 ```
 
 It looks like my scaled dot product fn outputs the correct dimensions. Hmm. Lets
-check the dimentions of the inputs.
+check the dimensions of the inputs.
 
 
 

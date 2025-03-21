@@ -14,12 +14,12 @@ image: "images/metal_pre.png"
 The original motivating goal of this project was a pure-rust-WASM ProteinMPNN/LigandMPNN
 implementation for fast local design.  In previous posts I discussed:
 
-1. Core Protein Data Structures for effecient protein representation using the Stuct-of-Arrays style. [link](https://zachcp.github.io/ferritin/posts/20241029_first_post/)
+1. Core Protein Data Structures for efficient protein representation using the Stuct-of-Arrays style. [link](https://zachcp.github.io/ferritin/posts/20241029_first_post/)
 2. The LigandMPNN Trait to define functions for extracting features from a protein representation. [link](https://zachcp.github.io/ferritin/posts/20241105_lmpnnfeaturizer/)
 3. The Candle implementation of the Amplify model (parts [1](https://zachcp.github.io/ferritin/posts/20241111_amplify/), [2](https://zachcp.github.io/ferritin/posts/20241114_amplify_02/), and [3](https://zachcp.github.io/ferritin/posts/20241115_amplify_03/))
 
 
-Now that I was able to get my feet wet on a protein language model implmentation, I am ready to return to the more architecturally challenging problem of {Protein/Ligand}-MPNN. This post will descrive a few of the challenges faced
+Now that I was able to get my feet wet on a protein language model implementation, I am ready to return to the more architecturally challenging problem of {Protein/Ligand}-MPNN. This post will descrive a few of the challenges faced
 in porting that library over and the current state of the model.
 
 # Issues to Solve.
@@ -33,7 +33,7 @@ There are a few differences between Candle and Pytorch in terms of how:
 - specifying matrix contiguity. (pytorch: ?; candle: `.contiguous()`)
 
 As a ballpark approximation we can take a look at a few of the function call types that handle those differences.  I am
-calculating the occurences of function calls in the code bases [here](https://github.com/dauparas/LigandMPNN) and [here](https://huggingface.co/chandar-lab/AMPLIFY_120M) and showing
+calculating the occurrences of function calls in the code bases [here](https://github.com/dauparas/LigandMPNN) and [here](https://huggingface.co/chandar-lab/AMPLIFY_120M) and showing
 the aggregated results in the table below. The LigandMPNN data is inflated because these calls also include the `sc.py` file which allows for side-cahin packing. Nonetheless,
 from the perspective of implementation, it should be clear that the potentially tricky implementation bits in LigandMPNN are far greater than in Amplify.
 
@@ -59,9 +59,9 @@ rg -c 'mul' *py
 In working with AMPLIFY, one of the key successes was being able to load Amplify's model into a [VarBuilder(https://docs.rs/candle-nn/latest/candle_nn/var_builder/type.VarBuilder.html) using the
 `from_mmaped_safetensors`. You can then build your model by accessing the Tensors by name. It allows you to match the pytorch model using layers that make sense by name. During this process,
 I noticed that there is a similar function for pytorch files - `from_pth`.  Excellent! This gives me a new tool I lacked - the ability to load the model with the exact same
-names as the pytorch model. I should be able to laod this file and have all the Tensors match and use/account for all layers. It turned out there was a hiccup in that the PTH
+names as the pytorch model. I should be able to load this file and have all the Tensors match and use/account for all layers. It turned out there was a hiccup in that the PTH
 and safetensor formats differ a bit and you need to be able to access the pytorch statemap. I submitted a fix [here](https://github.com/huggingface/candle/pull/2639) and began
-assemble the model into my pre-existing code.  This is where I began to run into a nubmer of issues related to Tensor dimension.
+assemble the model into my pre-existing code.  This is where I began to run into a number of issues related to Tensor dimension.
 
 
 ## Dimension Matching
@@ -91,7 +91,7 @@ Err(Metal(UnexpectedDType { msg: "scatter-add ids should be u8/u32/i64", expecte
 
 The first fix is to convert a number of F64/I64s to F32/U32. I then needed to track down and implement a few 2-line additions to Candle's Metal kernels that would allow the kernels
 to work. These were the PRs for [Gather](https://github.com/huggingface/candle/pull/2653) and [Scatter Add](https://github.com/huggingface/candle/pull/2656). The result was impressive.
-My inital model ran in 3 minutes; the  new model in 8 seconds! Okay, we can work with that.
+My initial model ran in 3 minutes; the  new model in 8 seconds! Okay, we can work with that.
 
 
 
@@ -122,4 +122,4 @@ cargo instruments -t time \
 ## Testing Suite.
 
 I've started a [test suite](https://github.com/zachcp/ferritin/pull/59) to match LigandMPNNs and have begun implementing the CLI code for it.  As of Today, December 2 there is
-not much to show. But I am satisfied with where the project has gotten and am impressed by Justas Dauparas and his colloaborators on this implementation. There are still some hard bits ahead.
+not much to show. But I am satisfied with where the project has gotten and am impressed by Justas Dauparas and his collaborators on this implementation. There are still some hard bits ahead.

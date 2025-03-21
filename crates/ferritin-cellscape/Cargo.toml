@@ -8,5 +8,5 @@ description.workspace = true
 
 [dependencies]
 ferritin-core = { path = "../ferritin-core" }
-geo.workspace = true
-svg.workspace = true
+svg = "0.18.0"
+geo = "0.29.3"

@@ -25,25 +25,22 @@ Protein utilities for Rust
 
 ### Ferritin-Core
 
-Data structures and algorithims to work with proteins. [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_core/). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-core).
+Data structures and algorithms to work with proteins. [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_core/). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-core).
 
-### Ferritin-Bevy
-
-Visualization of proteins using the Bevy animation engine. [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_bevy/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-bevy).
-
-### Ferritin-Pymol
-
-Native Rust access to pymol `pse` binary files.  [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_pymol/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-pymol).
 
 ### Ferritin-MolViewSpec
 
-Utilities for consuming and creating [molviewspec files](https://molstar.org/mol-view-spec/).  [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_molviewspec/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-molviewspec).
+Utilities for consuming and creating [molviewspec files](https://molstar.org/mol-view-spec/).  [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_molviewspec/index.html). [source](https://github.com/ferritin-bio/ferritin/tree/main/ferritin-molviewspec).
 
 ### Ferritin-ONNX-Models
 
-Access to protein PLM via the ONNX runtime. [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_onnx_models/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-onnx-models).
+Access to protein PLM via the ONNX runtime. [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_onnx_models/index.html). [source](https://github.com/ferritin-bio/ferritin/tree/main/ferritin-onnx-models).
 
 
 ### Ferritin-PLMs
 
-Utilities for working with protein language models. [rust-docs](https://zachcp.github.io/ferritin/doc/ferritin_plms/index.html). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-plms).
+Utilities for working with protein language models. [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_plms/index.html). [source](https://github.com/ferritin-bio/ferritin/tree/main/ferritin-plms).
+
+### Ferritin-Structure-Mesh
+
+Conversion of protein structures for use in [Bevy](https://bevyengine.org), [Rerun](https://rerun.io)  or other Rust Viz tools.  [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_structure_mesh/index.html). [source](https://github.com/ferritin-bio/ferritin/tree/main/ferritin-structure-mesh).

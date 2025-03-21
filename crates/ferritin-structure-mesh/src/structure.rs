@@ -864,7 +864,7 @@ mod tests {
     #[test]
     fn test_pdb_to_mesh() -> anyhow::Result<()> {
         let (molfile, _handle) = TestFile::protein_04().create_temp()?;
-        let ac = load_structure(molfile).unwrap();
+        let ac = load_structure(molfile)?;
         let structure = Structure::builder().pdb(ac).build();
         assert_eq!(structure.pdb.get_size(), 2154);
         let mesh = structure.to_mesh();
@@ -875,7 +875,7 @@ mod tests {
     #[test]
     fn test_pdb_to_mesh_cartoon() -> anyhow::Result<()> {
         let (molfile, _handle) = TestFile::protein_04().create_temp()?;
-        let ac = load_structure(molfile).unwrap();
+        let ac = load_structure(molfile)?;
         let structure = Structure::builder()
             .pdb(ac)
             .rendertype(RenderOptions::Cartoon)

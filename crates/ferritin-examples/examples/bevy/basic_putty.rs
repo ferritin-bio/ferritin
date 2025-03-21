@@ -1,7 +1,7 @@
 //!  Example allowing custom colors and rendering options
 use anyhow::Result;
 use bevy::prelude::*;
-use ferritin_bevy::{ColorScheme, RenderOptions, StructurePlugin, StructureSettings};
+use ferritin_structure_mesh::{ColorScheme, RenderOptions, StructurePlugin, StructureSettings};
 use ferritin_test_data::TestFile;
 
 fn main() -> Result<()> {

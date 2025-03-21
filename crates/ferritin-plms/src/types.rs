@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-// Struct for Handling soft-maxxed logits
+// Struct for Handling soft-maxed logits
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PseudoProbability {
     pub position: usize,
