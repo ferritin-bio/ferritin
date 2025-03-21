@@ -197,7 +197,7 @@ impl
                     channel_datatype,
                 }
                 .into(),
-                rerun::components::ImageBuffer(self.data.clone().into()),
+                rerun::components::ImageBuffer(self.data.clone().unwrap().into()),
             )
         })
     }
@@ -233,6 +233,8 @@ impl ToRerun<rerun::Pinhole> for Projection {
         match self {
             Projection::Perspective(p) => p.to_rerun(),
             Projection::Orthographic(p) => p.to_rerun(),
+            Projection::Custom(_) => rerun::Pinhole::new(rerun::Mat3x3::IDENTITY)
+                .with_camera_xyz(rerun::components::ViewCoordinates::RUB),
         }
     }
 }

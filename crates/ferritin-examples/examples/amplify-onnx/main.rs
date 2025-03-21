@@ -92,5 +92,7 @@
 // }
 
 fn main() {
-    todo!("Amplify was recalcitrant to conversion to ONNX due to some of the complex numbers in the rotary inputs.")
+    todo!(
+        "Amplify was recalcitrant to conversion to ONNX due to some of the complex numbers in the rotary inputs."
+    )
 }

@@ -1,4 +1,4 @@
-use candle_core::{Result, Tensor, D};
+use candle_core::{D, Result, Tensor};
 
 // Helper structs and enums
 #[derive(Debug)]

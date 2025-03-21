@@ -1,4 +1,4 @@
-use candle_core::{DType, Device, IndexOp, Result, Tensor, D};
+use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
 use candle_nn::encoding::one_hot;
 use strum::{Display, EnumIter, EnumString};
 
