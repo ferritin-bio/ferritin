@@ -116,7 +116,7 @@ impl CIFFile {
     }
 
     /// Parse the raw content into structured data blocks
-    fn parse_content(&mut self) -> Result<(), CIFError> {
+    pub(crate) fn parse_content(&mut self) -> Result<(), CIFError> {
         let mut current_data_block: Option<CIFDataBlock> = None;
         let mut current_category: Option<CIFCategory> = None;
         let mut in_loop = false;
