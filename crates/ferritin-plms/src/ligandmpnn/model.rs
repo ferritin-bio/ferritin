@@ -383,7 +383,7 @@ impl ProteinMPNN {
         let features = ProteinFeaturesModel::load(vb.pp("features"), config.clone())?;
 
         Ok(Self {
-            config: config.clone(), // todo: check the\is clone later...
+            config: config.clone(),
             decoder_layers,
             device: vb.device().clone(),
             encoder_layers,
@@ -394,7 +394,7 @@ impl ProteinMPNN {
         })
     }
     fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
-        let s_true = &features.get_sequence();
+        let s_true = features.get_sequence();
         let base_dtype = DType::F32;
         let mask = match features.get_sequence_mask() {
             Some(m) => m,
@@ -403,43 +403,47 @@ impl ProteinMPNN {
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
                 let (e, e_idx) = self.features.forward(features, &self.device)?;
-                let mut h_v = Tensor::zeros(
+
+                let h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     base_dtype,
                     &self.device,
                 )?;
-                let mut h_e = self.w_e.forward(&e)?;
-                let mask_attend = if let Some(mask) = features.get_sequence_mask() {
-                    let mask_expanded = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
-                    let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?;
-                    let mask_gathered = mask_gathered.squeeze(D::Minus1)?;
-                    let mask_attend = {
-                        let mask_unsqueezed = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
-                        let mask_expanded = mask_unsqueezed.expand((
+                let h_e = self.w_e.forward(&e)?;
+
+                let mask_attend = if let Some(seq_mask) = features.get_sequence_mask() {
+                    let mask_expanded = seq_mask.unsqueeze(D::Minus1)?; // [B, L, 1]
+                    let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?.squeeze(D::Minus1)?;
+                    let mask_unsqueezed = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
+                    mask_unsqueezed
+                        .expand((
                             mask_gathered.dim(0)?, // batch
                             mask_gathered.dim(1)?, // sequence length
                             mask_gathered.dim(2)?, // number of neighbors
-                        ))?;
-                        mask_expanded.mul(&mask_gathered)?
-                    };
-                    mask_attend
+                        ))?
+                        .mul(&mask_gathered)?
                 } else {
                     let (b, l) = mask.dims2()?;
                     Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, &self.device)?
                 };
                 println!("Beginning the Encoding...");
-                for layer in self.encoder_layers.iter() {
-                    let (new_h_v, new_h_e) = layer.forward(
-                        &h_v,
-                        &h_e,
-                        &e_idx,
-                        Some(mask),
-                        Some(&mask_attend),
-                        Some(false),
-                    )?;
-                    h_v = new_h_v;
-                    h_e = new_h_e;
-                }
+
+                // Process through all encoder layers
+                let (h_v, h_e) =
+                    self.encoder_layers
+                        .iter()
+                        .fold(Ok((h_v, h_e)), |acc, layer| {
+                            let (h_v, h_e) = acc?;
+                            layer.forward(
+                                &h_v,
+                                &h_e,
+                                &e_idx,
+                                Some(mask),
+                                Some(&mask_attend),
+                                Some(false),
+                            )
+                        })?;
+
                 Ok((h_v, h_e, e_idx))
             }
             ModelTypes::LigandMPNN => {
@@ -477,6 +481,10 @@ impl ProteinMPNN {
                 //     Ok((h_v, h_e, e_idx))
             }
         }
+    }
+    fn decode(&self) {
+        // take the output from encode and decode to logits
+        todo!()
     }
     pub fn sample(
         &self,
@@ -933,9 +941,8 @@ impl ProteinMPNN {
     }
 
     pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
-        let sample_dtype = DType::F32;
         let ProteinFeatures { s, x_mask, .. } = &features;
-
+        let sample_dtype = DType::F32;
         let s_true = &s.clone();
         let device = s_true.device();
         let (b, l) = s_true.dims2()?;
@@ -945,7 +952,7 @@ impl ProteinMPNN {
         // Todo: This is a hack. we should be passing in encoded chains.
         // Update chain_mask to include missing regions
         let chain_mask = Tensor::zeros_like(mask.unwrap())?.to_dtype(sample_dtype)?;
-        let chain_mask = mask.unwrap().mul(&chain_mask)?;
+        let chain_mask = mask.unwrap().mul(&chain_mask)?; // does the order count here?
 
         // encode ...
         let (h_v, h_e, e_idx) = self.encode(features)?;
@@ -966,8 +973,8 @@ impl ProteinMPNN {
                 let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1f32, 0f32)?
                     .to_dtype(sample_dtype)?
                     .contiguous()?;
-                let tril = Tensor::tril2(l, sample_dtype, device)?;
-                let tril = tril.unsqueeze(0)?;
+
+                let tril = Tensor::tril2(l, sample_dtype, device)?.unsqueeze(0)?;
                 let temp = tril
                     .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
                     .contiguous()?; // shape (b, i, q)
@@ -977,23 +984,28 @@ impl ProteinMPNN {
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
-                let mask_1d = mask.unwrap().reshape((b, l, 1, 1))?;
+
                 // Broadcast mask_1d to match mask_attend's shape
-                let mask_1d = mask_1d
+                let mask_1d = mask
+                    .unwrap()
+                    .reshape((b, l, 1, 1))?
                     .broadcast_as(mask_attend.shape())?
                     .to_dtype(sample_dtype)?;
+
                 let mask_bw = mask_1d.mul(&mask_attend)?;
                 let mask_fw = mask_1d.mul(&(mask_attend - 1.0)?.neg()?)?;
                 (mask_fw, mask_bw, e_idx, decoding_order)
             }
         };
-        let b_decoder = b_decoder;
+
         let s_true = s_true.repeat(&[b_decoder, 1])?;
         let h_v = h_v.repeat(&[b_decoder, 1, 1])?;
         let h_e = h_e.repeat(&[b_decoder, 1, 1, 1])?;
-        let mask = x_mask.as_ref().unwrap().repeat(&[b_decoder, 1])?;
+        let mask = mask.as_ref().unwrap().repeat(&[b_decoder, 1])?;
+
         let h_s = self.w_s.forward(&s_true)?; // embedding layer
         let h_es = cat_neighbors_nodes(&h_s, &h_e, &e_idx)?;
+
         // Build encoder embeddings
         let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
         let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
@@ -1001,18 +1013,24 @@ impl ProteinMPNN {
             .broadcast_as(h_exv_encoder.shape())?
             .to_dtype(h_exv_encoder.dtype())?
             .mul(&h_exv_encoder)?;
-        let mut h_v = h_v;
-        if !use_sequence {
-            for layer in &self.decoder_layers {
-                h_v = layer.forward(&h_v, &h_exv_encoder_fw, Some(&mask), None, None)?;
-            }
+
+        // Apply decoder layers
+        let h_v = if !use_sequence {
+            // Simple forward pass through decoder layers
+            self.decoder_layers.iter().fold(Ok(h_v), |acc, layer| {
+                layer.forward(&acc?, &h_exv_encoder_fw, Some(&mask), None, None)
+            })?
         } else {
-            for layer in &self.decoder_layers {
-                let h_esv = cat_neighbors_nodes(&h_v, &h_es, &e_idx)?;
-                let h_esv = mask_bw.mul(&h_esv)?.add(&h_exv_encoder_fw)?;
-                h_v = layer.forward(&h_v, &h_esv, Some(&mask), None, None)?;
-            }
-        }
+            // Forward pass with sequence-aware processing
+            self.decoder_layers.iter().fold(Ok(h_v), |acc, layer| {
+                let current_h_v = acc?;
+                let h_esv = cat_neighbors_nodes(&current_h_v, &h_es, &e_idx)?
+                    .mul(&mask_bw)?
+                    .add(&h_exv_encoder_fw)?;
+                layer.forward(&current_h_v, &h_esv, Some(&mask), None, None)
+            })?
+        };
+
         let logits = self.w_out.forward(&h_v)?;
         let log_probs = log_softmax(&logits, D::Minus1)?;
 
