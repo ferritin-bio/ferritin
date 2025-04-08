@@ -5,6 +5,11 @@ use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::encoding::one_hot;
 use candle_nn::{LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear};
 
+// After (at module level)
+const RBF_MIN_DISTANCE: f64 = 2.0;
+const RBF_MAX_DISTANCE: f64 = 22.0;
+const NUMERICAL_STABILITY_EPSILON: f64 = 1e-6;
+
 #[derive(Clone, Debug)]
 /// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L669
 pub struct ProteinFeaturesModel {
@@ -61,24 +66,28 @@ impl ProteinFeaturesModel {
     fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
         compute_nearest_neighbors(x, mask, self.top_k, eps as f32)
     }
-    /// 1. It takes a tensor `d` as input and creates a set of RBF features
-    /// 2. Sets up parameters:
-    ///    - `d_min` = 2.0 (minimum distance)
-    ///    - `d_max` = 22.0 (maximum distance)
-    ///    - `d_count` = number of RBF centers
-    /// 3. Creates evenly spaced centers (μ) between d_min and d_max
-    /// 4. Calculates the width (σ) of the Gaussian functions
-    /// 5. Applies the RBF formula: exp(-(x-μ)²/σ²)
+    /// Computes Radial Basis Function features for a given distance tensor
+    ///
+    /// # Arguments
+    /// * `d` - Tensor containing distances between points [batch, length, k_neighbors]
+    /// * `device` - Device to perform calculations on
+    ///
+    /// # Returns
+    /// * Tensor of RBF features [batch, length, k_neighbors, num_rbf]
     fn _rbf(&self, d: &Tensor, device: &Device) -> Result<Tensor> {
-        const D_MIN: f64 = 2.0;
-        const D_MAX: f64 = 22.0;
         // Create centers (μ)
-        let d_mu = linspace(D_MIN, D_MAX, self.num_rbf, &Device::Cpu)? // Use CPU device
-            .to_dtype(DType::F32)? // Convert to F32 on CPU
-            .reshape((1, 1, 1, self.num_rbf))?
-            .to_device(device)?; // Move to Metal device after conversion
+        let d_mu = linspace(
+            RBF_MIN_DISTANCE,
+            RBF_MAX_DISTANCE,
+            self.num_rbf,
+            &Device::Cpu,
+        )?
+        .to_dtype(DType::F32)?
+        .reshape((1, 1, 1, self.num_rbf))?
+        .to_device(device)?; // Move to Metal device after conversion
+
         // Calculate width (σ)
-        let d_sigma = (D_MAX - D_MIN) / self.num_rbf as f64;
+        let d_sigma = (RBF_MAX_DISTANCE - RBF_MIN_DISTANCE) / self.num_rbf as f64;
         let dims = d.dims();
         let d_expanded = d.unsqueeze(D::Minus1)?; // [N, N, C, 1]
         let d_mu_broadcast = d_mu.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
@@ -147,9 +156,8 @@ impl ProteinFeaturesModel {
         let x = input_features.get_coords();
         let mask = input_features.x_mask.as_ref().unwrap();
         let r_idx = input_features.get_residue_index();
-        // let chain_labels = input_features.chain_labels.as_ref();
-        // todo: fix
-        // let chain_labels = input_features.get_chain_labels();
+
+        // Temporary implementation until chain labels are supported
         let chain_labels = Tensor::zeros_like(r_idx)?;
         let x = if self.augment_eps > 0.0 {
             let noise = x.randn_like(0.0, self.augment_eps as f64)?;
