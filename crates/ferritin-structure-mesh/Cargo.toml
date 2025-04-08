@@ -7,10 +7,11 @@ license.workspace = true
 description.workspace = true
 
 [dependencies]
-bevy.workspace = true
+bevy = { workspace = true, optional = false, default-features = true }
 bon.workspace = true
 ferritin-core = { path = "../ferritin-core" }
 itertools.workspace = true
+re_viewer.workspace = true
 rerun.workspace = true
 
 [dev-dependencies]

@@ -23,7 +23,7 @@ edition = "2024"
 
 [workspace.dependencies]
 anyhow = "1.0"
-bevy = "0.16.0-rc.3"
+bevy = { version = "0.16.0-rc.3", default-features = false }
 bon = "3.5.1"
 candle-core = "=0.9.0-alpha.1"
 candle-metal-kernels = "=0.9.0-alpha.1"
@@ -37,8 +37,8 @@ itertools = "0.14.0"
 ndarray = "0.16"
 ort = "=2.0.0-rc.9"
 rand = "0.9.0"
-# rerun = "0.22.1"
-rerun = { git = "https://github.com/rerun-io/rerun.git" }
+re_viewer = "0.23.0-alpha.1"
+rerun = "0.23.0-alpha.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.140"
 strum = { version = "0.27", features = ["derive"] }

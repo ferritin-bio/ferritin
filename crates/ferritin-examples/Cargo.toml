@@ -18,7 +18,7 @@ molviewspec = ["ferritin/molviewspec"]
 [dependencies]
 ferritin = { path = "../ferritin", default-features = false }
 anyhow.workspace = true
-bevy.workspace = true
+bevy = { workspace = true, default-features = true }
 candle-core.workspace = true
 candle-metal-kernels = { workspace = true, optional = true }
 candle-nn.workspace = true
