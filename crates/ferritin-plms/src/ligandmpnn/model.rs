@@ -65,19 +65,17 @@ pub struct ScoreOutput {
     pub(crate) logits: Tensor,
     pub(crate) decoding_order: Tensor,
 }
+///  Score dims are [Batch, seqlength]
 impl ScoreOutput {
-    // S dims are [Batch, seqlength]
     pub fn get_sequences(&self) -> Result<Vec<String>> {
         let (b, l) = self.s.dims2()?;
         let mut sequences = Vec::with_capacity(b);
         for batch_idx in 0..b {
+            let batch = self.s.get(batch_idx)?;
             let mut sequence = String::with_capacity(l);
             for pos in 0..l {
-                let aa_idx = self.s.get(batch_idx)?.get(pos)?.to_vec0::<u32>()?;
-                // println!("Position {}, Raw index: {}", pos, aa_idx);
-                let aa = int_to_aa1(aa_idx);
-                // println!("Converted to: {}", aa);
-                sequence.push(aa);
+                let aa_idx = batch.get(pos)?.to_vec0::<u32>()?;
+                sequence.push(int_to_aa1(aa_idx));
             }
             sequences.push(sequence);
         }
@@ -123,9 +121,7 @@ impl PositionWiseFeedForward {
 
 impl Module for PositionWiseFeedForward {
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let x = self.w1.forward(x)?;
-        let x = x.gelu()?;
-        self.w2.forward(&x)
+        self.w1.forward(x)?.gelu().and_then(|x| self.w2.forward(&x))
     }
 }
 
@@ -926,9 +922,6 @@ impl ProteinMPNN {
         }
     }
 
-    fn single_aa_score() {
-        todo!()
-    }
     pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
         let sample_dtype = DType::F32;
         let ProteinFeatures { s, x_mask, .. } = &features;
