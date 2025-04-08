@@ -152,22 +152,25 @@ impl EncLayer {
         let augment_eps = config.augment_eps as f64;
         let num_in = (config.hidden_dim * 2) as usize;
         let dropout_ratio = config.dropout_ratio;
-        let norm1 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm1"))?;
-        let norm2 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm2"))?;
-        let norm3 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm3"))?;
 
-        let w1 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("W1"))?;
-        let w2 = linear::linear(num_hidden, num_hidden, vb.pp("W2"))?;
-        let w3 = linear::linear(num_hidden, num_hidden, vb.pp("W3"))?;
-        let w11 = linear::linear(num_hidden + num_in, num_hidden, vb.pp("W11"))?;
-        let w12 = linear::linear(num_hidden, num_hidden, vb.pp("W12"))?;
-        let w13 = linear::linear(num_hidden, num_hidden, vb.pp("W13"))?;
+        // Create layer norms
+        let norm1 = layer_norm(num_hidden, augment_eps, vb.pp("norm1"))?;
+        let norm2 = layer_norm(num_hidden, augment_eps, vb.pp("norm2"))?;
+        let norm3 = layer_norm(num_hidden, augment_eps, vb.pp("norm3"))?;
 
+        // Create linear layers
+        let w1 = linear(num_hidden + num_in, num_hidden, vb.pp("W1"))?;
+        let w2 = linear(num_hidden, num_hidden, vb.pp("W2"))?;
+        let w3 = linear(num_hidden, num_hidden, vb.pp("W3"))?;
+        let w11 = linear(num_hidden + num_in, num_hidden, vb.pp("W11"))?;
+        let w12 = linear(num_hidden, num_hidden, vb.pp("W12"))?;
+        let w13 = linear(num_hidden, num_hidden, vb.pp("W13"))?;
+
+        // Create dropouts with same ratio
         let dropout1 = Dropout::new(dropout_ratio);
         let dropout2 = Dropout::new(dropout_ratio);
         let dropout3 = Dropout::new(dropout_ratio);
 
-        // note in the pytorch code they add the GELU activation here.
         let dense = PositionWiseFeedForward::new(vb.pp("dense"), num_hidden, num_hidden * 4)?;
 
         Ok(Self {
@@ -209,24 +212,25 @@ impl EncLayer {
             .gelu()?
             .apply(&self.w3)?;
 
-        let h_message = if let Some(mask) = mask_attend {
-            mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
-        } else {
-            h_message
-        };
+        let h_message = mask_attend
+            .map(|mask| mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message))
+            .transpose()?
+            .unwrap_or(h_message);
+
         // Safe division with scale
-        let sum = h_message.sum(D::Minus2)?;
         let scale = if self.scale == 0.0 { 1.0 } else { self.scale };
-        let dh = (sum / scale)?;
+        let dh = (h_message.sum(D::Minus2)? / scale)?;
+
         let h_v = apply_dropout_and_norm(&h_v, &dh, &self.dropout1, &self.norm1, training)?;
         let dense_output = self.dense.forward(&h_v)?;
         let h_v =
             apply_dropout_and_norm(&h_v, &dense_output, &self.dropout2, &self.norm2, training)?;
-        let h_v = if let Some(mask) = mask_v {
-            mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_v)?
-        } else {
-            h_v
-        };
+
+        // Apply mask if provided
+        let h_v = mask_v
+            .map(|mask| mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_v))
+            .transpose()?
+            .unwrap_or(h_v);
 
         let h_ev = concat_node_tensors(&h_v, h_e, e_idx)?;
         let h_message = self
@@ -236,6 +240,7 @@ impl EncLayer {
             .apply(&self.w12)?
             .gelu()?
             .apply(&self.w13)?;
+
         let h_e = apply_dropout_and_norm(h_e, &h_message, &self.dropout3, &self.norm3, training)?;
         Ok((h_v, h_e))
     }
