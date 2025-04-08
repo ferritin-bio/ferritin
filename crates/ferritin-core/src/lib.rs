@@ -21,4 +21,4 @@ mod views;
 pub use self::atomcollection::AtomCollection;
 pub use self::bonds::{Bond, BondOrder};
 pub use self::featurize::StructureFeatures;
-pub use self::io::load_structure;
+pub use self::io::{load_structure, load_structure_from_string};
