@@ -5,6 +5,7 @@
 
 use crate::info::elements::Element;
 use crate::{AtomCollection, Bond, BondOrder};
+use anyhow::Result;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
@@ -53,14 +54,20 @@ impl PDBFile {
     /// Create a new [`PDBFile`].
     /// The lines of text are given to `lines`.
     /// An empty `Vec` represents an empty PDB file.
-    pub fn new(lines: Vec<String>) -> Self {
+    pub fn new(lines: Vec<String>) -> Result<PDBFile> {
         let mut pdb_file = PDBFile {
             lines,
             model_start_i: Vec::new(),
             atom_line_i: Vec::new(),
         };
         pdb_file.index_models_and_atoms();
-        pdb_file
+        Ok(pdb_file)
+    }
+
+    /// Create a new [`PDBFile`] from the full text of the file.
+    pub fn new_from_string(content: String) -> Result<PDBFile> {
+        let lines = content.lines().map(|x| x.to_string()).collect();
+        PDBFile::new(lines)
     }
 
     /// Read a [`PDBFile`] from a file.

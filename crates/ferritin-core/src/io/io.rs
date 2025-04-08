@@ -26,6 +26,25 @@ pub fn load_structure<P: AsRef<Path>>(file_path: P) -> Result<AtomCollection> {
     Ok(ac)
 }
 
+pub fn load_structure_from_string(content: &str, filetype: &str) -> Result<AtomCollection> {
+    let filetype = filetype.to_lowercase();
+
+    let mut ac = match filetype.as_str() {
+        "pdb" => pdb::PDBFile::new_from_string(content.to_string())
+            .context("Failed to read PDB from string")?
+            .parse_to_atom_collection()
+            .context("Failed to parse PDB string to atom collection")?,
+        "cif" => cif::CIFFile::new(content.to_string())
+            .context("Failed to read CIF from string")?
+            .parse_to_atom_collection()
+            .context("Failed to parse CIF string to atom collection")?,
+        _ => return Err(anyhow::anyhow!("Unsupported file type: {}", filetype)),
+    };
+
+    ac.connect_via_residue_names();
+    Ok(ac)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

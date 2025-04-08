@@ -1,5 +1,10 @@
-// Lifted and modified from:  https://github.com/rerun-io/revy/blob/main/src/conversions.rs
-//
+//! Conversions between Bevy and Rerun types
+//!
+//! This module provides conversions from Bevy types to Rerun types.
+//! It is only enabled when both the "bevy" and "rerun" features are enabled.
+//!
+//! Lifted and modified from: https://github.com/rerun-io/revy/blob/main/src/conversions.rs
+
 use bevy::{math::Vec3A, prelude::*, render::mesh::VertexAttributeValues};
 use itertools::Itertools;
 
