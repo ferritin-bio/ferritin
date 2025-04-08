@@ -304,12 +304,14 @@ impl DecLayer {
     ) -> Result<Tensor> {
         let training_bool = training.unwrap_or(false);
 
+        // Expand node features to match edge dimensions
         let expand_shape = [
             h_e.dims()[0], // batch (1)
             h_e.dims()[1], // sequence length (93)
             h_e.dims()[2], // number of neighbors (24)
             h_v.dims()[2], // keep original hidden dim (128)
         ];
+
         let h_v_expand = h_v.unsqueeze(D::Minus2)?.expand(&expand_shape)?;
         let h_ev = Tensor::cat(&[&h_v_expand, h_e], D::Minus1)?.contiguous()?;
 
@@ -322,21 +324,24 @@ impl DecLayer {
             .apply(&self.w3)?;
 
         let h_message = self.dropout1.forward(&h_message, training_bool)?;
-        let h_message = if let Some(mask) = mask_attend {
-            mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message)?
-        } else {
-            h_message
-        };
+
+        let h_message = mask_attend
+            .map(|mask| mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message))
+            .transpose()?
+            .unwrap_or(h_message);
+
         let dh = (h_message.sum(D::Minus2)? / self.scale)?;
         let h_v = self.norm1.forward(&(h_v + dh)?)?;
         let dh = self.dense.forward(&h_v)?;
         let dh_dropout = self.dropout2.forward(&dh, training_bool)?;
         let h_v = self.norm2.forward(&(h_v + dh_dropout)?)?;
-        let h_v = if let Some(mask) = mask_v {
-            mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_v)?
-        } else {
-            h_v
-        };
+
+        // Apply optional node mask
+        let h_v = mask_v
+            .map(|mask| mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_v))
+            .transpose()?
+            .unwrap_or(h_v);
+
         Ok(h_v)
     }
 }
