@@ -75,12 +75,13 @@ pub fn compute_nearest_neighbors(
     let (_batch_size, seq_len, _) = coords.dims3()?;
     // broadcast_matmul handles broadcasting automatically
     // [2, 3, 1] × [2, 1, 3] -> [2, 3, 3]
+
     let mask_2d = mask
         .unsqueeze(2)?
         .broadcast_matmul(&mask.unsqueeze(1)?)?
         .to_dtype(DType::F32)?;
-
     // Compute pairwise distances with broadcasting
+
     let distances = (coords
         .unsqueeze(2)?
         .broadcast_sub(&coords.unsqueeze(1)?)?
@@ -98,7 +99,6 @@ pub fn compute_nearest_neighbors(
     let mask_term = ((&mask_2d.to_dtype(DType::F32)? * -1.0)? + 1.0)?;
     let d_adjust = (&masked_distances + mask_term.broadcast_mul(&d_max)?)?;
     let d_adjust = d_adjust.to_dtype(DType::F32)?;
-
     Ok(topk_last_dim(&d_adjust, k.min(seq_len))?)
 }
 
