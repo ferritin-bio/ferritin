@@ -439,6 +439,16 @@ impl ProteinMPNN {
                 };
                 println!("Beginning the Encoding...");
 
+                println!("h_v dtype: {:?}", h_v.dtype());
+                println!("h_e dtype: {:?}", h_e.dtype());
+                println!("e_idx dtype: {:?}", e_idx.dtype());
+                println!("mask dtype: {:?}", mask.dtype());
+                println!("mask_attend dtype: {:?}", mask_attend.dtype());
+
+                // Convert masks to F32 before passing them to the encoder layers
+                let mask_f32 = mask.to_dtype(DType::F32)?;
+                let mask_attend_f32 = mask_attend.to_dtype(DType::F32)?;
+
                 // Process through all encoder layers
                 let (h_v, h_e) =
                     self.encoder_layers
@@ -449,8 +459,10 @@ impl ProteinMPNN {
                                 &h_v,
                                 &h_e,
                                 &e_idx,
-                                Some(mask),
-                                Some(&mask_attend),
+                                // Some(mask),
+                                // Some(&mask_attend),
+                                Some(&mask_f32),        // Use F32 mask
+                                Some(&mask_attend_f32), // Use F32 mask_attend
                                 Some(false),
                             )
                         })?;
