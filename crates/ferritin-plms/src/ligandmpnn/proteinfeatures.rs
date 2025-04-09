@@ -90,8 +90,25 @@ impl LMPNNFeatures for AtomCollection {
             (4,),
             &device,
         )?;
+        println!(
+            "Initial shapes - x: {:?}, mask: {:?}, r_idx: {:?}",
+            x_37.dims(),
+            x_37_m.dims(),
+            r_idx.dims()
+        );
 
-        let x = x_37.index_select(&indices, 1)?;
+        let x = x_37.index_select(&indices, 2)?;
+        println!("After index_select - x shape: {:?}", x.dims());
+
+        // N/CA/C/O
+        let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
+        println!("n shape: {:?}", n.dims());
+        let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
+        println!("ca shape: {:?}", ca.dims());
+        let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
+        println!("c shape: {:?}", c.dims());
+        let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
+        println!("o shape: {:?}", o.dims());
 
         Ok(ProteinFeatures {
             s,

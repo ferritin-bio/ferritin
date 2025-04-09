@@ -153,9 +153,17 @@ impl ProteinFeaturesModel {
         input_features: &ProteinFeatures,
         device: &Device,
     ) -> Result<(Tensor, Tensor)> {
-        let x = input_features.get_coords();
-        let mask = input_features.x_mask.as_ref().unwrap();
-        let r_idx = input_features.get_residue_index();
+        println!("Starting forward pass");
+        let x = input_features.get_coords(); // [1, 4, 37, 3]
+        let mask = input_features.x_mask.as_ref().unwrap(); // [1, 154]
+        let r_idx = input_features.get_residue_index(); // [154]
+
+        println!(
+            "Initial shapes - x: {:?}, mask: {:?}, r_idx: {:?}",
+            x.dims(),
+            mask.dims(),
+            r_idx.dims()
+        );
 
         // Temporary implementation until chain labels are supported
         let chain_labels = Tensor::zeros_like(r_idx)?;
@@ -183,11 +191,21 @@ impl ProteinFeaturesModel {
 
         // N/CA/C/O
         let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
+        println!("n shape: {:?}", n.dims());
         let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
+        println!("ca shape: {:?}", ca.dims());
         let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
+        println!("c shape: {:?}", c.dims());
         let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
+        println!("o shape: {:?}", o.dims());
 
+        println!("Before _dist call");
         let (d_neighbors, e_idx) = self._dist(&ca, mask, self.augment_eps as f64)?;
+        println!(
+            "After _dist call - d_neighbors: {:?}, e_idx: {:?}",
+            d_neighbors.dims(),
+            e_idx.dims()
+        );
 
         let mut rbf_all = Vec::new();
         rbf_all.push(self._rbf(&d_neighbors, device)?);
@@ -217,6 +235,8 @@ impl ProteinFeaturesModel {
         rbf_all.push(self._get_rbf(&c, &o, &e_idx, device)?);
 
         let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
+        println!("rbf_all shape: {:?}", rbf_all.dims());
+
         let dims = r_idx.dims();
         let target_shape = (dims[0], dims[1], dims[1]);
         let r_idx_expanded1 = r_idx
@@ -233,6 +253,10 @@ impl ProteinFeaturesModel {
         let offset = offset.squeeze(D::Minus1)?;
         let dims = chain_labels.dims();
         let target_shape = (dims[0], dims[1], dims[1]);
+        println!("target_shape: {:?}", target_shape);
+
+        //
+
         let d_chains = (&chain_labels.unsqueeze(2)?.broadcast_as(target_shape)?
             - &chain_labels.unsqueeze(1)?.broadcast_as(target_shape)?)?
             .eq(0.0)?

@@ -18,7 +18,9 @@ fn main() -> Result<()> {
     let pmpnn = ProteinMPNN::load(vb, &pconf)?;
 
     let features = ac.featurize(&candle_core::Device::Cpu)?;
+    println!("Features");
     let encoded = pmpnn.encode(&features)?;
+    println!("Encoded");
     // let model = LigandMPNN::new()?;
     // let logits = model.run_model(ac, 10, 0.1)?;
     // println!("{:?}", logits);

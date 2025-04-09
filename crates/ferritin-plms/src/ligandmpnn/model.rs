@@ -394,6 +394,7 @@ impl ProteinMPNN {
         })
     }
     pub fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
+        println!("Encode01");
         let s_true = features.get_sequence();
         let base_dtype = DType::F32;
         let mask = match features.get_sequence_mask() {
@@ -402,15 +403,25 @@ impl ProteinMPNN {
         };
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
-                let (e, e_idx) = self.features.forward(features, &self.device)?;
+                println!("Encode02");
 
+                let (e, e_idx) = self.features.forward(features, &self.device)?;
+                println!(
+                    "Edge features dimensions: e: {:?}, e_idx: {:?}",
+                    e.dims(),
+                    e_idx.dims()
+                );
+
+                println!("Encode03");
                 let h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     base_dtype,
                     &self.device,
                 )?;
+                println!("Encode04");
                 let h_e = self.w_e.forward(&e)?;
 
+                println!("Encode05");
                 let mask_attend = if let Some(seq_mask) = features.get_sequence_mask() {
                     let mask_expanded = seq_mask.unsqueeze(D::Minus1)?; // [B, L, 1]
                     let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?.squeeze(D::Minus1)?;
