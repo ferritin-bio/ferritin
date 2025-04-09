@@ -10,7 +10,8 @@
 //! - Evolutionary features from MSA profiles
 
 use super::utilities::{AAAtom, aa1to_int, aa3to1};
-use candle_core::{Device, Result, Tensor};
+use crate::ligandmpnn::utilities::calculate_cb;
+use candle_core::{DType, Device, Result, Tensor};
 use ferritin_core::AtomCollection;
 use ferritin_core::info::elements::Element;
 use itertools::MultiUnzip;
@@ -28,7 +29,6 @@ pub trait LMPNNFeatures {
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures>; // need more control over this featurization process
     fn get_res_index(&self) -> Vec<u32>;
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
-
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
     fn to_pdb(&self); //
@@ -49,47 +49,63 @@ impl LMPNNFeatures for AtomCollection {
         Tensor::from_iter(s, device)?.reshape((1, n))
     }
     // equivalent to protien MPNN's parse_PDB
-    fn featurize(&self, _device: &Device) -> Result<ProteinFeatures> {
-        todo!();
-        // let x_37 = self.to_numeric_atom37(device)?;
-        // let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
-        // let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
+    fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
+        let x_37 = self.to_numeric_atom37(device)?;
+        let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
+        let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
 
-        // // get CB locations...
-        // // although we have these already for our full set...
-        // let cb = calculate_cb(&x_37);
+        // get CB locations...
+        let cb = calculate_cb(&x_37);
 
-        // // chain_labels = np.array(CA_atoms.getChindices(), dtype=np.int32)
-        // let chain_labels = self.get_resids(); //  <-- need to double-check shape. I think this is all-atom
+        // chain_labels = np.array(CA_atoms.getChindices(), dtype=np.int32)
+        let chain_labels = self.get_resids(); //  <-- need to double-check shape. I think this is all-atom
 
-        // // R_idx = np.array(CA_resnums, dtype=np.int32)
-        // // let _r_idx = self.get_resids(); // todo()!
+        // Get residue IDs for r_idx
+        let residue_ids = self.get_res_index();
+        let r_idx = Tensor::from_iter(residue_ids, device)?;
 
-        // // amino acid names as int....
-        // let s = self.encode_amino_acids(device)?;
+        // Extract chain information
+        let chain_letters: Vec<String> = self
+            .iter_residues_aminoacid()
+            .map(|res| res.chain_id().to_string())
+            .collect();
 
-        // // coordinates of the backbone atoms
-        // let indices = Tensor::from_slice(
-        //     &[0i64, 1i64, 2i64, 4i64], // index of N/CA/C/O as integers
-        //     (4,),
-        //     &device,
-        // )?;
+        // Create a list of unique chains
+        let chain_list: Vec<String> = chain_letters
+            .clone()
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
 
-        // let x = x_37.index_select(&indices, 1)?;
+        // Numeric chain labels (optional)
+        let chain_labels: Option<Vec<f64>> = None; // Could populate if needed
 
-        // Ok(ProteinFeatures {
-        //     s,
-        //     x,
-        //     x_mask: Some(x_37_m),
-        //     y,
-        //     y_t,
-        //     y_m: Some(y_m),
-        //     r_idx: None,
-        //     chain_labels: None,
-        //     chain_letters: None,
-        //     mask_c: None,
-        //     chain_list: None,
-        // })
+        // amino acid names as int....
+        let s = self.encode_amino_acids(device)?;
+
+        // coordinates of the backbone atoms
+        let indices = Tensor::from_slice(
+            &[0i64, 1i64, 2i64, 4i64], // index of N/CA/C/O as integers
+            (4,),
+            &device,
+        )?;
+
+        let x = x_37.index_select(&indices, 1)?;
+
+        Ok(ProteinFeatures {
+            s,
+            x,
+            x_mask: Some(x_37_m),
+            y,
+            y_t,
+            y_m: Some(y_m),
+            r_idx,
+            chain_labels,
+            chain_letters,
+            mask_c: None,
+            chain_list,
+        })
     }
     fn get_res_index(&self) -> Vec<u32> {
         self.iter_residues_aminoacid()
