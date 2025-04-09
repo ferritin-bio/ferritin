@@ -51,7 +51,7 @@ impl LMPNNFeatures for AtomCollection {
     // equivalent to protien MPNN's parse_PDB
     fn featurize(&self, device: &Device) -> Result<ProteinFeatures> {
         let x_37 = self.to_numeric_atom37(device)?;
-        let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
+        let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F32, device)?;
         let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
         let cb = calculate_cb(&x_37);
         let chain_labels = self.get_resids(); //  <-- need to double-check shape. I think this is all-atom

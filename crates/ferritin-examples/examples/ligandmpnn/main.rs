@@ -8,17 +8,19 @@ use ferritin_test_data::TestFile;
 
 fn main() -> Result<()> {
     println!("Loading the Model and Tokenizer.......");
+
+    let deviceA = device(false)?;
     let (protfile, _handle) = TestFile::protein_01().create_temp()?;
     let ac = load_structure(protfile)?;
 
     let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
     let pth = PthTensors::new(mpnn_file, Some("model_state_dict"))?;
-    let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, Device::Cpu);
+    let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, deviceA.clone());
     let pconf = ProteinMPNNConfig::proteinmpnn();
     let pmpnn = ProteinMPNN::load(vb, &pconf)?;
 
     // let features = ac.featurize(&candle_core::Device::Cpu)?;
-    let features = ac.featurize(&device(false)?)?;
+    let features = ac.featurize(&deviceA.clone())?;
     println!("Features");
     let encoded = pmpnn.encode(&features)?;
     println!("Encoded");

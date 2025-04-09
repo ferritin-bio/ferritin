@@ -77,27 +77,69 @@ impl ProteinFeaturesModel {
     /// # Returns
     /// * Tensor of RBF features [batch, length, k_neighbors, num_rbf]
     fn _rbf(&self, d: &Tensor, device: &Device) -> Result<Tensor> {
+        println!("In RBF");
         // Create centers (μ)
-        let d_mu = linspace_f32(
-            RBF_MIN_DISTANCE,
-            RBF_MAX_DISTANCE,
-            self.num_rbf,
-            &Device::Cpu,
-        )?
-        .reshape((1, 1, 1, self.num_rbf))?
-        .to_device(device)?; // Move to Metal device after conversion
+        println!("Input device for RBF: {:?}", device);
+        let d_mu = linspace_f32(RBF_MIN_DISTANCE, RBF_MAX_DISTANCE, self.num_rbf, device)?
+            .reshape((1, 1, 1, self.num_rbf))?
+            .to_device(device)?; // Move to Metal device after conversion
 
+        println!(
+            "d_mu dtype: {:?}, device: {:?}",
+            d_mu.dtype(),
+            d_mu.device()
+        );
+
+        println!("In RBF 01 ");
         // Calculate width (σ)
         let d_sigma = (RBF_MAX_DISTANCE - RBF_MIN_DISTANCE) / self.num_rbf as f32;
+        println!("In RBF 02");
         let dims = d.dims();
         let d_expanded = d.unsqueeze(D::Minus1)?; // [N, N, C, 1]
+        println!("In RBF 03");
+        println!(
+            "d_expanded dtype: {:?}, device: {:?}",
+            d_expanded.dtype(),
+            d_expanded.device()
+        );
+
         let d_mu_broadcast = d_mu.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
+        println!("In RBF 04");
+        println!(
+            "d_mu_broadcast dtype: {:?}, device: {:?}",
+            d_mu_broadcast.dtype(),
+            d_mu_broadcast.device()
+        );
+
         let d_expanded_broadcast =
             d_expanded.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
+        println!("In RBF 05");
+        println!(
+            "d_expanded_broadcast dtype: {:?}, device: {:?}",
+            d_expanded_broadcast.dtype(),
+            d_expanded_broadcast.device()
+        );
+
         let d_sigma_tensor =
             Tensor::new(&[d_sigma], device)?.broadcast_as(d_expanded_broadcast.shape())?;
+        println!("In RBF 06");
+        println!(
+            "d_sigma_tensor dtype: {:?}, device: {:?}",
+            d_sigma_tensor.dtype(),
+            d_sigma_tensor.device()
+        );
+
         let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma_tensor)?;
+        println!("In RBF 06");
+        println!(
+            "diff dtype: {:?}, device: {:?}",
+            diff.dtype(),
+            diff.device()
+        );
+
         let rbf = diff.powf(2.0)?.neg()?.exp()?;
+        println!("rbf dtype: {:?}, device: {:?}", rbf.dtype(), rbf.device());
+
         Ok(rbf)
     }
 
@@ -205,7 +247,9 @@ impl ProteinFeaturesModel {
         );
 
         let mut rbf_all = Vec::new();
+        println!("Call 02");
         rbf_all.push(self._rbf(&d_neighbors, device)?);
+        println!("Call 03");
         rbf_all.push(self._get_rbf(&n, &n, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&c, &c, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&o, &o, &e_idx, device)?);
@@ -231,6 +275,7 @@ impl ProteinFeaturesModel {
         rbf_all.push(self._get_rbf(&o, &cb, &e_idx, device)?);
         rbf_all.push(self._get_rbf(&c, &o, &e_idx, device)?);
 
+        println!("Call 01");
         let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
         println!("rbf_all shape: {:?}", rbf_all.dims());
         println!("r_idx shape: {:?}", r_idx.dims());
