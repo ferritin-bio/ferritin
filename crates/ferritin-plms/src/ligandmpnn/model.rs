@@ -394,7 +394,6 @@ impl ProteinMPNN {
         })
     }
     pub fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
-        println!("Encode01");
         let s_true = features.get_sequence();
         let base_dtype = DType::F32;
         let mask = match features.get_sequence_mask() {
@@ -403,25 +402,13 @@ impl ProteinMPNN {
         };
         match self.config.model_type {
             ModelTypes::ProteinMPNN => {
-                println!("Encode02");
-
                 let (e, e_idx) = self.features.forward(features, &self.device)?;
-                println!(
-                    "Edge features dimensions: e: {:?}, e_idx: {:?}",
-                    e.dims(),
-                    e_idx.dims()
-                );
-
-                println!("Encode03");
                 let h_v = Tensor::zeros(
                     (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
                     base_dtype,
                     &self.device,
                 )?;
-                println!("Encode04");
                 let h_e = self.w_e.forward(&e)?;
-
-                println!("Encode05");
                 let mask_attend = if let Some(seq_mask) = features.get_sequence_mask() {
                     let mask_expanded = seq_mask.unsqueeze(D::Minus1)?; // [B, L, 1]
                     let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?.squeeze(D::Minus1)?;
@@ -438,16 +425,9 @@ impl ProteinMPNN {
                     Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, &self.device)?
                 };
                 println!("Beginning the Encoding...");
-
-                println!("h_v dtype: {:?}", h_v.dtype());
-                println!("h_e dtype: {:?}", h_e.dtype());
-                println!("e_idx dtype: {:?}", e_idx.dtype());
-                println!("mask dtype: {:?}", mask.dtype());
-                println!("mask_attend dtype: {:?}", mask_attend.dtype());
-
-                // Convert masks to F32 before passing them to the encoder layers
-                let mask_f32 = mask.to_dtype(DType::F32)?;
-                let mask_attend_f32 = mask_attend.to_dtype(DType::F32)?;
+                // todo: dtype handling not ideal
+                let mask_f32 = mask.to_dtype(base_dtype)?;
+                let mask_attend_f32 = mask_attend.to_dtype(base_dtype)?;
 
                 // Process through all encoder layers
                 let (h_v, h_e) =
@@ -459,10 +439,8 @@ impl ProteinMPNN {
                                 &h_v,
                                 &h_e,
                                 &e_idx,
-                                // Some(mask),
-                                // Some(&mask_attend),
-                                Some(&mask_f32),        // Use F32 mask
-                                Some(&mask_attend_f32), // Use F32 mask_attend
+                                Some(&mask_f32),
+                                Some(&mask_attend_f32),
                                 Some(false),
                             )
                         })?;
