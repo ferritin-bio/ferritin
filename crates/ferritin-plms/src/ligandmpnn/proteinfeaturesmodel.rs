@@ -1,9 +1,16 @@
 use super::configs::ProteinMPNNConfig;
 use super::proteinfeatures::ProteinFeatures;
-use super::utilities::{compute_nearest_neighbors, cross_product, gather_edges, linspace};
+use super::utilities::{
+    compute_nearest_neighbors, cross_product, gather_edges, linspace, linspace_f32,
+};
 use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::encoding::one_hot;
 use candle_nn::{LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear};
+
+// After (at module level)
+const RBF_MIN_DISTANCE: f32 = 2.0;
+const RBF_MAX_DISTANCE: f32 = 22.0;
+const NUMERICAL_STABILITY_EPSILON: f32 = 1e-6;
 
 #[derive(Clone, Debug)]
 /// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L669
@@ -58,34 +65,37 @@ impl ProteinFeaturesModel {
 
     /// This function calculates the nearest Ca coordinates and returns the distances and indices.
     // Todo: potential refactor
-    fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
-        compute_nearest_neighbors(x, mask, self.top_k, eps as f32)
+    fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f32) -> Result<(Tensor, Tensor)> {
+        compute_nearest_neighbors(x, mask, self.top_k, eps)
     }
-    /// 1. It takes a tensor `d` as input and creates a set of RBF features
-    /// 2. Sets up parameters:
-    ///    - `d_min` = 2.0 (minimum distance)
-    ///    - `d_max` = 22.0 (maximum distance)
-    ///    - `d_count` = number of RBF centers
-    /// 3. Creates evenly spaced centers (μ) between d_min and d_max
-    /// 4. Calculates the width (σ) of the Gaussian functions
-    /// 5. Applies the RBF formula: exp(-(x-μ)²/σ²)
+    /// Computes Radial Basis Function features for a given distance tensor
+    ///
+    /// # Arguments
+    /// * `d` - Tensor containing distances between points [batch, length, k_neighbors]
+    /// * `device` - Device to perform calculations on
+    ///
+    /// # Returns
+    /// * Tensor of RBF features [batch, length, k_neighbors, num_rbf]
     fn _rbf(&self, d: &Tensor, device: &Device) -> Result<Tensor> {
-        const D_MIN: f64 = 2.0;
-        const D_MAX: f64 = 22.0;
         // Create centers (μ)
-        let d_mu = linspace(D_MIN, D_MAX, self.num_rbf, &Device::Cpu)? // Use CPU device
-            .to_dtype(DType::F32)? // Convert to F32 on CPU
-            .reshape((1, 1, 1, self.num_rbf))?
-            .to_device(device)?; // Move to Metal device after conversion
+        let d_mu = linspace_f32(
+            RBF_MIN_DISTANCE,
+            RBF_MAX_DISTANCE,
+            self.num_rbf,
+            &Device::Cpu,
+        )?
+        .reshape((1, 1, 1, self.num_rbf))?
+        .to_device(device)?; // Move to Metal device after conversion
+
         // Calculate width (σ)
-        let d_sigma = (D_MAX - D_MIN) / self.num_rbf as f64;
+        let d_sigma = (RBF_MAX_DISTANCE - RBF_MIN_DISTANCE) / self.num_rbf as f32;
         let dims = d.dims();
         let d_expanded = d.unsqueeze(D::Minus1)?; // [N, N, C, 1]
         let d_mu_broadcast = d_mu.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
         let d_expanded_broadcast =
             d_expanded.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
         let d_sigma_tensor =
-            Tensor::new(&[d_sigma as f32], device)?.broadcast_as(d_expanded_broadcast.shape())?;
+            Tensor::new(&[d_sigma], device)?.broadcast_as(d_expanded_broadcast.shape())?;
         let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma_tensor)?;
         let rbf = diff.powf(2.0)?.neg()?.exp()?;
         Ok(rbf)
@@ -144,12 +154,19 @@ impl ProteinFeaturesModel {
         input_features: &ProteinFeatures,
         device: &Device,
     ) -> Result<(Tensor, Tensor)> {
-        let x = input_features.get_coords();
-        let mask = input_features.x_mask.as_ref().unwrap();
-        let r_idx = input_features.get_residue_index();
-        // let chain_labels = input_features.chain_labels.as_ref();
-        // todo: fix
-        // let chain_labels = input_features.get_chain_labels();
+        println!("Starting forward pass");
+        let x = input_features.get_coords(); // [1, 4, 37, 3]
+        let mask = input_features.x_mask.as_ref().unwrap(); // [1, 154]
+        let r_idx = input_features.get_residue_index(); // [154]
+
+        println!(
+            "Initial shapes - x: {:?}, mask: {:?}, r_idx: {:?}",
+            x.dims(),
+            mask.dims(),
+            r_idx.dims()
+        );
+
+        // Temporary implementation until chain labels are supported
         let chain_labels = Tensor::zeros_like(r_idx)?;
         let x = if self.augment_eps > 0.0 {
             let noise = x.randn_like(0.0, self.augment_eps as f64)?;
@@ -179,7 +196,13 @@ impl ProteinFeaturesModel {
         let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
         let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
 
-        let (d_neighbors, e_idx) = self._dist(&ca, mask, self.augment_eps as f64)?;
+        println!("Before _dist call");
+        let (d_neighbors, e_idx) = self._dist(&ca, mask, self.augment_eps)?;
+        println!(
+            "After _dist call - d_neighbors: {:?}, e_idx: {:?}",
+            d_neighbors.dims(),
+            e_idx.dims()
+        );
 
         let mut rbf_all = Vec::new();
         rbf_all.push(self._rbf(&d_neighbors, device)?);
@@ -209,7 +232,11 @@ impl ProteinFeaturesModel {
         rbf_all.push(self._get_rbf(&c, &o, &e_idx, device)?);
 
         let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
+        println!("rbf_all shape: {:?}", rbf_all.dims());
+        println!("r_idx shape: {:?}", r_idx.dims());
         let dims = r_idx.dims();
+
+        // index out of bounds: the len is 1 but the index is 1
         let target_shape = (dims[0], dims[1], dims[1]);
         let r_idx_expanded1 = r_idx
             .unsqueeze(2)?
@@ -223,8 +250,13 @@ impl ProteinFeaturesModel {
         let offset = (r_idx_expanded1 - r_idx_expanded2)?;
         let offset = gather_edges(&offset.unsqueeze(D::Minus1)?, &e_idx)?;
         let offset = offset.squeeze(D::Minus1)?;
+
         let dims = chain_labels.dims();
         let target_shape = (dims[0], dims[1], dims[1]);
+        println!("target_shape: {:?}", target_shape);
+
+        //
+
         let d_chains = (&chain_labels.unsqueeze(2)?.broadcast_as(target_shape)?
             - &chain_labels.unsqueeze(1)?.broadcast_as(target_shape)?)?
             .eq(0.0)?
