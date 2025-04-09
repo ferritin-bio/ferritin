@@ -53,14 +53,8 @@ impl LMPNNFeatures for AtomCollection {
         let x_37 = self.to_numeric_atom37(device)?;
         let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F64, device)?;
         let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
-
-        // get CB locations...
         let cb = calculate_cb(&x_37);
-
-        // chain_labels = np.array(CA_atoms.getChindices(), dtype=np.int32)
         let chain_labels = self.get_resids(); //  <-- need to double-check shape. I think this is all-atom
-
-        // Get residue IDs for r_idx
         let residue_ids = self.get_res_index();
         let residue_length = residue_ids.len();
         let r_idx = Tensor::from_iter(residue_ids, device)?.reshape((1, residue_length))?;
@@ -81,8 +75,6 @@ impl LMPNNFeatures for AtomCollection {
 
         // Numeric chain labels (optional)
         let chain_labels: Option<Vec<f64>> = None; // Could populate if needed
-
-        // amino acid names as int....
         let s = self.encode_amino_acids(device)?;
 
         // coordinates of the backbone atoms
@@ -93,12 +85,6 @@ impl LMPNNFeatures for AtomCollection {
         )?;
 
         let x = x_37.index_select(&indices, 2)?;
-
-        // // N/CA/C/O
-        // let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
-        // let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
-        // let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
-        // let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
 
         Ok(ProteinFeatures {
             s,
@@ -145,7 +131,7 @@ impl LMPNNFeatures for AtomCollection {
         Tensor::from_vec(backbone_data, (1, res_count, 4, 3), device)
     }
 
-    /// create numeric Tensor of shape [<sequence-length>, 37, 3]
+    /// create numeric Tensor of shape [batch <sequence-length>, 37, 3]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
@@ -161,7 +147,6 @@ impl LMPNNFeatures for AtomCollection {
                 }
             }
         }
-        // Create tensor with shape [residues, 37, 3]
         Tensor::from_vec(atom37_data, (1, res_count, 37, 3), device)
     }
 

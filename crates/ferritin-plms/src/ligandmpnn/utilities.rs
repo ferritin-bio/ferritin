@@ -431,7 +431,13 @@ fn get_score(s: &Tensor, log_probs: &Tensor, mask: &Tensor) -> Result<(Tensor, T
     Ok((average_loss, loss_per_residue))
 }
 
-pub fn linspace(start: f64, stop: f64, steps: usize, device: &Device) -> Result<Tensor> {
+pub fn linspace(
+    start: f64,
+    stop: f64,
+    steps: usize,
+    device: &Device,
+    return_type: DType,
+) -> Result<Tensor> {
     if steps == 0 {
         Tensor::from_vec(Vec::<f64>::new(), steps, device)
     } else if steps == 1 {
@@ -440,6 +446,25 @@ pub fn linspace(start: f64, stop: f64, steps: usize, device: &Device) -> Result<
         let delta = (stop - start) / (steps - 1) as f64;
         let vs = (0..steps)
             .map(|step| start + step as f64 * delta)
+            .collect::<Vec<_>>();
+        Tensor::from_vec(vs, steps, device)?.to_dtype(return_type)
+    }
+}
+
+pub fn linspace_f32(
+    start: f32, // Changed to f32
+    stop: f32,  // Changed to f32
+    steps: usize,
+    device: &Device,
+) -> Result<Tensor> {
+    if steps == 0 {
+        Tensor::from_vec(Vec::<f32>::new(), steps, device) // Changed to f32
+    } else if steps == 1 {
+        Tensor::from_vec(vec![start], steps, device)
+    } else {
+        let delta = (stop - start) / (steps - 1) as f32; // Changed to f32
+        let vs = (0..steps)
+            .map(|step| start + step as f32 * delta)
             .collect::<Vec<_>>();
         Tensor::from_vec(vs, steps, device)
     }

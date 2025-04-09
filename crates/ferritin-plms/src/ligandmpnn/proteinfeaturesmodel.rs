@@ -1,14 +1,16 @@
 use super::configs::ProteinMPNNConfig;
 use super::proteinfeatures::ProteinFeatures;
-use super::utilities::{compute_nearest_neighbors, cross_product, gather_edges, linspace};
+use super::utilities::{
+    compute_nearest_neighbors, cross_product, gather_edges, linspace, linspace_f32,
+};
 use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::encoding::one_hot;
 use candle_nn::{LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear};
 
 // After (at module level)
-const RBF_MIN_DISTANCE: f64 = 2.0;
-const RBF_MAX_DISTANCE: f64 = 22.0;
-const NUMERICAL_STABILITY_EPSILON: f64 = 1e-6;
+const RBF_MIN_DISTANCE: f32 = 2.0;
+const RBF_MAX_DISTANCE: f32 = 22.0;
+const NUMERICAL_STABILITY_EPSILON: f32 = 1e-6;
 
 #[derive(Clone, Debug)]
 /// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L669
@@ -63,8 +65,8 @@ impl ProteinFeaturesModel {
 
     /// This function calculates the nearest Ca coordinates and returns the distances and indices.
     // Todo: potential refactor
-    fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f64) -> Result<(Tensor, Tensor)> {
-        compute_nearest_neighbors(x, mask, self.top_k, eps as f32)
+    fn _dist(&self, x: &Tensor, mask: &Tensor, eps: f32) -> Result<(Tensor, Tensor)> {
+        compute_nearest_neighbors(x, mask, self.top_k, eps)
     }
     /// Computes Radial Basis Function features for a given distance tensor
     ///
@@ -76,25 +78,24 @@ impl ProteinFeaturesModel {
     /// * Tensor of RBF features [batch, length, k_neighbors, num_rbf]
     fn _rbf(&self, d: &Tensor, device: &Device) -> Result<Tensor> {
         // Create centers (μ)
-        let d_mu = linspace(
+        let d_mu = linspace_f32(
             RBF_MIN_DISTANCE,
             RBF_MAX_DISTANCE,
             self.num_rbf,
             &Device::Cpu,
         )?
-        .to_dtype(DType::F32)?
         .reshape((1, 1, 1, self.num_rbf))?
         .to_device(device)?; // Move to Metal device after conversion
 
         // Calculate width (σ)
-        let d_sigma = (RBF_MAX_DISTANCE - RBF_MIN_DISTANCE) / self.num_rbf as f64;
+        let d_sigma = (RBF_MAX_DISTANCE - RBF_MIN_DISTANCE) / self.num_rbf as f32;
         let dims = d.dims();
         let d_expanded = d.unsqueeze(D::Minus1)?; // [N, N, C, 1]
         let d_mu_broadcast = d_mu.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
         let d_expanded_broadcast =
             d_expanded.broadcast_as((dims[0], dims[1], dims[2], self.num_rbf))?;
         let d_sigma_tensor =
-            Tensor::new(&[d_sigma as f32], device)?.broadcast_as(d_expanded_broadcast.shape())?;
+            Tensor::new(&[d_sigma], device)?.broadcast_as(d_expanded_broadcast.shape())?;
         let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma_tensor)?;
         let rbf = diff.powf(2.0)?.neg()?.exp()?;
         Ok(rbf)
@@ -200,7 +201,7 @@ impl ProteinFeaturesModel {
         println!("o shape: {:?}", o.dims());
 
         println!("Before _dist call");
-        let (d_neighbors, e_idx) = self._dist(&ca, mask, self.augment_eps as f64)?;
+        let (d_neighbors, e_idx) = self._dist(&ca, mask, self.augment_eps)?;
         println!(
             "After _dist call - d_neighbors: {:?}, e_idx: {:?}",
             d_neighbors.dims(),
