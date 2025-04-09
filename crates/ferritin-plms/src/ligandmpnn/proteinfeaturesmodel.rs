@@ -192,13 +192,9 @@ impl ProteinFeaturesModel {
 
         // N/CA/C/O
         let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
-        println!("n shape: {:?}", n.dims());
         let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
-        println!("ca shape: {:?}", ca.dims());
         let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
-        println!("c shape: {:?}", c.dims());
         let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
-        println!("o shape: {:?}", o.dims());
 
         println!("Before _dist call");
         let (d_neighbors, e_idx) = self._dist(&ca, mask, self.augment_eps)?;
