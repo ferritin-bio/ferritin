@@ -487,6 +487,7 @@ impl ProteinMPNN {
         // take the output from encode and decode to logits
         todo!()
     }
+    //noinspection RsBorrowChecker
     pub fn sample(
         &self,
         features: &ProteinFeatures,

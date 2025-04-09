@@ -3938,7 +3938,6 @@ dependencies = [
  "ferritin-core",
  "ferritin-test-data",
  "itertools 0.14.0",
- "re_viewer",
  "rerun",
 ]
 
