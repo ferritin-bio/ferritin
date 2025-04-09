@@ -483,10 +483,56 @@ impl ProteinMPNN {
             }
         }
     }
-    fn decode(&self) {
-        // take the output from encode and decode to logits
-        todo!()
+    // Removed unused decode methods
+    pub fn simple_decode(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
+        // Create a batch size of 1 for simple decoding
+        let b_decoder = 1;
+        
+        // Extract relevant features
+        let ProteinFeatures { s, x_mask, .. } = features;
+        let device = s.device();
+        let (_, l) = s.dims2()?;
+        
+        // Encode the structure once
+        let (h_v_enc, h_e_enc, e_idx_enc) = self.encode(features)?;
+        
+        // Process all positions at once with a simplified approach
+        let s_true = s.clone();
+        let mask = x_mask.clone().unwrap();
+        
+        // Create tensors for the decoder
+        let zeros = Tensor::zeros((b_decoder, l, h_v_enc.dim(D::Minus1)?), DType::F32, device)?;
+        let h_v = h_v_enc.clone();
+        let h_e = h_e_enc.clone();
+        let e_idx = e_idx_enc.clone();
+        
+        // Build encoder embeddings for neighbors
+        let h_ex_encoder = cat_neighbors_nodes(&zeros, &h_e, &e_idx)?;
+        let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
+        
+        // Apply decoder layers using only structure information
+        let h_v_final = self.decoder_layers.iter().fold(Ok(h_v), |acc, layer| {
+            layer.forward(&acc?, &h_exv_encoder, Some(&mask), None, None)
+        })?;
+        
+        // Calculate logits and log probabilities
+        let logits = self.w_out.forward(&h_v_final)?;
+        let log_probs = log_softmax(&logits, D::Minus1)?;
+        
+        // For the decoding order, just use a placeholder
+        let decoding_order = Tensor::arange(0, l as i64, device)?
+            .reshape((1, l))?
+            .broadcast_as((b_decoder, l))?.to_dtype(DType::F32)?;
+        
+        // Return the output directly
+        Ok(ScoreOutput {
+            s: s_true,
+            log_probs,
+            logits,
+            decoding_order,
+        })
     }
+
     //noinspection RsBorrowChecker
     pub fn sample(
         &self,

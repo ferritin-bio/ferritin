@@ -19,12 +19,14 @@ fn main() -> Result<()> {
     let pconf = ProteinMPNNConfig::proteinmpnn();
     let pmpnn = ProteinMPNN::load(vb, &pconf)?;
 
-    // let features = ac.featurize(&candle_core::Device::Cpu)?;
     let features = ac.featurize(&deviceA.clone())?;
     println!("Features");
 
-    // let logits = model.run_model(ac, 10, 0.1)?;
-    // println!("{:?}", logits);
+    let scores = pmpnn.simple_decode(&features)?;
+    println!("{:?}", scores);
+
+    let sequences = scores.get_sequences()?;
+    println!("{:?}", sequences);
 
     Ok(())
 }
