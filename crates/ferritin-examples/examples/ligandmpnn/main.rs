@@ -1,9 +1,9 @@
 use anyhow::Result;
 use candle_core::pickle::PthTensors;
-use candle_core::{DType, Device, Error};
+use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
 use ferritin_core::load_structure;
-use ferritin_plms::{LMPNNFeatures, ProteinMPNN, ProteinMPNNConfig};
+use ferritin_plms::{LMPNNFeatures, ProteinMPNN, ProteinMPNNConfig, device};
 use ferritin_test_data::TestFile;
 
 fn main() -> Result<()> {
@@ -17,7 +17,8 @@ fn main() -> Result<()> {
     let pconf = ProteinMPNNConfig::proteinmpnn();
     let pmpnn = ProteinMPNN::load(vb, &pconf)?;
 
-    let features = ac.featurize(&candle_core::Device::Cpu)?;
+    // let features = ac.featurize(&candle_core::Device::Cpu)?;
+    let features = ac.featurize(&device(false)?)?;
     println!("Features");
     let encoded = pmpnn.encode(&features)?;
     println!("Encoded");

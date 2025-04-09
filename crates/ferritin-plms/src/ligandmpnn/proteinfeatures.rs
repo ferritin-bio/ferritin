@@ -91,21 +91,14 @@ impl LMPNNFeatures for AtomCollection {
             (4,),
             &device,
         )?;
-        println!(
-            "Initial shapes - x: {:?}, mask: {:?}, r_idx: {:?}",
-            x_37.dims(),
-            x_37_m.dims(),
-            r_idx.dims()
-        );
 
         let x = x_37.index_select(&indices, 2)?;
-        println!("After index_select - x shape: {:?}", x.dims());
 
-        // N/CA/C/O
-        let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
-        let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
-        let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
-        let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
+        // // N/CA/C/O
+        // let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
+        // let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
+        // let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
+        // let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
 
         Ok(ProteinFeatures {
             s,
@@ -183,12 +176,10 @@ impl LMPNNFeatures for AtomCollection {
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
         let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
             .iter_residues()
-            // keep only the non-protein, non-water residues
             .filter(|residue| {
                 let res_name = &residue.residue_name();
                 !residue.is_amino_acid() && *res_name != "HOH" && *res_name != "WAT"
             })
-            // keep only the heavy atoms
             .flat_map(|residue| {
                 residue
                     .iter_atoms()
