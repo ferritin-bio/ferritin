@@ -393,7 +393,7 @@ impl ProteinMPNN {
             w_s,
         })
     }
-    fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
+    pub fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
         let s_true = features.get_sequence();
         let base_dtype = DType::F32;
         let mask = match features.get_sequence_mask() {
