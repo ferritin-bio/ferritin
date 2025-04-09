@@ -236,8 +236,10 @@ impl ProteinFeaturesModel {
 
         let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
         println!("rbf_all shape: {:?}", rbf_all.dims());
-
+        println!("r_idx shape: {:?}", r_idx.dims());
         let dims = r_idx.dims();
+
+        // index out of bounds: the len is 1 but the index is 1
         let target_shape = (dims[0], dims[1], dims[1]);
         let r_idx_expanded1 = r_idx
             .unsqueeze(2)?
@@ -251,6 +253,7 @@ impl ProteinFeaturesModel {
         let offset = (r_idx_expanded1 - r_idx_expanded2)?;
         let offset = gather_edges(&offset.unsqueeze(D::Minus1)?, &e_idx)?;
         let offset = offset.squeeze(D::Minus1)?;
+
         let dims = chain_labels.dims();
         let target_shape = (dims[0], dims[1], dims[1]);
         println!("target_shape: {:?}", target_shape);

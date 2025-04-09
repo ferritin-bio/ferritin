@@ -62,7 +62,8 @@ impl LMPNNFeatures for AtomCollection {
 
         // Get residue IDs for r_idx
         let residue_ids = self.get_res_index();
-        let r_idx = Tensor::from_iter(residue_ids, device)?;
+        let residue_length = residue_ids.len();
+        let r_idx = Tensor::from_iter(residue_ids, device)?.reshape((1, residue_length))?;
 
         // Extract chain information
         let chain_letters: Vec<String> = self
@@ -102,13 +103,9 @@ impl LMPNNFeatures for AtomCollection {
 
         // N/CA/C/O
         let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
-        println!("n shape: {:?}", n.dims());
         let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
-        println!("ca shape: {:?}", ca.dims());
         let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
-        println!("c shape: {:?}", c.dims());
         let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
-        println!("o shape: {:?}", o.dims());
 
         Ok(ProteinFeatures {
             s,
