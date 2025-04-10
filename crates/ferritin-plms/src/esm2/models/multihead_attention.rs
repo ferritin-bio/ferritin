@@ -494,7 +494,6 @@ use candle_nn::init;
 use candle_nn::ops;
 use candle_nn::{self as nn, Module, VarBuilder};
 use std::collections::HashMap;
-use std::f32;
 use uuid::Uuid;
 
 // Implementation of the utils_softmax function from PyTorch
@@ -613,8 +612,8 @@ impl MultiheadAttention {
         let rot_emb = RotaryEmbedding::load(vb.pp("rotary_embeddings"), config)?;
 
         let (bias_k, bias_v) = if add_bias_kv {
-            let bias_k = vb.get_with_hints("bias_k", &[1, 1, embed_dim], init::ZEROS)?;
-            let bias_v = vb.get_with_hints("bias_v", &[1, 1, embed_dim], init::ZEROS)?;
+            let bias_k = vb.get_with_hints(&[1, 1, embed_dim], "bias_k", init::ZEROS)?;
+            let bias_v = vb.get_with_hints(&[1, 1, embed_dim], "bias_v", init::ZEROS)?;
             (Some(bias_k), Some(bias_v))
         } else {
             (None, None)
@@ -690,7 +689,7 @@ impl MultiheadAttention {
             self.k_proj.forward(query)?
         } else if self.encoder_decoder_attention && key.is_none() {
             assert!(value.is_none());
-            Tensor::zeros((), query.device())?
+            Tensor::zeros((), DType::F32, query.device())?
         } else {
             assert!(key.is_some());
             self.k_proj.forward(key.unwrap())?
@@ -699,7 +698,7 @@ impl MultiheadAttention {
         let v = if self.self_attention {
             self.v_proj.forward(query)?
         } else if self.encoder_decoder_attention && value.is_none() {
-            Tensor::zeros((), query.device())?
+            Tensor::zeros((), DType::F32, query.device())?
         } else {
             assert!(value.is_some());
             self.v_proj.forward(value.unwrap())?
@@ -723,7 +722,7 @@ impl MultiheadAttention {
                 let attn_mask = Tensor::cat(
                     &[
                         attn_mask,
-                        Tensor::zeros((attn_mask.dim(0)?, 1), query.device())?,
+                        &Tensor::zeros((attn_mask.dim(0)?, 1), DType::F32, query.device())?,
                     ],
                     1,
                 )?;
@@ -733,7 +732,7 @@ impl MultiheadAttention {
                 let key_padding_mask = Tensor::cat(
                     &[
                         key_padding_mask,
-                        Tensor::zeros((key_padding_mask.dim(0)?, 1), query.device())?,
+                        &Tensor::zeros((key_padding_mask.dim(0)?, 1), DType::F32, query.device())?,
                     ],
                     1,
                 )?;
@@ -754,21 +753,29 @@ impl MultiheadAttention {
             ))?
             .transpose(0, 1)?;
 
-        if k.dim()? > 0 {
+        if k.dims().len() > 0 {
             // Use src_len instead of -1 for the first dimension
             let src_len = k.dim(0)?;
             k = k
                 .contiguous()?
-                .reshape((src_len, bsz * self.num_heads as usize, self.head_dim as usize))?
+                .reshape((
+                    src_len,
+                    bsz * self.num_heads as usize,
+                    self.head_dim as usize,
+                ))?
                 .transpose(0, 1)?;
         }
 
-        if v.dim()? > 0 {
+        if v.dims().len() > 0 {
             // Use src_len instead of -1 for the first dimension
             let src_len = v.dim(0)?;
             v = v
                 .contiguous()?
-                .reshape((src_len, bsz * self.num_heads as usize, self.head_dim as usize))?
+                .reshape((
+                    src_len,
+                    bsz * self.num_heads as usize,
+                    self.head_dim as usize,
+                ))?
                 .transpose(0, 1)?;
         }
 
@@ -785,7 +792,7 @@ impl MultiheadAttention {
                 if static_kv {
                     k = prev_key;
                 } else {
-                    k = Tensor::cat(&[prev_key, &k], 1)?;
+                    k = Tensor::cat(&[prev_key, k], 1)?;
                 }
             }
 
@@ -800,7 +807,7 @@ impl MultiheadAttention {
                 if static_kv {
                     v = prev_value;
                 } else {
-                    v = Tensor::cat(&[prev_value, &v], 1)?;
+                    v = Tensor::cat(&[prev_value, v], 1)?;
                 }
             }
 
@@ -825,17 +832,15 @@ impl MultiheadAttention {
 
         if self.add_zero_attn {
             src_len += 1;
-            let k_zeros = Tensor::zeros((k.dim(0)?, 1, k.dim(2)?), query.device())?;
-            let v_zeros = Tensor::zeros((v.dim(0)?, 1, v.dim(2)?), query.device())?;
-            
+            let k_zeros = Tensor::zeros((k.dim(0)?, 1, k.dim(2)?), DType::F32, query.device())?;
+            let v_zeros = Tensor::zeros((v.dim(0)?, 1, v.dim(2)?), DType::F32, query.device())?;
             k = Tensor::cat(&[&k, &k_zeros], 1)?;
             v = Tensor::cat(&[&v, &v_zeros], 1)?;
-
             if let Some(attn_mask) = attn_mask {
                 let attn_mask = Tensor::cat(
                     &[
                         attn_mask,
-                        Tensor::zeros((attn_mask.dim(0)?, 1), query.device())?,
+                        &Tensor::zeros((attn_mask.dim(0)?, 1), DType::F32, query.device())?,
                     ],
                     1,
                 )?;
@@ -845,7 +850,7 @@ impl MultiheadAttention {
                 let key_padding_mask = Tensor::cat(
                     &[
                         key_padding_mask,
-                        Tensor::zeros((key_padding_mask.dim(0)?, 1), query.device())?,
+                        &Tensor::zeros((key_padding_mask.dim(0)?, 1), DType::F32, query.device())?,
                     ],
                     1,
                 )?;
@@ -859,15 +864,12 @@ impl MultiheadAttention {
             q = q_rot;
             k = k_rot;
         }
-
         let attn_weights = q.matmul(&k.transpose(1, 2)?)?;
-
         let expected_dims = [bsz * self.num_heads as usize, tgt_len, src_len];
         assert_eq!(attn_weights.dims().len(), expected_dims.len());
         for (i, &dim) in attn_weights.dims().iter().enumerate() {
             assert_eq!(dim, expected_dims[i]);
         }
-
         if let Some(attn_mask) = attn_mask {
             let attn_mask = attn_mask.unsqueeze(0)?;
             if self.onnx_trace {
@@ -875,24 +877,18 @@ impl MultiheadAttention {
             }
             attn_weights = (&attn_weights + attn_mask)?;
         }
-
         if let Some(key_padding_mask) = key_padding_mask {
             let attn_weights =
                 attn_weights.reshape((bsz, self.num_heads as usize, tgt_len, src_len))?;
-
             // Convert to boolean mask as done in PyTorch with .to(torch.bool)
             let key_padding_mask = key_padding_mask.unsqueeze(1)?.unsqueeze(2)?;
-            
+
             // Convert padding mask to appropriate format for masking
             // PyTorch uses .to(torch.bool) but we'll ensure our mask works with ops
-            
-            // Use NEG_INFINITY for masked positions as in PyTorch implementation
-            // PyTorch uses -Infinity (float("-inf")) in the original code
-            let neg_inf = Tensor::new(f32::NEG_INFINITY, attn_weights.device())?;
-            
             // This is equivalent to PyTorch's masked_fill operation
-            // Use masked_fill to replace values where mask is true
-            let attn_weights = attn_weights.masked_fill(&key_padding_mask, f32::NEG_INFINITY)?
+            // Use masked_fill to replace values where mask is true with NEG_INFINITY
+            let attn_weights = attn_weights
+                .masked_fill(&key_padding_mask, f32::NEG_INFINITY)?
                 .reshape((bsz * self.num_heads as usize, tgt_len, src_len))?;
         }
 
@@ -999,12 +995,13 @@ impl MultiheadAttention {
             )?)
         } else if key_padding_mask.is_some() {
             let key_padding_mask = key_padding_mask.unwrap();
-            let filler = Tensor::zeros(
+            let filler = &Tensor::zeros(
                 (batch_size, src_len - key_padding_mask.dim(1)?),
+                DType::F32,
                 key_padding_mask.device(),
             )?;
             Some(Tensor::cat(
-                &[filler, key_padding_mask.to_dtype(candle_core::DType::F32)?],
+                &[filler, &key_padding_mask.to_dtype(DType::F32)?],
                 1,
             )?)
         } else {
@@ -1031,7 +1028,6 @@ impl MultiheadAttention {
                 *v = Some(tensor.index_select(0, new_order)?);
             }
         }
-
         if !input_buffer.is_empty() {
             self.incremental_state.set_incremental_state(
                 Some(incremental_state),
@@ -1039,7 +1035,6 @@ impl MultiheadAttention {
                 input_buffer,
             );
         }
-
         Ok(())
     }
 
@@ -1077,67 +1072,62 @@ impl MultiheadAttention {
         Ok(attn_weights)
     }
 
-    pub fn upgrade_state_dict_named(
-        &self,
-        state_dict: &mut HashMap<String, Tensor>,
-        name: &str,
-    ) -> Result<()> {
-        let prefix = if name.is_empty() {
-            String::new()
-        } else {
-            format!("{}.", name)
-        };
+    // pub fn upgrade_state_dict_named(
+    //     &self,
+    //     state_dict: &mut HashMap<String, Tensor>,
+    //     name: &str,
+    // ) -> Result<()> {
+    //     let prefix = if name.is_empty() {
+    //         String::new()
+    //     } else {
+    //         format!("{}.", name)
+    //     };
 
-        let mut items_to_add = HashMap::new();
-        let mut keys_to_remove = Vec::new();
+    //     let mut items_to_add = HashMap::new();
+    //     let mut keys_to_remove = Vec::new();
 
-        for k in state_dict.keys() {
-            if k.ends_with(&format!("{}in_proj_weight", prefix)) {
-                let dim = state_dict[k].dim(0)? / 3;
-                items_to_add.insert(
-                    format!("{}q_proj.weight", prefix),
-                    state_dict[k].narrow(0, 0, dim)?,
-                );
-                items_to_add.insert(
-                    format!("{}k_proj.weight", prefix),
-                    state_dict[k].narrow(0, dim, dim)?,
-                );
-                items_to_add.insert(
-                    format!("{}v_proj.weight", prefix),
-                    state_dict[k].narrow(0, 2 * dim, dim)?,
-                );
+    //     for k in state_dict.keys() {
+    //         if k.ends_with(&format!("{}in_proj_weight", prefix)) {
+    //             let dim = state_dict[k].dim(0)? / 3;
+    //             items_to_add.insert(
+    //                 format!("{}q_proj.weight", prefix),
+    //                 state_dict[k].narrow(0, 0, dim)?,
+    //             );
+    //             items_to_add.insert(
+    //                 format!("{}k_proj.weight", prefix),
+    //                 state_dict[k].narrow(0, dim, dim)?,
+    //             );
+    //             items_to_add.insert(
+    //                 format!("{}v_proj.weight", prefix),
+    //                 state_dict[k].narrow(0, 2 * dim, dim)?,
+    //             );
+    //             keys_to_remove.push(k.clone());
+    //             let k_bias = format!("{}in_proj_bias", prefix);
+    //             if state_dict.contains_key(&k_bias) {
+    //                 let dim = state_dict[&k_bias].dim(0)? / 3;
+    //                 items_to_add.insert(
+    //                     format!("{}q_proj.bias", prefix),
+    //                     state_dict[&k_bias].narrow(0, 0, dim)?,
+    //                 );
+    //                 items_to_add.insert(
+    //                     format!("{}k_proj.bias", prefix),
+    //                     state_dict[&k_bias].narrow(0, dim, dim)?,
+    //                 );
+    //                 items_to_add.insert(
+    //                     format!("{}v_proj.bias", prefix),
+    //                     state_dict[&k_bias].narrow(0, 2 * dim, dim)?,
+    //                 );
 
-                keys_to_remove.push(k.clone());
-
-                let k_bias = format!("{}in_proj_bias", prefix);
-                if state_dict.contains_key(&k_bias) {
-                    let dim = state_dict[&k_bias].dim(0)? / 3;
-                    items_to_add.insert(
-                        format!("{}q_proj.bias", prefix),
-                        state_dict[&k_bias].narrow(0, 0, dim)?,
-                    );
-                    items_to_add.insert(
-                        format!("{}k_proj.bias", prefix),
-                        state_dict[&k_bias].narrow(0, dim, dim)?,
-                    );
-                    items_to_add.insert(
-                        format!("{}v_proj.bias", prefix),
-                        state_dict[&k_bias].narrow(0, 2 * dim, dim)?,
-                    );
-
-                    keys_to_remove.push(k_bias);
-                }
-            }
-        }
-
-        for k in keys_to_remove {
-            state_dict.remove(&k);
-        }
-
-        for (k, v) in items_to_add {
-            state_dict.insert(k, v);
-        }
-
-        Ok(())
-    }
+    //                 keys_to_remove.push(k_bias);
+    //             }
+    //         }
+    //     }
+    //     for k in keys_to_remove {
+    //         state_dict.remove(&k);
+    //     }
+    //     for (k, v) in items_to_add {
+    //         state_dict.insert(k, v);
+    //     }
+    //     Ok(())
+    // }
 }
