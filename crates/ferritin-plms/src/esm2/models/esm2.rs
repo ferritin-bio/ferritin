@@ -284,22 +284,36 @@ pub struct ESM1LayerNorm {
     eps: f64,
 }
 impl ESM1LayerNorm {
+    pub fn new(hidden_size: usize, vb: VarBuilder) -> Result<Self> {
+        // Fixed epsilon value of 1e-12 as per original code
+        let eps = 1e-12;
+        let weight = vb.get_with_hints("weight", hidden_size, "weight")?;
+        let bias = vb.get_with_hints("bias", hidden_size, "bias")?;
+        Ok(Self { weight, bias, eps })
+    }
+
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         todo!()
     }
-    fn forward() {
-        todo!()
+    fn forward(&self, x: &Tensor) -> Result<Tensor> {
+        let means = x.mean_keepdim(D::Minus1)?;
+        let x_zeromean = x.sub(&means)?;
+        let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
+        let variances1 = &(variances + self.eps)?.sqrt()?;
+        let x_norm = x_zeromean.div(variances1)?;
+        let weighted = x_norm.mul(&self.weight)?;
+        weighted.add(&self.bias)
     }
 }
 
 // Full transformer layer
 pub struct ESM2Layer {
     self_attn: ESM2Attention,
-    self_attn_layer_norm: ESM1bLayerNorm,
+    self_attn_layer_norm: ESM1LayerNorm,
     fc1: Linear,
     fc2: Linear,
-    ff_layer_norm: ESM1bLayerNorm,
-    final_layer_norm: ESM1bLayerNorm,
+    ff_layer_norm: ESM1LayerNorm,
+    final_layer_norm: ESM1LayerNorm,
 }
 
 impl ESM2Layer {
