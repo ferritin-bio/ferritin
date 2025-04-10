@@ -39,7 +39,7 @@
 //         │ (predictions)│         │ (if requested)  │
 //         └──────────────┘         └─────────────────┘
 
-use candle_core::{D, DType, Device, Result, Tensor};
+use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::{Embedding, LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
@@ -335,27 +335,26 @@ pub struct ESM2Layer {
     self_attn_layer_norm: ESM1LayerNorm,
     fc1: Linear,
     fc2: Linear,
-    ff_layer_norm: ESM1LayerNorm,
     final_layer_norm: ESM1LayerNorm,
 }
 
 impl ESM2Layer {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        let embed_dim = 100;
-        let ffn_embed_dim = 100;
-        // note there are 3 LayerNorms here....
+        let embed_dim = config.hidden_size;
+        let ffn_embed_dim = config.intermediate_size as usize;
+
         let layer_norm = ESM1LayerNorm::load(vb.pp("attention.LayerNorm"), config)?;
         let multi_head = ESM2Attention::load(vb.pp("attention"), config)?;
-        let fc1 = linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?;
-        let fc2 = linear(embed_dim, ffn_embed_dim, vb.pp("fc2"))?;
-        let ff_layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
+        let fc1 = linear(embed_dim, ffn_embed_dim, vb.pp("intermediate.dense"))?;
+        let fc2 = linear(embed_dim, ffn_embed_dim, vb.pp("output.dense"))?;
+        // let ff_layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
+
         let final_layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
         Ok(Self {
             self_attn: multi_head,
             self_attn_layer_norm: layer_norm,
             fc1,
             fc2,
-            ff_layer_norm,
             final_layer_norm,
         })
     }
@@ -366,15 +365,22 @@ impl ESM2Layer {
         self_attn_padding_mask: Option<&Tensor>,
         need_head_weights: bool,
     ) -> Result<(Tensor, Option<Tensor>)> {
-        // Implementation would include:
-        // 1. Self-attention with rotary embeddings
-        // 2. Add & norm
-        // 3. Feed-forward
-        // 4. Add & norm
-        // 5. Return output tensor and optional attention weights
+        let residual = xs.clone();
+        let x = self.self_attn_layer_norm.forward(xs)?;
+        let (x, attn) =
+            self.self_attn
+                .forward(&x, &x, &x, self_attn_padding_mask, need_head_weights)?;
+        let x = (x + residual)?;
 
-        // Would follow candle_transformers patterns for transformer layers
-        todo!()
+        // Second block: FFN with residual connection
+        let residual = x.clone();
+        let x = self.final_layer_norm.forward(&x)?;
+        let x = self.fc1.forward(&x)?;
+        let x = x.gelu()?;
+        let x = self.fc2.forward(&x)?;
+        let x = x + residual;
+
+        Ok((x, attn))
     }
 }
 
