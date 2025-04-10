@@ -1,7 +1,7 @@
+// Port of Falcon Rotary Embeffin code form candle_transformers
+// it uses the same structure as the
 use super::esm2::ESM2Config;
 use candle_core::{D, DType, Device, Result, Tensor};
-use candle_nn::{Embedding, LayerNorm, Linear, Module, VarBuilder, embedding, linear_b as linear};
-use serde::Deserialize;
 
 const MAX_SEQ_LEN: usize = 5000;
 
@@ -21,7 +21,6 @@ struct FalconRotaryEmbedding {
 
 impl FalconRotaryEmbedding {
     fn load(device: &Device, cfg: &ESM2Config) -> Result<Self> {
-        // let head_dim = cfg.head_dim();
         let head_dim = cfg.head_dim();
         let inv_freq: Vec<_> = (0..head_dim)
             .step_by(2)
