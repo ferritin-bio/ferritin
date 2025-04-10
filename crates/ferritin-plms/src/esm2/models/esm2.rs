@@ -225,9 +225,10 @@ pub struct ESM2ContactHead {
 impl ESM2ContactHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         // let contact_scale
+        let in_features = (config.num_hidden_layers as usize * config.num_attention_heads) as usize;
         Ok(ESM2ContactHead {
             // contact_scale: Tensor,
-            feedforward: vb.get(config.hidden_size, "regression")?,
+            feedforward: linear(in_features, 1, vb.pp("regression"))?,
             prepend_bos: false,
             append_eos: false,
             eos_idx: 32,
@@ -402,7 +403,7 @@ impl ESM2 {
             .collect::<Result<Vec<_>>>()?;
         let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), config)?;
         let layer_norm_after = layer_norm(
-            config.intermediate_size as usize,
+            config.hidden_size as usize,
             LayerNormConfig {
                 eps: 0.001,
                 remove_mean: true,
