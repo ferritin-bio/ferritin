@@ -148,17 +148,20 @@ struct FalconRotaryEmbedding {
 }
 
 impl FalconRotaryEmbedding {
-    fn load(device: &Device, cfg: &ESM2Config) -> Result<Self> {
-        let head_dim = cfg.head_dim();
-        let inv_freq: Vec<_> = (0..head_dim)
-            .step_by(2)
-            .map(|i| 1f32 / 10000f32.powf(i as f32 / head_dim as f32))
-            .collect();
-        Ok(Self {
-            inv_freq: Tensor::new(inv_freq.as_slice(), device)?,
-            cache: None,
-        })
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        todo!()
     }
+    // fn load(device: &Device, cfg: &ESM2Config) -> Result<Self> {
+    //     let head_dim = cfg.head_dim();
+    //     let inv_freq: Vec<_> = (0..head_dim)
+    //         .step_by(2)
+    //         .map(|i| 1f32 / 10000f32.powf(i as f32 / head_dim as f32))
+    //         .collect();
+    //     Ok(Self {
+    //         inv_freq: Tensor::new(inv_freq.as_slice(), device)?,
+    //         cache: None,
+    //     })
+    // }
 
     fn cos_sin(
         &mut self,
@@ -205,7 +208,7 @@ pub struct ESM2Embeddings {
 
 pub struct ESM2LMHead {
     dense: Linear,
-    layer_norm: ESM1bLayerNorm,
+    layer_norm: LayerNorm,
     decoder: Linear, // Weight tied to embeddings
 }
 impl ESM2LMHead {
@@ -245,7 +248,32 @@ pub struct ESM2Attention {
 }
 impl ESM2Attention {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        todo!()
+        let hidden_size = config.hidden_size;
+        let num_attention_heads = config.num_attention_heads;
+        let embed_dim = hidden_size;
+        let num_heads = num_attention_heads;
+        let head_dim = embed_dim / num_heads;
+        let kdim = hidden_size;
+        let vdim = hidden_size;
+
+        let q_proj = linear(embed_dim, embed_dim, vb.pp("self.query"))?;
+        let k_proj = linear(kdim, embed_dim, vb.pp("self.key"))?;
+        let v_proj = linear(vdim, embed_dim, vb.pp("self.value"))?;
+        let out_proj = linear(embed_dim, embed_dim, vb.pp("output.dense"))?;
+        let rotary_emb = Some(FalconRotaryEmbedding::load(
+            vb.pp("rotary_embeddings"),
+            config,
+        )?);
+
+        Ok(Self {
+            q_proj,
+            k_proj,
+            v_proj,
+            out_proj,
+            num_heads,
+            head_dim,
+            rotary_emb,
+        })
     }
     fn forward() {
         todo!()
@@ -316,12 +344,13 @@ impl ESM2Layer {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let embed_dim = 100;
         let ffn_embed_dim = 100;
-        let layer_norm = ESM1bLayerNorm::load(vb.pp("Layer_Norm"), config)?;
+        // note there are 3 LayerNorms here....
+        let layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
         let multi_head = ESM2Attention::load(vb.pp("attention"), config)?;
         let fc1 = linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?;
         let fc2 = linear(embed_dim, ffn_embed_dim, vb.pp("fc2"))?;
-        let ff_layer_norm = ESM1bLayerNorm::load(vb.pp("Layer_Norm"), config)?;
-        let final_layer_norm = ESM1bLayerNorm::load(vb.pp("LayerNorm"), config)?;
+        let ff_layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
+        let final_layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
         Ok(Self {
             self_attn: multi_head,
             self_attn_layer_norm: layer_norm,
@@ -382,7 +411,7 @@ impl ESM2 {
                 affine: true,
             },
             vb.pp("esm.encoder.emb_layer_norm_after"),
-        );
+        )?;
         let lm_head = ESM2LMHead::load(vb.pp("lm_head"), config)?;
 
         Ok(Self {
