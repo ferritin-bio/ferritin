@@ -451,6 +451,7 @@ impl ESM1LayerNorm {
     //     let bias = if affine {
     //         Some(vb.get_with_hints(size, "bias", candle_nn::Init::Const(0.))?)
     //     } else {
+    //
     //         None
     //     };
 

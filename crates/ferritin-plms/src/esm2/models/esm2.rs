@@ -39,8 +39,8 @@
 //         │ (predictions)│         │ (if requested)  │
 //         └──────────────┘         └─────────────────┘
 
-use candle_core::{D, DType, Device, Module, Result, Tensor};
-use candle_nn::{Embedding, Linear, VarBuilder, linear};
+use candle_core::{D, DType, Device, Result, Tensor};
+use candle_nn::{Embedding, LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
 
@@ -217,7 +217,6 @@ impl ESM2LMHead {
     }
 }
 
-
 pub struct ESM2ContactHead {
     contact_scale: Tensor,
     feedforward: Linear,
@@ -233,7 +232,6 @@ impl ESM2ContactHead {
         todo!()
     }
 }
-
 
 // Attention module with rotary embeddings
 pub struct ESM2Attention {
@@ -254,30 +252,38 @@ impl ESM2Attention {
     }
 }
 
-
-
-// Feed-forward network
-pub struct ESM2FeedForward {
-    fc1: Linear,
-    fc2: Linear,
-    layer_norm: ESM1bLayerNorm,
-}
-impl ESM2FeedForward {
-    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        todo!()
-    }
-    fn forward() {
-        todo!()
-    }
-}
-
-// ESM1b style layer norm
-pub struct ESM1bLayerNorm {
+/// ESM1 style layer norm
+/// for esm1blayernorm use Candle::nn::layernorm
+///
+// // class ESM1LayerNorm(nn.Module):
+//     def __init__(self, hidden_size, eps=1e-12, affine=True):
+//         """Construct a layernorm layer in the TF style (eps inside the sqrt)."""
+//         super().__init__()
+//         self.hidden_size = (hidden_size,) if isinstance(hidden_size, int) else tuple(hidden_size)
+//         self.eps = eps
+//         self.affine = bool(affine)
+//         if self.affine:
+//             self.weight = nn.Parameter(torch.ones(hidden_size))
+//             self.bias = nn.Parameter(torch.zeros(hidden_size))
+//         else:
+//             self.weight, self.bias = None, None
+//
+//     def forward(self, x):
+//         dims = tuple(-(i + 1) for i in range(len(self.hidden_size)))
+//         means = x.mean(dims, keepdim=True)
+//         x_zeromean = x - means
+//         variances = x_zeromean.pow(2).mean(dims, keepdim=True)
+//         x = x_zeromean / torch.sqrt(variances + self.eps)
+//         if self.affine:
+//             x = (self.weight * x) + self.bias
+//         return x
+//
+pub struct ESM1LayerNorm {
     weight: Tensor,
     bias: Tensor,
     eps: f64,
 }
-impl ESM1bLayerNorm {
+impl ESM1LayerNorm {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         todo!()
     }
@@ -290,7 +296,9 @@ impl ESM1bLayerNorm {
 pub struct ESM2Layer {
     self_attn: ESM2Attention,
     self_attn_layer_norm: ESM1bLayerNorm,
-    feed_forward: ESM2FeedForward,
+    fc1: Linear,
+    fc2: Linear,
+    ff_layer_norm: ESM1bLayerNorm,
     final_layer_norm: ESM1bLayerNorm,
 }
 
@@ -300,17 +308,16 @@ impl ESM2Layer {
         let ffn_embed_dim = 100;
         let layer_norm = ESM1bLayerNorm::load(vb.pp("Layer_Norm"), config)?;
         let multi_head = ESM2Attention::load(vb.pp("attention"), config)?;
-        let ff = ESM2FeedForward {
-            fc1: linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?,
-            fc2: linear(ffn_embed_dim, embed_dim, vb.pp("fc2"))?,
-            layer_norm: ESM1bLayerNorm::load(vb.pp("Layer_Norm"), config)?,
-        }
+        let fc1 = linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?;
+        let fc2 = linear(embed_dim, ffn_embed_dim, vb.pp("fc2"))?;
+        let ff_layer_norm = ESM1bLayerNorm::load(vb.pp("Layer_Norm"), config)?;
         let final_layer_norm = ESM1bLayerNorm::load(vb.pp("LayerNorm"), config)?;
-
         Ok(Self {
             self_attn: multi_head,
             self_attn_layer_norm: layer_norm,
-            feed_forward: ff,
+            fc1,
+            fc2,
+            ff_layer_norm,
             final_layer_norm,
         })
     }
@@ -338,7 +345,7 @@ pub struct ESM2 {
     config: ESM2Config,
     // embeddings: ESM2Embeddings,
     layers: Vec<ESM2Layer>,
-    layer_norm_after: ESM1bLayerNorm,
+    layer_norm_after: LayerNorm,
     lm_head: ESM2LMHead,
     contact_head: ESM2ContactHead,
 }
@@ -356,8 +363,16 @@ impl ESM2 {
             .collect::<Result<Vec<_>>>()?;
 
         let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), config)?;
-        let layer_norm_after =
-            ESM1bLayerNorm::load(vb.pp("esm.encoder.emb_layer_norm_after"), config)?;
+        // LayerNorm::load(vb.pp("esm.encoder.emb_layer_norm_after"), config)?;
+        let layer_norm_after = layer_norm(
+            config.intermediate_size as usize,
+            LayerNormConfig {
+                eps: 0.001,
+                remove_mean: true,
+                affine: true,
+            },
+            vb.pp("esm.encoder.emb_layer_norm_after"),
+        );
         let lm_head = ESM2LMHead::load(vb.pp("lm_head"), config)?;
 
         Ok(Self {
@@ -367,7 +382,6 @@ impl ESM2 {
             layer_norm_after,
             layers,
             lm_head,
-
         })
     }
     // // Helper methods for predictions

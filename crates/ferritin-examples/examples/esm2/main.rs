@@ -31,7 +31,6 @@ struct Args {
 
 impl Args {
     fn build_model_and_tokenizer(&self) -> Result<(ESM2, Tokenizer)> {
-        // fn build_model_and_tokenizer(&self) -> Result<((), Tokenizer)> {
         let device = device(self.cpu)?;
         let (model_id, revision) = match self.model_id.as_str() {
             "8M" => ("facebook/esm2_t6_8M_UR50D", "main"),
@@ -54,7 +53,6 @@ impl Args {
         let config_str = config_str
             .replace("SwiGLU", "swiglu")
             .replace("Swiglu", "swiglu");
-
         // Now you can iterate through the tensors
         let tensors = load(&weights_filename, &device)?;
         for (name, tensor) in tensors.iter() {
@@ -106,17 +104,17 @@ fn main() -> Result<()> {
 
         let token_ids = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
 
-        println!("Encoding.......");
-        let encoded = model.forward(&token_ids, None, false, false)?;
+        // println!("Encoding.......");
+        // let encoded = model.forward(&token_ids, None, false, false)?;
 
-        println!("Predicting.......");
-        let predictions = encoded.logits.argmax(D::Minus1)?;
+        // println!("Predicting.......");
+        // let predictions = encoded.logits.argmax(D::Minus1)?;
 
-        println!("Decoding.......");
-        let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
-        let decoded = tokenizer.decode(indices.as_slice(), true);
+        // println!("Decoding.......");
+        // let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
+        // let decoded = tokenizer.decode(indices.as_slice(), true);
 
-        println!("Decoded: {:?}, ", decoded);
+        // println!("Decoded: {:?}, ", decoded);
     }
 
     Ok(())
