@@ -284,16 +284,12 @@ pub struct ESM1LayerNorm {
     eps: f64,
 }
 impl ESM1LayerNorm {
-    pub fn new(hidden_size: usize, vb: VarBuilder) -> Result<Self> {
-        // Fixed epsilon value of 1e-12 as per original code
-        let eps = 1e-12;
-        let weight = vb.get_with_hints("weight", hidden_size, "weight")?;
-        let bias = vb.get_with_hints("bias", hidden_size, "bias")?;
-        Ok(Self { weight, bias, eps })
-    }
-
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        todo!()
+        Ok(Self {
+            weight: vb.get(config.hidden_size, "weight")?,
+            bias: vb.get(config.hidden_size, "bias")?,
+            eps: config.layer_norm_eps as f64,
+        })
     }
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
         let means = x.mean_keepdim(D::Minus1)?;
