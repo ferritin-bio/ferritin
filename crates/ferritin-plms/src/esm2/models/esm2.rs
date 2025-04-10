@@ -151,10 +151,6 @@ struct FalconRotaryEmbedding {
 }
 
 impl FalconRotaryEmbedding {
-    //   8M -->  8
-    //  35M --> 12
-    // 150M --> 16
-    // 650M --> 32
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         Ok(FalconRotaryEmbedding {
             inv_freq: vb.get(config.inv_freq_size(), "inv_freq")?,
@@ -254,7 +250,6 @@ impl ESM2Attention {
         let head_dim = embed_dim / num_heads;
         let kdim = hidden_size;
         let vdim = hidden_size;
-
         let q_proj = linear(embed_dim, embed_dim, vb.pp("self.query"))?;
         let k_proj = linear(kdim, embed_dim, vb.pp("self.key"))?;
         let v_proj = linear(vdim, embed_dim, vb.pp("self.value"))?;
@@ -263,7 +258,6 @@ impl ESM2Attention {
             vb.pp("self.rotary_embeddings"),
             config,
         )?);
-
         Ok(Self {
             q_proj,
             k_proj,
@@ -342,13 +336,10 @@ impl ESM2Layer {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let embed_dim = config.hidden_size;
         let ffn_embed_dim = config.intermediate_size as usize;
-
         let layer_norm = ESM1LayerNorm::load(vb.pp("attention.LayerNorm"), config)?;
         let multi_head = ESM2Attention::load(vb.pp("attention"), config)?;
         let fc1 = linear(embed_dim, ffn_embed_dim, vb.pp("intermediate.dense"))?;
-        let fc2 = linear(embed_dim, ffn_embed_dim, vb.pp("output.dense"))?;
-        // let ff_layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
-
+        let fc2 = linear(ffn_embed_dim, embed_dim, vb.pp("output.dense"))?;
         let final_layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
         Ok(Self {
             self_attn: multi_head,
@@ -359,35 +350,32 @@ impl ESM2Layer {
         })
     }
 
-    fn forward(
-        &self,
-        xs: &Tensor,
-        self_attn_padding_mask: Option<&Tensor>,
-        need_head_weights: bool,
-    ) -> Result<(Tensor, Option<Tensor>)> {
-        let residual = xs.clone();
-        let x = self.self_attn_layer_norm.forward(xs)?;
-        let (x, attn) =
-            self.self_attn
-                .forward(&x, &x, &x, self_attn_padding_mask, need_head_weights)?;
-        let x = (x + residual)?;
-
-        // Second block: FFN with residual connection
-        let residual = x.clone();
-        let x = self.final_layer_norm.forward(&x)?;
-        let x = self.fc1.forward(&x)?;
-        let x = x.gelu()?;
-        let x = self.fc2.forward(&x)?;
-        let x = x + residual;
-
-        Ok((x, attn))
-    }
+    // fn forward(
+    //     &self,
+    //     xs: &Tensor,
+    //     self_attn_padding_mask: Option<&Tensor>,
+    //     need_head_weights: bool,
+    // ) -> Result<(Tensor, Option<Tensor>)> {
+    //     let residual = xs.clone();
+    //     let x = self.self_attn_layer_norm.forward(xs)?;
+    //     let (x, attn) =
+    //         self.self_attn
+    //             .forward(&x, &x, &x, self_attn_padding_mask, need_head_weights)?;
+    //     let x = (x + residual)?;
+    //     // Second block: FFN with residual connection
+    //     let residual = x.clone();
+    //     let x = self.final_layer_norm.forward(&x)?;
+    //     let x = self.fc1.forward(&x)?;
+    //     let x = x.gelu()?;
+    //     let x = self.fc2.forward(&x)?;
+    //     let x = x + residual;
+    //     Ok((x, attn))
+    // }
 }
 
 // Main model struct
 pub struct ESM2 {
     config: ESM2Config,
-    // embeddings: ESM2Embeddings,
     layers: Vec<ESM2Layer>,
     layer_norm_after: LayerNorm,
     lm_head: ESM2LMHead,
@@ -405,9 +393,7 @@ impl ESM2 {
         let layers = (0..config.num_hidden_layers)
             .map(|i| ESM2Layer::load(vb.pp(format!("esm.encoder.layer.{}", i)), config))
             .collect::<Result<Vec<_>>>()?;
-
         let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), config)?;
-        // LayerNorm::load(vb.pp("esm.encoder.emb_layer_norm_after"), config)?;
         let layer_norm_after = layer_norm(
             config.intermediate_size as usize,
             LayerNormConfig {
@@ -418,21 +404,14 @@ impl ESM2 {
             vb.pp("esm.encoder.emb_layer_norm_after"),
         )?;
         let lm_head = ESM2LMHead::load(vb.pp("lm_head"), config)?;
-
         Ok(Self {
             config: config.clone(),
             contact_head,
-            // embeddings: None,
             layer_norm_after,
             layers,
             lm_head,
         })
     }
-    // // Helper methods for predictions
-    // pub fn predict_contacts(&self, tokens: &Tensor) -> Result<Tensor> {
-    //     let output = self.forward(tokens, &[], true, true)?;
-    //     Ok(output.contacts.unwrap())
-    // }
     pub fn forward(
         &self,
         tokens: &Tensor,
