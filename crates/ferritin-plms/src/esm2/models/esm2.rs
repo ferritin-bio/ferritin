@@ -208,7 +208,43 @@ pub struct ESM2LMHead {
 }
 impl ESM2LMHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        todo!()
+        // Name: lm_head.bias, Shape: [33]
+        // Name: lm_head.dense.bias, Shape: [320]
+        // Name: lm_head.dense.weight, Shape: [320, 320]
+        // Name: lm_head.layer_norm.bias, Shape: [320]
+        // Name: lm_head.layer_norm.weight, Shape: [320]
+        let dense = linear(
+            config.hidden_size as usize,
+            config.hidden_size as usize,
+            vb.pp("dense"),
+        )?;
+
+        let layer_norm = layer_norm(
+            config.hidden_size as usize,
+            LayerNormConfig {
+                eps: config.layer_norm_eps as f64,
+                remove_mean: true,
+                affine: true,
+            },
+            vb.pp("layer_norm"),
+        )?;
+
+        let decoder_bias = vb.get(config.vocab_size as usize, "bias")?;
+        let decoder = Linear::new(
+            // The weight will be tied to embeddings later
+            Tensor::zeros(
+                &[config.vocab_size as usize, config.hidden_size as usize],
+                DType::F32,
+                vb.device(),
+            )?,
+            Some(decoder_bias),
+        );
+
+        Ok(ESM2LMHead {
+            dense,
+            layer_norm,
+            decoder,
+        })
     }
     fn forward() {
         todo!()
