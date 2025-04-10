@@ -15,14 +15,14 @@ lto = true
 candle-core = { workspace = true }
 leptos = "0.7.8"
 console_error_panic_hook = "0.1.7"
-uuid = { version = "1.10", features = ["v4", "js", "serde"] }
+uuid = { version = "1.16", features = ["v4", "js", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-web-sys = { version = "0.3.70", features = ["Storage"] }
+web-sys = { version = "0.3.77", features = ["Storage"] }
 getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3.42"
+wasm-bindgen-test = "0.3.50"
 
 [package.metadata.cargo-all-features]
 skip_feature_sets = [["csr", "ssr"], ["csr", "hydrate"], ["ssr", "hydrate"], []]

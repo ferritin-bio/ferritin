@@ -9,7 +9,7 @@ members = [
     "crates/ferritin-plms",
     # "crates/ferritin-pymol",
     "crates/ferritin-structure-mesh",
-    "crates/ferritin-test-data",
+    "crates/ferritin-test-data", "crates/ferritin-wasm-examples/ligandmpnn", "crates/ferritin-wasm-examples/ligandmpnn-wasm",
 ]
 resolver = "2"
 
@@ -24,7 +24,7 @@ edition = "2024"
 [workspace.dependencies]
 anyhow = "1.0"
 bevy = { version = "0.16.0-rc.3", default-features = false }
-bon = "3.5.1"
+bon = "3.5.2"
 candle-core = "=0.9.0-alpha.1"
 candle-metal-kernels = "=0.9.0-alpha.1"
 candle-nn = "=0.9.0-alpha.1"
