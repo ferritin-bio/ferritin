@@ -40,7 +40,7 @@
 //         └──────────────┘         └─────────────────┘
 
 use candle_core::{D, DType, Device, Module, Result, Tensor};
-use candle_nn::{Embedding, Linear, VarBuilder};
+use candle_nn::{Embedding, Linear, VarBuilder, linear};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
 
@@ -208,6 +208,15 @@ pub struct ESM2LMHead {
     layer_norm: ESM1bLayerNorm,
     decoder: Linear, // Weight tied to embeddings
 }
+impl ESM2LMHead {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        todo!()
+    }
+    fn forward() {
+        todo!()
+    }
+}
+
 
 pub struct ESM2ContactHead {
     contact_scale: Tensor,
@@ -216,6 +225,15 @@ pub struct ESM2ContactHead {
     append_eos: bool,
     eos_idx: usize,
 }
+impl ESM2ContactHead {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        todo!()
+    }
+    fn forward() {
+        todo!()
+    }
+}
+
 
 // Attention module with rotary embeddings
 pub struct ESM2Attention {
@@ -227,6 +245,16 @@ pub struct ESM2Attention {
     head_dim: usize,
     rotary_emb: Option<FalconRotaryEmbedding>,
 }
+impl ESM2Attention {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        todo!()
+    }
+    fn forward() {
+        todo!()
+    }
+}
+
+
 
 // Feed-forward network
 pub struct ESM2FeedForward {
@@ -234,12 +262,28 @@ pub struct ESM2FeedForward {
     fc2: Linear,
     layer_norm: ESM1bLayerNorm,
 }
+impl ESM2FeedForward {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        todo!()
+    }
+    fn forward() {
+        todo!()
+    }
+}
 
 // ESM1b style layer norm
 pub struct ESM1bLayerNorm {
     weight: Tensor,
     bias: Tensor,
     eps: f64,
+}
+impl ESM1bLayerNorm {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        todo!()
+    }
+    fn forward() {
+        todo!()
+    }
 }
 
 // Full transformer layer
@@ -251,6 +295,26 @@ pub struct ESM2Layer {
 }
 
 impl ESM2Layer {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        let embed_dim = 100;
+        let ffn_embed_dim = 100;
+        let layer_norm = ESM1bLayerNorm::load(vb.pp("Layer_Norm"), config)?;
+        let multi_head = ESM2Attention::load(vb.pp("attention"), config)?;
+        let ff = ESM2FeedForward {
+            fc1: linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?,
+            fc2: linear(ffn_embed_dim, embed_dim, vb.pp("fc2"))?,
+            layer_norm: ESM1bLayerNorm::load(vb.pp("Layer_Norm"), config)?,
+        }
+        let final_layer_norm = ESM1bLayerNorm::load(vb.pp("LayerNorm"), config)?;
+
+        Ok(Self {
+            self_attn: multi_head,
+            self_attn_layer_norm: layer_norm,
+            feed_forward: ff,
+            final_layer_norm,
+        })
+    }
+
     fn forward(
         &self,
         xs: &Tensor,
@@ -272,7 +336,7 @@ impl ESM2Layer {
 // Main model struct
 pub struct ESM2 {
     config: ESM2Config,
-    embeddings: ESM2Embeddings,
+    // embeddings: ESM2Embeddings,
     layers: Vec<ESM2Layer>,
     layer_norm_after: ESM1bLayerNorm,
     lm_head: ESM2LMHead,
@@ -292,17 +356,18 @@ impl ESM2 {
             .collect::<Result<Vec<_>>>()?;
 
         let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), config)?;
-        let emb_layer_norm_after =
+        let layer_norm_after =
             ESM1bLayerNorm::load(vb.pp("esm.encoder.emb_layer_norm_after"), config)?;
         let lm_head = ESM2LMHead::load(vb.pp("lm_head"), config)?;
 
         Ok(Self {
-            embed_tokens: None,
-            layers,
-            contact_head,
-            emb_layer_norm_after,
-            lm_head,
             config: config.clone(),
+            contact_head,
+            // embeddings: None,
+            layer_norm_after,
+            layers,
+            lm_head,
+
         })
     }
     // // Helper methods for predictions
