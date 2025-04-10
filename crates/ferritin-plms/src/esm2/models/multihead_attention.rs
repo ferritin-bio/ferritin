@@ -489,13 +489,25 @@
 // LICENSE file in the root directory of this source tree.
 use super::esm2::ESM2Config;
 use super::rotary_embedding::RotaryEmbedding;
-use candle_core::{Result, Tensor, DType, Device};
+use candle_core::{DType, Device, Result, Tensor};
 use candle_nn::init;
 use candle_nn::ops;
 use candle_nn::{self as nn, Module, VarBuilder};
-use std::f32;
 use std::collections::HashMap;
+use std::f32;
 use uuid::Uuid;
+
+// Implementation of the utils_softmax function from PyTorch
+fn utils_softmax(x: &Tensor, dim: usize, onnx_trace: bool) -> Result<Tensor> {
+    if onnx_trace {
+        // Convert to float and apply softmax
+        let x_float = x.to_dtype(DType::F32)?;
+        ops::softmax(&x_float, dim)
+    } else {
+        // Apply softmax directly
+        ops::softmax(x, dim)
+    }
+}
 
 #[derive(Debug)]
 pub struct FairseqIncrementalState {
@@ -652,38 +664,12 @@ impl MultiheadAttention {
         let (tgt_len, bsz, embed_dim) = query.dims3()?;
         assert_eq!(embed_dim, self.embed_dim as usize);
 
-        // Disabled the torch direct implementation as it's not available
-        // if !self.rot_emb.is_some()
-        //     && self.enable_torch_version
-        //     && !self.onnx_trace
-        //     && incremental_state.is_none()
-        //     && !static_kv
-        //     && !need_head_weights
-        // {
-        //     return multihead_attention_forward(
-        //         query,
-        //         key.unwrap(),
-        //         value.unwrap(),
-        //         self.embed_dim,
-        //         self.num_heads,
-        //         &self.q_proj,
-        //         &self.k_proj,
-        //         &self.v_proj,
-        //         self.bias_k.as_ref(),
-        //         self.bias_v.as_ref(),
-        //         self.add_zero_attn,
-        //         self.dropout,
-        //         &self.out_proj,
-        //         self.training,
-        //         key_padding_mask,
-        //         need_weights,
-        //         attn_mask,
-        //     );
-        // }
-
+        // Disabled the torch direct
         let mut saved_state = None;
         if let Some(inc_state) = incremental_state {
-            saved_state = self.incremental_state.get_incremental_state(Some(inc_state), "attn_state");
+            saved_state = self
+                .incremental_state
+                .get_incremental_state(Some(inc_state), "attn_state");
             if let Some(saved_state_ref) = &saved_state {
                 if saved_state_ref.contains_key("prev_key") && static_kv {
                     assert!(self.encoder_decoder_attention && !self.self_attention);
@@ -726,10 +712,9 @@ impl MultiheadAttention {
             let bias_k = self.bias_k.as_ref().unwrap();
             let bias_v = self.bias_v.as_ref().unwrap();
 
-            let bias_k_size = bias_k.dim(2)?;
-            let bias_v_size = bias_v.dim(2)?;
-            let bias_k = bias_k.broadcast_to(&[1, bsz, bias_k_size])?;
-            let bias_v = bias_v.broadcast_to(&[1, bsz, bias_v_size])?;
+            // Use repeat instead of broadcast to match PyTorch implementation
+            let bias_k = bias_k.repeat((1, bsz, 1))?;
+            let bias_v = bias_v.repeat((1, bsz, 1))?;
 
             let k = Tensor::cat(&[&k, &bias_k], 1)?;
             let v = Tensor::cat(&[&v, &bias_v], 1)?;
@@ -812,33 +797,28 @@ impl MultiheadAttention {
             saved_state_ref.insert("prev_value".to_string(), Some(v.clone()));
 
             if let Some(inc_state) = incremental_state {
-                self.incremental_state.set_incremental_state(Some(inc_state), "attn_state", saved_state_ref.clone());
+                self.incremental_state.set_incremental_state(
+                    Some(inc_state),
+                    "attn_state",
+                    saved_state_ref.clone(),
+                );
             }
         }
 
         let src_len = k.dim(1)?;
 
         if let Some(key_padding_mask) = key_padding_mask {
-            assert_eq!(key_padding_mask.dim(0)? as i64, bsz);
-            assert_eq!(key_padding_mask.dim(1)? as i64, src_len);
+            assert_eq!(key_padding_mask.dim(0)?, bsz as usize);
+            assert_eq!(key_padding_mask.dim(1)?, src_len as usize);
         }
 
         if self.add_zero_attn {
             src_len += 1;
-            k = Tensor::cat(
-                &[
-                    &k,
-                    Tensor::zeros((k.dim(0)?, 1, k.dim(2)?), query.device())?,
-                ],
-                1,
-            )?;
-            v = Tensor::cat(
-                &[
-                    &v,
-                    Tensor::zeros((v.dim(0)?, 1, v.dim(2)?), query.device())?,
-                ],
-                1,
-            )?;
+            let k_zeros = Tensor::zeros((k.dim(0)?, 1, k.dim(2)?), query.device())?;
+            let v_zeros = Tensor::zeros((v.dim(0)?, 1, v.dim(2)?), query.device())?;
+            
+            k = Tensor::cat(&[&k, &k_zeros], 1)?;
+            v = Tensor::cat(&[&v, &v_zeros], 1)?;
 
             if let Some(attn_mask) = attn_mask {
                 let attn_mask = Tensor::cat(
@@ -887,13 +867,13 @@ impl MultiheadAttention {
             let attn_weights =
                 attn_weights.reshape((bsz, self.num_heads as usize, tgt_len, src_len))?;
 
-            let key_padding_mask = key_padding_mask
-                .unsqueeze(1)?
-                .unsqueeze(2)?;
-
-            // Create mask for masked_fill
-            let attn_weights = attn_weights
-                .masked_fill(&key_padding_mask, f32::NEG_INFINITY)?
+            // Convert to boolean mask as done in PyTorch with .to(torch.bool)
+            let key_padding_mask = key_padding_mask.unsqueeze(1)?.unsqueeze(2)?;
+            
+            // In PyTorch, masked_fill requires a boolean mask to replace values with a fill value
+            // In candle, we can use where_cond to achieve a similar effect
+            let fill_value = Tensor::new(f32::NEG_INFINITY, attn_weights.device())?;
+            let attn_weights = ops::where_cond(&key_padding_mask, &fill_value, &attn_weights)?
                 .reshape((bsz * self.num_heads as usize, tgt_len, src_len))?;
         }
 
@@ -901,19 +881,18 @@ impl MultiheadAttention {
             return Ok((attn_weights, Some(v)));
         }
 
-        let attn_weights = if self.onnx_trace {
-            attn_weights.to_dtype(candle_core::DType::F32)?.softmax(2)?
-        } else {
-            attn_weights.softmax(2)?
-        };
+        // Use utils_softmax to match PyTorch implementation
+        let attn_weights_float = utils_softmax(&attn_weights, 2, self.onnx_trace)?;
+        let attn_weights = attn_weights_float.to_device(attn_weights.device())?;
 
-        let attn_weights = if self.training && self.dropout > 0.0 {
-            ops::dropout(&attn_weights, self.dropout)?
+        // Match PyTorch's dropout implementation which uses attn_weights_float.type_as(attn_weights)
+        let attn_probs = if self.training && self.dropout > 0.0 {
+            ops::dropout(&attn_weights, self.dropout as f64)?
         } else {
             attn_weights
         };
 
-        let attn = attn_weights.matmul(&v)?;
+        let attn = attn_probs.matmul(&v)?;
 
         assert_eq!(
             attn.dims(),
@@ -933,21 +912,23 @@ impl MultiheadAttention {
 
         let attn = self.out_proj.forward(&attn)?;
 
-        let attn_weights = if need_weights {
-            let attn_weights = attn_weights
+        // Match PyTorch's attention weights return logic
+        let attn_weights_out = if need_weights {
+            let attn_weights_reshaped = attn_weights_float
                 .reshape((bsz, self.num_heads as usize, tgt_len, src_len))?
                 .transpose(0, 1)?;
 
             if !need_head_weights {
-                Some(attn_weights.mean(0)?)
+                // Average attention weights over heads
+                Some(attn_weights_reshaped.mean(0)?)
             } else {
-                Some(attn_weights)
+                Some(attn_weights_reshaped)
             }
         } else {
             None
         };
 
-        Ok((attn, attn_weights))
+        Ok((attn, attn_weights_out))
     }
 
     fn _append_prev_key_padding_mask(
@@ -1016,7 +997,11 @@ impl MultiheadAttention {
         }
 
         if !input_buffer.is_empty() {
-            self.incremental_state.set_incremental_state(Some(incremental_state), "attn_state", input_buffer);
+            self.incremental_state.set_incremental_state(
+                Some(incremental_state),
+                "attn_state",
+                input_buffer,
+            );
         }
 
         Ok(())
@@ -1024,10 +1009,15 @@ impl MultiheadAttention {
 
     fn _get_input_buffer(
         &self,
-        incremental_state: Option<&HashMap<String, HashMap<String, Option<Tensor>>>>,
+        incremental_state: Option<&mut HashMap<String, HashMap<String, Option<Tensor>>>>,
     ) -> HashMap<String, Option<Tensor>> {
-        self.incremental_state.get_incremental_state(incremental_state, "attn_state")
-            .unwrap_or_default()
+        if let Some(inc_state) = incremental_state {
+            self.incremental_state
+                .get_incremental_state(Some(inc_state), "attn_state")
+                .unwrap_or_default()
+        } else {
+            HashMap::new()
+        }
     }
 
     fn _set_input_buffer(
@@ -1035,7 +1025,11 @@ impl MultiheadAttention {
         incremental_state: Option<&mut HashMap<String, HashMap<String, Option<Tensor>>>>,
         buffer: HashMap<String, Option<Tensor>>,
     ) -> Option<HashMap<String, HashMap<String, Option<Tensor>>>> {
-        self.incremental_state.set_incremental_state(incremental_state, "attn_state", buffer)
+        if let Some(inc_state) = incremental_state {
+            self.incremental_state
+                .set_incremental_state(Some(inc_state), "attn_state", buffer);
+        }
+        None
     }
 
     fn apply_sparse_mask(
