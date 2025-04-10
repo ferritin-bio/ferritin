@@ -91,14 +91,10 @@ pub struct RotaryEmbedding {
 
 impl RotaryEmbedding {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        // The comment indicates this should be 8 dimensions, which suggests
-        // we should use a fixed dimension size for embedding
-        // According to the PyTorch code, we need to get the hidden_size from config
-        // and create a smaller dimension for the rotary embeddings
-        let dim = 16; // This gives us 8 elements when stepping by 2
-
-        // Using config variable to silence the warning
-        let _hidden_size = config.hidden_size;
+        // Get head_dim from config to match PyTorch initialization
+        // For ESM2, the rotary embedding dim should be the attention head dimension
+        let head_dim = config.hidden_size as usize / config.num_attention_heads as usize;
+        let dim = head_dim; // Use head dimension directly as in PyTorch
 
         let inv_freq = (0..dim)
             .step_by(2)

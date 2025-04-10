@@ -489,7 +489,7 @@
 // LICENSE file in the root directory of this source tree.
 use super::esm2::ESM2Config;
 use super::rotary_embedding::RotaryEmbedding;
-use candle_core::{DType, Device, Result, Tensor};
+use candle_core::{DType, Result, Tensor};
 use candle_nn::init;
 use candle_nn::ops;
 use candle_nn::{self as nn, Module, VarBuilder};
@@ -571,7 +571,7 @@ pub struct MultiheadAttention {
     add_zero_attn: bool,
     onnx_trace: bool,
     enable_torch_version: bool,
-    rot_emb: Option<RotaryEmbedding>,
+    rot_emb: Option<Box<RotaryEmbedding>>,
     incremental_state: FairseqIncrementalState,
     training: bool,
 }
@@ -640,7 +640,7 @@ impl MultiheadAttention {
             add_zero_attn,
             onnx_trace,
             enable_torch_version,
-            rot_emb: Some(rot_emb),
+            rot_emb: Some(Box::new(rot_emb)),
             incremental_state: FairseqIncrementalState::new(),
             training,
         })
@@ -744,7 +744,9 @@ impl MultiheadAttention {
             (k, v)
         };
 
+        // Ensure contiguity before reshaping to match PyTorch's view() behavior
         let q = q
+            .contiguous()?
             .reshape((
                 tgt_len,
                 bsz * self.num_heads as usize,
@@ -753,23 +755,31 @@ impl MultiheadAttention {
             .transpose(0, 1)?;
 
         if k.dim()? > 0 {
+            // Use src_len instead of -1 for the first dimension
+            let src_len = k.dim(0)?;
             k = k
-                .reshape((-1, bsz * self.num_heads as usize, self.head_dim as usize))?
+                .contiguous()?
+                .reshape((src_len, bsz * self.num_heads as usize, self.head_dim as usize))?
                 .transpose(0, 1)?;
         }
 
         if v.dim()? > 0 {
+            // Use src_len instead of -1 for the first dimension
+            let src_len = v.dim(0)?;
             v = v
-                .reshape((-1, bsz * self.num_heads as usize, self.head_dim as usize))?
+                .contiguous()?
+                .reshape((src_len, bsz * self.num_heads as usize, self.head_dim as usize))?
                 .transpose(0, 1)?;
         }
 
         if let Some(saved_state_ref) = &mut saved_state {
             if saved_state_ref.contains_key("prev_key") {
                 let prev_key = saved_state_ref.get("prev_key").unwrap().as_ref().unwrap();
+                // Get the actual dimension instead of using -1
+                let prev_seq_len = prev_key.shape().dims()[1];
                 let prev_key = prev_key.reshape((
                     bsz * self.num_heads as usize,
-                    -1,
+                    prev_seq_len,
                     self.head_dim as usize,
                 ))?;
                 if static_kv {
@@ -781,9 +791,10 @@ impl MultiheadAttention {
 
             if saved_state_ref.contains_key("prev_value") {
                 let prev_value = saved_state_ref.get("prev_value").unwrap().as_ref().unwrap();
+                let prev_seq_len = prev_value.shape().dims()[1];
                 let prev_value = prev_value.reshape((
                     bsz * self.num_heads as usize,
-                    -1,
+                    prev_seq_len,
                     self.head_dim as usize,
                 ))?;
                 if static_kv {
@@ -841,7 +852,9 @@ impl MultiheadAttention {
             }
         }
 
-        if let Some(rot_emb) = &self.rot_emb {
+        // Apply rotary embeddings if available - needs to be mutable to update cached values
+        if let Some(rot_emb) = &mut self.rot_emb {
+            // The PyTorch implementation calls forward method which updates cached values
             let (q_rot, k_rot) = rot_emb.forward(&q, &k)?;
             q = q_rot;
             k = k_rot;
@@ -870,10 +883,16 @@ impl MultiheadAttention {
             // Convert to boolean mask as done in PyTorch with .to(torch.bool)
             let key_padding_mask = key_padding_mask.unsqueeze(1)?.unsqueeze(2)?;
             
-            // In PyTorch, masked_fill requires a boolean mask to replace values with a fill value
-            // In candle, we can use where_cond to achieve a similar effect
-            let fill_value = Tensor::new(f32::NEG_INFINITY, attn_weights.device())?;
-            let attn_weights = ops::where_cond(&key_padding_mask, &fill_value, &attn_weights)?
+            // Convert padding mask to appropriate format for masking
+            // PyTorch uses .to(torch.bool) but we'll ensure our mask works with ops
+            
+            // Use NEG_INFINITY for masked positions as in PyTorch implementation
+            // PyTorch uses -Infinity (float("-inf")) in the original code
+            let neg_inf = Tensor::new(f32::NEG_INFINITY, attn_weights.device())?;
+            
+            // This is equivalent to PyTorch's masked_fill operation
+            // Use masked_fill to replace values where mask is true
+            let attn_weights = attn_weights.masked_fill(&key_padding_mask, f32::NEG_INFINITY)?
                 .reshape((bsz * self.num_heads as usize, tgt_len, src_len))?;
         }
 
@@ -883,11 +902,28 @@ impl MultiheadAttention {
 
         // Use utils_softmax to match PyTorch implementation
         let attn_weights_float = utils_softmax(&attn_weights, 2, self.onnx_trace)?;
-        let attn_weights = attn_weights_float.to_device(attn_weights.device())?;
+        // Ensure we maintain the correct device and data type to match PyTorch behavior
+        let attn_weights = if attn_weights.dtype() != attn_weights_float.dtype() {
+            attn_weights_float.to_dtype(attn_weights.dtype())?
+        } else {
+            attn_weights_float
+        };
 
         // Match PyTorch's dropout implementation which uses attn_weights_float.type_as(attn_weights)
         let attn_probs = if self.training && self.dropout > 0.0 {
-            ops::dropout(&attn_weights, self.dropout as f64)?
+            // PyTorch converts to F32 for numerical stability during dropout
+            let dropout_input = if attn_weights.dtype() != DType::F32 {
+                attn_weights.to_dtype(DType::F32)?
+            } else {
+                attn_weights.clone()
+            };
+            let dropped = ops::dropout(&dropout_input, self.dropout)?;
+            // Convert back to original dtype if needed
+            if dropout_input.dtype() != attn_weights.dtype() {
+                dropped.to_dtype(attn_weights.dtype())?
+            } else {
+                dropped
+            }
         } else {
             attn_weights
         };
