@@ -139,14 +139,15 @@ impl RotaryEmbedding {
         // Reset tables if sequence length changed or we're on a different device
         // This matches the PyTorch logic
         // Check if we need to regenerate the tables
+        // 1. If sequence length has changed
+        // 2. If there's no cached values yet
+        // 3. If the device has changed (comparing device pointers)
         let need_regeneration = self.seq_len_cached != Some(seq_len)
-            || match &self.cos_cached {
-                Some(t) => {
-                    // Simple string comparison of device debug representation
-                    format!("{:?}", t.device()) != format!("{:?}", x.device())
-                }
-                None => true,
-            };
+            || self.cos_cached.is_none()
+            || self.cos_cached.as_ref().map_or(false, |t| {
+                // More efficient device comparison using pointer address
+                !std::ptr::eq(t.device(), x.device())
+            });
 
         if need_regeneration {
             self.seq_len_cached = Some(seq_len);
