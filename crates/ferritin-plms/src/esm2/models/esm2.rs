@@ -31,6 +31,10 @@ pub struct ESM2Config {
     pub use_cache: bool,
     pub vocab_list: Option<Vec<String>>,
     pub vocab_size: i32,
+    // pub prepend_bos: bool,
+    // pub append_eos: bool,
+    // pub cls_idx: i64,
+    // pub eos_idx: i64,
 }
 
 impl ESM2Config {
@@ -115,15 +119,13 @@ impl ESM2 {
     fn token_dropout(&self) -> bool {
         self.config.token_dropout
     }
-    // note: in thisload function we do NOT handle the embedding code
+    // note: in this load function we do NOT handle the embedding code
     // which gets invoked only when the model is invoked with tokens
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        let mut layers = Vec::with_capacity(config.num_hidden_layers as usize);
-        for i in 0..config.num_hidden_layers {
-            let transformer_layer =
-                TransformerLayer::load(vb.pp(format!("esm.encoder.layer.{}", i)), config)?;
-            layers.push(transformer_layer);
-        }
+        let layers = (0..config.num_hidden_layers)
+            .map(|i| TransformerLayer::load(vb.pp(format!("esm.encoder.layer.{}", i)), config))
+            .collect::<Result<Vec<_>>>()?;
+
         let contact_head = ContactPredictionHead::load(vb.pp("esm.contact_head"), config)?;
         let emb_layer_norm_after =
             ESM1bLayerNorm::load(vb.pp("esm.encoder.emb_layer_norm_after"), config)?;
@@ -151,14 +153,17 @@ impl ESM2 {
     ) -> Result<BTreeMap<String, Tensor>> {
         let need_head_weights = need_head_weights || return_contacts;
         let padding_mask = tokens.eq(self.padding_idx())?;
+        
         let mut x = self
             .embed_tokens?
             .forward(tokens)?
             .mul_scalar(self.embed_scale)?;
+        
         if self.token_dropout() {
             // let mask = tokens.eq(self.mask_idx)?.unsqueeze(-1)?;
             let mask = tokens.eq(self.mask_idx())?.unsqueeze(-1)?;
             x = x.masked_fill(&mask, 0.0)?;
+            
             let mask_ratio_train = 0.15 * 0.8;
             let src_lengths = padding_mask.logical_not()?.sum_keepdim(-1)?;
             let mask_ratio_observed = tokens
@@ -172,8 +177,11 @@ impl ESM2 {
         if padding_mask.any()? {
             x = x.masked_fill(&padding_mask.unsqueeze(-1)?, 0.0)?;
         }
+        
         let repr_layers: HashSet<_> = repr_layers.iter().cloned().collect();
+        
         let mut hidden_representations = BTreeMap::new();
+        
         if repr_layers.contains(&0) {
             hidden_representations.insert("0".to_string(), x.clone());
         }
