@@ -34,60 +34,52 @@ pub struct ESM2Config {
 }
 
 impl ESM2Config {
+    fn base_config() -> Self {
+        Self {
+            attention_probs_dropout_prob: 0.0,
+            classifier_dropout: None,
+            emb_layer_norm_before: false,
+            esmfold_config: None,
+            hidden_act: "gelu".to_string(),
+            hidden_dropout_prob: 0.0,
+            initializer_range: 0.02,
+            is_folding_model: false,
+            layer_norm_eps: 1e-5,
+            mask_token_id: 32,
+            max_position_embeddings: 1026,
+            model_type: "esm".to_string(),
+            pad_token_id: 1,
+            position_embedding_type: "rotary".to_string(),
+            token_dropout: true,
+            torch_dtype: "float32".to_string(),
+            transformers_version: "4.25.0.dev0".to_string(),
+            use_cache: true,
+            vocab_list: None,
+            vocab_size: 33,
+            num_attention_heads: 0, // placeholder
+            hidden_size: 0,
+            intermediate_size: 0,
+            num_hidden_layers: 0,
+        }
+    }
+
     pub fn esm2_t36_3b_ur50() -> Self {
         Self {
             num_attention_heads: 40,
-            attention_probs_dropout_prob: 0.0,
-            classifier_dropout: None,
-            emb_layer_norm_before: false,
-            esmfold_config: None,
-            hidden_act: "gelu".to_string(),
-            hidden_dropout_prob: 0.0,
             hidden_size: 2560,
-            initializer_range: 0.02,
             intermediate_size: 10240,
-            is_folding_model: false,
-            layer_norm_eps: 1e-5,
-            mask_token_id: 32,
-            max_position_embeddings: 1026,
-            model_type: "esm".to_string(),
             num_hidden_layers: 36,
-            pad_token_id: 1,
-            position_embedding_type: "rotary".to_string(),
-            token_dropout: true,
-            torch_dtype: "float32".to_string(),
-            transformers_version: "4.25.0.dev0".to_string(),
-            use_cache: true,
-            vocab_list: None,
-            vocab_size: 33,
+            ..Self::base_config()
         }
     }
+
     pub fn esm2_t6_8M_ur50() -> Self {
         Self {
             num_attention_heads: 20,
-            attention_probs_dropout_prob: 0.0,
-            classifier_dropout: None,
-            emb_layer_norm_before: false,
-            esmfold_config: None,
-            hidden_act: "gelu".to_string(),
-            hidden_dropout_prob: 0.0,
             hidden_size: 320,
-            initializer_range: 0.02,
             intermediate_size: 1280,
-            is_folding_model: false,
-            layer_norm_eps: 1e-5,
-            mask_token_id: 32,
-            max_position_embeddings: 1026,
-            model_type: "esm".to_string(),
             num_hidden_layers: 6,
-            pad_token_id: 1,
-            position_embedding_type: "rotary".to_string(),
-            token_dropout: true,
-            torch_dtype: "float32".to_string(),
-            transformers_version: "4.25.0.dev0".to_string(),
-            use_cache: true,
-            vocab_list: None,
-            vocab_size: 33,
+            ..Self::base_config()
         }
     }
 }
@@ -172,19 +164,20 @@ impl ESM2 {
         let mut attn_weights = Vec::new();
         x = x.transpose(0, 1)?;
 
-        let padding_mask = if !padding_mask.any()? {
-            None
-        } else {
+        let padding_mask = if padding_mask.any()? {
             Some(padding_mask)
+        } else {
+            None
         };
 
         for (layer_idx, layer) in self.layers.iter().enumerate() {
             let (new_x, attn) = layer.forward(&x, padding_mask.as_ref(), need_head_weights)?;
             x = new_x;
 
-            if repr_layers.contains(&(layer_idx as i32 + 1)) {
+            let repr_index = layer_idx + 1;
+            if repr_layers.contains(&(repr_index as i32)) {
                 hidden_representations
-                    .insert((layer_idx + 1).to_string(), x.transpose(0, 1)?.clone());
+                    .insert(format!("{}", repr_index), x.transpose(0, 1)?.clone());
             }
 
             if need_head_weights {
@@ -238,6 +231,7 @@ impl ESM2 {
 mod tests {
     use super::*;
 
+    #[test]
     fn test_tokenizer_load() -> Result<()> {
         let tokenizer = ESM2::load_tokenizer()?;
         let text = "MLKLRV";
