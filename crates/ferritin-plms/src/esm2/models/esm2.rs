@@ -216,7 +216,7 @@ impl ESM2LMHead {
 }
 
 pub struct ESM2ContactHead {
-    contact_scale: Tensor,
+    // contact_scale: Tensor,
     feedforward: Linear,
     prepend_bos: bool,
     append_eos: bool,
@@ -224,7 +224,14 @@ pub struct ESM2ContactHead {
 }
 impl ESM2ContactHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        todo!()
+        // let contact_scale
+        Ok(ESM2ContactHead {
+            // contact_scale: Tensor,
+            feedforward: vb.get(config.hidden_size, "regression")?,
+            prepend_bos: false,
+            append_eos: false,
+            eos_idx: 32,
+        })
     }
     fn forward() {
         todo!()
