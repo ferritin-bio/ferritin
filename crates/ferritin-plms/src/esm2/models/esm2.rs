@@ -131,6 +131,9 @@ impl ESM2Config {
     pub(crate) fn head_dim(&self) -> usize {
         self.hidden_size / self.num_attention_heads
     }
+    pub(crate) fn inv_freq_size(&self) -> usize {
+        self.head_dim() / 2
+    }
 }
 
 fn rotate_half(x: &Tensor) -> Result<Tensor> {
@@ -148,20 +151,16 @@ struct FalconRotaryEmbedding {
 }
 
 impl FalconRotaryEmbedding {
+    //   8M -->  8
+    //  35M --> 12
+    // 150M --> 16
+    // 650M --> 32
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        todo!()
+        Ok(FalconRotaryEmbedding {
+            inv_freq: vb.get(config.inv_freq_size(), "inv_freq")?,
+            cache: None,
+        })
     }
-    // fn load(device: &Device, cfg: &ESM2Config) -> Result<Self> {
-    //     let head_dim = cfg.head_dim();
-    //     let inv_freq: Vec<_> = (0..head_dim)
-    //         .step_by(2)
-    //         .map(|i| 1f32 / 10000f32.powf(i as f32 / head_dim as f32))
-    //         .collect();
-    //     Ok(Self {
-    //         inv_freq: Tensor::new(inv_freq.as_slice(), device)?,
-    //         cache: None,
-    //     })
-    // }
 
     fn cos_sin(
         &mut self,
@@ -261,7 +260,7 @@ impl ESM2Attention {
         let v_proj = linear(vdim, embed_dim, vb.pp("self.value"))?;
         let out_proj = linear(embed_dim, embed_dim, vb.pp("output.dense"))?;
         let rotary_emb = Some(FalconRotaryEmbedding::load(
-            vb.pp("rotary_embeddings"),
+            vb.pp("self.rotary_embeddings"),
             config,
         )?);
 
@@ -345,7 +344,7 @@ impl ESM2Layer {
         let embed_dim = 100;
         let ffn_embed_dim = 100;
         // note there are 3 LayerNorms here....
-        let layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
+        let layer_norm = ESM1LayerNorm::load(vb.pp("attention.LayerNorm"), config)?;
         let multi_head = ESM2Attention::load(vb.pp("attention"), config)?;
         let fc1 = linear(embed_dim, ffn_embed_dim, vb.pp("fc1"))?;
         let fc2 = linear(embed_dim, ffn_embed_dim, vb.pp("fc2"))?;
