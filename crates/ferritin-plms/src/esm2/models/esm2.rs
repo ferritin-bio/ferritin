@@ -1,6 +1,48 @@
+// ESM2 Model Architecture
+// ======================
+
+//              ┌─────────────────┐
+//              │  Input Tokens   │
+//              └────────┬────────┘
+//                       │
+//              ┌────────▼────────┐
+//              │  Token Embedding│
+//              └────────┬────────┘
+//                       │
+//           ┌───────────▼───────────┐
+//           │   Token Dropout       │ (conditional)
+//           └───────────┬───────────┘
+//                       │
+// ┌─────────────────────▼─────────────────────┐
+// │            Transformer Layers              │
+// │  ┌─────────────────────────────────────┐  │
+// │  │ Layer 1                             │  │
+// │  │  ├─ Multi-head Self-Attention       │  │
+// │  │  │   (with rotary embeddings)       │  │
+// │  │  └─ Feed Forward Network            │  │
+// │  └─────────────────────────────────────┘  │
+// │                     ⋮                      │
+// │  ┌─────────────────────────────────────┐  │
+// │  │ Layer N (33 by default)             │  │
+// │  │  ├─ Multi-head Self-Attention       │  │
+// │  │  │   (with rotary embeddings)       │  │
+// │  │  └─ Feed Forward Network            │  │
+// │  └─────────────────────────────────────┘  │
+// └─────────────────────┬─────────────────────┘
+//                       │
+//              ┌────────▼────────┐
+//              │ Layer Norm After│
+//              └───┬───────────┬─┘
+//                  │           │
+//         ┌────────▼─────┐    │    ┌─────────────────┐
+//         │   LM Head    │    └────▶ Contact Head    │
+//         │ (predictions)│         │ (if requested)  │
+//         └──────────────┘         └─────────────────┘
+
 use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::{Embedding, Linear, VarBuilder};
 use serde::Deserialize;
+use tokenizers::Tokenizer;
 
 // for embeddings
 const MAX_SEQ_LEN: usize = 5000;
@@ -242,17 +284,33 @@ impl ESM2 {
         // Create embeddings, layers, and heads
         todo!()
     }
+    // note: in this load function we do NOT handle the embedding code
+    // which gets invoked only when the model is invoked with tokens
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        let layers = (0..config.num_hidden_layers)
+            .map(|i| ESM2Layer::load(vb.pp(format!("esm.encoder.layer.{}", i)), config))
+            .collect::<Result<Vec<_>>>()?;
 
+        let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), config)?;
+        let emb_layer_norm_after =
+            ESM1bLayerNorm::load(vb.pp("esm.encoder.emb_layer_norm_after"), config)?;
+        let lm_head = ESM2LMHead::load(vb.pp("lm_head"), config)?;
+
+        Ok(Self {
+            embed_tokens: None,
+            layers,
+            contact_head,
+            emb_layer_norm_after,
+            lm_head,
+            config: config.clone(),
+        })
+    }
     // // Helper methods for predictions
     // pub fn predict_contacts(&self, tokens: &Tensor) -> Result<Tensor> {
     //     let output = self.forward(tokens, &[], true, true)?;
     //     Ok(output.contacts.unwrap())
     // }
-}
-
-// Main forward implementation - would implement candle_transformers traits as needed
-impl Module for ESM2 {
-    fn forward(
+    pub fn forward(
         &self,
         tokens: &Tensor,
         repr_layers: &[usize],
@@ -270,6 +328,12 @@ impl Module for ESM2 {
         // 8. Calculate contacts if requested
         // ...
         todo!()
+    }
+    /// Load the tokenizer for encoding sequences
+    pub fn load_tokenizer() -> Result<Tokenizer> {
+        let tokenizer_bytes = include_bytes!("tokenizer.json");
+        Tokenizer::from_bytes(tokenizer_bytes)
+            .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
     }
 }
 
