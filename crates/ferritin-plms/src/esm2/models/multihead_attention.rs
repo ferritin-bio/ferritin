@@ -858,13 +858,13 @@ impl MultiheadAttention {
         }
 
         // Apply rotary embeddings if available - needs to be mutable to update cached values
-        if let Some(rot_emb) = &mut self.rot_emb {
+        let (q, k) = if let Some(rot_emb) = &mut self.rot_emb {
             // The PyTorch implementation calls forward method which updates cached values
-            let (q_rot, k_rot) = rot_emb.forward(&q, &k)?;
-            q = q_rot;
-            k = k_rot;
-        }
-        let attn_weights = q.matmul(&k.transpose(1, 2)?)?;
+            rot_emb.forward(&q, &k)?
+        } else {
+            (q, k)
+        };
+        let mut attn_weights = q.matmul(&k.transpose(1, 2)?)?;
         let expected_dims = [bsz * self.num_heads as usize, tgt_len, src_len];
         assert_eq!(attn_weights.dims().len(), expected_dims.len());
         for (i, &dim) in attn_weights.dims().iter().enumerate() {
@@ -913,7 +913,7 @@ impl MultiheadAttention {
             } else {
                 attn_weights.clone()
             };
-            let dropped = ops::dropout(&dropout_input, self.dropout)?;
+            let dropped = ops::dropout(&dropout_input, self.dropout as f32)?;
             // Convert back to original dtype if needed
             if dropout_input.dtype() != attn_weights.dtype() {
                 dropped.to_dtype(attn_weights.dtype())?
@@ -984,6 +984,7 @@ impl MultiheadAttention {
             let prev_key_padding_mask = prev_key_padding_mask.unwrap();
             let filler = Tensor::zeros(
                 (batch_size, src_len - prev_key_padding_mask.dim(1)?),
+                DType::F32,
                 prev_key_padding_mask.device(),
             )?;
             Some(Tensor::cat(
@@ -1022,9 +1023,11 @@ impl MultiheadAttention {
 
         for (k, v) in input_buffer.iter_mut() {
             if let Some(tensor) = v {
+                // If the tensor is from encoder-decoder attention and has the right batch size, keep it
                 if self.encoder_decoder_attention && tensor.dim(0)? == new_order.dim(0)? {
                     break;
                 }
+                // Otherwise, reindex the tensor based on the new order
                 *v = Some(tensor.index_select(0, new_order)?);
             }
         }
@@ -1041,13 +1044,12 @@ impl MultiheadAttention {
     fn _get_input_buffer(
         &self,
         incremental_state: Option<&mut HashMap<String, HashMap<String, Option<Tensor>>>>,
-    ) -> HashMap<String, Option<Tensor>> {
+    ) -> Option<HashMap<String, Option<Tensor>>> {
         if let Some(inc_state) = incremental_state {
             self.incremental_state
                 .get_incremental_state(Some(inc_state), "attn_state")
-                .unwrap_or_default()
         } else {
-            HashMap::new()
+            None
         }
     }
 
@@ -1063,12 +1065,14 @@ impl MultiheadAttention {
         None
     }
 
+    // This is a static function that should be called with the appropriate parameters
     fn apply_sparse_mask(
         attn_weights: Tensor,
-        tgt_len: usize,
-        src_len: usize,
-        bsz: usize,
+        _tgt_len: usize,
+        _src_len: usize,
     ) -> Result<Tensor> {
+        // The PyTorch version doesn't actually apply a sparse mask
+        // so we just pass through the tensor
         Ok(attn_weights)
     }
 
