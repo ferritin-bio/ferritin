@@ -1,5 +1,9 @@
 /// Mutihead attention based on the ESM2 pytorch code
 ///
+/// Related:
+/// - Distillbert: https://github.com/huggingface/candle/blob/d339b01726cc33d40ca2df1bf1cfa55379616e4e/candle-transformers/src/models/distilbert.rs#L133-L200
+/// - Whisper: https://github.com/huggingface/candle/blob/d339b01726cc33d40ca2df1bf1cfa55379616e4e/candle-transformers/src/models/whisper/model.rs#L26
+///
 // # Copyright (c) Meta Platforms, Inc. and affiliates.
 // #
 // # This source code is licensed under the MIT license found in the
@@ -1066,11 +1070,7 @@ impl MultiheadAttention {
     }
 
     // This is a static function that should be called with the appropriate parameters
-    fn apply_sparse_mask(
-        attn_weights: Tensor,
-        _tgt_len: usize,
-        _src_len: usize,
-    ) -> Result<Tensor> {
+    fn apply_sparse_mask(attn_weights: Tensor, _tgt_len: usize, _src_len: usize) -> Result<Tensor> {
         // The PyTorch version doesn't actually apply a sparse mask
         // so we just pass through the tensor
         Ok(attn_weights)

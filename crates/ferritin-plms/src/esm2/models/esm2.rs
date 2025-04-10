@@ -7,14 +7,14 @@ use tokenizers::Tokenizer;
 
 #[derive(Deserialize, Clone)]
 pub struct ESM2Config {
-    pub num_attention_heads: i32,
+    pub num_attention_heads: usize,
     pub attention_probs_dropout_prob: f32,
     pub classifier_dropout: Option<f32>,
     pub emb_layer_norm_before: bool,
     pub esmfold_config: Option<String>,
     pub hidden_act: String,
     pub hidden_dropout_prob: f32,
-    pub hidden_size: i32,
+    pub hidden_size: usize,
     pub initializer_range: f32,
     pub intermediate_size: i32,
     pub is_folding_model: bool,
@@ -90,6 +90,9 @@ impl ESM2Config {
             ..Self::base_config()
         }
     }
+    fn head_dim(&self) -> usize {
+        self.hidden_size / self.num_attention_heads
+    }
 }
 
 /// ESM2 Architecture
@@ -140,9 +143,9 @@ impl ESM2 {
             config: config.clone(),
         })
     }
-    // pub fn get_device(&self) -> &Device {
-    //     self.freqs_cis.device()
-    // }
+    pub fn get_device(&self) -> &Device {
+        self.freqs_cis.device()
+    }
 
     fn forward(
         &self,
@@ -153,17 +156,17 @@ impl ESM2 {
     ) -> Result<BTreeMap<String, Tensor>> {
         let need_head_weights = need_head_weights || return_contacts;
         let padding_mask = tokens.eq(self.padding_idx())?;
-        
+
         let mut x = self
             .embed_tokens?
             .forward(tokens)?
             .mul_scalar(self.embed_scale)?;
-        
+
         if self.token_dropout() {
             // let mask = tokens.eq(self.mask_idx)?.unsqueeze(-1)?;
             let mask = tokens.eq(self.mask_idx())?.unsqueeze(-1)?;
             x = x.masked_fill(&mask, 0.0)?;
-            
+
             let mask_ratio_train = 0.15 * 0.8;
             let src_lengths = padding_mask.logical_not()?.sum_keepdim(-1)?;
             let mask_ratio_observed = tokens
@@ -177,11 +180,11 @@ impl ESM2 {
         if padding_mask.any()? {
             x = x.masked_fill(&padding_mask.unsqueeze(-1)?, 0.0)?;
         }
-        
+
         let repr_layers: HashSet<_> = repr_layers.iter().cloned().collect();
-        
+
         let mut hidden_representations = BTreeMap::new();
-        
+
         if repr_layers.contains(&0) {
             hidden_representations.insert("0".to_string(), x.clone());
         }

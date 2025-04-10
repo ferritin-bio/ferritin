@@ -1,4 +1,10 @@
-/// Rotary EMbedding file based on the python version here
+/// Rotary Embedding file based on the python version here
+///
+/// See also:
+///     - Candle R-emb: https://github.com/huggingface/candle/blob/d339b01726cc33d40ca2df1bf1cfa55379616e4e/candle-transformers/src/models/whisper/model.rs#L26
+///     - YI: https://github.com/huggingface/candle/blob/d339b01726cc33d40ca2df1bf1cfa55379616e4e/candle-transformers/src/models/yi.rs#L70
+///     - Mistral: https://github.com/huggingface/candle/blob/d339b01726cc33d40ca2df1bf1cfa55379616e4e/candle-transformers/src/models/quantized_mistral.rs#L53
+///     - Falcon (very similar): https://github.com/huggingface/candle/blob/d339b01726cc33d40ca2df1bf1cfa55379616e4e/candle-transformers/src/models/falcon.rs#L130
 ///
 // # Copyright (c) Meta Platforms, Inc. and affiliates.
 // #
