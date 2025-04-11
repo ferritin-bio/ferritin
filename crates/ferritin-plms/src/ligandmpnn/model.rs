@@ -9,9 +9,11 @@ use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::proteinfeatures::ProteinFeatures;
 use super::proteinfeaturesmodel::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
+use crate::types::PseudoProbability;
 use candle_core::safetensors;
 use candle_core::{D, DType, Device, IndexOp, Module, Result, Tensor};
 use candle_nn::encoding::one_hot;
+use candle_nn::ops;
 use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{Dropout, Embedding, LayerNorm, Linear, VarBuilder, embedding, layer_norm, linear};
 use candle_transformers::generation::LogitsProcessor;
@@ -87,6 +89,54 @@ impl ScoreOutput {
     }
     pub fn get_log_probs(&self) -> &Tensor {
         &self.log_probs
+    }
+    pub fn get_pseudo_probabilities(&self) -> Result<Vec<PseudoProbability>> {
+        let (batch_size, seq_len, _vocab_size) = self.logits.dims3()?;
+        let mut all_probabilities = Vec::with_capacity(batch_size * seq_len);
+
+        for batch_idx in 0..batch_size {
+            let batch_logits = self.logits.get(batch_idx)?;
+
+            for pos in 0..seq_len {
+                let pos_logits = batch_logits.get(pos)?;
+                let probs = ops::softmax(&pos_logits, 0)?;
+                let probs = probs.to_vec1::<f32>()?;
+
+                // Get the decoding order to determine the actual position
+                let actual_pos = if let Ok(order) = self
+                    .decoding_order
+                    .get(batch_idx)?
+                    .get(pos)?
+                    .to_scalar::<u32>()
+                {
+                    order as usize
+                } else {
+                    pos
+                };
+
+                for aa_idx in 0..probs.len() {
+                    if probs[aa_idx] > 0.01 {
+                        // Only include probabilities above threshold
+                        all_probabilities.push(PseudoProbability {
+                            position: actual_pos,
+                            pseudo_prob: probs[aa_idx],
+                            amino_acid: int_to_aa1(aa_idx as u32),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Sort by position and then by probability (descending)
+        all_probabilities.sort_by(|a, b| {
+            a.position.cmp(&b.position).then(
+                b.pseudo_prob
+                    .partial_cmp(&a.pseudo_prob)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
+        });
+
+        Ok(all_probabilities)
     }
     pub fn save_as_safetensors(&self, filename: String) -> Result<()> {
         let mut tensors = HashMap::new();
@@ -487,43 +537,44 @@ impl ProteinMPNN {
     pub fn simple_decode(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
         // Create a batch size of 1 for simple decoding
         let b_decoder = 1;
-        
+
         // Extract relevant features
         let ProteinFeatures { s, x_mask, .. } = features;
         let device = s.device();
         let (_, l) = s.dims2()?;
-        
+
         // Encode the structure once
         let (h_v_enc, h_e_enc, e_idx_enc) = self.encode(features)?;
-        
+
         // Process all positions at once with a simplified approach
         let s_true = s.clone();
         let mask = x_mask.clone().unwrap();
-        
+
         // Create tensors for the decoder
         let zeros = Tensor::zeros((b_decoder, l, h_v_enc.dim(D::Minus1)?), DType::F32, device)?;
         let h_v = h_v_enc.clone();
         let h_e = h_e_enc.clone();
         let e_idx = e_idx_enc.clone();
-        
+
         // Build encoder embeddings for neighbors
         let h_ex_encoder = cat_neighbors_nodes(&zeros, &h_e, &e_idx)?;
         let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
-        
+
         // Apply decoder layers using only structure information
         let h_v_final = self.decoder_layers.iter().fold(Ok(h_v), |acc, layer| {
             layer.forward(&acc?, &h_exv_encoder, Some(&mask), None, None)
         })?;
-        
+
         // Calculate logits and log probabilities
         let logits = self.w_out.forward(&h_v_final)?;
         let log_probs = log_softmax(&logits, D::Minus1)?;
-        
+
         // For the decoding order, just use a placeholder
         let decoding_order = Tensor::arange(0, l as i64, device)?
             .reshape((1, l))?
-            .broadcast_as((b_decoder, l))?.to_dtype(DType::F32)?;
-        
+            .broadcast_as((b_decoder, l))?
+            .to_dtype(DType::F32)?;
+
         // Return the output directly
         Ok(ScoreOutput {
             s: s_true,

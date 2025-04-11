@@ -1,6 +1,6 @@
 use anyhow::{Error as E, Result};
 use candle_core::safetensors::load;
-use candle_core::{DType, Tensor};
+use candle_core::{D, DType, Tensor};
 use candle_nn::VarBuilder;
 use clap::Parser;
 use ferritin_plms::{ESM2, ESM2Config as Config, device};
@@ -31,7 +31,6 @@ struct Args {
 
 impl Args {
     fn build_model_and_tokenizer(&self) -> Result<(ESM2, Tokenizer)> {
-        // fn build_model_and_tokenizer(&self) -> Result<((), Tokenizer)> {
         let device = device(self.cpu)?;
         let (model_id, revision) = match self.model_id.as_str() {
             "8M" => ("facebook/esm2_t6_8M_UR50D", "main"),
@@ -54,7 +53,6 @@ impl Args {
         let config_str = config_str
             .replace("SwiGLU", "swiglu")
             .replace("Swiglu", "swiglu");
-
         // Now you can iterate through the tensors
         let tensors = load(&weights_filename, &device)?;
         for (name, tensor) in tensors.iter() {
@@ -67,7 +65,7 @@ impl Args {
 
         let tokenizer = ESM2::load_tokenizer()?;
         let protein = self.protein_string.as_ref().unwrap().as_str();
-        let _encoded = tokenizer.encode(protein, false);
+        let encoded = tokenizer.encode(protein, false);
 
         println!("Encoded.... and.....");
         let model = ESM2::load(vb, &config)?;
@@ -81,14 +79,14 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     println!("Loading the Model and Tokenizer.......");
-    let (_model, tokenizer) = args.build_model_and_tokenizer()?;
+    let (model, tokenizer) = args.build_model_and_tokenizer()?;
 
     // let device = &model.get_device();
     let device = device(false)?;
 
     let protein_sequences = if let Some(seq) = args.protein_string {
         vec![seq]
-    } else if let Some(_fasta_path) = args.protein_fasta {
+    } else if let Some(fasta_path) = args.protein_fasta {
         todo!("fasta processing unimplimented")
         // std::fs::read_to_string(fasta_path)?
     } else {
@@ -104,10 +102,10 @@ fn main() -> Result<()> {
             .get_ids()
             .to_vec();
 
-        let _token_ids = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
+        let token_ids = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
 
         println!("Encoding.......");
-        // let encoded = model.forward(&token_ids, None, false, false)?;
+        let encoded = model.forward(&token_ids)?;
 
         // println!("Predicting.......");
         // let predictions = encoded.logits.argmax(D::Minus1)?;
