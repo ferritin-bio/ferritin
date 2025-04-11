@@ -40,7 +40,9 @@
 //         └──────────────┘         └─────────────────┘
 
 use candle_core::{D, DType, Device, Module, Result, Tensor};
-use candle_nn::{Embedding, LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear};
+use candle_nn::{
+    Embedding, LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear, ops,
+};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
 
@@ -269,6 +271,7 @@ pub struct ESM2Attention {
     num_heads: usize,
     head_dim: usize,
     rotary_emb: Option<FalconRotaryEmbedding>,
+    // scale val?
 }
 impl ESM2Attention {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
@@ -297,35 +300,74 @@ impl ESM2Attention {
             rotary_emb,
         })
     }
-    fn forward(self, x: &Tensor) {}
+    fn forward(
+        &self,
+        query: &Tensor,
+        key: &Tensor,
+        value: &Tensor,
+    ) -> Result<(Tensor, Option<Tensor>)> {
+        let batch_size = query.dim(0)?;
+        let seq_len = query.dim(1)?;
+        let q = self.q_proj.forward(query)?;
+        let k = self.k_proj.forward(key)?;
+        let v = self.v_proj.forward(value)?;
+        // Reshape for multi-head attention
+        // [batch_size, seq_len, embed_dim] -> [batch_size, seq_len, num_heads, head_dim]
+        let q = q.reshape((batch_size, seq_len, self.num_heads, self.head_dim))?;
+        let k = k.reshape((batch_size, seq_len, self.num_heads, self.head_dim))?;
+        let v = v.reshape((batch_size, seq_len, self.num_heads, self.head_dim))?;
+
+        // Transpose to [batch_size, num_heads, seq_len, head_dim]
+        let q = q.transpose(1, 2)?;
+        let k = k.transpose(1, 2)?;
+        let v = v.transpose(1, 2)?;
+
+        // // Apply rotary embeddings if available
+        // let (q, k) = if let Some(rotary_emb) = &self.rotary_emb {
+        //     rotary_emb.apply_rotary_emb(&q, &k)?
+        // } else {
+        //     (q, k)
+        // };
+
+        // Compute attention scores: [batch_size, num_heads, seq_len, seq_len]
+        let scale = (self.head_dim as f64).powf(-0.5);
+        let attention_scores = (q.matmul(&k.transpose(2, 3)?)? * scale)?;
+        // Pytorch: attn_weights_float = utils_softmax(attn_weights, dim=-1, onnx_trace=self.onnx_trace)
+        // Pytorch: attn_weights = attn_weights_float.type_as(attn_weights)
+        let attention_weights = ops::softmax(&attention_scores, 3)?;
+
+        // Pytorch:dropouts
+        //         attn_probs = F.dropout(
+        //             attn_weights_float.type_as(attn_weights),
+        //             p=self.dropout,
+        //             training=self.training,
+        //         )
+        //
+        //  Pytorch: attn = torch.bmm(attn_probs, v)
+
+        let context = attention_weights.matmul(&v)?;
+        // Transpose and reshape back to [batch_size, seq_len, embed_dim]
+        let context = context.transpose(1, 2)?;
+        let embed_dim = self.num_heads * self.head_dim;
+        let context = context.reshape((batch_size, seq_len, embed_dim))?;
+
+        // Pytorch: Process the weights
+        //         if need_weights:
+        //             attn_weights = attn_weights_float.view(
+        //                 bsz, self.num_heads, tgt_len, src_len
+        //             ).type_as(attn).transpose(1, 0)
+        //             if not need_head_weights:
+        //                 # average attention weights over heads
+        //                 attn_weights = attn_weights.mean(dim=0)
+        //
+        //         return at
+        //
+        let output = self.out_proj.forward(&context)?;
+
+        Ok((output, None)) // weights tensor
+    }
 }
 
-/// ESM1 style layer norm
-/// for esm1blayernorm use Candle::nn::layernorm
-///
-// // class ESM1LayerNorm(nn.Module):
-//     def __init__(self, hidden_size, eps=1e-12, affine=True):
-//         """Construct a layernorm layer in the TF style (eps inside the sqrt)."""
-//         super().__init__()
-//         self.hidden_size = (hidden_size,) if isinstance(hidden_size, int) else tuple(hidden_size)
-//         self.eps = eps
-//         self.affine = bool(affine)
-//         if self.affine:
-//             self.weight = nn.Parameter(torch.ones(hidden_size))
-//             self.bias = nn.Parameter(torch.zeros(hidden_size))
-//         else:
-//             self.weight, self.bias = None, None
-//
-//     def forward(self, x):
-//         dims = tuple(-(i + 1) for i in range(len(self.hidden_size)))
-//         means = x.mean(dims, keepdim=True)
-//         x_zeromean = x - means
-//         variances = x_zeromean.pow(2).mean(dims, keepdim=True)
-//         x = x_zeromean / torch.sqrt(variances + self.eps)
-//         if self.affine:
-//             x = (self.weight * x) + self.bias
-//         return x
-//
 pub struct ESM1LayerNorm {
     weight: Tensor,
     bias: Tensor,
@@ -389,12 +431,15 @@ impl ESM2Layer {
             self.self_attn
                 .forward(&x, &x, &x, self_attn_padding_mask, need_head_weights)?;
         let x = (x + residual)?;
+
         // Second block: FFN with residual connection
         let residual = x.clone();
-        let x = self.final_layer_norm.forward(&x)?;
-        let x = self.fc1.forward(&x)?;
-        let x = x.gelu()?;
-        let x = self.fc2.forward(&x)?;
+        let x = self
+            .final_layer_norm
+            .forward(&x)?
+            .gelu()?
+            .apply(&self.fc1)?
+            .apply(&self.fc2)?;
         let x = x + residual;
         Ok((x, attn))
     }
@@ -440,11 +485,11 @@ impl ESM2 {
         })
     }
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
-        let mut xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
-        // for (layer_idx, layer) in self.layers.iter().enumerate() {
-        //     let (new_xs, attn) = layer.forward(&xs)?;
-        //     xs = new_xs;
-        // }
+        let xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
+        for (layer_idx, layer) in self.layers.iter().enumerate() {
+            let (new_xs, attn) = layer.forward(&xs)?;
+            xs = new_xs;
+        }
         // xs = self.layer_norm_after.forward(&xs)?;
         // xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
         let logits = self.lm_head.forward(&xs)?;
