@@ -208,17 +208,26 @@ impl ESM2Embeddings {
         let vocab_size = config.vocab_size as usize;
         let hidden_size = config.hidden_size as usize;
         let max_pos = config.max_position_embeddings as usize;
-        let word_embeddings = embedding(vocab_size, hidden_size, vb.pp("word_embeddings"))?;
+        let word_embeddings = vb.get((vocab_size, hidden_size), "word_embeddings.weight")?;
         let pos_embeddings = embedding(max_pos, hidden_size, vb.pp("position_embeddings"))?;
         let position_ids = vb.get((1, max_pos), "position_ids")?;
         Ok(Self {
-            word_embeddings,
+            word_embeddings: Embedding::new(word_embeddings, hidden_size),
             position_embeddings: pos_embeddings,
             position_ids,
         })
     }
     pub fn embed_tokens(&self, x: &Tensor) -> Result<Tensor> {
-        self.word_embeddings.forward(x)
+        println!("Token embedding input DType: {:?}", x.dtype());
+
+        println!("Token embedding input shape: {:?}", x.dims());
+        let max_value = x.max(D::Minus1)?;
+        println!("Maximum value in input: {:?}", max_value); // 23
+        let max_value = x.flatten_all()?.to_vec1::<u32>().into_iter().max();
+        println!("Maximum value in input: {:?}", max_value); // 23
+        let embeddings = self.word_embeddings.forward(x)?;
+        println!("Token embedding output shape: {:?}", embeddings.dims());
+        Ok(embeddings)
     }
     pub fn forward(&self, input_ids: &Tensor) -> Result<Tensor> {
         // todo: investigate whethere ESM2 USES the position embeddings
@@ -518,7 +527,7 @@ impl ESM2 {
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
         // x = self.embed_scale * self.embed_tokens(tokens)
         println!("Input tensor shape before embedding: {:?}", x.dims());
-        let x = self.embeddings.forward(x)?;
+        let mut xs = self.embeddings.forward(x)?;
         println!("Tensor shape after embedding: {:?}", x.dims());
         let mut xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
         for (_layer_idx, layer) in self.layers.iter().enumerate() {
