@@ -208,17 +208,11 @@ pub struct ESM2LMHead {
 }
 impl ESM2LMHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        // Name: lm_head.bias, Shape: [33]
-        // Name: lm_head.dense.bias, Shape: [320]
-        // Name: lm_head.dense.weight, Shape: [320, 320]
-        // Name: lm_head.layer_norm.bias, Shape: [320]
-        // Name: lm_head.layer_norm.weight, Shape: [320]
         let dense = linear(
             config.hidden_size as usize,
             config.hidden_size as usize,
             vb.pp("dense"),
         )?;
-
         let layer_norm = layer_norm(
             config.hidden_size as usize,
             LayerNormConfig {
@@ -228,10 +222,8 @@ impl ESM2LMHead {
             },
             vb.pp("layer_norm"),
         )?;
-
         let decoder_bias = vb.get(config.vocab_size as usize, "bias")?;
         let decoder = Linear::new(
-            // The weight will be tied to embeddings later
             Tensor::zeros(
                 &[config.vocab_size as usize, config.hidden_size as usize],
                 DType::F32,
@@ -239,7 +231,6 @@ impl ESM2LMHead {
             )?,
             Some(decoder_bias),
         );
-
         Ok(ESM2LMHead {
             dense,
             layer_norm,
@@ -312,9 +303,7 @@ impl ESM2Attention {
             rotary_emb,
         })
     }
-    fn forward() {
-        todo!()
-    }
+    fn forward(self, x: &Tensor) {}
 }
 
 /// ESM1 style layer norm
@@ -394,27 +383,27 @@ impl ESM2Layer {
         })
     }
 
-    // fn forward(
-    //     &self,
-    //     xs: &Tensor,
-    //     self_attn_padding_mask: Option<&Tensor>,
-    //     need_head_weights: bool,
-    // ) -> Result<(Tensor, Option<Tensor>)> {
-    //     let residual = xs.clone();
-    //     let x = self.self_attn_layer_norm.forward(xs)?;
-    //     let (x, attn) =
-    //         self.self_attn
-    //             .forward(&x, &x, &x, self_attn_padding_mask, need_head_weights)?;
-    //     let x = (x + residual)?;
-    //     // Second block: FFN with residual connection
-    //     let residual = x.clone();
-    //     let x = self.final_layer_norm.forward(&x)?;
-    //     let x = self.fc1.forward(&x)?;
-    //     let x = x.gelu()?;
-    //     let x = self.fc2.forward(&x)?;
-    //     let x = x + residual;
-    //     Ok((x, attn))
-    // }
+    fn forward(
+        &self,
+        xs: &Tensor,
+        self_attn_padding_mask: Option<&Tensor>,
+        need_head_weights: bool,
+    ) -> Result<(Tensor, Option<Tensor>)> {
+        let residual = xs.clone();
+        let x = self.self_attn_layer_norm.forward(xs)?;
+        let (x, attn) =
+            self.self_attn
+                .forward(&x, &x, &x, self_attn_padding_mask, need_head_weights)?;
+        let x = (x + residual)?;
+        // Second block: FFN with residual connection
+        let residual = x.clone();
+        let x = self.final_layer_norm.forward(&x)?;
+        let x = self.fc1.forward(&x)?;
+        let x = x.gelu()?;
+        let x = self.fc2.forward(&x)?;
+        let x = x + residual;
+        Ok((x, attn))
+    }
 }
 
 // Main model struct
@@ -457,99 +446,16 @@ impl ESM2 {
         })
     }
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
-        // def forward(self, tokens, repr_layers=[], need_head_weights=False, return_contacts=False):
-        //     if return_contacts:
-        //         need_head_weights = True
-        //     assert tokens.ndim == 2
-        //     padding_mask = tokens.eq(self.padding_idx)  # B, T
-        //     x = self.embed_scale * self.embed_tokens(tokens)
-        //     if self.token_dropout:
-        //         x.masked_fill_((tokens == self.mask_idx).unsqueeze(-1), 0.0)
-        //         # x: B x T x C
-        //         mask_ratio_train = 0.15 * 0.8
-        //         src_lengths = (~padding_mask).sum(-1)
-        //         mask_ratio_observed = (tokens == self.mask_idx).sum(-1).to(x.dtype) / src_lengths
-        //         x = x * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]
-        //     if padding_mask is not None:
-        //         x = x * (1 - padding_mask.unsqueeze(-1).type_as(x))
-        //     repr_layers = set(repr_layers)
-        //     hidden_representations = {}
-        //     if 0 in repr_layers:
-        //         hidden_representations[0] = x
-        //     if need_head_weights:
-        //         attn_weights = []
-        //     # (B, T, E) => (T, B, E)
-        //     x = x.transpose(0, 1)
-        //     if not padding_mask.any():
-        //         padding_mask = None
-        //     for layer_idx, layer in enumerate(self.layers):
-        //         x, attn = layer(
-        //             x,
-        //             self_attn_padding_mask=padding_mask,
-        //             need_head_weights=need_head_weights,
-        //         )
-        //         if (layer_idx + 1) in repr_layers:
-        //             hidden_representations[layer_idx + 1] = x.transpose(0, 1)
-        //         if need_head_weights:
-        //             # (H, B, T, T) => (B, H, T, T)
-        //             attn_weights.append(attn.transpose(1, 0))
-        //     x = self.emb_layer_norm_after(x)
-        //     x = x.transpose(0, 1)  # (T, B, E) => (B, T, E)
-        //     # last hidden representation should have layer norm applied
-        //     if (layer_idx + 1) in repr_layers:
-        //         hidden_representations[layer_idx + 1] = x
-        //     x = self.lm_head(x)
-        //     result = {"logits": x, "representations": hidden_representations}
-        //     if need_head_weights:
-        //         # attentions: B x L x H x T x T
-        //         attentions = torch.stack(attn_weights, 1)
-        //         if padding_mask is not None:
-        //             attention_mask = 1 - padding_mask.type_as(attentions)
-        //             attention_mask = attention_mask.unsqueeze(1) * attention_mask.unsqueeze(2)
-        //             attentions = attentions * attention_mask[:, None, None, :, :]
-        //         result["attentions"] = attentions
-        //         if return_contacts:
-        //             contacts = self.contact_head(tokens, attentions)
-        //             result["contacts"] = contacts
-        //     return result
-        // 6. Process through all layers
+        let mut xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
         for (layer_idx, layer) in self.layers.iter().enumerate() {
-            let (new_x, attn) = layer.forward(&x, None, need_head_weights)?;
-            x = new_x;
-            if need_head_weights {
-                attn_weights.push(attn.transpose(1, 0)?);
+            let (new_xs, attn) = layer.forward(&xs, None, need_head_weights)?;
+            xs = new_xs;
         }
-
-        // 7. Apply final layer norm
-        x = self.layer_norm_after.forward(&x)?;
-        // 8. Transpose back to (B, T, E)
-        x = x.transpose(0, 1)?;
-        // 9. Apply language model head
-        let logits = self.lm_head.forward(&x)?;
-
-        // 10. Process attention weights and compute contacts if needed
-        let attentions = if need_head_weights {
-            Some(Tensor::stack(&attn_weights, 1)?)
-        } else {
-            None
-        };
-
-        let contacts = if need_head_weights {
-            // Some(self.contact_head.forward(tokens, &attentions.unwrap())?)
-            None // Placeholder
-        } else {
-            None
-        };
-
-        // 11. Return results
-        Ok(ESM2Output {
-            logits,
-            hidden_states: hidden_representations,
-            attentions,
-            contacts,
-        })
+        xs = self.layer_norm_after.forward(&xs)?;
+        xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
+        let logits = self.lm_head.forward(&xs)?;
+        Ok(ESM2Output { logits })
     }
-
     /// Load the tokenizer for encoding sequences
     pub fn load_tokenizer() -> Result<Tokenizer> {
         let tokenizer_bytes = include_bytes!("tokenizer.json");
@@ -559,9 +465,10 @@ impl ESM2 {
 }
 
 // Output struct
+// todo: potentially expand
 pub struct ESM2Output {
     pub logits: Tensor,
-    pub representations: std::collections::HashMap<usize, Tensor>,
-    pub attentions: Option<Tensor>,
-    pub contacts: Option<Tensor>,
+    // pub representations: std::collections::HashMap<usize, Tensor>,
+    // pub attentions: Option<Tensor>,
+    // pub contacts: Option<Tensor>,
 }
