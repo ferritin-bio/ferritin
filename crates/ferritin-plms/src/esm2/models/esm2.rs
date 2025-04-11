@@ -237,8 +237,11 @@ impl ESM2LMHead {
             decoder,
         })
     }
-    fn forward() {
-        todo!()
+    fn forward(self, xs: &Tensor) -> Result<Tensor> {
+        xs.apply(&self.dense)?
+            .gelu()?
+            .apply(&self.layer_norm)?
+            .apply(&self.decoder)
     }
 }
 
@@ -447,12 +450,12 @@ impl ESM2 {
     }
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
         let mut xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
-        for (layer_idx, layer) in self.layers.iter().enumerate() {
-            let (new_xs, attn) = layer.forward(&xs)?;
-            xs = new_xs;
-        }
-        xs = self.layer_norm_after.forward(&xs)?;
-        xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
+        // for (layer_idx, layer) in self.layers.iter().enumerate() {
+        //     let (new_xs, attn) = layer.forward(&xs)?;
+        //     xs = new_xs;
+        // }
+        // xs = self.layer_norm_after.forward(&xs)?;
+        // xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
         let logits = self.lm_head.forward(&xs)?;
         Ok(ESM2Output { logits })
     }
