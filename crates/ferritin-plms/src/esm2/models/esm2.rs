@@ -208,27 +208,18 @@ pub struct ESM2LMHead {
 }
 impl ESM2LMHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        let dense = linear(
-            config.hidden_size as usize,
-            config.hidden_size as usize,
-            vb.pp("dense"),
-        )?;
-        let layer_norm = layer_norm(
-            config.hidden_size as usize,
-            LayerNormConfig {
-                eps: config.layer_norm_eps as f64,
-                remove_mean: true,
-                affine: true,
-            },
-            vb.pp("layer_norm"),
-        )?;
+        let hidden_size = config.hidden_size as usize;
+        let vocab_size = config.vocab_size as usize;
+        let dense = linear(hidden_size, hidden_size, vb.pp("dense"))?;
+        let ln_config = LayerNormConfig {
+            eps: config.layer_norm_eps as f64,
+            remove_mean: true,
+            affine: true,
+        };
+        let layer_norm = layer_norm(hidden_size, ln_config, vb.pp("layer_norm"))?;
         let decoder_bias = vb.get(config.vocab_size as usize, "bias")?;
         let decoder = Linear::new(
-            Tensor::zeros(
-                &[config.vocab_size as usize, config.hidden_size as usize],
-                DType::F32,
-                vb.device(),
-            )?,
+            Tensor::zeros(&[vocab_size, hidden_size], DType::F32, vb.device())?,
             Some(decoder_bias),
         );
         Ok(ESM2LMHead {
