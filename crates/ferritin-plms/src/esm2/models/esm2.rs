@@ -330,9 +330,7 @@ impl ESM2Attention {
         // };
 
         // Compute attention scores: [batch_size, num_heads, seq_len, seq_len]
-        println!("before");
         let scale = (self.head_dim as f64).powf(-0.5);
-        println!("after");
         let attention_scores = (q.matmul(&k.transpose(2, 3)?)? * scale)?;
         // Pytorch: attn_weights_float = utils_softmax(attn_weights, dim=-1, onnx_trace=self.onnx_trace)
         // Pytorch: attn_weights = attn_weights_float.type_as(attn_weights)
@@ -383,6 +381,7 @@ impl ESM1LayerNorm {
         })
     }
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
+        println!("ESM1LayerNorm Input tensor shape: {:?}", x.dims());
         let x = x.to_dtype(DType::F32)?; // note: needed for OPs but not clear why U32
         let means = x.mean_keepdim(D::Minus1)?.to_dtype(DType::F32)?;
         let x_zeromean = x.sub(&means)?;
@@ -390,9 +389,47 @@ impl ESM1LayerNorm {
         let variances1 = &(variances + self.eps)?.sqrt()?;
         let x_norm = x_zeromean.div(variances1)?;
         println!("Mismatch Below");
+        //Error: shape mismatch in mul, lhs: [255, 1], rhs: [480]
         let weighted = x_norm.mul(&self.weight)?;
         weighted.add(&self.bias)
     }
+    // fn forward(&self, x: &Tensor) -> Result<Tensor> {
+    //     let x = x.to_dtype(DType::F32)?;
+
+    //     // Get the shape of x for debugging
+    //     println!("Input tensor shape: {:?}", x.dims());
+
+    //     // Calculate mean across the last dimension
+    //     let means = x.mean_keepdim(D::Minus1)?.to_dtype(DType::F32)?;
+    //     let x_zeromean = x.sub(&means)?;
+    //     let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
+    //     let variances1 = &(variances + self.eps)?.sqrt()?;
+    //     let x_norm = x_zeromean.div(variances1)?;
+
+    //     // In PyTorch, the weight and bias are broadcasted automatically
+    //     // We need to reshape them to match the broadcasting semantics in Candle
+
+    //     // Get the dimensions we need to prepend to weight/bias
+    //     let input_dims = x.dims();
+    //     let mut weight_shape = Vec::with_capacity(input_dims.len());
+
+    //     // Add leading '1's to match the shape of x_norm except the last dimension
+    //     for i in 0..input_dims.len()-1 {
+    //         weight_shape.push(1);
+    //     }
+    //     // Add the actual dimension for the last axis
+    //     weight_shape.push(self.weight.dim(0)?);
+
+    //     println!("Reshaping weight to: {:?}", weight_shape);
+
+    //     // Reshape weight and bias for proper broadcasting
+    //     let weight_reshaped = self.weight.reshape(&weight_shape)?;
+    //     let bias_reshaped = self.bias.reshape(&weight_shape)?;
+
+    //     // Now element-wise multiplication should work with broadcasting
+    //     let weighted = x_norm.mul(&weight_reshaped)?;
+    //     weighted.add(&bias_reshaped)
+    // }
 }
 
 // Full transformer layer
@@ -480,17 +517,7 @@ impl ESM2 {
             lm_head,
         })
     }
-    pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
-        let mut xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
-        for (_layer_idx, layer) in self.layers.iter().enumerate() {
-            let (new_xs, _attn) = layer.forward(&xs)?;
-            xs = new_xs;
-        }
-        xs = self.layer_norm_after.forward(&xs)?;
-        xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
-        let logits = self.lm_head.forward(&xs)?;
-        Ok(ESM2Output { logits })
-    }
+
     /// Load the tokenizer for encoding sequences
     pub fn load_tokenizer() -> Result<Tokenizer> {
         let tokenizer_bytes = include_bytes!("tokenizer.json");
