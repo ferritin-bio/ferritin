@@ -2360,9 +2360,9 @@ dependencies = [
 
 [[package]]
 name = "candle-core"
-version = "0.9.0-alpha.1"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7bcb2a9a0a4d892dc27980054f8ab697612e4c2394bf3c3a4be7dc229cb3148"
+checksum = "06ccf5ee3532e66868516d9b315f73aec9f34ea1a37ae98514534d458915dbf1"
 dependencies = [
  "byteorder",
  "candle-metal-kernels",
@@ -2385,9 +2385,9 @@ dependencies = [
 
 [[package]]
 name = "candle-metal-kernels"
-version = "0.9.0-alpha.1"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e720c3761462b5691aea6214bf6315e9c4437b8f0cfa18014a28c86524da570"
+checksum = "52c85c21827c28db94e7112e364abe7e0cf8d2b022c014edf08642be6b94f21e"
 dependencies = [
  "metal 0.27.0",
  "once_cell",
@@ -2397,9 +2397,9 @@ dependencies = [
 
 [[package]]
 name = "candle-nn"
-version = "0.9.0-alpha.1"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ad53130b88a67f351c7c7d15a7723c3a65e2675d75795d777ac8e5ce27f4e76"
+checksum = "be1160c3b63f47d40d91110a3e1e1e566ae38edddbbf492a60b40ffc3bc1ff38"
 dependencies = [
  "candle-core",
  "candle-metal-kernels",
@@ -2414,9 +2414,9 @@ dependencies = [
 
 [[package]]
 name = "candle-onnx"
-version = "0.9.0-alpha.1"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b212413ab6af68c8d4abd6b4459d9bdf310aefcf4d2c7256661df8bb72088d49"
+checksum = "5d8e1b5113bc7cf40371e78f5123fe428c9d47ad84869082246d2c40b12699cf"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -2426,9 +2426,9 @@ dependencies = [
 
 [[package]]
 name = "candle-transformers"
-version = "0.9.0-alpha.1"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e065351e72a9b81c285e78e8dab10af0c946d8a49e53e512a0b8c9b3f33d9c1d"
+checksum = "94a0900d49f8605e0e7e6693a1f560e6271279de98e5fa369e7abf3aac245020"
 dependencies = [
  "byteorder",
  "candle-core",
@@ -12296,9 +12296,9 @@ dependencies = [
 
 [[package]]
 name = "ug"
-version = "0.2.0"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8b4e6c66f5eda774e2dcb5e35779b4a7c7ab8557c7de46398716b824464cacb"
+checksum = "03719c61a91b51541f076dfdba45caacf750b230cefaa4b32d6f5411c3f7f437"
 dependencies = [
  "gemm 0.18.2",
  "half",
@@ -12317,9 +12317,9 @@ dependencies = [
 
 [[package]]
 name = "ug-metal"
-version = "0.2.0"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b37192988631e1f5083890dbdceb11e142fde2752375b6187d18a853326d773a"
+checksum = "a02ddc17bf32f7dcaaf016b6735f7198082b82f122df7b3ca15d8ead5911ccef"
 dependencies = [
  "half",
  "metal 0.29.0",

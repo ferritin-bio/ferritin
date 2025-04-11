@@ -219,7 +219,6 @@ impl ESM2Embeddings {
     }
     pub fn embed_tokens(&self, x: &Tensor) -> Result<Tensor> {
         println!("Token embedding input DType: {:?}", x.dtype());
-
         println!("Token embedding input shape: {:?}", x.dims());
         let max_value = x.max(D::Minus1)?;
         println!("Maximum value in input: {:?}", max_value); // 23
@@ -492,12 +491,12 @@ pub struct ESM2 {
 }
 
 impl ESM2 {
-    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        let embeddings = ESM2Embeddings::load(vb.pp("esm.embeddings"), config)?;
+    pub fn load(vb: VarBuilder, config: ESM2Config) -> Result<Self> {
+        let embeddings = ESM2Embeddings::load(vb.pp("esm.embeddings"), &config)?;
         let layers = (0..config.num_hidden_layers)
-            .map(|i| ESM2Layer::load(vb.pp(format!("esm.encoder.layer.{}", i)), config))
+            .map(|i| ESM2Layer::load(vb.pp(format!("esm.encoder.layer.{}", i)), &config))
             .collect::<Result<Vec<_>>>()?;
-        let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), config)?;
+        let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), &config)?;
         let layer_norm_after = layer_norm(
             config.hidden_size as usize,
             LayerNormConfig {
@@ -507,10 +506,10 @@ impl ESM2 {
             },
             vb.pp("esm.encoder.emb_layer_norm_after"),
         )?;
-        let lm_head = ESM2LMHead::load(vb.pp("lm_head"), config)?;
+        let lm_head = ESM2LMHead::load(vb.pp("lm_head"), &config)?;
         Ok(Self {
             embeddings,
-            config: config.clone(),
+            config,
             contact_head,
             layer_norm_after,
             layers,
@@ -529,7 +528,7 @@ impl ESM2 {
         println!("Input tensor shape before embedding: {:?}", x.dims());
         let mut xs = self.embeddings.forward(x)?;
         println!("Tensor shape after embedding: {:?}", x.dims());
-        let mut xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
+        xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
         for (_layer_idx, layer) in self.layers.iter().enumerate() {
             let (new_xs, _attn) = layer.forward(&xs)?;
             xs = new_xs;
