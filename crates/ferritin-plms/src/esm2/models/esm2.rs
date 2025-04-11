@@ -230,7 +230,7 @@ impl ESM2LMHead {
             decoder,
         })
     }
-    fn forward(self, xs: &Tensor) -> Result<Tensor> {
+    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
         xs.apply(&self.dense)?
             .gelu()?
             .apply(&self.layer_norm)?
@@ -330,7 +330,9 @@ impl ESM2Attention {
         // };
 
         // Compute attention scores: [batch_size, num_heads, seq_len, seq_len]
+        println!("before");
         let scale = (self.head_dim as f64).powf(-0.5);
+        println!("after");
         let attention_scores = (q.matmul(&k.transpose(2, 3)?)? * scale)?;
         // Pytorch: attn_weights_float = utils_softmax(attn_weights, dim=-1, onnx_trace=self.onnx_trace)
         // Pytorch: attn_weights = attn_weights_float.type_as(attn_weights)
@@ -360,8 +362,7 @@ impl ESM2Attention {
         //                 # average attention weights over heads
         //                 attn_weights = attn_weights.mean(dim=0)
         //
-        //         return at
-        //
+        //         return attn
         let output = self.out_proj.forward(&context)?;
 
         Ok((output, None)) // weights tensor
@@ -382,11 +383,13 @@ impl ESM1LayerNorm {
         })
     }
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let means = x.mean_keepdim(D::Minus1)?;
+        let x = x.to_dtype(DType::F32)?; // note: needed for OPs but not clear why U32
+        let means = x.mean_keepdim(D::Minus1)?.to_dtype(DType::F32)?;
         let x_zeromean = x.sub(&means)?;
         let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
         let variances1 = &(variances + self.eps)?.sqrt()?;
         let x_norm = x_zeromean.div(variances1)?;
+        println!("Mismatch Below");
         let weighted = x_norm.mul(&self.weight)?;
         weighted.add(&self.bias)
     }
@@ -419,17 +422,10 @@ impl ESM2Layer {
         })
     }
 
-    fn forward(
-        &self,
-        xs: &Tensor,
-        self_attn_padding_mask: Option<&Tensor>,
-        need_head_weights: bool,
-    ) -> Result<(Tensor, Option<Tensor>)> {
+    fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
         let residual = xs.clone();
         let x = self.self_attn_layer_norm.forward(xs)?;
-        let (x, attn) =
-            self.self_attn
-                .forward(&x, &x, &x, self_attn_padding_mask, need_head_weights)?;
+        let (x, attn) = self.self_attn.forward(&x, &x, &x)?;
         let x = (x + residual)?;
 
         // Second block: FFN with residual connection
@@ -440,7 +436,7 @@ impl ESM2Layer {
             .gelu()?
             .apply(&self.fc1)?
             .apply(&self.fc2)?;
-        let x = x + residual;
+        let x = (x + residual)?;
         Ok((x, attn))
     }
 }
@@ -485,13 +481,13 @@ impl ESM2 {
         })
     }
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
-        let xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
-        for (layer_idx, layer) in self.layers.iter().enumerate() {
-            let (new_xs, attn) = layer.forward(&xs)?;
+        let mut xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
+        for (_layer_idx, layer) in self.layers.iter().enumerate() {
+            let (new_xs, _attn) = layer.forward(&xs)?;
             xs = new_xs;
         }
-        // xs = self.layer_norm_after.forward(&xs)?;
-        // xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
+        xs = self.layer_norm_after.forward(&xs)?;
+        xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
         let logits = self.lm_head.forward(&xs)?;
         Ok(ESM2Output { logits })
     }
