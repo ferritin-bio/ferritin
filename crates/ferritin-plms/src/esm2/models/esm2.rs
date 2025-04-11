@@ -217,6 +217,23 @@ impl ESM2Embeddings {
             position_ids,
         })
     }
+    pub fn embed_tokens(&self, x: &Tensor) -> Result<Tensor> {
+        self.word_embeddings.forward(x)
+    }
+    pub fn forward(&self, input_ids: &Tensor) -> Result<Tensor> {
+        // todo: investigate whethere ESM2 USES the position embeddings
+        //
+        // Get token embeddings
+        // let token_embeddings = self.embed_tokens(input_ids)?;
+        // Get position embeddings
+        // let seq_length = input_ids.dim(1)?;
+        // let position_ids = self.position_ids.narrow(1, 0, seq_length)?;
+        // let position_embeddings = self.position_embeddings.forward(&position_ids)?;
+        // // Add token and position embeddings
+        // let embeddings = token_embeddings + position_embeddings;
+        // Ok(embeddings)
+        self.embed_tokens(input_ids)
+    }
 }
 
 pub struct ESM2LMHead {
@@ -263,7 +280,6 @@ pub struct ESM2ContactHead {
 }
 impl ESM2ContactHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        // let contact_scale
         let in_features = (config.num_hidden_layers as usize * config.num_attention_heads) as usize;
         Ok(ESM2ContactHead {
             // contact_scale: Tensor,
@@ -287,7 +303,6 @@ pub struct ESM2Attention {
     num_heads: usize,
     head_dim: usize,
     rotary_emb: Option<FalconRotaryEmbedding>,
-    // scale val?
 }
 impl ESM2Attention {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
@@ -409,43 +424,6 @@ impl ESM1LayerNorm {
         let weighted = x_norm.mul(&self.weight)?;
         weighted.add(&self.bias)
     }
-    // fn forward(&self, x: &Tensor) -> Result<Tensor> {
-    //     let x = x.to_dtype(DType::F32)?;
-
-    //     // Get the shape of x for debugging
-    //     println!("Input tensor shape: {:?}", x.dims());
-
-    //     // Calculate mean across the last dimension
-    //     let means = x.mean_keepdim(D::Minus1)?.to_dtype(DType::F32)?;
-    //     let x_zeromean = x.sub(&means)?;
-    //     let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
-    //     let variances1 = &(variances + self.eps)?.sqrt()?;
-    //     let x_norm = x_zeromean.div(variances1)?;
-
-    //     // In PyTorch, the weight and bias are broadcasted automatically
-    //     // We need to reshape them to match the broadcasting semantics in Candle
-
-    //     // Get the dimensions we need to prepend to weight/bias
-    //     let input_dims = x.dims();
-    //     let mut weight_shape = Vec::with_capacity(input_dims.len());
-
-    //     // Add leading '1's to match the shape of x_norm except the last dimension
-    //     for i in 0..input_dims.len()-1 {
-    //         weight_shape.push(1);
-    //     }
-    //     // Add the actual dimension for the last axis
-    //     weight_shape.push(self.weight.dim(0)?);
-
-    //     println!("Reshaping weight to: {:?}", weight_shape);
-
-    //     // Reshape weight and bias for proper broadcasting
-    //     let weight_reshaped = self.weight.reshape(&weight_shape)?;
-    //     let bias_reshaped = self.bias.reshape(&weight_shape)?;
-
-    //     // Now element-wise multiplication should work with broadcasting
-    //     let weighted = x_norm.mul(&weight_reshaped)?;
-    //     weighted.add(&bias_reshaped)
-    // }
 }
 
 // Full transformer layer
@@ -538,9 +516,13 @@ impl ESM2 {
             .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
     }
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
+        // x = self.embed_scale * self.embed_tokens(tokens)
+        println!("Input tensor shape before embedding: {:?}", x.dims());
+        let x = self.embeddings.forward(x)?;
+        println!("Tensor shape after embedding: {:?}", x.dims());
         let mut xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
-        for (layer_idx, layer) in self.layers.iter().enumerate() {
-            let (new_xs, attn) = layer.forward(&xs)?;
+        for (_layer_idx, layer) in self.layers.iter().enumerate() {
+            let (new_xs, _attn) = layer.forward(&xs)?;
             xs = new_xs;
         }
         xs = self.layer_norm_after.forward(&xs)?;
