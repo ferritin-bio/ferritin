@@ -448,7 +448,7 @@ impl ESM2 {
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
         let mut xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
         for (layer_idx, layer) in self.layers.iter().enumerate() {
-            let (new_xs, attn) = layer.forward(&xs, None, need_head_weights)?;
+            let (new_xs, attn) = layer.forward(&xs)?;
             xs = new_xs;
         }
         xs = self.layer_norm_after.forward(&xs)?;
