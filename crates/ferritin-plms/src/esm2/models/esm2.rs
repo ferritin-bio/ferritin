@@ -41,7 +41,7 @@
 
 use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::{
-    Embedding, LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear, ops,
+    Embedding, LayerNorm, LayerNormConfig, Linear, VarBuilder, embedding, layer_norm, linear, ops,
 };
 use serde::Deserialize;
 use tokenizers::Tokenizer;
@@ -199,8 +199,24 @@ impl FalconRotaryEmbedding {
 }
 
 pub struct ESM2Embeddings {
-    token_embeddings: Embedding,
-    embed_scale: f64,
+    word_embeddings: Embedding,
+    position_embeddings: Embedding,
+    position_ids: Tensor,
+}
+impl ESM2Embeddings {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        let vocab_size = config.vocab_size as usize;
+        let hidden_size = config.hidden_size as usize;
+        let max_pos = config.max_position_embeddings as usize;
+        let word_embeddings = embedding(vocab_size, hidden_size, vb.pp("word_embeddings"))?;
+        let pos_embeddings = embedding(max_pos, hidden_size, vb.pp("position_embeddings"))?;
+        let position_ids = vb.get((1, max_pos), "position_ids")?;
+        Ok(Self {
+            word_embeddings,
+            position_embeddings: pos_embeddings,
+            position_ids,
+        })
+    }
 }
 
 pub struct ESM2LMHead {
@@ -480,6 +496,7 @@ impl ESM2Layer {
 
 // Main model struct
 pub struct ESM2 {
+    embeddings: ESM2Embeddings,
     config: ESM2Config,
     layers: Vec<ESM2Layer>,
     layer_norm_after: LayerNorm,
@@ -488,13 +505,8 @@ pub struct ESM2 {
 }
 
 impl ESM2 {
-    pub fn new(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        // Create embeddings, layers, and heads
-        todo!()
-    }
-    // note: in this load function we do NOT handle the embedding code
-    // which gets invoked only when the model is invoked with tokens
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        let embeddings = ESM2Embeddings::load(vb.pp("esm.embeddings"), config)?;
         let layers = (0..config.num_hidden_layers)
             .map(|i| ESM2Layer::load(vb.pp(format!("esm.encoder.layer.{}", i)), config))
             .collect::<Result<Vec<_>>>()?;
@@ -510,6 +522,7 @@ impl ESM2 {
         )?;
         let lm_head = ESM2LMHead::load(vb.pp("lm_head"), config)?;
         Ok(Self {
+            embeddings,
             config: config.clone(),
             contact_head,
             layer_norm_after,
@@ -523,6 +536,17 @@ impl ESM2 {
         let tokenizer_bytes = include_bytes!("tokenizer.json");
         Tokenizer::from_bytes(tokenizer_bytes)
             .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
+    }
+    pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
+        let mut xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
+        for (layer_idx, layer) in self.layers.iter().enumerate() {
+            let (new_xs, attn) = layer.forward(&xs)?;
+            xs = new_xs;
+        }
+        xs = self.layer_norm_after.forward(&xs)?;
+        xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
+        let logits = self.lm_head.forward(&xs)?;
+        Ok(ESM2Output { logits })
     }
 }
 
