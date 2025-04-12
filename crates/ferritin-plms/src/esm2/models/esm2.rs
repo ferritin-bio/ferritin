@@ -412,15 +412,7 @@ impl ESM1LayerNorm {
         })
     }
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let x = x.to_dtype(DType::F32)?; // note: needed for OPs but not clear why U32
-        println!("x shape: {:?}", x.dims());
-        let hidden_size = x.dim(D::Minus1)?;
-        let means = (x.sum_keepdim(D::Minus1)? / hidden_size as f64)?;
-        // let means = x.mean_keepdim(D::Minus1)?;
-        println!("means shape: {:?}", means.dims());
-        let x_zeromean = x.broadcast_sub(&means)?;
-        println!("Here 02
-            ");
+        let x_zeromean = ops::layer_norm(x, &self.weight, &self.bias, self.eps as f32)?;
         let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
         let variances1 = &(variances + self.eps)?.sqrt()?;
         let x_norm = x_zeromean.div(variances1)?;
