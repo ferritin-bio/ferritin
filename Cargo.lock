@@ -1067,11 +1067,12 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bevy"
-version = "0.16.0-rc.3"
+version = "0.16.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e66ee4b3dee30684ad59146b06a09952da817fb6a22ad25ee8c6f1dc5ab15cf5"
+checksum = "fdd1a95f467119c45876e04814e17501ad14af8ff2f94f5721d0b065d6a654ac"
 dependencies = [
  "bevy_internal",
+ "tracing",
 ]
 
 [[package]]
@@ -1493,9 +1494,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_internal"
-version = "0.16.0-rc.3"
+version = "0.16.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dd5e43ab39f5e93732003e805bd37f2b89f92432eb350655cd3bc56849514af"
+checksum = "efc4a4857e019fb3079d30af3a2d282b8faece3e3a8ccc0608de598478695b47"
 dependencies = [
  "bevy_a11y",
  "bevy_animation",
@@ -2360,9 +2361,9 @@ dependencies = [
 
 [[package]]
 name = "candle-core"
-version = "0.8.4"
+version = "0.9.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06ccf5ee3532e66868516d9b315f73aec9f34ea1a37ae98514534d458915dbf1"
+checksum = "a7bcb2a9a0a4d892dc27980054f8ab697612e4c2394bf3c3a4be7dc229cb3148"
 dependencies = [
  "byteorder",
  "candle-metal-kernels",
@@ -2385,9 +2386,9 @@ dependencies = [
 
 [[package]]
 name = "candle-metal-kernels"
-version = "0.8.4"
+version = "0.9.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52c85c21827c28db94e7112e364abe7e0cf8d2b022c014edf08642be6b94f21e"
+checksum = "0e720c3761462b5691aea6214bf6315e9c4437b8f0cfa18014a28c86524da570"
 dependencies = [
  "metal 0.27.0",
  "once_cell",
@@ -2397,9 +2398,9 @@ dependencies = [
 
 [[package]]
 name = "candle-nn"
-version = "0.8.4"
+version = "0.9.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be1160c3b63f47d40d91110a3e1e1e566ae38edddbbf492a60b40ffc3bc1ff38"
+checksum = "4ad53130b88a67f351c7c7d15a7723c3a65e2675d75795d777ac8e5ce27f4e76"
 dependencies = [
  "candle-core",
  "candle-metal-kernels",
@@ -2414,9 +2415,9 @@ dependencies = [
 
 [[package]]
 name = "candle-onnx"
-version = "0.8.4"
+version = "0.9.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d8e1b5113bc7cf40371e78f5123fe428c9d47ad84869082246d2c40b12699cf"
+checksum = "b212413ab6af68c8d4abd6b4459d9bdf310aefcf4d2c7256661df8bb72088d49"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -2426,9 +2427,9 @@ dependencies = [
 
 [[package]]
 name = "candle-transformers"
-version = "0.8.4"
+version = "0.9.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94a0900d49f8605e0e7e6693a1f560e6271279de98e5fa369e7abf3aac245020"
+checksum = "e065351e72a9b81c285e78e8dab10af0c946d8a49e53e512a0b8c9b3f33d9c1d"
 dependencies = [
  "byteorder",
  "candle-core",
@@ -2579,9 +2580,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.35"
+version = "4.5.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8aa86934b44c19c50f87cc2790e19f54f7a67aedb64101c2e1a2e5ecfb73944"
+checksum = "2df961d8c8a0d08aa9945718ccf584145eee3f3aa06cddbeac12933781102e04"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -2589,9 +2590,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.35"
+version = "4.5.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2414dbb2dd0695280da6ea9261e327479e9d37b0630f6b53ba2a11c60c679fd9"
+checksum = "132dbda40fb6753878316a489d5a1242a8ef2f0d9e47ba01c951ea8aa7d013a5"
 dependencies = [
  "anstream",
  "anstyle",
@@ -3680,9 +3681,9 @@ checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
 name = "either_of"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "169ae1dd00fb612cf27fd069b3b10f325ea60ac551f08e5b931b4413972a847d"
+checksum = "216d23e0ec69759a17f05e1c553f3a6870e5ec73420fbb07807a6f34d5d1d5a4"
 dependencies = [
  "paste",
  "pin-project-lite",
@@ -12296,9 +12297,9 @@ dependencies = [
 
 [[package]]
 name = "ug"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03719c61a91b51541f076dfdba45caacf750b230cefaa4b32d6f5411c3f7f437"
+checksum = "f8b4e6c66f5eda774e2dcb5e35779b4a7c7ab8557c7de46398716b824464cacb"
 dependencies = [
  "gemm 0.18.2",
  "half",
@@ -12317,9 +12318,9 @@ dependencies = [
 
 [[package]]
 name = "ug-metal"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a02ddc17bf32f7dcaaf016b6735f7198082b82f122df7b3ca15d8ead5911ccef"
+checksum = "b37192988631e1f5083890dbdceb11e142fde2752375b6187d18a853326d773a"
 dependencies = [
  "half",
  "metal 0.29.0",

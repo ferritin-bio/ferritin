@@ -218,15 +218,7 @@ impl ESM2Embeddings {
         })
     }
     pub fn embed_tokens(&self, x: &Tensor) -> Result<Tensor> {
-        println!("Token embedding input DType: {:?}", x.dtype());
-        println!("Token embedding input shape: {:?}", x.dims());
-        let max_value = x.max(D::Minus1)?;
-        println!("Maximum value in input: {:?}", max_value); // 23
-        let max_value = x.flatten_all()?.to_vec1::<u32>().into_iter().max();
-        println!("Maximum value in input: {:?}", max_value); // 23
-        let embeddings = self.word_embeddings.forward(x)?;
-        println!("Token embedding output shape: {:?}", embeddings.dims());
-        Ok(embeddings)
+        self.word_embeddings.forward(x)
     }
     pub fn forward(&self, input_ids: &Tensor) -> Result<Tensor> {
         // todo: investigate whethere ESM2 USES the position embeddings
@@ -420,15 +412,18 @@ impl ESM1LayerNorm {
         })
     }
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        println!("ESM1LayerNorm Input tensor shape: {:?}", x.dims());
         let x = x.to_dtype(DType::F32)?; // note: needed for OPs but not clear why U32
-        let means = x.mean_keepdim(D::Minus1)?.to_dtype(DType::F32)?;
-        let x_zeromean = x.sub(&means)?;
+        println!("x shape: {:?}", x.dims());
+        let hidden_size = x.dim(D::Minus1)?;
+        let means = (x.sum_keepdim(D::Minus1)? / hidden_size as f64)?;
+        // let means = x.mean_keepdim(D::Minus1)?;
+        println!("means shape: {:?}", means.dims());
+        let x_zeromean = x.broadcast_sub(&means)?;
+        println!("Here 02
+            ");
         let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
         let variances1 = &(variances + self.eps)?.sqrt()?;
         let x_norm = x_zeromean.div(variances1)?;
-        println!("Mismatch Below");
-        //Error: shape mismatch in mul, lhs: [255, 1], rhs: [480]
         let weighted = x_norm.mul(&self.weight)?;
         weighted.add(&self.bias)
     }
