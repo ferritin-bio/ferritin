@@ -1,6 +1,6 @@
 use anyhow::{Error as E, Result};
 use candle_core::safetensors::load;
-use candle_core::{D, DType, Tensor};
+use candle_core::{D, DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use clap::Parser;
 use ferritin_plms::{ESM2, ESM2Config as Config, device};
@@ -9,7 +9,7 @@ use tokenizers::Tokenizer;
 
 pub const DTYPE: DType = DType::F32;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Run on CPU rather than on GPU.
@@ -30,8 +30,7 @@ struct Args {
 }
 
 impl Args {
-    fn build_model_and_tokenizer(&self) -> Result<(ESM2, Tokenizer)> {
-        let device = device(self.cpu)?;
+    fn build_model_and_tokenizer(&self, device: &Device) -> Result<(ESM2, Tokenizer)> {
         let (model_id, revision) = match self.model_id.as_str() {
             "8M" => ("facebook/esm2_t6_8M_UR50D", "main"),
             "35M" => ("facebook/esm2_t12_35M_UR50D", "main"),
@@ -68,7 +67,7 @@ impl Args {
         let encoded = tokenizer.encode(protein, false);
 
         println!("Encoded.... and.....");
-        let model = ESM2::load(vb, &config)?;
+        let model = ESM2::load(vb, config)?;
         println!("Loaded!");
 
         Ok((model, tokenizer))
@@ -79,11 +78,8 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     println!("Loading the Model and Tokenizer.......");
-    let (model, tokenizer) = args.build_model_and_tokenizer()?;
-
-    // let device = &model.get_device();
-    let device = device(false)?;
-
+    let device = device(args.cpu)?;
+    let (model, tokenizer) = args.build_model_and_tokenizer(&device)?;
     let protein_sequences = if let Some(seq) = args.protein_string {
         vec![seq]
     } else if let Some(fasta_path) = args.protein_fasta {
@@ -107,14 +103,14 @@ fn main() -> Result<()> {
         println!("Encoding.......");
         let encoded = model.forward(&token_ids)?;
 
-        // println!("Predicting.......");
-        // let predictions = encoded.logits.argmax(D::Minus1)?;
+        println!("Predicting.......");
+        let predictions = encoded.logits.argmax(D::Minus1)?;
 
-        // println!("Decoding.......");
-        // let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
-        // let decoded = tokenizer.decode(indices.as_slice(), true);
+        println!("Decoding.......");
+        let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
+        let decoded = tokenizer.decode(indices.as_slice(), true);
 
-        // println!("Decoded: {:?}, ", decoded);
+        println!("Decoded: {:?}, ", decoded);
     }
 
     Ok(())

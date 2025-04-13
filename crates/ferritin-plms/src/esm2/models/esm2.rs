@@ -40,7 +40,9 @@
 //         └──────────────┘         └─────────────────┘
 
 use candle_core::{D, DType, Device, Module, Result, Tensor};
-use candle_nn::{Embedding, LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear};
+use candle_nn::{
+    Embedding, LayerNorm, LayerNormConfig, Linear, VarBuilder, embedding, layer_norm, linear, ops,
+};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
 
@@ -197,8 +199,41 @@ impl FalconRotaryEmbedding {
 }
 
 pub struct ESM2Embeddings {
-    token_embeddings: Embedding,
-    embed_scale: f64,
+    word_embeddings: Embedding,
+    position_embeddings: Embedding,
+    position_ids: Tensor,
+}
+impl ESM2Embeddings {
+    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+        let vocab_size = config.vocab_size as usize;
+        let hidden_size = config.hidden_size as usize;
+        let max_pos = config.max_position_embeddings as usize;
+        let word_embeddings = vb.get((vocab_size, hidden_size), "word_embeddings.weight")?;
+        let pos_embeddings = embedding(max_pos, hidden_size, vb.pp("position_embeddings"))?;
+        let position_ids = vb.get((1, max_pos), "position_ids")?;
+        Ok(Self {
+            word_embeddings: Embedding::new(word_embeddings, hidden_size),
+            position_embeddings: pos_embeddings,
+            position_ids,
+        })
+    }
+    pub fn embed_tokens(&self, x: &Tensor) -> Result<Tensor> {
+        self.word_embeddings.forward(x)
+    }
+    pub fn forward(&self, input_ids: &Tensor) -> Result<Tensor> {
+        // todo: investigate whethere ESM2 USES the position embeddings
+        //
+        // Get token embeddings
+        // let token_embeddings = self.embed_tokens(input_ids)?;
+        // Get position embeddings
+        // let seq_length = input_ids.dim(1)?;
+        // let position_ids = self.position_ids.narrow(1, 0, seq_length)?;
+        // let position_embeddings = self.position_embeddings.forward(&position_ids)?;
+        // // Add token and position embeddings
+        // let embeddings = token_embeddings + position_embeddings;
+        // Ok(embeddings)
+        self.embed_tokens(input_ids)
+    }
 }
 
 pub struct ESM2LMHead {
@@ -208,27 +243,18 @@ pub struct ESM2LMHead {
 }
 impl ESM2LMHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        let dense = linear(
-            config.hidden_size as usize,
-            config.hidden_size as usize,
-            vb.pp("dense"),
-        )?;
-        let layer_norm = layer_norm(
-            config.hidden_size as usize,
-            LayerNormConfig {
-                eps: config.layer_norm_eps as f64,
-                remove_mean: true,
-                affine: true,
-            },
-            vb.pp("layer_norm"),
-        )?;
+        let hidden_size = config.hidden_size as usize;
+        let vocab_size = config.vocab_size as usize;
+        let dense = linear(hidden_size, hidden_size, vb.pp("dense"))?;
+        let ln_config = LayerNormConfig {
+            eps: config.layer_norm_eps as f64,
+            remove_mean: true,
+            affine: true,
+        };
+        let layer_norm = layer_norm(hidden_size, ln_config, vb.pp("layer_norm"))?;
         let decoder_bias = vb.get(config.vocab_size as usize, "bias")?;
         let decoder = Linear::new(
-            Tensor::zeros(
-                &[config.vocab_size as usize, config.hidden_size as usize],
-                DType::F32,
-                vb.device(),
-            )?,
+            Tensor::zeros(&[vocab_size, hidden_size], DType::F32, vb.device())?,
             Some(decoder_bias),
         );
         Ok(ESM2LMHead {
@@ -237,8 +263,11 @@ impl ESM2LMHead {
             decoder,
         })
     }
-    fn forward() {
-        todo!()
+    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+        xs.apply(&self.dense)?
+            .gelu()?
+            .apply(&self.layer_norm)?
+            .apply(&self.decoder)
     }
 }
 
@@ -251,7 +280,6 @@ pub struct ESM2ContactHead {
 }
 impl ESM2ContactHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        // let contact_scale
         let in_features = (config.num_hidden_layers as usize * config.num_attention_heads) as usize;
         Ok(ESM2ContactHead {
             // contact_scale: Tensor,
@@ -303,35 +331,73 @@ impl ESM2Attention {
             rotary_emb,
         })
     }
-    fn forward(self, x: &Tensor) {}
+    fn forward(
+        &self,
+        query: &Tensor,
+        key: &Tensor,
+        value: &Tensor,
+    ) -> Result<(Tensor, Option<Tensor>)> {
+        let batch_size = query.dim(0)?;
+        let seq_len = query.dim(1)?;
+        let q = self.q_proj.forward(query)?;
+        let k = self.k_proj.forward(key)?;
+        let v = self.v_proj.forward(value)?;
+        // Reshape for multi-head attention
+        // [batch_size, seq_len, embed_dim] -> [batch_size, seq_len, num_heads, head_dim]
+        let q = q.reshape((batch_size, seq_len, self.num_heads, self.head_dim))?;
+        let k = k.reshape((batch_size, seq_len, self.num_heads, self.head_dim))?;
+        let v = v.reshape((batch_size, seq_len, self.num_heads, self.head_dim))?;
+
+        // Transpose to [batch_size, num_heads, seq_len, head_dim]
+        let q = q.transpose(1, 2)?;
+        let k = k.transpose(1, 2)?;
+        let v = v.transpose(1, 2)?;
+
+        // // Apply rotary embeddings if available
+        // let (q, k) = if let Some(rotary_emb) = &self.rotary_emb {
+        //     rotary_emb.apply_rotary_emb(&q, &k)?
+        // } else {
+        //     (q, k)
+        // };
+
+        // Compute attention scores: [batch_size, num_heads, seq_len, seq_len]
+        let scale = (self.head_dim as f64).powf(-0.5);
+        let attention_scores = (q.matmul(&k.transpose(2, 3)?)? * scale)?;
+        // Pytorch: attn_weights_float = utils_softmax(attn_weights, dim=-1, onnx_trace=self.onnx_trace)
+        // Pytorch: attn_weights = attn_weights_float.type_as(attn_weights)
+        let attention_weights = ops::softmax(&attention_scores, 3)?;
+
+        // Pytorch:dropouts
+        //         attn_probs = F.dropout(
+        //             attn_weights_float.type_as(attn_weights),
+        //             p=self.dropout,
+        //             training=self.training,
+        //         )
+        //
+        //  Pytorch: attn = torch.bmm(attn_probs, v)
+
+        let context = attention_weights.matmul(&v)?;
+        // Transpose and reshape back to [batch_size, seq_len, embed_dim]
+        let context = context.transpose(1, 2)?;
+        let embed_dim = self.num_heads * self.head_dim;
+        let context = context.reshape((batch_size, seq_len, embed_dim))?;
+
+        // Pytorch: Process the weights
+        //         if need_weights:
+        //             attn_weights = attn_weights_float.view(
+        //                 bsz, self.num_heads, tgt_len, src_len
+        //             ).type_as(attn).transpose(1, 0)
+        //             if not need_head_weights:
+        //                 # average attention weights over heads
+        //                 attn_weights = attn_weights.mean(dim=0)
+        //
+        //         return attn
+        let output = self.out_proj.forward(&context)?;
+
+        Ok((output, None)) // weights tensor
+    }
 }
 
-/// ESM1 style layer norm
-/// for esm1blayernorm use Candle::nn::layernorm
-///
-// // class ESM1LayerNorm(nn.Module):
-//     def __init__(self, hidden_size, eps=1e-12, affine=True):
-//         """Construct a layernorm layer in the TF style (eps inside the sqrt)."""
-//         super().__init__()
-//         self.hidden_size = (hidden_size,) if isinstance(hidden_size, int) else tuple(hidden_size)
-//         self.eps = eps
-//         self.affine = bool(affine)
-//         if self.affine:
-//             self.weight = nn.Parameter(torch.ones(hidden_size))
-//             self.bias = nn.Parameter(torch.zeros(hidden_size))
-//         else:
-//             self.weight, self.bias = None, None
-//
-//     def forward(self, x):
-//         dims = tuple(-(i + 1) for i in range(len(self.hidden_size)))
-//         means = x.mean(dims, keepdim=True)
-//         x_zeromean = x - means
-//         variances = x_zeromean.pow(2).mean(dims, keepdim=True)
-//         x = x_zeromean / torch.sqrt(variances + self.eps)
-//         if self.affine:
-//             x = (self.weight * x) + self.bias
-//         return x
-//
 pub struct ESM1LayerNorm {
     weight: Tensor,
     bias: Tensor,
@@ -346,13 +412,14 @@ impl ESM1LayerNorm {
         })
     }
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let means = x.mean_keepdim(D::Minus1)?;
-        let x_zeromean = x.sub(&means)?;
-        let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
-        let variances1 = &(variances + self.eps)?.sqrt()?;
-        let x_norm = x_zeromean.div(variances1)?;
-        let weighted = x_norm.mul(&self.weight)?;
-        weighted.add(&self.bias)
+        let x_zeromean = ops::layer_norm(x, &self.weight, &self.bias, self.eps as f32)?;
+        let x_norm = {
+            let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
+            x_zeromean.broadcast_div(&variances)?
+        };
+        x_norm
+            .broadcast_mul(&self.weight)?
+            .broadcast_add(&self.bias)
     }
 }
 
@@ -383,31 +450,25 @@ impl ESM2Layer {
         })
     }
 
-    fn forward(
-        &self,
-        xs: &Tensor,
-        self_attn_padding_mask: Option<&Tensor>,
-        need_head_weights: bool,
-    ) -> Result<(Tensor, Option<Tensor>)> {
+    fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
         let residual = xs.clone();
         let x = self.self_attn_layer_norm.forward(xs)?;
-        let (x, attn) =
-            self.self_attn
-                .forward(&x, &x, &x, self_attn_padding_mask, need_head_weights)?;
+        let (x, attn) = self.self_attn.forward(&x, &x, &x)?;
         let x = (x + residual)?;
         // Second block: FFN with residual connection
         let residual = x.clone();
         let x = self.final_layer_norm.forward(&x)?;
-        let x = self.fc1.forward(&x)?;
         let x = x.gelu()?;
-        let x = self.fc2.forward(&x)?;
-        let x = x + residual;
+        let x = x.apply(&self.fc1)?;
+        let x = x.apply(&self.fc2)?;
+        let x = (x + residual)?;
         Ok((x, attn))
     }
 }
 
 // Main model struct
 pub struct ESM2 {
+    embeddings: ESM2Embeddings,
     config: ESM2Config,
     layers: Vec<ESM2Layer>,
     layer_norm_after: LayerNorm,
@@ -416,17 +477,12 @@ pub struct ESM2 {
 }
 
 impl ESM2 {
-    pub fn new(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        // Create embeddings, layers, and heads
-        todo!()
-    }
-    // note: in this load function we do NOT handle the embedding code
-    // which gets invoked only when the model is invoked with tokens
-    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+    pub fn load(vb: VarBuilder, config: ESM2Config) -> Result<Self> {
+        let embeddings = ESM2Embeddings::load(vb.pp("esm.embeddings"), &config)?;
         let layers = (0..config.num_hidden_layers)
-            .map(|i| ESM2Layer::load(vb.pp(format!("esm.encoder.layer.{}", i)), config))
+            .map(|i| ESM2Layer::load(vb.pp(format!("esm.encoder.layer.{}", i)), &config))
             .collect::<Result<Vec<_>>>()?;
-        let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), config)?;
+        let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), &config)?;
         let layer_norm_after = layer_norm(
             config.hidden_size as usize,
             LayerNormConfig {
@@ -436,31 +492,35 @@ impl ESM2 {
             },
             vb.pp("esm.encoder.emb_layer_norm_after"),
         )?;
-        let lm_head = ESM2LMHead::load(vb.pp("lm_head"), config)?;
+        let lm_head = ESM2LMHead::load(vb.pp("lm_head"), &config)?;
         Ok(Self {
-            config: config.clone(),
+            embeddings,
+            config,
             contact_head,
             layer_norm_after,
             layers,
             lm_head,
         })
     }
+
+    /// Load the tokenizer for encoding sequences
+    pub fn load_tokenizer() -> Result<Tokenizer> {
+        let tokenizer_bytes = include_bytes!("tokenizer.json");
+        Tokenizer::from_bytes(tokenizer_bytes)
+            .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
+    }
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
-        let mut xs = x.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
+        // x = self.embed_scale * self.embed_tokens(tokens)
+        let mut xs = self.embeddings.forward(x)?;
+        xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
         for (layer_idx, layer) in self.layers.iter().enumerate() {
-            let (new_xs, attn) = layer.forward(&xs)?;
+            let (new_xs, _attn) = layer.forward(&xs)?;
             xs = new_xs;
         }
         xs = self.layer_norm_after.forward(&xs)?;
         xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
         let logits = self.lm_head.forward(&xs)?;
         Ok(ESM2Output { logits })
-    }
-    /// Load the tokenizer for encoding sequences
-    pub fn load_tokenizer() -> Result<Tokenizer> {
-        let tokenizer_bytes = include_bytes!("tokenizer.json");
-        Tokenizer::from_bytes(tokenizer_bytes)
-            .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
     }
 }
 
