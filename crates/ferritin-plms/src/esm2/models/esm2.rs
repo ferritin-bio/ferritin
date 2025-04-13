@@ -452,14 +452,9 @@ impl ESM2Layer {
 
     fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
         let residual = xs.clone();
-        println!("Residual shape: {:?}", residual.dims());
         let x = self.self_attn_layer_norm.forward(xs)?;
-        println!("After attention layer norm shape: {:?}", x.dims());
         let (x, attn) = self.self_attn.forward(&x, &x, &x)?;
-        println!("After attention shape: {:?}", x.dims());
         let x = (x + residual)?;
-        println!("After residual connection shape: {:?}", x.dims());
-
         // Second block: FFN with residual connection
         let residual = x.clone();
         let x = self.final_layer_norm.forward(&x)?;
@@ -519,7 +514,6 @@ impl ESM2 {
         let mut xs = self.embeddings.forward(x)?;
         xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
         for (layer_idx, layer) in self.layers.iter().enumerate() {
-            println!("Tensor layer: {:?}", layer_idx);
             let (new_xs, _attn) = layer.forward(&xs)?;
             xs = new_xs;
         }
