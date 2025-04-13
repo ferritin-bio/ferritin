@@ -105,9 +105,10 @@ fn main() -> Result<()> {
 
         println!("Predicting.......");
         let predictions = encoded.logits.argmax(D::Minus1)?;
+        println!("predictions: {:?}", predictions);
 
         println!("Decoding.......");
-        let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
+        let indices: Vec<u32> = predictions.to_vec1()?;
         let decoded = tokenizer.decode(indices.as_slice(), true);
 
         println!("Decoded: {:?}, ", decoded);
