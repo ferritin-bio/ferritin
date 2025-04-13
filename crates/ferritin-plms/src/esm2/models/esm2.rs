@@ -47,7 +47,7 @@ use serde::Deserialize;
 use tokenizers::Tokenizer;
 
 // for embeddings
-const MAX_SEQ_LEN: usize = 5000;
+const MAX_SEQ_LEN: usize = 10000;
 
 #[derive(Deserialize, Clone)]
 pub struct ESM2Config {
@@ -104,10 +104,6 @@ impl ESM2Config {
             hidden_size: 0,
             intermediate_size: 0,
             num_hidden_layers: 0,
-            // pub prepend_bos: bool,
-            // pub append_eos: bool,
-            // pub cls_idx: i64,
-            // pub eos_idx: i64,
         }
     }
 
@@ -157,6 +153,7 @@ struct FalconRotaryEmbedding {
 impl FalconRotaryEmbedding {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let inv_freq = vb.get(config.inv_freq_size(), "inv_freq")?;
+        println!("INV_FREQ DIM: {:?}", inv_freq.dims());
         let mut rotary = FalconRotaryEmbedding {
             inv_freq,
             max_seq_len: MAX_SEQ_LEN,
@@ -227,8 +224,6 @@ impl ESM2Embeddings {
         self.word_embeddings.forward(x)
     }
     pub fn forward(&self, input_ids: &Tensor) -> Result<Tensor> {
-        // If not using position
-        // self.embed_tokens(input_ids)
         let token_embeddings = self.embed_tokens(input_ids)?;
         let seq_length = input_ids.dim(1)?;
         let position_ids = self
@@ -428,7 +423,6 @@ impl ESM2Layer {
 // Main model struct
 pub struct ESM2 {
     embeddings: ESM2Embeddings,
-    // config: ESM2Config,
     layers: Vec<ESM2Layer>,
     layer_norm_after: LayerNorm,
     lm_head: ESM2LMHead,
@@ -445,13 +439,12 @@ impl ESM2 {
         let layer_norm_after = layer_norm(
             config.hidden_size as usize,
             LayerNormConfig {
-                eps: 0.00001,
+                eps: config.layer_norm_eps as f64,
                 remove_mean: true,
                 affine: true,
             },
             vb.pp("esm.encoder.emb_layer_norm_after"),
         )?;
-
         let lm_head = ESM2LMHead::load(
             vb.pp("lm_head"),
             &config,
@@ -459,7 +452,6 @@ impl ESM2 {
         )?;
         Ok(Self {
             embeddings,
-            // config,
             contact_head,
             layer_norm_after,
             layers,
