@@ -407,41 +407,19 @@ impl ESM2Attention {
         let q = q.reshape((seq_len, batch_size * self.num_heads, self.head_dim))?;
         let k = k.reshape((seq_len, batch_size * self.num_heads, self.head_dim))?;
         let v = v.reshape((seq_len, batch_size * self.num_heads, self.head_dim))?;
-
-        // Transpose to [batch_size, num_heads, seq_len, head_dim]
-        println!("q before transpose: {:?}", q.dims());
         let q = q.transpose(0, 1)?;
-        println!("q after transpose: {:?}", q.dims());
-
-        println!("k before transpose: {:?}", k.dims());
         let k = k.transpose(0, 1)?;
-        println!("k after transpose: {:?}", k.dims());
-
-        println!("v before transpose: {:?}", v.dims());
         let v = v.transpose(0, 1)?;
-        println!("v after transpose: {:?}", v.dims());
-
-        // // Apply rotary embeddings if available
         let (q, k) = self.rotary_emb.forward(&q, &k, None)?;
-
-        println!("After Rotary");
-        // Compute attention scores: [batch_size, num_heads, seq_len, seq_len]
         let scale = (self.head_dim as f64).powf(-0.5);
-        let attention_scores = (q.matmul(&k.transpose(2, 3)?)? * scale)?;
-        // Pytorch: attn_weights_float = utils_softmax(attn_weights, dim=-1, onnx_trace=self.onnx_trace)
-        // Pytorch: attn_weights = attn_weights_float.type_as(attn_weights)
-        let attention_weights = ops::softmax(&attention_scores, 3)?;
-
-        // Pytorch:dropouts
-        //         attn_probs = F.dropout(
-        //             attn_weights_float.type_as(attn_weights),
-        //             p=self.dropout,
-        //             training=self.training,
-        //         )
-        //
+        let attention_scores = (q.matmul(&k.transpose(1, 2)?)? * scale)?;
+        let attention_weights = ops::softmax(&attention_scores, D::Minus1)?;
         //  Pytorch: attn = torch.bmm(attn_probs, v)
-
+        println!("Pre-context");
+        println!("attention_weights shape: {:?}", attention_weights.dims());
+        println!("v shape: {:?}", v.dims());
         let context = attention_weights.matmul(&v)?;
+        println!("Post-context");
         // Transpose and reshape back to [batch_size, seq_len, embed_dim]
         let context = context.transpose(1, 2)?;
         let embed_dim = self.num_heads * self.head_dim;
