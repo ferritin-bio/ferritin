@@ -409,21 +409,21 @@ impl ESM2Attention {
         let v = v.reshape((seq_len, batch_size * self.num_heads, self.head_dim))?;
         let q = q.transpose(0, 1)?;
         let k = k.transpose(0, 1)?;
-        let v = v.transpose(0, 1)?;
+        let v = v.transpose(0, 1)?.contiguous()?;
         let (q, k) = self.rotary_emb.forward(&q, &k, None)?;
         let scale = (self.head_dim as f64).powf(-0.5);
+
+        // attn_weights = torch.bmm(q, k.transpose(1, 2))
+        // attn_weights = MultiheadAttention.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)  //<-- unimplemented
+        //  assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
         let attention_scores = (q.matmul(&k.transpose(1, 2)?)? * scale)?;
+        // potentially return (attention_weights), v here
         let attention_weights = ops::softmax(&attention_scores, D::Minus1)?;
-        //  Pytorch: attn = torch.bmm(attn_probs, v)
-        println!("Pre-context");
-        println!("attention_weights shape: {:?}", attention_weights.dims());
-        println!("v shape: {:?}", v.dims());
         let context = attention_weights.matmul(&v)?;
-        println!("Post-context");
-        // Transpose and reshape back to [batch_size, seq_len, embed_dim]
         let context = context.transpose(1, 2)?;
         let embed_dim = self.num_heads * self.head_dim;
         let context = context.reshape((batch_size, seq_len, embed_dim))?;
+        println!("Post-context");
 
         // Pytorch: Process the weights
         //         if need_weights:
@@ -436,7 +436,7 @@ impl ESM2Attention {
         //
         //         return attn
         let output = self.out_proj.forward(&context)?;
-
+        println!("Post-context");
         Ok((output, None)) // weights tensor
     }
 }
@@ -500,7 +500,7 @@ impl ESM2Layer {
         println!("After self_attn_layer_norm: {:?}", x.dims());
         let (x, attn) = self.self_attn.forward(&x, &x, &x)?;
         println!("After self_attn: {:?}", x.dims());
-        let x = (x + residual)?;
+        let x = (x + residual.transpose(0, 1)?)?;
         println!("After residual connection: {:?}", x.dims());
         // Second block: FFN with residual connection
         let residual = x.clone();
