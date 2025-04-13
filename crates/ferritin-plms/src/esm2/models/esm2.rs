@@ -306,20 +306,39 @@ impl ESM2LMHead {
             affine: true,
         };
         let layer_norm = layer_norm(hidden_size, ln_config, vb.pp("layer_norm"))?;
-        let decoder_bias = vb.get(config.vocab_size as usize, "bias")?;
-        let decoder = Linear::new(embedding, Some(decoder_bias));
+        let embedding_weights = embedding.embeddings().clone();
+        // let decoder_bias = vb.get(config.vocab_size as usize, "bias")?;
+        // let decoder = Linear::new(embedding, Some(decoder_bias));
         Ok(ESM2LMHead {
             dense,
             layer_norm,
-            decoder,
+            embedding_weights,
             bias,
         })
     }
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        xs.apply(&self.dense)?
-            .gelu()?
-            .apply(&self.layer_norm)?
-            .apply(&self.decoder)
+        // xs.apply(&self.dense)?
+        //     .gelu()?
+        //     .apply(&self.layer_norm)?
+        //     .apply(&self.decoder)
+        // Apply the dense layer and activation
+        println!("Hiddden states");
+        let hidden_states = xs.apply(&self.dense)?.gelu()?;
+        println!("Hiddden states");
+        // Apply layer norm
+        let hidden_states = self.layer_norm.forward(&hidden_states)?;
+        let (batch_size, seq_len, hidden_dim) = hidden_states.dims3()?;
+
+        let reshaped = hidden_states.reshape((batch_size * seq_len, hidden_dim))?;
+        println!("After reshape: {:?}", reshaped.dims());
+
+        println!("logits");
+        // Use embedding weights as the decoder weights (weight tying)
+        // We need to transpose the embedding weights for the linear projection
+        let logits = reshaped.matmul(&self.embedding_weights.transpose(0, 1)?)?;
+        println!("logits: {:?}", logits.dims());
+        // Add the bias
+        logits.broadcast_add(&self.bias)
     }
 }
 
