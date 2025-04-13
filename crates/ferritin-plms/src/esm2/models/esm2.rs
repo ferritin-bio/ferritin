@@ -174,53 +174,8 @@ impl FalconRotaryEmbedding {
         let emb = Tensor::cat(&[&freqs, &freqs], D::Minus1)?;
         self.cos_cache = Some(emb.cos()?);
         self.sin_cache = Some(emb.sin()?);
-
         Ok(())
     }
-    // fn cos_sin(
-    //     &mut self,
-    //     seq_len: usize,
-    //     device: &Device,
-    //     dtype: DType,
-    // ) -> Result<(Tensor, Tensor)> {
-    //     match &self.cache {
-    //         Some((s, cos, sin)) if *s == seq_len => {
-    //             return Ok((cos.clone(), sin.clone()));
-    //         }
-    //         _ => {}
-    //     }
-    //     let t = Tensor::arange(0, seq_len as u32, device)?.to_dtype(dtype)?;
-    //     let inv_freq = self.inv_freq.to_dtype(dtype)?;
-    //     let freqs = t.unsqueeze(1)?.matmul(&inv_freq.unsqueeze(0)?)?;
-    //     let emb = Tensor::cat(&[&freqs, &freqs], D::Minus1)?;
-    //     let cos = emb.cos()?;
-    //     let sin = emb.sin()?;
-    //     // self.cache = Some((seq_len, cos.clone(), sin.clone()));
-    //     Ok((cos, sin))
-    // }
-
-    // fn forward(
-    //     &mut self,
-    //     query: &Tensor,
-    //     key: &Tensor,
-    //     // past_kv_len: usize,
-    //     cos_sin_cache: Option<(&Tensor, &Tensor)>,
-    // ) -> Result<(Tensor, Tensor)> {
-    //     let (_batch, seq_len, _head_dim) = query.dims3()?;
-    //     // let (cos, sin) = self.cos_sin(MAX_SEQ_LEN, query.device(), query.dtype())?;
-    //     // let (cos, sin) = self.cos_sin(seq_len, query.device(), query.dtype())?;
-    //     let (cos, sin) = match cos_sin_cache {
-    //         Some((cos, sin)) => (cos.clone(), sin.clone()),
-    //         None => self.cos_sin(seq_len + 0, query.device(), query.dtype())?,
-    //     };
-    //     // let cos = cos.narrow(0, past_kv_len, seq_len)?;
-    //     // let sin = sin.narrow(0, past_kv_len, seq_len)?;
-    //     let cos = cos.narrow(0, 0, seq_len)?;
-    //     let sin = sin.narrow(0, 0, seq_len)?;
-    //     let qs = (query.broadcast_mul(&cos)? + &rotate_half(query)?.broadcast_mul(&sin)?)?;
-    //     let ks = (key.broadcast_mul(&cos)? + &rotate_half(key)?.broadcast_mul(&sin)?)?;
-    //     Ok((qs, ks))
-    // }
     fn forward(
         &self,
         query: &Tensor,
@@ -290,9 +245,7 @@ impl ESM2Embeddings {
 pub struct ESM2LMHead {
     dense: Linear,
     layer_norm: LayerNorm,
-    // decoder: Linear, // Weight tied to embeddings
-    embedding_weights: Tensor, // Store the embedding weights
-    bias: Tensor,
+    decoder: Linear,
 }
 impl ESM2LMHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config, embedding: &Embedding) -> Result<Self> {
@@ -300,36 +253,25 @@ impl ESM2LMHead {
         let vocab_size = config.vocab_size as usize;
         let dense = linear(hidden_size, hidden_size, vb.pp("dense"))?;
         let bias = vb.get(config.vocab_size as usize, "bias")?;
+
         let ln_config = LayerNormConfig {
             eps: config.layer_norm_eps as f64,
             remove_mean: true,
             affine: true,
         };
         let layer_norm = layer_norm(hidden_size, ln_config, vb.pp("layer_norm"))?;
-        let embedding_weights = embedding.embeddings().clone();
-        // let decoder_bias = vb.get(config.vocab_size as usize, "bias")?;
-        // let decoder = Linear::new(embedding, Some(decoder_bias));
+        let decoder = Linear::new(embedding.embeddings().clone(), Some(bias));
         Ok(ESM2LMHead {
             dense,
             layer_norm,
-            embedding_weights,
-            bias,
+            decoder,
         })
     }
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        // xs.apply(&self.dense)?
-        //     .gelu()?
-        //     .apply(&self.layer_norm)?
-        //     .apply(&self.decoder)
-        // Apply the dense layer and activation
-        let hidden_states = xs.apply(&self.dense)?.gelu()?;
-        let hidden_states = self.layer_norm.forward(&hidden_states)?;
-        let (batch_size, seq_len, hidden_dim) = hidden_states.dims3()?;
-        let reshaped = hidden_states.reshape((batch_size * seq_len, hidden_dim))?;
-        // Use embedding weights as the decoder weights (weight tying)
-        // We need to transpose the embedding weights for the linear projection
-        let logits = reshaped.matmul(&self.embedding_weights.transpose(0, 1)?)?;
-        logits.broadcast_add(&self.bias)
+        xs.apply(&self.dense)?
+            .gelu()?
+            .apply(&self.layer_norm)?
+            .apply(&self.decoder)
     }
 }
 
@@ -396,10 +338,6 @@ impl ESM2Attention {
         key: &Tensor,
         value: &Tensor,
     ) -> Result<(Tensor, Option<Tensor>)> {
-        println!("Query shape: {:?}", query.dims());
-        println!("Key shape: {:?}", key.dims());
-        println!("Value shape: {:?}", value.dims());
-
         let (seq_len, batch_size, embed_dim) = query.dims3()?;
         let q = self.q_proj.forward(query)?;
         let k = self.k_proj.forward(key)?;
@@ -415,22 +353,9 @@ impl ESM2Attention {
         let attention_scores = (q.matmul(&k.transpose(1, 2)?)? * scale)?;
         let attention_weights = ops::softmax(&attention_scores, D::Minus1)?;
         let context = attention_weights.matmul(&v)?;
-
         let context = context.transpose(1, 2)?;
-        // let context = context.reshape((batch_size, seq_len, embed_dim))?;
         let context = context.reshape((seq_len, batch_size, embed_dim))?;
-        // Pytorch: Process the weights
-        //         if need_weights:
-        //             attn_weights = attn_weights_float.view(
-        //                 bsz, self.num_heads, tgt_len, src_len
-        //             ).type_as(attn).transpose(1, 0)
-        //             if not need_head_weights:
-        //                 # average attention weights over heads
-        //                 attn_weights = attn_weights.mean(dim=0)
-        //
-        //         return attn
         let output = self.out_proj.forward(&context)?;
-        println!("Attention output shape: {:?}", output.dims());
         Ok((output, None))
     }
 }
@@ -486,7 +411,6 @@ impl ESM2Layer {
             final_layer_norm,
         })
     }
-
     fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
         // Input should be: [seq_len, batch_size, embed_dim]
         let (seq_len, batch_size, embed_dim) = xs.dims3()?;
@@ -503,7 +427,6 @@ impl ESM2Layer {
         println!("After self_attn: {:?}", x.dims());
         let x = (x + residual)?;
         println!("After residual connection: {:?}", x.dims());
-
         // Second block: FFN with residual connection
         let residual = x.clone();
         let x = self.final_layer_norm.forward(&x)?;
@@ -540,7 +463,7 @@ impl ESM2 {
         let layer_norm_after = layer_norm(
             config.hidden_size as usize,
             LayerNormConfig {
-                eps: 0.001,
+                eps: 0.00001,
                 remove_mean: true,
                 affine: true,
             },

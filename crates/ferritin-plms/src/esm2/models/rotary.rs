@@ -3,7 +3,7 @@
 use super::esm2::ESM2Config;
 use candle_core::{D, DType, Device, Result, Tensor};
 
-const MAX_SEQ_LEN: usize = 5000;
+const MAX_SEQ_LEN: usize = dim;
 
 fn rotate_half(x: &Tensor) -> Result<Tensor> {
     let l = x.dim(D::Minus1)?;
