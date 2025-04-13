@@ -409,9 +409,7 @@ impl ESM2Attention {
         println!("Key shape: {:?}", key.dims());
         println!("Value shape: {:?}", value.dims());
 
-        // whats the embed_dim doing hhre?
         let (seq_len, batch_size, embed_dim) = query.dims3()?;
-
         let q = self.q_proj.forward(query)?;
         let k = self.k_proj.forward(key)?;
         let v = self.v_proj.forward(value)?;
@@ -423,14 +421,13 @@ impl ESM2Attention {
         let v = v.transpose(0, 1)?.contiguous()?;
         let (q, k) = self.rotary_emb.forward(&q, &k, None)?;
         let scale = (self.head_dim as f64).powf(-0.5);
-        //  assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
         let attention_scores = (q.matmul(&k.transpose(1, 2)?)? * scale)?;
-        // potentially return (attention_weights), v here
         let attention_weights = ops::softmax(&attention_scores, D::Minus1)?;
         let context = attention_weights.matmul(&v)?;
+
         let context = context.transpose(1, 2)?;
-        // let embed_dim = self.num_heads * self.head_dim;
-        let context = context.reshape((batch_size, seq_len, embed_dim))?;
+        // let context = context.reshape((batch_size, seq_len, embed_dim))?;
+        let context = context.reshape((seq_len, batch_size, embed_dim))?;
         // Pytorch: Process the weights
         //         if need_weights:
         //             attn_weights = attn_weights_float.view(
@@ -442,6 +439,7 @@ impl ESM2Attention {
         //
         //         return attn
         let output = self.out_proj.forward(&context)?;
+        println!("Attention output shape: {:?}", output.dims());
         Ok((output, None))
     }
 }
@@ -499,13 +497,20 @@ impl ESM2Layer {
     }
 
     fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
+        // Input should be: [seq_len, batch_size, embed_dim]
+        let (seq_len, batch_size, embed_dim) = xs.dims3()?;
+        println!(
+            "Layer input shape: [{}, {}, {}]",
+            seq_len, batch_size, embed_dim
+        );
+
         let residual = xs.clone();
         println!("Layer input shape: {:?}", xs.dims());
         let x = self.self_attn_layer_norm.forward(xs)?;
         println!("After self_attn_layer_norm: {:?}", x.dims());
         let (x, attn) = self.self_attn.forward(&x, &x, &x)?;
         println!("After self_attn: {:?}", x.dims());
-        let x = (x + residual.transpose(0, 1)?)?;
+        let x = (x + residual)?;
         println!("After residual connection: {:?}", x.dims());
 
         // Second block: FFN with residual connection
@@ -519,7 +524,7 @@ impl ESM2Layer {
         let x = x.apply(&self.fc2)?;
         println!("After fc2: {:?}", x.dims());
         let x = (x + residual)?;
-        println!("After final residual connection: {:?}", x.dims());
+        println!("Layer output shape: {:?}", x.dims());
         Ok((x, attn))
     }
 }
@@ -573,14 +578,17 @@ impl ESM2 {
             .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
     }
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
+        println!("Input shape: {:?}", x.dims());
         // x = self.embed_scale * self.embed_tokens(tokens)
         let mut xs = self.embeddings.forward(x)?;
         println!("After embeddings forward: {:?}", xs.dims());
         xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
         println!("After transpose: {:?}", xs.dims());
-        for (_layer_idx, layer) in self.layers.iter().enumerate() {
+        for (layer_idx, layer) in self.layers.iter().enumerate() {
+            println!("Processing layer {}", layer_idx);
             let (new_xs, _attn) = layer.forward(&xs)?;
-            xs = new_xs
+            xs = new_xs;
+            println!("After layer {}: {:?}", layer_idx, xs.dims());
         }
         xs = self.layer_norm_after.forward(&xs)?;
         xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
