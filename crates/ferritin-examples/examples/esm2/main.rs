@@ -103,14 +103,14 @@ fn main() -> Result<()> {
         println!("Encoding.......");
         let encoded = model.forward(&token_ids)?;
 
-        // println!("Predicting.......");
-        // let predictions = encoded.logits.argmax(D::Minus1)?;
+        println!("Predicting.......");
+        let predictions = encoded.logits.argmax(D::Minus1)?;
 
-        // println!("Decoding.......");
-        // let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
-        // let decoded = tokenizer.decode(indices.as_slice(), true);
+        println!("Decoding.......");
+        let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
+        let decoded = tokenizer.decode(indices.as_slice(), true);
 
-        // println!("Decoded: {:?}, ", decoded);
+        println!("Decoded: {:?}, ", decoded);
     }
 
     Ok(())

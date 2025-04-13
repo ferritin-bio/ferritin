@@ -417,7 +417,9 @@ impl ESM1LayerNorm {
             let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
             x_zeromean.broadcast_div(&variances)?
         };
-        x_norm.broadcast_mul(&self.weight)?.broadcast_add( &self.bias)
+        x_norm
+            .broadcast_mul(&self.weight)?
+            .broadcast_add(&self.bias)
     }
 }
 
@@ -449,7 +451,6 @@ impl ESM2Layer {
     }
 
     fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
-
         let residual = xs.clone();
         println!("Residual shape: {:?}", residual.dims());
         let x = self.self_attn_layer_norm.forward(xs)?;
@@ -461,17 +462,11 @@ impl ESM2Layer {
 
         // Second block: FFN with residual connection
         let residual = x.clone();
-        println!("Second residual shape: {:?}", residual.dims());
         let x = self.final_layer_norm.forward(&x)?;
-        println!("After final layer norm shape: {:?}", x.dims());
         let x = x.gelu()?;
-        println!("After gelu shape: {:?}", x.dims());
         let x = x.apply(&self.fc1)?;
-        println!("After fc1 shape: {:?}", x.dims());
         let x = x.apply(&self.fc2)?;
-        println!("After fc2 shape: {:?}", x.dims());
         let x = (x + residual)?;
-        println!("Final output shape: {:?}", x.dims());
         Ok((x, attn))
     }
 }
@@ -521,9 +516,7 @@ impl ESM2 {
     }
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
         // x = self.embed_scale * self.embed_tokens(tokens)
-        println!("Input tensor shape before embedding: {:?}", x.dims());
         let mut xs = self.embeddings.forward(x)?;
-        println!("Tensor shape after embedding: {:?}", x.dims());
         xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
         for (layer_idx, layer) in self.layers.iter().enumerate() {
             println!("Tensor layer: {:?}", layer_idx);
