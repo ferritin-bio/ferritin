@@ -227,18 +227,16 @@ impl ESM2Embeddings {
         self.word_embeddings.forward(x)
     }
     pub fn forward(&self, input_ids: &Tensor) -> Result<Tensor> {
-        // todo: investigate whethere ESM2 USES the position embeddings
-        //
-        // Get token embeddings
-        // let token_embeddings = self.embed_tokens(input_ids)?;
-        // Get position embeddings
-        // let seq_length = input_ids.dim(1)?;
-        // let position_ids = self.position_ids.narrow(1, 0, seq_length)?;
-        // let position_embeddings = self.position_embeddings.forward(&position_ids)?;
-        // // Add token and position embeddings
-        // let embeddings = token_embeddings + position_embeddings;
-        // Ok(embeddings)
-        self.embed_tokens(input_ids)
+        // If not using position
+        // self.embed_tokens(input_ids)
+        let token_embeddings = self.embed_tokens(input_ids)?;
+        let seq_length = input_ids.dim(1)?;
+        let position_ids = self
+            .position_ids
+            .narrow(1, 0, seq_length)?
+            .to_dtype(DType::U32)?;
+        let position_embeddings = self.position_embeddings.forward(&position_ids)?;
+        (token_embeddings + position_embeddings)
     }
 }
 
@@ -250,10 +248,8 @@ pub struct ESM2LMHead {
 impl ESM2LMHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config, embedding: &Embedding) -> Result<Self> {
         let hidden_size = config.hidden_size as usize;
-        let vocab_size = config.vocab_size as usize;
         let dense = linear(hidden_size, hidden_size, vb.pp("dense"))?;
         let bias = vb.get(config.vocab_size as usize, "bias")?;
-
         let ln_config = LayerNormConfig {
             eps: config.layer_norm_eps as f64,
             remove_mean: true,
@@ -413,32 +409,18 @@ impl ESM2Layer {
     }
     fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
         // Input should be: [seq_len, batch_size, embed_dim]
-        let (seq_len, batch_size, embed_dim) = xs.dims3()?;
-        println!(
-            "Layer input shape: [{}, {}, {}]",
-            seq_len, batch_size, embed_dim
-        );
-
+        // let (seq_len, batch_size, embed_dim) = xs.dims3()?;
         let residual = xs.clone();
-        println!("Layer input shape: {:?}", xs.dims());
         let x = self.self_attn_layer_norm.forward(xs)?;
-        println!("After self_attn_layer_norm: {:?}", x.dims());
         let (x, attn) = self.self_attn.forward(&x, &x, &x)?;
-        println!("After self_attn: {:?}", x.dims());
         let x = (x + residual)?;
-        println!("After residual connection: {:?}", x.dims());
         // Second block: FFN with residual connection
         let residual = x.clone();
         let x = self.final_layer_norm.forward(&x)?;
-        println!("After final_layer_norm: {:?}", x.dims());
         let x = x.gelu()?;
-        println!("After gelu: {:?}", x.dims());
         let x = x.apply(&self.fc1)?;
-        println!("After fc1: {:?}", x.dims());
         let x = x.apply(&self.fc2)?;
-        println!("After fc2: {:?}", x.dims());
         let x = (x + residual)?;
-        println!("Layer output shape: {:?}", x.dims());
         Ok((x, attn))
     }
 }
@@ -446,7 +428,7 @@ impl ESM2Layer {
 // Main model struct
 pub struct ESM2 {
     embeddings: ESM2Embeddings,
-    config: ESM2Config,
+    // config: ESM2Config,
     layers: Vec<ESM2Layer>,
     layer_norm_after: LayerNorm,
     lm_head: ESM2LMHead,
@@ -477,14 +459,13 @@ impl ESM2 {
         )?;
         Ok(Self {
             embeddings,
-            config,
+            // config,
             contact_head,
             layer_norm_after,
             layers,
             lm_head,
         })
     }
-
     /// Load the tokenizer for encoding sequences
     pub fn load_tokenizer() -> Result<Tokenizer> {
         let tokenizer_bytes = include_bytes!("tokenizer.json");
@@ -492,17 +473,12 @@ impl ESM2 {
             .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
     }
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
-        println!("Input shape: {:?}", x.dims());
         // x = self.embed_scale * self.embed_tokens(tokens)
         let mut xs = self.embeddings.forward(x)?;
-        println!("After embeddings forward: {:?}", xs.dims());
         xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
-        println!("After transpose: {:?}", xs.dims());
-        for (layer_idx, layer) in self.layers.iter().enumerate() {
-            println!("Processing layer {}", layer_idx);
+        for (_layer_idx, layer) in self.layers.iter().enumerate() {
             let (new_xs, _attn) = layer.forward(&xs)?;
             xs = new_xs;
-            println!("After layer {}: {:?}", layer_idx, xs.dims());
         }
         xs = self.layer_norm_after.forward(&xs)?;
         xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
