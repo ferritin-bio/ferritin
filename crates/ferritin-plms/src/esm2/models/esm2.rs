@@ -149,51 +149,111 @@ fn rotate_half(x: &Tensor) -> Result<Tensor> {
 #[derive(Debug, Clone)]
 struct FalconRotaryEmbedding {
     inv_freq: Tensor,
-    cache: Option<(usize, Tensor, Tensor)>,
+    max_seq_len: usize,
+    cos_cache: Option<Tensor>,
+    sin_cache: Option<Tensor>,
 }
 
 impl FalconRotaryEmbedding {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        Ok(FalconRotaryEmbedding {
-            inv_freq: vb.get(config.inv_freq_size(), "inv_freq")?,
-            cache: None,
-        })
+        let inv_freq = vb.get(config.inv_freq_size(), "inv_freq")?;
+        let mut rotary = FalconRotaryEmbedding {
+            inv_freq,
+            max_seq_len: MAX_SEQ_LEN,
+            cos_cache: None,
+            sin_cache: None,
+        };
+        rotary.precompute_freqs_cis(vb.device(), vb.dtype())?;
+        Ok(rotary)
     }
 
-    fn cos_sin(
-        &mut self,
-        seq_len: usize,
-        device: &Device,
-        dtype: DType,
-    ) -> Result<(Tensor, Tensor)> {
-        match &self.cache {
-            Some((s, cos, sin)) if *s == seq_len => {
-                return Ok((cos.clone(), sin.clone()));
-            }
-            _ => {}
-        }
-        let t = Tensor::arange(0, seq_len as u32, device)?.to_dtype(dtype)?;
+    // Pre-compute rotary embeddings during initialization
+    fn precompute_freqs_cis(&mut self, device: &Device, dtype: DType) -> Result<()> {
+        let t = Tensor::arange(0, self.max_seq_len as u32, device)?.to_dtype(dtype)?;
         let inv_freq = self.inv_freq.to_dtype(dtype)?;
         let freqs = t.unsqueeze(1)?.matmul(&inv_freq.unsqueeze(0)?)?;
         let emb = Tensor::cat(&[&freqs, &freqs], D::Minus1)?;
-        let cos = emb.cos()?;
-        let sin = emb.sin()?;
-        self.cache = Some((seq_len, cos.clone(), sin.clone()));
-        Ok((cos, sin))
+        self.cos_cache = Some(emb.cos()?);
+        self.sin_cache = Some(emb.sin()?);
+
+        Ok(())
     }
 
+    // fn cos_sin(
+    //     &mut self,
+    //     seq_len: usize,
+    //     device: &Device,
+    //     dtype: DType,
+    // ) -> Result<(Tensor, Tensor)> {
+    //     match &self.cache {
+    //         Some((s, cos, sin)) if *s == seq_len => {
+    //             return Ok((cos.clone(), sin.clone()));
+    //         }
+    //         _ => {}
+    //     }
+    //     let t = Tensor::arange(0, seq_len as u32, device)?.to_dtype(dtype)?;
+    //     let inv_freq = self.inv_freq.to_dtype(dtype)?;
+    //     let freqs = t.unsqueeze(1)?.matmul(&inv_freq.unsqueeze(0)?)?;
+    //     let emb = Tensor::cat(&[&freqs, &freqs], D::Minus1)?;
+    //     let cos = emb.cos()?;
+    //     let sin = emb.sin()?;
+    //     // self.cache = Some((seq_len, cos.clone(), sin.clone()));
+    //     Ok((cos, sin))
+    // }
+
+    // fn forward(
+    //     &mut self,
+    //     query: &Tensor,
+    //     key: &Tensor,
+    //     // past_kv_len: usize,
+    //     cos_sin_cache: Option<(&Tensor, &Tensor)>,
+    // ) -> Result<(Tensor, Tensor)> {
+    //     let (_batch, seq_len, _head_dim) = query.dims3()?;
+    //     // let (cos, sin) = self.cos_sin(MAX_SEQ_LEN, query.device(), query.dtype())?;
+    //     // let (cos, sin) = self.cos_sin(seq_len, query.device(), query.dtype())?;
+    //     let (cos, sin) = match cos_sin_cache {
+    //         Some((cos, sin)) => (cos.clone(), sin.clone()),
+    //         None => self.cos_sin(seq_len + 0, query.device(), query.dtype())?,
+    //     };
+    //     // let cos = cos.narrow(0, past_kv_len, seq_len)?;
+    //     // let sin = sin.narrow(0, past_kv_len, seq_len)?;
+    //     let cos = cos.narrow(0, 0, seq_len)?;
+    //     let sin = sin.narrow(0, 0, seq_len)?;
+    //     let qs = (query.broadcast_mul(&cos)? + &rotate_half(query)?.broadcast_mul(&sin)?)?;
+    //     let ks = (key.broadcast_mul(&cos)? + &rotate_half(key)?.broadcast_mul(&sin)?)?;
+    //     Ok((qs, ks))
+    // }
     fn forward(
-        &mut self,
+        &self,
         query: &Tensor,
         key: &Tensor,
-        past_kv_len: usize,
+        cos_sin_cache: Option<(&Tensor, &Tensor)>,
     ) -> Result<(Tensor, Tensor)> {
+        println!("In Rotary forward.");
+        println!("Query Dims: {:?}", query.dims());
         let (_batch, seq_len, _head_dim) = query.dims3()?;
-        let (cos, sin) = self.cos_sin(MAX_SEQ_LEN, query.device(), query.dtype())?;
-        let cos = cos.narrow(0, past_kv_len, seq_len)?;
-        let sin = sin.narrow(0, past_kv_len, seq_len)?;
+
+        println!("SIN/COS");
+        // Use provided cache or the pre-computed caches
+        let (cos, sin) = match cos_sin_cache {
+            Some((cos, sin)) => (cos.clone(), sin.clone()),
+            None => {
+                if let (Some(cos_cache), Some(sin_cache)) = (&self.cos_cache, &self.sin_cache) {
+                    (
+                        cos_cache.narrow(0, 0, seq_len)?,
+                        sin_cache.narrow(0, 0, seq_len)?,
+                    )
+                } else {
+                    return Err(candle_core::Error::Msg(
+                        "Rotary embeddings were not pre-computed".to_string(),
+                    ));
+                }
+            }
+        };
+        println!("SIN?COS Done");
         let qs = (query.broadcast_mul(&cos)? + &rotate_half(query)?.broadcast_mul(&sin)?)?;
         let ks = (key.broadcast_mul(&cos)? + &rotate_half(key)?.broadcast_mul(&sin)?)?;
+        println!("IN Rotary forward.");
         Ok((qs, ks))
     }
 }
@@ -302,7 +362,7 @@ pub struct ESM2Attention {
     out_proj: Linear,
     num_heads: usize,
     head_dim: usize,
-    rotary_emb: Option<FalconRotaryEmbedding>,
+    rotary_emb: FalconRotaryEmbedding,
 }
 impl ESM2Attention {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
@@ -317,10 +377,7 @@ impl ESM2Attention {
         let k_proj = linear(kdim, embed_dim, vb.pp("self.key"))?;
         let v_proj = linear(vdim, embed_dim, vb.pp("self.value"))?;
         let out_proj = linear(embed_dim, embed_dim, vb.pp("output.dense"))?;
-        let rotary_emb = Some(FalconRotaryEmbedding::load(
-            vb.pp("self.rotary_embeddings"),
-            config,
-        )?);
+        let rotary_emb = FalconRotaryEmbedding::load(vb.pp("self.rotary_embeddings"), config)?;
         Ok(Self {
             q_proj,
             k_proj,
@@ -337,29 +394,37 @@ impl ESM2Attention {
         key: &Tensor,
         value: &Tensor,
     ) -> Result<(Tensor, Option<Tensor>)> {
-        let batch_size = query.dim(0)?;
-        let seq_len = query.dim(1)?;
+        println!("Query shape: {:?}", query.dims());
+        println!("Key shape: {:?}", key.dims());
+        println!("Value shape: {:?}", value.dims());
+
+        // whats the embed_dim doing hhre?
+        let (seq_len, batch_size, _embed_dim) = query.dims3()?;
+
         let q = self.q_proj.forward(query)?;
         let k = self.k_proj.forward(key)?;
         let v = self.v_proj.forward(value)?;
-        // Reshape for multi-head attention
-        // [batch_size, seq_len, embed_dim] -> [batch_size, seq_len, num_heads, head_dim]
-        let q = q.reshape((batch_size, seq_len, self.num_heads, self.head_dim))?;
-        let k = k.reshape((batch_size, seq_len, self.num_heads, self.head_dim))?;
-        let v = v.reshape((batch_size, seq_len, self.num_heads, self.head_dim))?;
+        let q = q.reshape((seq_len, batch_size * self.num_heads, self.head_dim))?;
+        let k = k.reshape((seq_len, batch_size * self.num_heads, self.head_dim))?;
+        let v = v.reshape((seq_len, batch_size * self.num_heads, self.head_dim))?;
 
         // Transpose to [batch_size, num_heads, seq_len, head_dim]
-        let q = q.transpose(1, 2)?;
-        let k = k.transpose(1, 2)?;
-        let v = v.transpose(1, 2)?;
+        println!("q before transpose: {:?}", q.dims());
+        let q = q.transpose(0, 1)?;
+        println!("q after transpose: {:?}", q.dims());
+
+        println!("k before transpose: {:?}", k.dims());
+        let k = k.transpose(0, 1)?;
+        println!("k after transpose: {:?}", k.dims());
+
+        println!("v before transpose: {:?}", v.dims());
+        let v = v.transpose(0, 1)?;
+        println!("v after transpose: {:?}", v.dims());
 
         // // Apply rotary embeddings if available
-        // let (q, k) = if let Some(rotary_emb) = &self.rotary_emb {
-        //     rotary_emb.apply_rotary_emb(&q, &k)?
-        // } else {
-        //     (q, k)
-        // };
+        let (q, k) = self.rotary_emb.forward(&q, &k, None)?;
 
+        println!("After Rotary");
         // Compute attention scores: [batch_size, num_heads, seq_len, seq_len]
         let scale = (self.head_dim as f64).powf(-0.5);
         let attention_scores = (q.matmul(&k.transpose(2, 3)?)? * scale)?;
@@ -452,16 +517,25 @@ impl ESM2Layer {
 
     fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
         let residual = xs.clone();
+        println!("Layer input shape: {:?}", xs.dims());
         let x = self.self_attn_layer_norm.forward(xs)?;
+        println!("After self_attn_layer_norm: {:?}", x.dims());
         let (x, attn) = self.self_attn.forward(&x, &x, &x)?;
+        println!("After self_attn: {:?}", x.dims());
         let x = (x + residual)?;
+        println!("After residual connection: {:?}", x.dims());
         // Second block: FFN with residual connection
         let residual = x.clone();
         let x = self.final_layer_norm.forward(&x)?;
+        println!("After final_layer_norm: {:?}", x.dims());
         let x = x.gelu()?;
+        println!("After gelu: {:?}", x.dims());
         let x = x.apply(&self.fc1)?;
+        println!("After fc1: {:?}", x.dims());
         let x = x.apply(&self.fc2)?;
+        println!("After fc2: {:?}", x.dims());
         let x = (x + residual)?;
+        println!("After final residual connection: {:?}", x.dims());
         Ok((x, attn))
     }
 }
@@ -512,10 +586,12 @@ impl ESM2 {
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
         // x = self.embed_scale * self.embed_tokens(tokens)
         let mut xs = self.embeddings.forward(x)?;
+        println!("After embeddings forward: {:?}", xs.dims());
         xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
-        for (layer_idx, layer) in self.layers.iter().enumerate() {
+        println!("After transpose: {:?}", xs.dims());
+        for (_layer_idx, layer) in self.layers.iter().enumerate() {
             let (new_xs, _attn) = layer.forward(&xs)?;
-            xs = new_xs;
+            xs = new_xs
         }
         xs = self.layer_norm_after.forward(&xs)?;
         xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
