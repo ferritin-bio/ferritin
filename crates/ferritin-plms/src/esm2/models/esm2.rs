@@ -166,7 +166,6 @@ impl FalconRotaryEmbedding {
         rotary.precompute_freqs_cis(vb.device(), vb.dtype())?;
         Ok(rotary)
     }
-
     // Pre-compute rotary embeddings during initialization
     fn precompute_freqs_cis(&mut self, device: &Device, dtype: DType) -> Result<()> {
         let t = Tensor::arange(0, self.max_seq_len as u32, device)?.to_dtype(dtype)?;
@@ -178,7 +177,6 @@ impl FalconRotaryEmbedding {
 
         Ok(())
     }
-
     // fn cos_sin(
     //     &mut self,
     //     seq_len: usize,
@@ -229,12 +227,7 @@ impl FalconRotaryEmbedding {
         key: &Tensor,
         cos_sin_cache: Option<(&Tensor, &Tensor)>,
     ) -> Result<(Tensor, Tensor)> {
-        println!("In Rotary forward.");
-        println!("Query Dims: {:?}", query.dims());
         let (_batch, seq_len, _head_dim) = query.dims3()?;
-
-        println!("SIN/COS");
-        // Use provided cache or the pre-computed caches
         let (cos, sin) = match cos_sin_cache {
             Some((cos, sin)) => (cos.clone(), sin.clone()),
             None => {
@@ -250,16 +243,14 @@ impl FalconRotaryEmbedding {
                 }
             }
         };
-        println!("SIN?COS Done");
         let qs = (query.broadcast_mul(&cos)? + &rotate_half(query)?.broadcast_mul(&sin)?)?;
         let ks = (key.broadcast_mul(&cos)? + &rotate_half(key)?.broadcast_mul(&sin)?)?;
-        println!("IN Rotary forward.");
         Ok((qs, ks))
     }
 }
 
 pub struct ESM2Embeddings {
-    word_embeddings: Embedding,
+    pub(crate) word_embeddings: Embedding,
     position_embeddings: Embedding,
     position_ids: Tensor,
 }
@@ -299,13 +290,16 @@ impl ESM2Embeddings {
 pub struct ESM2LMHead {
     dense: Linear,
     layer_norm: LayerNorm,
-    decoder: Linear, // Weight tied to embeddings
+    // decoder: Linear, // Weight tied to embeddings
+    embedding_weights: Tensor, // Store the embedding weights
+    bias: Tensor,
 }
 impl ESM2LMHead {
-    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+    pub fn load(vb: VarBuilder, config: &ESM2Config, embedding: &Embedding) -> Result<Self> {
         let hidden_size = config.hidden_size as usize;
         let vocab_size = config.vocab_size as usize;
         let dense = linear(hidden_size, hidden_size, vb.pp("dense"))?;
+        let bias = vb.get(config.vocab_size as usize, "bias")?;
         let ln_config = LayerNormConfig {
             eps: config.layer_norm_eps as f64,
             remove_mean: true,
@@ -313,14 +307,12 @@ impl ESM2LMHead {
         };
         let layer_norm = layer_norm(hidden_size, ln_config, vb.pp("layer_norm"))?;
         let decoder_bias = vb.get(config.vocab_size as usize, "bias")?;
-        let decoder = Linear::new(
-            Tensor::zeros(&[vocab_size, hidden_size], DType::F32, vb.device())?,
-            Some(decoder_bias),
-        );
+        let decoder = Linear::new(embedding, Some(decoder_bias));
         Ok(ESM2LMHead {
             dense,
             layer_norm,
             decoder,
+            bias,
         })
     }
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
@@ -399,7 +391,7 @@ impl ESM2Attention {
         println!("Value shape: {:?}", value.dims());
 
         // whats the embed_dim doing hhre?
-        let (seq_len, batch_size, _embed_dim) = query.dims3()?;
+        let (seq_len, batch_size, embed_dim) = query.dims3()?;
 
         let q = self.q_proj.forward(query)?;
         let k = self.k_proj.forward(key)?;
@@ -412,19 +404,14 @@ impl ESM2Attention {
         let v = v.transpose(0, 1)?.contiguous()?;
         let (q, k) = self.rotary_emb.forward(&q, &k, None)?;
         let scale = (self.head_dim as f64).powf(-0.5);
-
-        // attn_weights = torch.bmm(q, k.transpose(1, 2))
-        // attn_weights = MultiheadAttention.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)  //<-- unimplemented
         //  assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
         let attention_scores = (q.matmul(&k.transpose(1, 2)?)? * scale)?;
         // potentially return (attention_weights), v here
         let attention_weights = ops::softmax(&attention_scores, D::Minus1)?;
         let context = attention_weights.matmul(&v)?;
         let context = context.transpose(1, 2)?;
-        let embed_dim = self.num_heads * self.head_dim;
+        // let embed_dim = self.num_heads * self.head_dim;
         let context = context.reshape((batch_size, seq_len, embed_dim))?;
-        println!("Post-context");
-
         // Pytorch: Process the weights
         //         if need_weights:
         //             attn_weights = attn_weights_float.view(
@@ -436,8 +423,7 @@ impl ESM2Attention {
         //
         //         return attn
         let output = self.out_proj.forward(&context)?;
-        println!("Post-context");
-        Ok((output, None)) // weights tensor
+        Ok((output, None))
     }
 }
 
@@ -502,6 +488,7 @@ impl ESM2Layer {
         println!("After self_attn: {:?}", x.dims());
         let x = (x + residual.transpose(0, 1)?)?;
         println!("After residual connection: {:?}", x.dims());
+
         // Second block: FFN with residual connection
         let residual = x.clone();
         let x = self.final_layer_norm.forward(&x)?;
@@ -544,7 +531,12 @@ impl ESM2 {
             },
             vb.pp("esm.encoder.emb_layer_norm_after"),
         )?;
-        let lm_head = ESM2LMHead::load(vb.pp("lm_head"), &config)?;
+
+        let lm_head = ESM2LMHead::load(
+            vb.pp("lm_head"),
+            &config,
+            &embeddings.word_embeddings.clone(),
+        )?;
         Ok(Self {
             embeddings,
             config,
