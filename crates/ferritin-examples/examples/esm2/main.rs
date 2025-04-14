@@ -11,9 +11,6 @@ pub const DTYPE: DType = DType::F32;
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Run on CPU rather than on GPU.
-    #[arg(long)]
-    cpu: bool,
     /// Which ESM2 Model to use
     #[arg(long, value_parser = ["8M", "35M", "150M", "650M", "3B", "15B"], default_value = "35M")]
     model_id: String,
@@ -79,7 +76,7 @@ impl Args {
 fn main() -> Result<()> {
     let args = Args::parse();
     println!("Loading the Model and Tokenizer.......");
-    let device = device(args.cpu)?;
+    let device = device()?;
     let (model, tokenizer) = args.build_model_and_tokenizer(&device)?;
     let protein_sequences = if let Some(seq) = args.protein_string {
         vec![seq]

@@ -9,7 +9,7 @@ use ferritin_test_data::TestFile;
 fn main() -> Result<()> {
     println!("Loading the Model and Tokenizer.......");
 
-    let deviceA = device(false)?;
+    let deviceA = device()?;
     let (protfile, _handle) = TestFile::protein_01().create_temp()?;
     let ac = load_structure(protfile)?;
 

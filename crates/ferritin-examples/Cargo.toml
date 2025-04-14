@@ -32,8 +32,7 @@ hf-hub.workspace = true
 rerun = { workspace = true, features = ["native_viewer"] }
 serde_json.workspace = true
 
-[target.'cfg(target_os = "macos")'.features]
-metal = []
+# The metal feature is defined above, and we don't need to redefine it conditionally
 
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-metal-kernels.workspace = true

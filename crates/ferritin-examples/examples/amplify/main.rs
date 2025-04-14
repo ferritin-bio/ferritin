@@ -5,9 +5,6 @@ use ferritin_plms::{AmplifyModels, AmplifyRunner, device};
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Run on CPU rather than on GPU.
-    #[arg(long, default_value = "false")]
-    cpu: bool,
     /// Which AMPLIFY Model to use, either '120M' or '350M'.
     #[arg(long, value_parser = ["120M", "350M"], default_value = "120M")]
     model_id: String,
@@ -18,8 +15,7 @@ struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let device = device(args.cpu)?;
-    // println!("Device: {:?}", device);
+    let device = device()?;
     let amp_model = match args.model_id.as_str() {
         "120M" => AmplifyModels::AMP120M,
         "350M" => AmplifyModels::AMP350M,
