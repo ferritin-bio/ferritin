@@ -50,8 +50,6 @@ impl EncoderBlock {
         let (attn, contacts) =
             self.attention_block(&normed, pad_mask, freqs_cis, output_attentions)?;
         let x = x.add(&attn)?;
-
-        // Apply feedforward block
         let normed = self.ffn_norm.forward(&x)?;
         let ffn_output = self.ffn_forward(&normed)?;
         let ff = self.ffn_dropout.forward(&ffn_output, false)?; // Todo: pass in the Inference/Training bit
@@ -60,31 +58,17 @@ impl EncoderBlock {
     }
     /// process the FFN Block using swiglu
     fn ffn_forward(&self, x: &Tensor) -> Result<Tensor> {
-        // Todo: see if the apply or add can be done di
-        // Store original batch dimensions
-        let dims = x.dims();
-        let batch_shape = &dims[..dims.len() - 1];
-        // Reshape input to 2D: (batch_size, input_dim)
-        let x_flat = self.flatten_last_dim(x)?;
-        // Apply packed W1W2 linear transformation
+        let (batch, seq_len, _hidden_dim) = x.dims3()?;
+        let mut batch_shape = vec![batch, seq_len];
+        let x_flat = x.flatten_to(1)?;
         let w12_out = self.w12.forward(&x_flat)?;
-        // Split the output into two halves (for SwiGLU activation)
         let chunks = w12_out.chunk(2, 1)?;
         let x1 = &chunks[0];
         let x2 = &chunks[1];
         let hidden = x1.silu()?.mul(x2)?;
         let output = self.w3.forward(&hidden)?;
-        // Reshape back to original batch dimensions
-        let mut new_shape = batch_shape.to_vec();
-        new_shape.push(output.dim(1)?);
-        output.reshape(new_shape)
-    }
-    fn flatten_last_dim(&self, x: &Tensor) -> Result<Tensor> {
-        let dims = x.dims();
-        let last_dim = dims[dims.len() - 1];
-        let total_elements = dims.iter().product::<usize>();
-        let first_dim = total_elements / last_dim;
-        x.reshape((first_dim, last_dim))
+        batch_shape.push(output.dim(1)?);
+        output.reshape(batch_shape) // todo fix the shape calculation
     }
     fn scaled_dot_product_attention(
         &self,
