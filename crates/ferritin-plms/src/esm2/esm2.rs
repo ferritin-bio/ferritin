@@ -342,12 +342,14 @@ impl ESM2Attention {
         let (q, k) = self.rotary_emb.forward(&q, &k)?;
         let scale = (self.head_dim as f64).powf(-0.5);
         let attention_weights = (q.matmul(&k.transpose(1, 2)?)? * scale)?;
-        let attention_weights = ops::softmax(&attention_weights, D::Minus1)?;
-        let context = attention_weights.matmul(&v)?;
-        let context = context
+        let attention_weights = ops::softmax_last_dim(&attention_weights)?;
+
+        let attn_output = attention_weights.matmul(&v)?;
+        let attn_output = attn_output
             .transpose(1, 2)?
+            .contiguous()?
             .reshape((seq_len, batch_size, embed_dim))?;
-        let output = self.out_proj.forward(&context)?;
+        let output = self.out_proj.forward(&attn_output)?;
         Ok((output, None))
     }
 }
