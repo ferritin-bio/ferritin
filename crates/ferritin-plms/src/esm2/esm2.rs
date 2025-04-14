@@ -220,59 +220,64 @@ impl RotaryEmbedding {
     }
     fn forward(&self, query: &Tensor, key: &Tensor) -> Result<(Tensor, Tensor)> {
         let (_batch, seq_len, _head_dim) = query.dims3()?;
-        
+
         // Get the appropriate positional embeddings for this sequence length
         let cos = self.cos_cache.narrow(0, 0, seq_len)?;
         let sin = self.sin_cache.narrow(0, 0, seq_len)?;
-        
+
         // Reshape to match the dimensions of query and key tensors
         let cos = cos.unsqueeze(0)?; // Shape becomes (1, seq_len, head_dim)
         let sin = sin.unsqueeze(0)?; // Shape becomes (1, seq_len, head_dim)
-        
+
         // Apply rotary embeddings to query
         let query_rot = rotate_half(query)?;
-        let query_rotated = query.broadcast_mul(&cos)?.add(&query_rot.broadcast_mul(&sin)?)?;
-        
+        let query_rotated = query
+            .broadcast_mul(&cos)?
+            .add(&query_rot.broadcast_mul(&sin)?)?;
+
         // Apply rotary embeddings to key
         let key_rot = rotate_half(key)?;
-        let key_rotated = key.broadcast_mul(&cos)?.add(&key_rot.broadcast_mul(&sin)?)?;
-        
+        let key_rotated = key
+            .broadcast_mul(&cos)?
+            .add(&key_rot.broadcast_mul(&sin)?)?;
+
         Ok((query_rotated, key_rotated))
     }
 }
 
 pub struct ESM2Embeddings {
     pub(crate) word_embeddings: Embedding,
-    // position_embeddings: Embedding,
-    // position_ids: Tensor,
+    position_embeddings: Embedding,
+    position_ids: Tensor,
+    embedding_scale: f64,
 }
 impl ESM2Embeddings {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let vocab_size = config.vocab_size as usize;
         let hidden_size = config.hidden_size as usize;
-        let _max_pos = config.max_position_embeddings as usize;
+        let max_pos = config.max_position_embeddings as usize;
         let word_embeddings = vb.get((vocab_size, hidden_size), "word_embeddings.weight")?;
-        // let pos_embeddings = embedding(max_pos, hidden_size, vb.pp("position_embeddings"))?;
-        // let position_ids = vb.get((1, max_pos), "position_ids")?;
+        let pos_embeddings = vb.get((max_pos, hidden_size), "position_embeddings.weight")?;
+        let position_ids = vb.get((1, max_pos), "position_ids")?;
         Ok(Self {
             word_embeddings: Embedding::new(word_embeddings, hidden_size),
-            // position_embeddings: pos_embeddings,
-            // position_ids,
+            position_embeddings: Embedding::new(pos_embeddings, hidden_size),
+            position_ids,
+            embedding_scale: (hidden_size as f64).sqrt(),
         })
     }
     pub fn embed_tokens(&self, x: &Tensor) -> Result<Tensor> {
         self.word_embeddings.forward(x)
     }
     pub fn forward(&self, input_ids: &Tensor) -> Result<Tensor> {
-        // let token_embeddings = self.embed_tokens(input_ids)?;
-        // let seq_length = input_ids.dim(1)?;
-        // let position_ids = self
-        //     .position_ids
-        //     .narrow(1, 0, seq_length)?
-        //     .to_dtype(DType::U32)?;
-        // let position_embeddings = self.position_embeddings.forward(&position_ids)?;
-        // (token_embeddings + position_embeddings)
-        self.word_embeddings.forward(input_ids)
+        let token_embeddings = self.embed_tokens(input_ids)?;
+        let seq_length = input_ids.dim(1)?;
+        let position_ids = self
+            .position_ids
+            .narrow(1, 0, seq_length)?
+            .to_dtype(DType::U32)?;
+        let position_embeddings = self.position_embeddings.forward(&position_ids)?;
+        token_embeddings.add(&position_embeddings)
     }
 }
 
@@ -371,12 +376,12 @@ impl ESM2Attention {
         value: &Tensor,
     ) -> Result<(Tensor, Option<Tensor>)> {
         let (seq_len, batch_size, embed_dim) = query.dims3()?;
-        
+
         // Project inputs to queries, keys, values
         let q = self.q_proj.forward(query)?;
         let k = self.k_proj.forward(key)?;
         let v = self.v_proj.forward(value)?;
-        
+
         // Reshape for multi-head attention: (seq_len, batch, heads*dim) -> (batch*heads, seq_len, dim)
         let q = q
             .reshape((seq_len, batch_size * self.num_heads, self.head_dim))?
@@ -390,17 +395,17 @@ impl ESM2Attention {
             .reshape((seq_len, batch_size * self.num_heads, self.head_dim))?
             .transpose(0, 1)?
             .contiguous()?;
-            
+
         // Apply rotary position embeddings
         let (q, k) = self.rotary_emb.forward(&q, &k)?;
-        
+
         // Calculate attention scores with proper scaling
         let scale = (self.head_dim as f64).powf(-0.5);
         let attention_scores = (q.matmul(&k.transpose(1, 2)?)? * scale)?;
-        
+
         // Apply softmax to get attention weights
         let attention_weights = ops::softmax_last_dim(&attention_scores)?;
-        
+
         // Apply attention weights to values
         let attn_output = attention_weights.matmul(&v)?;
         let attn_output = attn_output
@@ -412,30 +417,30 @@ impl ESM2Attention {
     }
 }
 
-pub struct ESM1LayerNorm {
-    weight: Tensor,
-    bias: Tensor,
-    eps: f64,
-}
-impl ESM1LayerNorm {
-    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        Ok(Self {
-            weight: vb.get(config.hidden_size, "weight")?,
-            bias: vb.get(config.hidden_size, "bias")?,
-            eps: config.layer_norm_eps as f64,
-        })
-    }
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let x_zeromean = ops::layer_norm(x, &self.weight, &self.bias, self.eps as f32)?;
-        let x_norm = {
-            let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
-            x_zeromean.broadcast_div(&variances)?
-        };
-        x_norm
-            .broadcast_mul(&self.weight)?
-            .broadcast_add(&self.bias)
-    }
-}
+// pub struct ESM1LayerNorm {
+//     weight: Tensor,
+//     bias: Tensor,
+//     eps: f64,
+// }
+// impl ESM1LayerNorm {
+//     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
+//         Ok(Self {
+//             weight: vb.get(config.hidden_size, "weight")?,
+//             bias: vb.get(config.hidden_size, "bias")?,
+//             eps: config.layer_norm_eps as f64,
+//         })
+//     }
+//     fn forward(&self, x: &Tensor) -> Result<Tensor> {
+//         let x_zeromean = ops::layer_norm(x, &self.weight, &self.bias, self.eps as f32)?;
+//         let x_norm = {
+//             let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
+//             x_zeromean.broadcast_div(&variances)?
+//         };
+//         x_norm
+//             .broadcast_mul(&self.weight)?
+//             .broadcast_add(&self.bias)
+//     }
+// }
 
 // Full transformer layer
 pub struct ESM2Layer {
@@ -476,9 +481,8 @@ impl ESM2Layer {
         let norm_x = self.self_attn_layer_norm.forward(xs)?;
         let (attn_out, attn) = self.self_attn.forward(&norm_x, &norm_x, &norm_x)?;
         let x = (attn_out + xs)?;
-        let ffn_out = self
-            .final_layer_norm
-            .forward(&x)?
+        let norm_x2 = self.final_layer_norm.forward(&x)?;
+        let ffn_out = norm_x2
             .apply(&self.fc1)?
             .gelu()?
             .apply(&self.fc2)?;

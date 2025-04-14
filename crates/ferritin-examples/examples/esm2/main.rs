@@ -1,5 +1,5 @@
 use anyhow::{Error as E, Result};
-use candle_core::safetensors::load;
+// use candle_core::safetensors::load;
 use candle_core::{D, DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use clap::Parser;
@@ -14,15 +14,12 @@ struct Args {
     /// Run on CPU rather than on GPU.
     #[arg(long)]
     cpu: bool,
-
     /// Which ESM2 Model to use
     #[arg(long, value_parser = ["8M", "35M", "150M", "650M", "3B", "15B"], default_value = "35M")]
     model_id: String,
-
     /// Protein String
     #[arg(long)]
     protein_string: Option<String>,
-
     /// Path to a protein FASTA file
     #[arg(long)]
     protein_fasta: Option<std::path::PathBuf>,
@@ -67,15 +64,12 @@ impl Args {
         let api = Api::new()?;
         let api = api.repo(repo);
         let weights = api.get("model.safetensors")?;
-        let tensors = load(&weights, &device)?;
+        // let tensors = load(&weights, &device)?;
         // for (name, tensor) in tensors.iter() {
         //     println!("Name: {}, Shape: {:?}", name, tensor.shape());
         // }
         let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DTYPE, &device)? };
         let tokenizer = ESM2::load_tokenizer()?;
-        let protein = self.protein_string.as_ref().unwrap().as_str();
-        let _encoded = tokenizer.encode(protein, false);
-        println!("Encoded.... and.....");
         let model = ESM2::load(vb, config)?;
         println!("Loaded!");
         Ok((model, tokenizer))
@@ -118,17 +112,27 @@ fn main() -> Result<()> {
         } else {
             println!("Decoding failed!");
         }
-        
         // Calculate similarity between input and output
         if let Ok(decoded_str) = decoded {
             let decoded_str = decoded_str.replace(" ", "");
             let input_chars: Vec<char> = prot.chars().collect();
             let output_chars: Vec<char> = decoded_str.chars().collect();
             let min_len = std::cmp::min(input_chars.len(), output_chars.len());
-            let matches = input_chars.iter().zip(output_chars.iter()).take(min_len)
-                .filter(|(a, b)| a == b).count();
-            let similarity = if min_len > 0 { matches as f32 / min_len as f32 } else { 0.0 };
-            println!("Similarity score: {:.2} ({} matching out of {})", similarity, matches, min_len);
+            let matches = input_chars
+                .iter()
+                .zip(output_chars.iter())
+                .take(min_len)
+                .filter(|(a, b)| a == b)
+                .count();
+            let similarity = if min_len > 0 {
+                matches as f32 / min_len as f32
+            } else {
+                0.0
+            };
+            println!(
+                "Similarity score: {:.2} ({} matching out of {})",
+                similarity, matches, min_len
+            );
         }
     }
     Ok(())
