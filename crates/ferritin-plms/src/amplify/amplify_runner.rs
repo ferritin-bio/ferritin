@@ -19,12 +19,11 @@ pub enum AmplifyModels {
     AMP350M,
 }
 impl AmplifyModels {
-    pub fn get_model_files(model: Self) -> Result<(&'static str, &'static str)> {
-        let (repo, rev) = match model {
+    pub fn get_model_files(model: Self) -> (&'static str, &'static str) {
+        match model {
             AmplifyModels::AMP120M => ("chandar-lab/AMPLIFY_120M", "main"),
             AmplifyModels::AMP350M => ("chandar-lab/AMPLIFY_350M", "main"),
-        };
-        Ok((repo, rev))
+        }
     }
 }
 
@@ -34,7 +33,7 @@ pub struct AmplifyRunner {
 }
 impl AmplifyRunner {
     pub fn load_model(modeltype: AmplifyModels, device: Device) -> Result<AmplifyRunner> {
-        let (model_id, revision) = AmplifyModels::get_model_files(modeltype)?;
+        let (model_id, revision) = AmplifyModels::get_model_files(modeltype);
         let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());
         let (config_filename, tokenizer_filename, weights_filename) = {
             let api = Api::new()?;
@@ -79,7 +78,6 @@ impl AmplifyRunner {
         let decoded = decoded.replace(" ", "");
         Ok(decoded)
     }
-    //
     pub fn get_pseudo_probabilities(&self, prot_sequence: &str) -> Result<Vec<PseudoProbability>> {
         let model_output = self.run_forward(prot_sequence)?;
         let predictions = model_output.logits;
@@ -89,7 +87,6 @@ impl AmplifyRunner {
     pub fn get_contact_map(&self, prot_sequence: &str) -> Result<Vec<ContactMap>> {
         let model_output = self.run_forward(prot_sequence)?;
         let contact_map_tensor = model_output.get_contact_map()?;
-        // Note: we might want mean or average here.
         let averaged = contact_map_tensor.clone().unwrap().max_keepdim(D::Minus1)?;
         let (position1, position2, val) = averaged.dims3()?;
         let data = averaged.to_vec3::<f32>()?;
