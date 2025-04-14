@@ -3,7 +3,7 @@ use anyhow::{Error as E, Result};
 use candle_core::{D, DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use clap::Parser;
-use ferritin_plms::{ESM2, ESM2Config as Config, device};
+use ferritin_plms::{ESM2, ESM2Config as Config, device, ESM2Runner};
 use hf_hub::{Repo, RepoType, api::sync::Api};
 use tokenizers::Tokenizer;
 pub const DTYPE: DType = DType::F32;

@@ -13,6 +13,7 @@ use candle_core::{Device, Result};
 
 pub use esm::models::esmc::{ESMC, ESMCConfig};
 pub use esm2::esm2::{ESM2, ESM2Config};
+pub use esm2::esm2_runner::{ESM2Models, ESM2Runner};
 pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
 pub use ligandmpnn::proteinfeatures::LMPNNFeatures;

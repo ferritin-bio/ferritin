@@ -4,7 +4,7 @@
 //! particularly the ESM2-650M model.
 
 use candle_core::Device;
-use ferritin_plms::esm2::esm2_runner::{Esm2Models, Esm2Runner};
+use ferritin_plms::esm2::{Esm2Models};
 use ferritin_plms::device;
 
 const TEST_SEQUENCE: &str = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL";
@@ -45,13 +45,13 @@ fn test_esm2_650m_embedding() {
 fn test_esm2_650m_masked_prediction() {
     let esm2 = Esm2Runner::load_model(Esm2Models::ESM2_650M, device().unwrap())
         .expect("Failed to load ESM2 650M model");
-    
+
     // Generate a masked sequence (replace some amino acids with masks)
     let original_sequence = TEST_SEQUENCE;
     let masked_positions = vec![5, 10, 15, 20]; // Example positions to mask
     let masked_sequence = esm2.create_masked_sequence(original_sequence, &masked_positions)
         .expect("Failed to create masked sequence");
-    
+
     // Get predictions for the masked positions
     let predictions = esm2.predict_masked_positions(&masked_sequence);
     assert!(
@@ -59,14 +59,14 @@ fn test_esm2_650m_masked_prediction() {
         "Failed to get predictions for masked positions: {:?}",
         predictions.err()
     );
-    
+
     let predictions = predictions.unwrap();
     assert!(
         !predictions.is_empty(),
         "Predictions for masked positions should not be empty"
     );
     println!("Generated {} predictions for masked positions", predictions.len());
-    
+
     // Verify that we got predictions for each masked position
     assert_eq!(
         predictions.len(),
@@ -82,7 +82,7 @@ fn test_esm2_650m_classification() {
     let esm2 = Esm2Runner::load_model(Esm2Models::ESM2_650M, device().unwrap())
         .expect("Failed to load ESM2 650M model");
     let sequence = TEST_SEQUENCE;
-    
+
     // Get classification scores
     let classification = esm2.classify_protein(sequence);
     assert!(
@@ -90,11 +90,11 @@ fn test_esm2_650m_classification() {
         "Failed to classify protein: {:?}",
         classification.err()
     );
-    
+
     let classes = classification.unwrap();
     assert!(!classes.is_empty(), "Classification results should not be empty");
     println!("Generated {} classification scores", classes.len());
-    
+
     // Verify classification scores format
     for class_score in &classes {
         assert!(
