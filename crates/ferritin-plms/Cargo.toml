@@ -34,9 +34,6 @@ tokenizers.workspace = true
 uuid = { version = "1.16", features = ["v4"] }
 
 
-[target.'cfg(target_os = "macos")'.features]
-metal = []
-
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-metal-kernels.workspace = true
 

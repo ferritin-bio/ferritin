@@ -238,7 +238,7 @@ impl EncoderBlock {
         let hidden = x1.silu()?.mul(x2)?;
         let output = self.w3.forward(&hidden)?;
         batch_shape.push(output.dim(1)?);
-        output.reshape(batch_shape) // todo fix the shape calculation
+        output.reshape(batch_shape)
     }
     fn scaled_dot_product_attention(
         &self,
@@ -271,20 +271,15 @@ impl EncoderBlock {
         let xq = self.q.forward(x)?.contiguous()?;
         let xk = self.k.forward(x)?.contiguous()?;
         let xv = self.v.forward(x)?.contiguous()?;
-
         // Reshape for rotary embeddings
         let shape = (batch_size, seq_len, self.num_heads, self.d_head);
         let xq = xq.reshape(shape)?;
         let xk = xk.reshape(shape)?;
         let xv = xv.reshape(shape)?;
         let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
-
         // need to handle pad_mask better ....
         let pad_mask = if let Some(mask) = pad_mask {
             let (batch_size, seq_len) = (x.dim(0)?, x.dim(1)?);
-            // Following PyTorch's implementation:
-            // 1. unsqueeze twice to add head dimensions
-            // 2. repeat to match attention matrix size
             let mask = mask.unsqueeze(1)?.unsqueeze(1)?.expand((
                 batch_size,
                 self.num_heads,
@@ -303,7 +298,6 @@ impl EncoderBlock {
             self.dropout_prob,
             false,
         )?;
-
         // `[batch, num_heads, seq_len, head_dim]` → `[batch, seq_len, num_heads, head_dim]`
         let attn = attn.permute((0, 2, 1, 3))?;
         let _attn = if output_attentions {
@@ -317,7 +311,6 @@ impl EncoderBlock {
         } else {
             None
         };
-
         // Final projection and dropout
         let output = attn.reshape((batch_size, seq_len, self.num_heads * self.d_head))?;
         let output01 = self.wo.forward(&output)?;
@@ -342,7 +335,6 @@ impl EncoderBlock {
         let ffn_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("ffn_norm"))?;
         let attention_norm =
             rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?;
-
         Ok(Self {
             q,
             k,
@@ -406,7 +398,6 @@ impl ModelOutput {
         let total_elements = attn_stacked.dims().iter().product::<usize>();
         let first_dim = total_elements / (seq_length * seq_length);
         let attn_map = attn_stacked.reshape(&[first_dim, seq_length, seq_length])?;
-
         // In PyTorch: attn_map = attn_map[:, 1:-1, 1:-1]
         let attn_map = attn_map
             .narrow(1, 1, attn_map.dim(1)? - 2)? // second dim
