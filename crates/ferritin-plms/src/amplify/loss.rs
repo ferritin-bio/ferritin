@@ -28,32 +28,27 @@ pub fn get_loss(device: &Device, config: &LossConfig) -> Result<CrossEntropyLoss
     )?;
 
     // Handle class weights if provided
-    let class_weights = if let Some(weights) = &config.weights {
-        if weights.values().any(|&w| w != 1.0) {
-            let weights_vec: Vec<f64> = (0..tokenizer.len())
-                .map(|i| {
-                    let token = tokenizer.id_to_token(i);
-                    *weights.get(&token).unwrap_or(&1.0)
-                })
-                .collect();
-
-            Some(Tensor::new(weights_vec.as_slice(), device)?.to_dtype(config.dtype)?)
-        } else {
-            None
+    let class_weights = config.weights.as_ref().and_then(|weights| {
+        if weights.values().all(|&w| w == 1.0) {
+            return None;
         }
-    } else {
-        None
-    };
 
-    // Create CrossEntropyLoss configuration
-    let ce_config = CrossEntropyConfig {
+        let weights_vec: Vec<f64> = (0..tokenizer.len())
+            .map(|i| *weights.get(&tokenizer.id_to_token(i)).unwrap_or(&1.0))
+            .collect();
+
+        Tensor::new(weights_vec.as_slice(), device)
+            .and_then(|t| t.to_dtype(config.dtype))
+            .ok()
+    });
+
+    // Create and return CrossEntropyLoss
+    CrossEntropyLoss::new(CrossEntropyConfig {
         reduction: candle_nn::loss::Reduction::Mean,
         ignore_index: Some(-100),
         label_smoothing: config.label_smoothing,
         weights: class_weights,
-    };
-
-    CrossEntropyLoss::new(ce_config)
+    })
 }
 
 // Example usage:

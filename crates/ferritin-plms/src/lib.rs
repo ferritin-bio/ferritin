@@ -5,10 +5,9 @@
 //! cargo run --example amplify
 //! cargo run --example amplify --features metal
 //! ```
-pub use amplify::amplify::AMPLIFY;
+pub use amplify::amplify::{AMPLIFY, ModelOutput};
 pub use amplify::amplify_runner::{AmplifyModels, AmplifyRunner};
 pub use amplify::config::AMPLIFYConfig;
-pub use amplify::outputs::ModelOutput;
 use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{Device, Result};
 pub use esm::models::esmc::{ESMC, ESMCConfig};
