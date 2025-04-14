@@ -11,7 +11,7 @@ members = [
     "crates/ferritin-structure-mesh",
     "crates/ferritin-test-data",
     "crates/ferritin-wasm-examples/ligandmpnn",
-    "crates/ferritin-wasm-examples/ligandmpnn-wasm",
+    # "crates/ferritin-wasm-examples/ligandmpnn-wasm",
 ]
 resolver = "3"
 

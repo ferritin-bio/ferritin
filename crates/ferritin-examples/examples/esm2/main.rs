@@ -108,7 +108,7 @@ fn main() -> Result<()> {
         println!("predictions: {:?}", predictions);
 
         println!("Decoding.......");
-        let indices: Vec<u32> = predictions.to_vec1()?;
+        let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
         let decoded = tokenizer.decode(indices.as_slice(), true);
 
         println!("Decoded: {:?}, ", decoded);
