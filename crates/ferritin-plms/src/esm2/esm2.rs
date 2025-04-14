@@ -561,6 +561,9 @@ impl ESM2 {
 
         Ok(ESM2Output { logits })
     }
+    pub(crate) fn get_device(&self) -> &Device {
+        self.embeddings.word_embeddings.embeddings().device()
+    }
 }
 
 // Output struct
