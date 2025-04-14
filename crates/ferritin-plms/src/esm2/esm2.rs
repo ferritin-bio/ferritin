@@ -323,22 +323,30 @@ impl ESM2Attention {
         value: &Tensor,
     ) -> Result<(Tensor, Option<Tensor>)> {
         let (seq_len, batch_size, embed_dim) = query.dims3()?;
+        println!("seq_len, batch_size, embed_dim: {:?}", query.dims3()?);
         let q = self.q_proj.forward(query)?;
         let k = self.k_proj.forward(key)?;
         let v = self.v_proj.forward(value)?;
-        let q = q.reshape((seq_len, batch_size * self.num_heads, self.head_dim))?;
-        let k = k.reshape((seq_len, batch_size * self.num_heads, self.head_dim))?;
-        let v = v.reshape((seq_len, batch_size * self.num_heads, self.head_dim))?;
-        let q = q.transpose(0, 1)?.contiguous()?;
-        let k = k.transpose(0, 1)?.contiguous()?;
-        let v = v.transpose(0, 1)?.contiguous()?;
+        let q = q
+            .reshape((seq_len, batch_size * self.num_heads, self.head_dim))?
+            .transpose(0, 1)?
+            .contiguous()?;
+        let k = k
+            .reshape((seq_len, batch_size * self.num_heads, self.head_dim))?
+            .transpose(0, 1)?
+            .contiguous()?;
+        let v = v
+            .reshape((seq_len, batch_size * self.num_heads, self.head_dim))?
+            .transpose(0, 1)?
+            .contiguous()?;
         let (q, k) = self.rotary_emb.forward(&q, &k)?;
         let scale = (self.head_dim as f64).powf(-0.5);
-        let attention_scores = (q.matmul(&k.transpose(1, 2)?)? * scale)?;
-        let attention_weights = ops::softmax(&attention_scores, D::Minus1)?;
+        let attention_weights = (q.matmul(&k.transpose(1, 2)?)? * scale)?;
+        let attention_weights = ops::softmax(&attention_weights, D::Minus1)?;
         let context = attention_weights.matmul(&v)?;
-        let context = context.transpose(1, 2)?;
-        let context = context.reshape((seq_len, batch_size, embed_dim))?;
+        let context = context
+            .transpose(1, 2)?
+            .reshape((seq_len, batch_size, embed_dim))?;
         let output = self.out_proj.forward(&context)?;
         Ok((output, None))
     }
