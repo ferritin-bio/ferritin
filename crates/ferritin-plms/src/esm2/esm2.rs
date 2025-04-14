@@ -291,10 +291,10 @@ impl ESM2LMHead {
         let hidden_size = config.hidden_size as usize;
         let dense = linear(hidden_size, hidden_size, vb.pp("dense"))?;
         let bias = vb.get(config.vocab_size as usize, "bias")?;
-        
+
         // Use custom ESM1LayerNorm
         let layer_norm = ESM1LayerNorm::load(vb.pp("layer_norm"), config)?;
-        
+
         let decoder = Linear::new(embedding.embeddings().clone(), Some(bias));
         Ok(ESM2LMHead {
             dense,
@@ -305,10 +305,10 @@ impl ESM2LMHead {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
         // Apply dense layer and GELU activation
         let hidden = xs.apply(&self.dense)?.gelu()?;
-        
+
         // Apply custom layer norm
         let normalized = self.layer_norm.forward(&hidden)?;
-        
+
         // Apply decoder (projection to vocabulary)
         normalized.apply(&self.decoder)
     }
@@ -402,6 +402,7 @@ impl ESM2Attention {
         let (q, k) = self.rotary_emb.forward(&q, &k)?;
 
         // Calculate attention scores with proper scaling
+        // todo: review for parity with ESM2-py
         let scale = (self.head_dim as f64).powf(-0.5);
         let attention_scores = (q.matmul(&k.transpose(1, 2)?)? * scale)?;
 
@@ -436,13 +437,13 @@ impl ESM1LayerNorm {
         // First compute mean over the last dimension
         let means = x.mean_keepdim(D::Minus1)?;
         let x_zeromean = x.broadcast_sub(&means)?;
-        
+
         // Compute variance along last dimension
         let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
-        
+
         // Normalize with sqrt(variance + eps)
         let x_norm = x_zeromean.broadcast_div(&(variances + self.eps)?.sqrt()?)?;
-        
+
         // Apply scale and shift
         x_norm
             .broadcast_mul(&self.weight)?
@@ -482,17 +483,14 @@ impl ESM2Layer {
         // Apply layer norm and then attention
         let norm_x = self.self_attn_layer_norm.forward(xs)?;
         let (attn_out, attn) = self.self_attn.forward(&norm_x, &norm_x, &norm_x)?;
-        
+
         // Residual connection
         let x = (attn_out + xs)?;
-        
+
         // Apply layer norm and then feed-forward network
         let norm_x2 = self.final_layer_norm.forward(&x)?;
-        let ffn_out = norm_x2
-            .apply(&self.fc1)?
-            .gelu()?
-            .apply(&self.fc2)?;
-            
+        let ffn_out = norm_x2.apply(&self.fc1)?.gelu()?.apply(&self.fc2)?;
+
         // Another residual connection
         Ok(((ffn_out + x)?, attn))
     }
@@ -514,19 +512,17 @@ impl ESM2 {
             .map(|i| ESM2Layer::load(vb.pp(format!("esm.encoder.layer.{}", i)), &config))
             .collect::<Result<Vec<_>>>()?;
         let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), &config)?;
-        
+
         // Use custom ESM1LayerNorm for final layer norm
-        let layer_norm_after = ESM1LayerNorm::load(
-            vb.pp("esm.encoder.emb_layer_norm_after"),
-            &config,
-        )?;
-        
+        let layer_norm_after =
+            ESM1LayerNorm::load(vb.pp("esm.encoder.emb_layer_norm_after"), &config)?;
+
         let lm_head = ESM2LMHead::load(
             vb.pp("lm_head"),
             &config,
             &embeddings.word_embeddings.clone(),
         )?;
-        
+
         Ok(Self {
             embeddings,
             contact_head,
@@ -544,25 +540,25 @@ impl ESM2 {
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
         // x = self.embed_scale * self.embed_tokens(tokens)
         let mut xs = self.embeddings.forward(x)?;
-        
+
         // Transpose to sequence-first format for transformer processing
         xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
-        
+
         // Process through transformer layers
         for (_layer_idx, layer) in self.layers.iter().enumerate() {
             let (new_xs, _attn) = layer.forward(&xs)?;
             xs = new_xs;
         }
-        
+
         // Apply final layer normalization
         xs = self.layer_norm_after.forward(&xs)?;
-        
+
         // Transpose back to batch-first format for output
         xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
-        
+
         // Apply language model head to get logits
         let logits = self.lm_head.forward(&xs)?;
-        
+
         Ok(ESM2Output { logits })
     }
 }
