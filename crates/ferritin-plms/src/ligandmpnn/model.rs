@@ -3,8 +3,6 @@
 //!
 //! - See the [LigandMPNN Repo](https://github.com/dauparas/LigandMPNN)
 //!
-use std::collections::HashMap;
-
 use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::proteinfeatures::ProteinFeatures;
 use super::proteinfeaturesmodel::ProteinFeaturesModel;
@@ -17,6 +15,7 @@ use candle_nn::ops;
 use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{Dropout, Embedding, LayerNorm, Linear, VarBuilder, embedding, layer_norm, linear};
 use candle_transformers::generation::LogitsProcessor;
+use std::collections::HashMap;
 
 // refactoring common fn
 fn concat_node_tensors(h_v: &Tensor, h_e: &Tensor, e_idx: &Tensor) -> Result<Tensor> {
@@ -583,8 +582,6 @@ impl ProteinMPNN {
             decoding_order,
         })
     }
-
-    //noinspection RsBorrowChecker
     pub fn sample(
         &self,
         features: &ProteinFeatures,
@@ -611,11 +608,9 @@ impl ProteinMPNN {
         let decoding_order = (&chain_mask + 0.0001)?
             .mul(&rand_tensor.abs()?)?
             .arg_sort_last_dim(false)?;
-        // Todo add  bias
+        // TodoL add  bias
         // # [B,L,21] - amino acid bias per position
-        //  bias = feature_dict["bias"]
         let bias = Tensor::ones((b, l, 21), sample_dtype, device)?;
-        println!("todo: We need to add the bias!");
         let symmetry_residues: Option<Vec<i32>> = None;
         match symmetry_residues {
             None => {
@@ -852,8 +847,6 @@ impl ProteinMPNN {
                     )?;
                     all_log_probs = all_log_probs.index_add(&t_expanded, &log_probs_update, 1)?;
                 }
-
-                println!("Before Score");
                 Ok(ScoreOutput {
                     s,
                     log_probs: all_probs,
@@ -863,178 +856,6 @@ impl ProteinMPNN {
             }
             Some(symmetry_residues) => {
                 todo!()
-                // // note this is a literal translation of the code... Howver I think this could lead to
-                // // possible unintentional overwriting of value - e.g. if there are multiple identical
-                // // values in the index. (I guess you might expect that if they are symetrical. Howver the
-                // // weights do not have to be the same)
-                // let symmetry_weights = symmetry_weights.as_ref().unwrap();
-                // // let symmetry_weights_tensor = Tensro::ones(l, candle_core::DType::F32, device)?;
-                // let mut symmetry_weights_vec = vec![1.0_f64; l];
-                // for (i1, item_list) in symmetry_residues.iter().enumerate() {
-                //     for (i2, &item) in item_list.iter().enumerate() {
-                //         let value = symmetry_weights[i1][i2];
-                //         symmetry_weights_vec[item as usize] = value;
-                //     }
-                // }
-
-                // let symmetry_weights_tensor = Tensor::from_vec(symmetry_weights_vec, l, device)?;
-
-                // // let flattened: Vec<i64> = new_decoding_order.into_iter().flatten().collect();
-                // let mut new_decoding_order: Vec<Vec<i64>> = Vec::new();
-                // let decoding_order_vec: Vec<i64> = decoding_order.get(0)?.to_vec1()?;
-                // for &t_dec in &decoding_order_vec {
-                //     if !new_decoding_order.iter().flatten().any(|&x| x == t_dec) {
-                //         let list_a: Vec<&Vec<i64>> = symmetry_residues
-                //             .iter()
-                //             .filter(|item| item.contains(&t_dec))
-                //             .collect();
-                //         if !list_a.is_empty() {
-                //             new_decoding_order.push(list_a[0].clone());
-                //         } else {
-                //             new_decoding_order.push(vec![t_dec]);
-                //         }
-                //     }
-                // }
-                // let flattened_order: Vec<i64> =
-                //     new_decoding_order.clone().into_iter().flatten().collect();
-                // let decoding_order = Tensor::from_vec(flattened_order, l, device)?
-                //     .unsqueeze(0)?
-                //     .repeat((b, 1))?;
-
-                // // shuffle the decoding. Note: This is now non-deterministic
-                // // let mut rng = thread_rng();
-                // // let mut new_decoding_order: Vec<i64> = decoding_order_vec.clone();
-                // // new_decoding_order.shuffle(&mut rng);
-                // // let decoding_order =
-                // //     Tensor::from_vec(new_decoding_order, l, device)?.repeat((b, 1))?;
-
-                // let permutation_matrix_reverse = one_hot(decoding_order, l, 1., 0.)?;
-
-                // let tril = Tensor::tril2(l, DType::F64, device)?;
-                // let temp = tril.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // (b, i, q)
-                // let order_mask_backward =
-                //     temp.matmul(&permutation_matrix_reverse.transpose(1, 2)?)?; // shape (b, q, p)
-                // let mask_attend = order_mask_backward
-                //     .gather(&e_idx, 2)?
-                //     .unsqueeze(D::Minus1)?;
-
-                // let mask_1d = x_mask.unwrap().reshape((b, l, 1, 1))?;
-                // let mask_bw = mask_1d.mul(&mask_attend)?;
-                // let mask_fw = mask_1d.mul(&(Tensor::ones_like(&mask_attend)? - mask_attend)?)?;
-
-                // // Repeat for decoding
-                // let s_true = s_true.repeat((b, 1))?;
-                // let h_v = h_v.repeat((b, 1, 1))?;
-                // let h_e = h_e.repeat((b, 1, 1, 1))?;
-                // let e_idx = e_idx.repeat((b, 1, 1))?;
-                // let mask_fw = mask_fw.repeat((b, 1, 1, 1))?;
-                // let mask_bw = mask_bw.repeat((b, 1, 1, 1))?;
-                // let chain_mask = chain_mask.repeat((b, 1))?;
-                // let mask = x_mask.unwrap().repeat((b, 1))?;
-                // // Todo: fix bias
-                // let bias = Tensor::zeros((b, l, 20), DType::F32, device)?;
-                // let bias = bias.repeat((b, 1, 1))?;
-                // let all_probs = Tensor::zeros((b, l, 20), candle_core::DType::F32, device)?;
-                // let all_log_probs = Tensor::zeros((b, l, 21), candle_core::DType::F32, device)?;
-                // let h_s = Tensor::zeros_like(&h_v)?;
-                // let s = (Tensor::ones((b, l), candle_core::DType::I64, device)? * 20.)?;
-
-                // let mut h_v_stack = vec![h_v.clone()];
-                // h_v_stack.extend(
-                //     (0..self.decoder_layers.len()).map(|_| Tensor::zeros_like(&h_v).unwrap()),
-                // );
-                // let h_ex_encoder = cat_neighbors_nodes(&Tensor::zeros_like(&h_s)?, &h_e, &e_idx)?;
-                // let h_exv_encoder = cat_neighbors_nodes(&h_v, &h_ex_encoder, &e_idx)?;
-                // let h_exv_encoder_fw = mask_fw.mul(&h_exv_encoder)?;
-
-                // for t_list in new_decoding_order {
-                //     let mut total_logits = Tensor::zeros((b, 21), candle_core::DType::F32, device)?;
-
-                //     for &t in &t_list {
-                //         // Select the t-th column from chain_mask
-                //         let chain_mask_t = chain_mask.i((.., t as usize))?;
-                //         let mask_t = mask.i((.., t as usize))?;
-                //         let bias_t = bias.i((.., t as usize))?;
-
-                //         let e_idx_t = e_idx.narrow(1, t as usize, 1)?;
-                //         let h_e_t = h_e.narrow(1, t as usize, 1)?;
-                //         let h_es_t = cat_neighbors_nodes(&h_s, &h_e_t, &e_idx_t)?;
-                //         let h_exv_encoder_t = h_exv_encoder_fw.narrow(1, t as usize, 1)?;
-
-                //         for (l, layer) in self.decoder_layers.iter().enumerate() {
-                //             let h_esv_decoder_t =
-                //                 cat_neighbors_nodes(&h_v_stack[l], &h_es_t, &e_idx_t)?;
-                //             let h_v_t = h_v_stack[l].narrow(1, t as usize, 1)?;
-                //             let h_esv_t = mask_bw
-                //                 .narrow(1, t as usize, 1)?
-                //                 .mul(&h_esv_decoder_t)?
-                //                 .add(&h_exv_encoder_t)?;
-                //             let new_h_v = layer.forward(
-                //                 &h_v_t,
-                //                 &h_esv_t,
-                //                 Some(&mask_t.unsqueeze(1)?),
-                //                 None,
-                //                 None,
-                //             )?;
-                //             h_v_stack[l + 1].slice_set(&new_h_v, 1, t as usize)?;
-                //         }
-
-                //         let h_v_t = h_v_stack.last().unwrap().i((.., t as usize))?;
-                //         let logits = self.w_out.forward(&h_v_t)?;
-                //         let log_probs = log_softmax(&logits, D::Minus1)?;
-                //         let updated_probs = chain_mask_t.unsqueeze(1)?.mul(&log_probs)?;
-                //         all_log_probs.slice_set(&updated_probs, 1, t as usize)?;
-                //         let symvec = &symmetry_weights[t as usize];
-                //         let symten = Tensor::new(symvec.as_slice(), device)?;
-                //         total_logits = total_logits.add(&logits.mul(&symten)?)?;
-                //     }
-
-                //     // todo: bias t not defined here!
-                //     let bias_t = Tensor::zeros_like(&total_logits)?;
-                //     let temperature = 20.;
-                //     let probs = softmax(&(total_logits.add(&bias_t)? / temperature)?, D::Minus1)?;
-                //     let probs_sample = probs
-                //         .narrow(1, 0, 20)?
-                //         .div(&probs.narrow(1, 0, 20)?.sum_keepdim(1)?)?;
-
-                //     // replce this with sampleing using built in Logit Processing
-                //     // let s_t = probs_sample.multinomial(1, true)?.squeeze(1)?;
-                //     let seed = 32;
-                //     let mut logproc = LogitsProcessor::new(seed, Some(temperature), Some(0.25));
-                //     let logits: Vec<u32> = vec![(); l]
-                //         .iter()
-                //         .map(|_| logproc.sample(&probs_sample))
-                //         .filter_map(Result::ok)
-                //         .collect();
-                //     let s_t = Tensor::from_vec(logits, l, device)?;
-
-                //     for &t in &t_list {
-                //         let chain_mask_t = chain_mask.i((.., t as usize))?;
-                //         let result = chain_mask_t.unsqueeze(1)?.mul(&probs_sample)?;
-
-                //         all_probs.slice_set(&result, 1, t as usize)?;
-
-                //         let s_true_t = s_true.i((.., t as usize))?;
-                //         let s_t = s_t
-                //             .mul(&chain_mask_t)?
-                //             .add(
-                //                 &s_true_t
-                //                     .mul(&(Tensor::ones_like(&chain_mask_t)? - chain_mask_t)?)?,
-                //             )?
-                //             .to_dtype(candle_core::DType::I64)?;
-
-                //         let h_s_t = self.w_s.forward(&s_t)?;
-                //         h_s.slice_set(&h_s_t.unsqueeze(1)?, 1, t as usize)?;
-                //         s.slice_set(&s_t.unsqueeze(1)?, 1, t as usize)?;
-                //     }
-                // }
-                // Ok(ScoreOutput {
-                //     s,
-                //     // sampling_probs: all_probs,
-                //     log_probs: all_log_probs,
-                //     logits: all_probs,
-                //     decoding_order,
-                // })
             }
         }
     }

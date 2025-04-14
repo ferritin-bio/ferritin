@@ -1,13 +1,10 @@
 use super::configs::ProteinMPNNConfig;
 use super::proteinfeatures::ProteinFeatures;
-use super::utilities::{
-    compute_nearest_neighbors, cross_product, gather_edges, linspace, linspace_f32,
-};
+use super::utilities::{compute_nearest_neighbors, cross_product, gather_edges, linspace_f32};
 use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::encoding::one_hot;
 use candle_nn::{LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear};
 
-// After (at module level)
 const RBF_MIN_DISTANCE: f32 = 2.0;
 const RBF_MAX_DISTANCE: f32 = 22.0;
 const NUMERICAL_STABILITY_EPSILON: f32 = 1e-6;
@@ -26,13 +23,13 @@ pub struct ProteinFeaturesModel {
     edge_embedding: Linear,
     norm_edges: LayerNorm,
 }
-
 impl ProteinFeaturesModel {
     pub fn load(vb: VarBuilder, config: ProteinMPNNConfig) -> Result<Self> {
+        // todo check the hardcoded configs
         let augment_eps = config.augment_eps;
-        let top_k = config.k_neighbors as usize; // Todo: check that this is 48
-        let num_rbf = config.num_rbf as usize; // Todo: check that this is 16
-        let num_positional_embeddings = 16usize; // todo: hardcoding : check where this number
+        let top_k = config.k_neighbors as usize;
+        let num_rbf = config.num_rbf as usize;
+        let num_positional_embeddings = 16usize;
         let edge_in = num_positional_embeddings + num_rbf * 25;
         let edge_features = config.edge_features as usize;
         let node_features = config.node_features as usize;
@@ -48,7 +45,6 @@ impl ProteinFeaturesModel {
             LayerNormConfig::default(),
             vb.pp("norm_edges"),
         )?;
-
         Ok(Self {
             edge_in: edge_in as i64,
             edge_features,
@@ -154,15 +150,11 @@ impl ProteinFeaturesModel {
         let x = input_features.get_coords();
         let mask = input_features.x_mask.as_ref().unwrap();
         let r_idx = input_features.get_residue_index();
-
         // Temporary implementation until chain labels are supported
         let chain_labels = Tensor::zeros_like(r_idx)?;
-        let x = if self.augment_eps > 0.0 {
-            let noise = x.randn_like(0.0, self.augment_eps as f64)?;
-            (x + noise)?
-        } else {
-            x.clone()
-        };
+        let x = (self.augment_eps > 0.0)
+            .then(|| (x + x.randn_like(0.0, self.augment_eps as f64)?))
+            .unwrap_or_else(|| Ok(x.clone()))?;
         let b = (&x.narrow(2, 1, 1)? - &x.narrow(2, 0, 1)?)?
             .squeeze(2)?
             .contiguous()?;
@@ -215,22 +207,19 @@ impl ProteinFeaturesModel {
 
         let rbf_all = Tensor::cat(&rbf_all, D::Minus1)?;
         let dims = r_idx.dims();
-
-        // index out of bounds: the len is 1 but the index is 1
         let target_shape = (dims[0], dims[1], dims[1]);
         let r_idx_expanded1 = r_idx
             .unsqueeze(2)?
             .broadcast_as(target_shape)?
-            .to_dtype(DType::F32)?; // [1, 93, 93]
+            .to_dtype(DType::F32)?;
         let r_idx_expanded2 = r_idx
             .unsqueeze(1)?
             .broadcast_as(target_shape)?
-            .to_dtype(DType::F32)?; // [1, 93, 93]
+            .to_dtype(DType::F32)?;
 
         let offset = (r_idx_expanded1 - r_idx_expanded2)?;
         let offset = gather_edges(&offset.unsqueeze(D::Minus1)?, &e_idx)?;
         let offset = offset.squeeze(D::Minus1)?;
-
         let dims = chain_labels.dims();
         let target_shape = (dims[0], dims[1], dims[1]);
         let d_chains = (&chain_labels.unsqueeze(2)?.broadcast_as(target_shape)?
@@ -269,34 +258,14 @@ impl PositionalEncodings {
     }
     /// - [pytorch](https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L1645)
     fn forward(&self, offset: &Tensor, mask: &Tensor) -> Result<Tensor> {
-        // def forward(self, offset, mask):
-        //     d = torch.clip(
-        //         offset + self.max_relative_feature, 0, 2 * self.max_relative_feature
-        //     ) * mask + (1 - mask) * (2 * self.max_relative_feature + 1)
-        //     d_onehot = torch.nn.functional.one_hot(d, 2 * self.max_relative_feature + 1 + 1)
-        //     E = self.linear(d_onehot.float())
-        //     return E
-        //
-        // println!("In positional Embedding: forward");
-        // Offset: Tensor[dims 1, 93, 24; u32, metal:4294969325]
         let max_rel = self.max_relative_feature as f64;
-        // First part: clip(offset + max_rel, 0, 2*max_rel)
-        let d = (offset + max_rel)?;
-        let d = d.clamp(0f64, 2.0 * max_rel)?;
-        // Second part: d * mask + (1-mask)*(2*max_rel + 1)
-        let masked_d = d.mul(mask)?;
-        let inverse_mask = (mask * -1.0)? + 1.0;
-        let extra_term = inverse_mask? * ((2.0 * max_rel) + 1.0);
-        let d = (masked_d + extra_term?)?;
-
-        // Todo: confirms this is correct: we are converting the mask
-        // Normalize the values by subtracting 97 (ASCII 'a') to make them 0-based
-        // let d_normalized = (d - 97u32)?; // This will make 'a'=0, 'b'=1, etc.
-        let offset_val = Tensor::full(97u32, d.dims(), d.device());
-        let d_normalized = (d - offset_val)?;
+        let clipped = (offset + max_rel)?.clamp(0f64, 2.0 * max_rel)?;
+        let inverse_mask = (1.0 - mask)?;
+        let d = (clipped.mul(mask)? + inverse_mask * ((2.0 * max_rel) + 1.0))?;
         let depth = (2 * self.max_relative_feature + 2) as i64;
-        let d_onehot = one_hot(d_normalized, depth as usize, 1f32, 0f32)?;
-        let d_onehot_float = d_onehot.to_dtype(DType::F32)?;
-        self.linear.forward(&d_onehot_float)
+        let d_value = Tensor::full(97f32, d.dims(), d.device())?;
+        let d_normalized = (&d - &d_value)?;
+        let d_onehot = one_hot(d_normalized, depth as usize, 1f32, 0f32)?.to_dtype(DType::F32)?;
+        self.linear.forward(&d_onehot)
     }
 }
