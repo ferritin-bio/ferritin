@@ -31,13 +31,37 @@ struct Args {
 
 impl Args {
     fn build_model_and_tokenizer(&self, device: &Device) -> Result<(ESM2, Tokenizer)> {
-        let (model_id, revision) = match self.model_id.as_str() {
-            "8M" => ("facebook/esm2_t6_8M_UR50D", "main"),
-            "35M" => ("facebook/esm2_t12_35M_UR50D", "main"),
-            "150M" => ("facebook/esm2_t30_150M_UR50D", "main"),
-            "650M" => ("facebook/esm2_t33_650M_UR50D", "main"),
-            "3B" => ("facebook/esm2_t36_3B_UR50D", "main"),
-            "15B" => ("facebook/esm2_t48_15B_UR50D", "main"),
+        let (model_id, revision, config) = match self.model_id.as_str() {
+            "8M" => (
+                "facebook/esm2_t6_8M_UR50D",
+                "main",
+                Config::esm2_t6_8M_ur50(),
+            ),
+            "35M" => (
+                "facebook/esm2_t12_35M_UR50D",
+                "main",
+                Config::esm2_t12_35M_ur50(),
+            ),
+            "150M" => (
+                "facebook/esm2_t30_150M_UR50D",
+                "main",
+                Config::esm2_t30_150M_ur50(),
+            ),
+            "650M" => (
+                "facebook/esm2_t33_650M_UR50D",
+                "main",
+                Config::esm2_t33_650M_ur50(),
+            ),
+            "3B" => (
+                "facebook/esm2_t36_3B_UR50D",
+                "main",
+                Config::esm2_t36_3b_ur50(),
+            ),
+            "15B" => (
+                "facebook/esm2_t48_15B_UR50D",
+                "main",
+                Config::esm2_t48_15b_ur50(),
+            ),
             _ => panic!("Invalid ESM models."),
         };
         let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());
@@ -48,28 +72,24 @@ impl Args {
             let weights = api.get("model.safetensors")?;
             (config, weights)
         };
-        let config_str = std::fs::read_to_string(config_filename)?;
-        let config_str = config_str
-            .replace("SwiGLU", "swiglu")
-            .replace("Swiglu", "swiglu");
+        // let config_str = std::fs::read_to_string(config_filename)?;
+        // let config: Config = serde_json::from_str(&config_str)?;
+        // let config: Config = serde_json::from_str(&config_str)?;
+
         // Now you can iterate through the tensors
         let tensors = load(&weights_filename, &device)?;
         for (name, tensor) in tensors.iter() {
             println!("Name: {}, Shape: {:?}", name, tensor.shape());
         }
 
-        let config: Config = serde_json::from_str(&config_str)?;
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
-
         let tokenizer = ESM2::load_tokenizer()?;
         let protein = self.protein_string.as_ref().unwrap().as_str();
         let encoded = tokenizer.encode(protein, false);
-
         println!("Encoded.... and.....");
         let model = ESM2::load(vb, config)?;
         println!("Loaded!");
-
         Ok((model, tokenizer))
     }
 }
