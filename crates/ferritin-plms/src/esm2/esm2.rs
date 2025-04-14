@@ -232,6 +232,7 @@ impl ESM2Embeddings {
             .to_dtype(DType::U32)?;
         let position_embeddings = self.position_embeddings.forward(&position_ids)?;
         (token_embeddings + position_embeddings)
+        // self.word_embeddings.forward(input_ids)
     }
 }
 
@@ -403,20 +404,17 @@ impl ESM2Layer {
         })
     }
     fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
-        // Input should be: [seq_len, batch_size, embed_dim]
-        // let (seq_len, batch_size, embed_dim) = xs.dims3()?;
-        let residual = xs.clone();
-        let x = self.self_attn_layer_norm.forward(xs)?;
-        let (x, attn) = self.self_attn.forward(&x, &x, &x)?;
-        let x = (x + residual)?;
-        // Second block: FFN with residual connection
-        let residual = x.clone();
-        let x = self.final_layer_norm.forward(&x)?;
-        let x = x.gelu()?;
-        let x = x.apply(&self.fc1)?;
-        let x = x.apply(&self.fc2)?;
-        let x = (x + residual)?;
-        Ok((x, attn))
+        // Input: [seq_len, batch_size, embed_dim]
+        let norm_x = self.self_attn_layer_norm.forward(xs)?;
+        let (attn_out, attn) = self.self_attn.forward(&norm_x, &norm_x, &norm_x)?;
+        let x = (attn_out + xs)?;
+        let ffn_out = self
+            .final_layer_norm
+            .forward(&x)?
+            .apply(&self.fc1)?
+            .gelu()?
+            .apply(&self.fc2)?;
+        Ok(((ffn_out + x)?, attn))
     }
 }
 
