@@ -10,9 +10,6 @@
 //!
 //!
 use super::config::AMPLIFYConfig;
-use super::outputs::ModelOutput;
-use super::rotary::apply_rotary_emb;
-use super::rotary::precompute_freqs_cis;
 use candle_core::{D, Device, Module, Result, Tensor};
 use candle_nn::{
     Dropout, Embedding, Linear, RmsNorm, VarBuilder, embedding, linear, linear_no_bias,
@@ -35,7 +32,6 @@ pub struct AMPLIFY {
     freqs_cis: Tensor,
     config: AMPLIFYConfig,
 }
-
 impl AMPLIFY {
     fn process_attention_mask(
         &self,
@@ -156,20 +152,15 @@ pub fn precompute_freqs_cis(head_dim: usize, seq_len: usize) -> Result<Tensor> {
 
 pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<(Tensor, Tensor)> {
     let (b_sz, seq_len, h, headdim) = xq.dims4()?;
-    // Calculate dimensions for reshape
-    let complex_dim = 2;
-    let half_headdim = headdim / complex_dim;
-    // Reshape inputs for complex multiplication
-    let xq = xq.reshape((b_sz, seq_len, h, half_headdim, complex_dim))?;
-    let xk = xk.reshape((b_sz, seq_len, h, half_headdim, complex_dim))?;
-    // Reshape freqs_cis to match and broadcast across attention heads
+    let half_headdim = headdim / 2;
+    let xq = xq.reshape((b_sz, seq_len, h, half_headdim, 2))?;
+    let xk = xk.reshape((b_sz, seq_len, h, half_headdim, 2))?;
     let freqs_cis = freqs_cis.narrow(0, 0, seq_len)?;
     let freqs_cis = freqs_cis
-        .reshape((seq_len, half_headdim, complex_dim))?
-        .unsqueeze(0)? // Add batch dim
-        .unsqueeze(2)? // Add head dim
-        .expand((b_sz, seq_len, h, half_headdim, complex_dim))?; // Expand to match input dimensions
-    // Define complex multiplication operation
+        .reshape((seq_len, half_headdim, 2))?
+        .unsqueeze(0)?
+        .unsqueeze(2)?
+        .expand((b_sz, seq_len, h, half_headdim, 2))?;
     let complex_mul = |x: &Tensor| -> Result<Tensor> {
         let real = x.narrow(4, 0, 1)?.squeeze(4)?;
         let imag = x.narrow(4, 1, 1)?.squeeze(4)?;
@@ -179,14 +170,9 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
         let imag = real.mul(&freqs_sin)?.add(&imag.mul(&freqs_cos)?)?;
         Tensor::stack(&[real, imag], 4)
     };
-    // Apply rotation to query and key
-    let xq_out = complex_mul(&xq)?;
-    let xk_out = complex_mul(&xk)?;
-
-    // Reshape back to original dimensions
-    let xq_out = xq_out.reshape((b_sz, seq_len, h, headdim))?;
+    let xq_out = complex_mul(&xq)?.reshape((b_sz, seq_len, h, headdim))?;
+    let xk_out = complex_mul(&xk)?.reshape((b_sz, seq_len, h, headdim))?;
     let xk_out = xk_out.reshape((b_sz, seq_len, h, headdim))?;
-
     Ok((xq_out, xk_out))
 }
 
@@ -222,7 +208,6 @@ pub struct EncoderBlock {
     num_heads: usize,
     dropout_prob: f64,
 }
-
 impl EncoderBlock {
     pub fn forward(
         &self,
@@ -265,20 +250,14 @@ impl EncoderBlock {
         _is_causal: bool,
     ) -> Result<Tensor> {
         // Calculate scaled attention scores (B, H, L, S)
-        let scale = 1.0 / (key.dim(D::Minus1)? as f64).sqrt();
         // (B, H, L, S) = (batch, heads, query_length, key_length)
+        let scale = 1.0 / (key.dim(D::Minus1)? as f64).sqrt();
         let scores = (query.matmul(&key.transpose(D::Minus2, D::Minus1)?)? * scale)?;
-        let masked_scores = if let Some(mask) = attn_mask {
-            scores.add(mask)?
-        } else {
-            scores
-        };
+        let masked_scores = attn_mask.map_or(Ok(scores.clone()), |mask| scores.add(mask))?;
         let attn_weights = softmax_last_dim(&masked_scores)?;
-        let attn_probs = if dropout_p > 0.0 {
-            candle_nn::ops::dropout(&attn_weights, dropout_p as f32)?
-        } else {
-            attn_weights
-        };
+        let attn_probs = (dropout_p > 0.0)
+            .then(|| candle_nn::ops::dropout(&attn_weights, dropout_p as f32))
+            .unwrap_or_else(|| Ok(attn_weights))?;
         attn_probs.matmul(value)
     }
     fn attention_block(

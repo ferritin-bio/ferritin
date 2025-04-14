@@ -3,9 +3,8 @@
 //! Class for loading and running the AMPLIFY models
 
 use super::super::types::{ContactMap, PseudoProbability};
-use super::amplify::AMPLIFY;
+use super::amplify::{AMPLIFY, ModelOutput};
 use super::config::AMPLIFYConfig;
-use super::outputs::ModelOutput;
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{D, DType, Device, Tensor};
 use candle_nn::VarBuilder;
