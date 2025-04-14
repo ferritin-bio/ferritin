@@ -142,7 +142,7 @@ impl EncoderBlock {
                 self.num_heads,
                 seq_len,
                 seq_len,
-            ))?; // Expand to full attention size
+            ))?;
             Some(mask)
         } else {
             None
