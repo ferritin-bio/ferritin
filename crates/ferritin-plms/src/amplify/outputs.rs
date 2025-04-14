@@ -23,11 +23,8 @@ impl ModelOutput {
         let a2 = x.sum_keepdim(D::Minus2)?;
         let a12 = x.sum_keepdim((D::Minus1, D::Minus2))?;
         let avg = a1.matmul(&a2)?;
-        // Divide by a12 (equivalent to pytorch's div_)
-        // println!("IN the APC: avg, a12 {:?}, {:?}", avg, a12);
-        // let avg = avg.div(&a12)?;
-        let a12_broadcast = a12.broadcast_as(avg.shape())?;
-        let avg = avg.div(&a12_broadcast)?;
+        let avg = a1.matmul(&a2)?;
+        let avg = avg.div(&a12.broadcast_as(avg.shape())?)?;
         x.sub(&avg)
     }
     // From https://github.com/facebookresearch/esm/blob/main/esm/modules.py
@@ -44,18 +41,17 @@ impl ModelOutput {
         };
         // we need the dimensions to reshape below.
         // the attention blocks have the following shape
-        let (_1, _n_head, _seq_length, seq_length) = attentions.first().unwrap().dims4()?;
-        let last_dim = seq_length;
+        let (_batch, _n_head, _seq_length, seq_length) = attentions.first().unwrap().dims4()?;
         let attn_stacked = Tensor::stack(attentions, 0)?;
         let total_elements = attn_stacked.dims().iter().product::<usize>();
-        let first_dim = total_elements / (last_dim * last_dim);
-        let attn_map_combined2 = attn_stacked.reshape(&[first_dim, last_dim, last_dim])?;
+        let first_dim = total_elements / (seq_length * seq_length);
+        let attn_map = attn_stacked.reshape(&[first_dim, seq_length, seq_length])?;
 
         // In PyTorch: attn_map = attn_map[:, 1:-1, 1:-1]
-        let attn_map_combined2 = attn_map_combined2
-            .narrow(1, 1, attn_map_combined2.dim(1)? - 2)? // second dim
-            .narrow(2, 1, attn_map_combined2.dim(2)? - 2)?; // third dim
-        let symmetric = self.symmetrize(&attn_map_combined2)?;
+        let attn_map = attn_map
+            .narrow(1, 1, attn_map.dim(1)? - 2)? // second dim
+            .narrow(2, 1, attn_map.dim(2)? - 2)?; // third dim
+        let symmetric = self.symmetrize(&attn_map)?;
         let normalized = self.apc(&symmetric)?;
         let proximity_map = normalized.permute((1, 2, 0))?; //  # (residues, residues, map)
 
