@@ -1,4 +1,4 @@
-use candle_core::{D, Device, Result, Tensor};
+use candle_core::{D, DType, Device, Result, Tensor};
 
 /// Precomputes frequency-based complex rotation matrices for rotary embeddings.
 ///
@@ -10,21 +10,17 @@ use candle_core::{D, Device, Result, Tensor};
 /// A tensor of shape [seq_len, head_dim/2, 2] containing cos and sin values
 ///
 pub fn precompute_freqs_cis(head_dim: usize, seq_len: usize) -> Result<Tensor> {
-    // Create frequencies using powf
-    let theta: f32 = 10000.0;
-    let freqs = (0..head_dim / 2)
-        .into_iter()
-        .map(|i| 1.0 / (theta.powf((2 * i) as f32 / (head_dim / 2) as f32)));
-    let freqs = Tensor::from_iter(freqs, &Device::Cpu)?;
-    // Create time steps
+    let half_dim = head_dim / 2;
+    let theta = 10000.0_f32;
+    let freqs = Tensor::from_iter(
+        (0..half_dim).map(|i| 1.0 / theta.powf(2.0 * i as f32 / half_dim as f32)),
+        &Device::Cpu,
+    )?;
     let t = (0..seq_len).map(|x| x as f32);
     let t = Tensor::from_iter(t, &Device::Cpu)?;
-    // Compute outer product
     let freqs = t.unsqueeze(1)?.matmul(&freqs.unsqueeze(0)?)?;
-    // Convert to complex representation
     let freqs_cos = freqs.cos()?;
     let freqs_sin = freqs.sin()?;
-
     Tensor::stack(&[freqs_cos, freqs_sin], D::Minus1)
 }
 
