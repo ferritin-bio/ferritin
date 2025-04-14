@@ -6,7 +6,6 @@ use clap::Parser;
 use ferritin_plms::{ESM2, ESM2Config as Config, device};
 use hf_hub::{Repo, RepoType, api::sync::Api};
 use tokenizers::Tokenizer;
-
 pub const DTYPE: DType = DType::F32;
 
 #[derive(Parser, Debug, Clone)]
@@ -65,28 +64,17 @@ impl Args {
             _ => panic!("Invalid ESM models."),
         };
         let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());
-        let (config_filename, weights_filename) = {
-            let api = Api::new()?;
-            let api = api.repo(repo);
-            let config = api.get("config.json")?;
-            let weights = api.get("model.safetensors")?;
-            (config, weights)
-        };
-        // let config_str = std::fs::read_to_string(config_filename)?;
-        // let config: Config = serde_json::from_str(&config_str)?;
-        // let config: Config = serde_json::from_str(&config_str)?;
-
-        // Now you can iterate through the tensors
-        let tensors = load(&weights_filename, &device)?;
+        let api = Api::new()?;
+        let api = api.repo(repo);
+        let weights = api.get("model.safetensors")?;
+        let tensors = load(&weights, &device)?;
         for (name, tensor) in tensors.iter() {
             println!("Name: {}, Shape: {:?}", name, tensor.shape());
         }
-
-        let vb =
-            unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
+        let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DTYPE, &device)? };
         let tokenizer = ESM2::load_tokenizer()?;
         let protein = self.protein_string.as_ref().unwrap().as_str();
-        let encoded = tokenizer.encode(protein, false);
+        let _encoded = tokenizer.encode(protein, false);
         println!("Encoded.... and.....");
         let model = ESM2::load(vb, config)?;
         println!("Loaded!");
@@ -96,7 +84,6 @@ impl Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-
     println!("Loading the Model and Tokenizer.......");
     let device = device(args.cpu)?;
     let (model, tokenizer) = args.build_model_and_tokenizer(&device)?;
@@ -110,29 +97,22 @@ fn main() -> Result<()> {
             "Either protein_string or protein_fasta must be provided",
         ));
     };
-
     for prot in protein_sequences.iter() {
         let tokens = tokenizer
             .encode(prot.to_string(), false)
             .map_err(E::msg)?
             .get_ids()
             .to_vec();
-
         let token_ids = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
-
         println!("Encoding.......");
         let encoded = model.forward(&token_ids)?;
-
         println!("Predicting.......");
         let predictions = encoded.logits.argmax(D::Minus1)?;
         println!("predictions: {:?}", predictions);
-
         println!("Decoding.......");
         let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
         let decoded = tokenizer.decode(indices.as_slice(), true);
-
         println!("Decoded: {:?}, ", decoded.unwrap().replace(" ", ""));
     }
-
     Ok(())
 }
