@@ -4,9 +4,9 @@
 
 - went through rotary embeddings in a first pass
 - went through at least one analysis of the Tensor dimensions
-- need to revisit LayerNorm setup
-- may need to check the transpositions in the Atteniont layers
--
+- changed to vanilla LayerNorm
+- may need to check the transpositions in the Attention layers
+
 
 ## Examples
 
