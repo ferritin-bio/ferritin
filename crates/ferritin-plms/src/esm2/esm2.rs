@@ -143,18 +143,18 @@ fn rotate_half(x: &Tensor) -> Result<Tensor> {
 }
 
 #[derive(Debug, Clone)]
-struct FalconRotaryEmbedding {
+struct RotaryEmbedding {
     inv_freq: Tensor,
     max_seq_len: usize,
     cos_cache: Option<Tensor>,
     sin_cache: Option<Tensor>,
 }
 
-impl FalconRotaryEmbedding {
+impl RotaryEmbedding {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let inv_freq = vb.get(config.inv_freq_size(), "inv_freq")?;
-        println!("INV_FREQ DIM: {:?}", inv_freq.dims());
-        let mut rotary = FalconRotaryEmbedding {
+        // println!("INV_FREQ DIM: {:?}", inv_freq.dims());
+        let mut rotary = RotaryEmbedding {
             inv_freq,
             max_seq_len: MAX_SEQ_LEN,
             cos_cache: None,
@@ -298,7 +298,7 @@ pub struct ESM2Attention {
     out_proj: Linear,
     num_heads: usize,
     head_dim: usize,
-    rotary_emb: FalconRotaryEmbedding,
+    rotary_emb: RotaryEmbedding,
 }
 impl ESM2Attention {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
@@ -313,7 +313,7 @@ impl ESM2Attention {
         let k_proj = linear(kdim, embed_dim, vb.pp("self.key"))?;
         let v_proj = linear(vdim, embed_dim, vb.pp("self.value"))?;
         let out_proj = linear(embed_dim, embed_dim, vb.pp("output.dense"))?;
-        let rotary_emb = FalconRotaryEmbedding::load(vb.pp("self.rotary_embeddings"), config)?;
+        let rotary_emb = RotaryEmbedding::load(vb.pp("self.rotary_embeddings"), config)?;
         Ok(Self {
             q_proj,
             k_proj,
