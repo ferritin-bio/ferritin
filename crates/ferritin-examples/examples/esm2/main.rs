@@ -111,7 +111,7 @@ fn main() -> Result<()> {
         let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
         let decoded = tokenizer.decode(indices.as_slice(), true);
 
-        println!("Decoded: {:?}, ", decoded);
+        println!("Decoded: {:?}, ", decoded.unwrap().replace(" ", ""));
     }
 
     Ok(())

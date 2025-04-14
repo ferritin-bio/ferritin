@@ -143,18 +143,18 @@ fn rotate_half(x: &Tensor) -> Result<Tensor> {
 }
 
 #[derive(Debug, Clone)]
-struct FalconRotaryEmbedding {
+struct RotaryEmbedding {
     inv_freq: Tensor,
     max_seq_len: usize,
     cos_cache: Option<Tensor>,
     sin_cache: Option<Tensor>,
 }
 
-impl FalconRotaryEmbedding {
+impl RotaryEmbedding {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let inv_freq = vb.get(config.inv_freq_size(), "inv_freq")?;
-        println!("INV_FREQ DIM: {:?}", inv_freq.dims());
-        let mut rotary = FalconRotaryEmbedding {
+        // println!("INV_FREQ DIM: {:?}", inv_freq.dims());
+        let mut rotary = RotaryEmbedding {
             inv_freq,
             max_seq_len: MAX_SEQ_LEN,
             cos_cache: None,
@@ -232,6 +232,7 @@ impl ESM2Embeddings {
             .to_dtype(DType::U32)?;
         let position_embeddings = self.position_embeddings.forward(&position_ids)?;
         (token_embeddings + position_embeddings)
+        // self.word_embeddings.forward(input_ids)
     }
 }
 
@@ -297,7 +298,7 @@ pub struct ESM2Attention {
     out_proj: Linear,
     num_heads: usize,
     head_dim: usize,
-    rotary_emb: FalconRotaryEmbedding,
+    rotary_emb: RotaryEmbedding,
 }
 impl ESM2Attention {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
@@ -312,7 +313,7 @@ impl ESM2Attention {
         let k_proj = linear(kdim, embed_dim, vb.pp("self.key"))?;
         let v_proj = linear(vdim, embed_dim, vb.pp("self.value"))?;
         let out_proj = linear(embed_dim, embed_dim, vb.pp("output.dense"))?;
-        let rotary_emb = FalconRotaryEmbedding::load(vb.pp("self.rotary_embeddings"), config)?;
+        let rotary_emb = RotaryEmbedding::load(vb.pp("self.rotary_embeddings"), config)?;
         Ok(Self {
             q_proj,
             k_proj,
@@ -403,20 +404,17 @@ impl ESM2Layer {
         })
     }
     fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
-        // Input should be: [seq_len, batch_size, embed_dim]
-        // let (seq_len, batch_size, embed_dim) = xs.dims3()?;
-        let residual = xs.clone();
-        let x = self.self_attn_layer_norm.forward(xs)?;
-        let (x, attn) = self.self_attn.forward(&x, &x, &x)?;
-        let x = (x + residual)?;
-        // Second block: FFN with residual connection
-        let residual = x.clone();
-        let x = self.final_layer_norm.forward(&x)?;
-        let x = x.gelu()?;
-        let x = x.apply(&self.fc1)?;
-        let x = x.apply(&self.fc2)?;
-        let x = (x + residual)?;
-        Ok((x, attn))
+        // Input: [seq_len, batch_size, embed_dim]
+        let norm_x = self.self_attn_layer_norm.forward(xs)?;
+        let (attn_out, attn) = self.self_attn.forward(&norm_x, &norm_x, &norm_x)?;
+        let x = (attn_out + xs)?;
+        let ffn_out = self
+            .final_layer_norm
+            .forward(&x)?
+            .apply(&self.fc1)?
+            .gelu()?
+            .apply(&self.fc2)?;
+        Ok(((ffn_out + x)?, attn))
     }
 }
 
