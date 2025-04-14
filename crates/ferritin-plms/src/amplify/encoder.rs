@@ -95,25 +95,22 @@ impl EncoderBlock {
         dropout_p: f64,
         _is_causal: bool,
     ) -> Result<Tensor> {
-        // Calculate attention scores
-        let d_k = key.dim(key.dims().len() - 1)? as f64;
-        let scaling = 1.0 / d_k.sqrt();
+        // Calculate scaled attention scores (B, H, L, S)
+        let scale = 1.0 / (key.dim(D::Minus1)? as f64).sqrt();
         // (B, H, L, S) = (batch, heads, query_length, key_length)
-        let scores = (query.matmul(&key.transpose(D::Minus2, D::Minus1)?)? * scaling)?;
-        // Apply mask if provided
-        if let Some(mask) = attn_mask {
-            let _scores = scores.add(mask)?;
-        }
-        // Apply softmax
-        let attn = softmax_last_dim(&scores)?;
-        // Apply dropout if needed
-        let attn = if dropout_p > 0.0 {
-            candle_nn::ops::dropout(&attn, dropout_p as f32)?
+        let scores = (query.matmul(&key.transpose(D::Minus2, D::Minus1)?)? * scale)?;
+        let masked_scores = if let Some(mask) = attn_mask {
+            scores.add(mask)?
         } else {
-            attn
+            scores
         };
-        // Final matrix multiplication with values
-        attn.matmul(value)
+        let attn_weights = softmax_last_dim(&masked_scores)?;
+        let attn_probs = if dropout_p > 0.0 {
+            candle_nn::ops::dropout(&attn_weights, dropout_p as f32)?
+        } else {
+            attn_weights
+        };
+        attn_probs.matmul(value)
     }
     fn attention_block(
         &self,
