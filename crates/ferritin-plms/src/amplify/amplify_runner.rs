@@ -13,6 +13,8 @@ use candle_nn::ops;
 use hf_hub::{Repo, RepoType, api::sync::Api};
 use tokenizers::Tokenizer;
 
+const AMPLIFY_DTYPE: DType = DType::F32;
+
 pub enum AmplifyModels {
     AMP120M,
     AMP350M,
@@ -49,9 +51,8 @@ impl AmplifyRunner {
             .replace("Swiglu", "swiglu");
         let config: AMPLIFYConfig = serde_json::from_str(&config_str)?;
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
-        let amp_dtype = DType::F32;
         let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights_filename], amp_dtype, &device)?
+            VarBuilder::from_mmaped_safetensors(&[weights_filename], AMPLIFY_DTYPE, &device)?
         };
         let model = AMPLIFY::load(vb, &config)?;
         Ok(AmplifyRunner { model, tokenizer })
@@ -89,8 +90,6 @@ impl AmplifyRunner {
     pub fn get_contact_map(&self, prot_sequence: &str) -> Result<Vec<ContactMap>> {
         let model_output = self.run_forward(prot_sequence)?;
         let contact_map_tensor = model_output.get_contact_map()?;
-        // let (res1, res2, attn) = contact_map_tensor.clone().unwrap().dims3()?;
-
         // Note: we might want mean or average here.
         let averaged = contact_map_tensor.clone().unwrap().max_keepdim(D::Minus1)?;
         let (position1, position2, val) = averaged.dims3()?;
@@ -127,10 +126,10 @@ impl AmplifyRunner {
     fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<PseudoProbability>> {
         let tensor = ops::softmax(tensor, D::Minus1)?;
         let data = tensor.to_vec3::<f32>()?;
-        let shape = tensor.dims();
-        let mut logit_positions = Vec::new();
-        for seq_pos in 0..shape[1] {
-            for vocab_idx in 0..shape[2] {
+        let (_, seq_len, vocab_size) = tensor.dims3()?;
+        let mut logit_positions = Vec::with_capacity(seq_len * vocab_size);
+        for seq_pos in 0..seq_len {
+            for vocab_idx in 0..vocab_size {
                 let score = data[0][seq_pos][vocab_idx];
                 let amino_acid_char = self
                     .tokenizer
