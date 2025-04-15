@@ -30,7 +30,6 @@ ferritin-onnx-models = { path = "../ferritin-onnx-models" }
 ferritin-structure-mesh = { path = "../ferritin-structure-mesh" }
 hf-hub.workspace = true
 rerun = { workspace = true, features = ["native_viewer"] }
-serde_json.workspace = true
 
 # The metal feature is defined above, and we don't need to redefine it conditionally
 
