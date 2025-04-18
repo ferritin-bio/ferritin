@@ -13,11 +13,8 @@
 //! - Optional integrations with Bevy and Rerun
 //!
 pub mod colors;
-pub mod structure;
-
 pub mod plugin;
-
-#[cfg(feature = "bevy")]
+pub mod structure;
 pub use plugin::{StructurePlugin, StructureSettings};
 
 #[cfg(feature = "rerun")]

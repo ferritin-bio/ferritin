@@ -7,15 +7,13 @@ license.workspace = true
 description.workspace = true
 
 [features]
-default = []
+default = ["plms", "mesh"]
 metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 mesh = ["ferritin/mesh"]
-mesh-bevy = ["ferritin/mesh-bevy"]
-mesh-rerun = ["ferritin/mesh-rerun"]
-mesh-full = ["ferritin/mesh-full"]
 plms = ["ferritin/plms"]
-all = ["mesh-full", "plms", "molviewspec"]
-molviewspec = ["ferritin/molviewspec"]
+# all = ["mesh", "plms", "molviewspec"]
+# all = ["mesh", "plms", "molviewspec"]
+# molviewspec = ["ferritin/molviewspec"]
 # pymol = ["ferritin/pymol"]
 
 [dependencies]

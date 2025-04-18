@@ -7,14 +7,11 @@ license.workspace = true
 edition.workspace = true
 
 [features]
-default = []
+default = ["mesh", "plms"]
 mesh = ["dep:ferritin-structure-mesh"]
-mesh-bevy = ["mesh", "ferritin-structure-mesh/bevy"]
-mesh-rerun = ["mesh", "ferritin-structure-mesh/rerun"]
-mesh-full = ["mesh-bevy", "mesh-rerun"]
 plms = ["dep:ferritin-plms"]
-full = ["mesh-full", "plms", "molviewspec"]
-molviewspec = ["dep:ferritin-molviewspec"]
+# full = ["mesh", "plms", "molviewspec"]
+# molviewspec = ["dep:ferritin-molviewspec"]
 # cellscape = ["dep:ferritin-cellscape"]
 # pymol = ["dep:ferritin-pymol"]
 
@@ -25,6 +22,6 @@ ferritin-core = { path = "../ferritin-core" }
 # Optional dependencies
 ferritin-structure-mesh = { path = "../ferritin-structure-mesh", optional = true }
 ferritin-plms = { path = "../ferritin-plms", optional = true }
-ferritin-molviewspec = { path = "../ferritin-molviewspec", optional = true }
+# ferritin-molviewspec = { path = "../ferritin-molviewspec", optional = true }
 # ferritin-cellscape = { path = "../ferritin-cellscape", optional = true }
 # ferritin-pymol = { path = "../ferritin-pymol", optional = true }
