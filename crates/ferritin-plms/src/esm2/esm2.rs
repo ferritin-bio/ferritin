@@ -107,7 +107,7 @@ impl ESM2Config {
         }
     }
 
-    pub fn esm2_t6_8M_ur50() -> Self {
+    pub fn t6_8m() -> Self {
         Self {
             num_attention_heads: 20,
             hidden_size: 320,
@@ -117,7 +117,7 @@ impl ESM2Config {
         }
     }
 
-    pub fn esm2_t12_35M_ur50() -> Self {
+    pub fn t12_35m() -> Self {
         Self {
             num_attention_heads: 20,
             hidden_size: 480,
@@ -127,7 +127,7 @@ impl ESM2Config {
         }
     }
 
-    pub fn esm2_t30_150M_ur50() -> Self {
+    pub fn t30_150m() -> Self {
         Self {
             num_attention_heads: 20,
             hidden_size: 640,
@@ -137,7 +137,7 @@ impl ESM2Config {
         }
     }
 
-    pub fn esm2_t33_650M_ur50() -> Self {
+    pub fn t33_650m() -> Self {
         Self {
             num_attention_heads: 20,
             hidden_size: 1280,
@@ -147,7 +147,7 @@ impl ESM2Config {
         }
     }
 
-    pub fn esm2_t36_3b_ur50() -> Self {
+    pub fn t36_3b() -> Self {
         Self {
             num_attention_heads: 40,
             hidden_size: 2560,
@@ -157,7 +157,7 @@ impl ESM2Config {
         }
     }
 
-    pub fn esm2_t48_15b_ur50() -> Self {
+    pub fn t48_15b() -> Self {
         Self {
             num_attention_heads: 40,
             hidden_size: 5120,

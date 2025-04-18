@@ -12,7 +12,7 @@ const TEST_SEQUENCE: &str = "MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKA
 #[test]
 #[ignore = "requires downloading model files"]
 fn test_load_esm2_8m() {
-    let esm2 = ESM2Runner::load_model(ESM2Models::Esm2T6_8M_UR50, device().unwrap());
+    let esm2 = ESM2Runner::load_model(ESM2Models::T6_8M, device().unwrap());
     assert!(
         esm2.is_ok(),
         "Failed to load ESM2 650M model: {:?}",
@@ -24,7 +24,7 @@ fn test_load_esm2_8m() {
 #[test]
 #[ignore = "requires downloading model files"]
 fn test_esm2_8m_embedding() {
-    let esm2 = ESM2Runner::load_model(ESM2Models::Esm2T6_8M_UR50, device().unwrap())
+    let esm2 = ESM2Runner::load_model(ESM2Models::T6_8M, device().unwrap())
         .expect("Failed to load ESM2 650M model");
     let sequence = TEST_SEQUENCE;
     // let embedding = esm2.get_embedding(sequence);
