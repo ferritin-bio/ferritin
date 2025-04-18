@@ -728,7 +728,7 @@ impl Structure {
         for (i, mesh) in valid_meshes.iter().enumerate().skip(1) {
             println!("Merging mesh {} with {} vertices", i, mesh.count_vertices());
             let before_count = combined_mesh.count_vertices();
-            combined_mesh.merge(mesh);
+            let _ = combined_mesh.merge(mesh);
             let after_count = combined_mesh.count_vertices();
             println!(
                 "After merge: {} vertices (added {})",
@@ -762,7 +762,7 @@ impl Structure {
                 sphere_mesh
             })
             .reduce(|mut acc, mesh| {
-                acc.merge(&mesh);
+                let _ = acc.merge(&mesh);
                 acc
             })
             .unwrap();
@@ -806,7 +806,7 @@ impl Structure {
                     Some(cylinder_mesh)
                 })
                 .for_each(|cylinder_mesh| {
-                    combined_mesh.merge(&cylinder_mesh);
+                    let _ = combined_mesh.merge(&cylinder_mesh);
                 });
         } else {
             println!("No-Bonds found!!")
@@ -834,7 +834,7 @@ impl Structure {
                 sphere_mesh
             })
             .reduce(|mut acc, mesh| {
-                acc.merge(&mesh);
+                let _ = acc.merge(&mesh);
                 acc
             })
             .unwrap()

@@ -41,7 +41,7 @@
 
 use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::{
-    Embedding, Linear, VarBuilder, layer_norm, linear, ops,
+    Embedding, Linear, VarBuilder, linear, ops,
 };
 use serde::Deserialize;
 use tokenizers::Tokenizer;
@@ -323,7 +323,7 @@ pub struct ESM2ContactHead {
 }
 impl ESM2ContactHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        let in_features = (config.num_hidden_layers as usize * config.num_attention_heads);
+        let in_features = config.num_hidden_layers as usize * config.num_attention_heads;
         Ok(ESM2ContactHead {
             // contact_scale: Tensor,
             feedforward: linear(in_features, 1, vb.pp("regression"))?,
