@@ -4,9 +4,9 @@
 //! please see the ESM2 repository and the HuggingFace hub.
 //!
 //! # Models:
-//! * ESM2_T6_8M - small 6-layer protein language model
-//! * ESM2_T12_35M - medium 12-layer protein language model
-//! * ESM2_T30_150M - large 30-layer protein language model
+//! * T6_8M - small 6-layer protein language model
+//! * T12_35M - medium 12-layer protein language model
+//! * T30_150M - large 30-layer protein language model
 //!
 use super::super::utilities::ndarray_to_tensor_f32;
 use anyhow::{Result, anyhow};
@@ -26,9 +26,9 @@ use std::path::PathBuf;
 use tokenizers::Tokenizer;
 
 pub enum ESM2Models {
-    ESM2_T6_8M,
-    ESM2_T12_35M,
-    ESM2_T30_150M,
+    T6_8M,
+    T12_35M,
+    T30_150M,
     // ESM2_T33_650M,
 }
 
@@ -52,9 +52,9 @@ impl ESM2 {
     pub fn load_model_path(model: ESM2Models) -> Result<PathBuf> {
         let api = Api::new()?;
         let repo_id = match model {
-            ESM2Models::ESM2_T6_8M => "zcpbx/esm2-t6-8m-UR50D-onnx",
-            ESM2Models::ESM2_T12_35M => "zcpbx/esm2-t12-35M-UR50D-onnx",
-            ESM2Models::ESM2_T30_150M => "zcpbx/esm2-t30-150M-UR50D-onnx",
+            ESM2Models::T6_8M => "zcpbx/esm2-t6-8m-UR50D-onnx",
+            ESM2Models::T12_35M => "zcpbx/esm2-t12-35M-UR50D-onnx",
+            ESM2Models::T30_150M => "zcpbx/esm2-t30-150M-UR50D-onnx",
             // ESM2Models::ESM2_T33_650M => "zcpbx/esm2-t33-650M-UR50D-onnx",
         }
         .to_string();

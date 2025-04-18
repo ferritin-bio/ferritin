@@ -275,17 +275,17 @@ pub fn get_nearest_neighbours(
     cb: &Tensor,
     mask: &Tensor,
     y: &Tensor,
-    Y_t: &Tensor,
-    Y_m: &Tensor,
+    y_t: &Tensor,
+    y_m: &Tensor,
     number_of_ligand_atoms: i64,
 ) -> Result<(Tensor, Tensor, Tensor, Tensor)> {
     // First, remove batch dimension if present using squeeze(0)
     let cb = cb.squeeze(0)?;
     let mask = mask.squeeze(0)?;
-    let y_m = if Y_m.dims().len() > 1 {
-        Y_m.sum_keepdim(1)?.squeeze(1)? // or .any(1)? depending on your needs
+    let y_m = if y_m.dims().len() > 1 {
+        y_m.sum_keepdim(1)?.squeeze(1)? // or .any(1)? depending on your needs
     } else {
-        Y_m.clone()
+        y_m.clone()
     };
     let num_residues = cb.dim(0)?;
     let mask_cby = mask.unsqueeze(1)?.matmul(&y_m.unsqueeze(0)?)?;
@@ -321,9 +321,9 @@ pub fn get_nearest_neighbours(
             1,
         )?;
 
-    let y_t_new = Y_t
+    let y_t_new = y_t
         .unsqueeze(0)?
-        .expand((num_residues, Y_t.dim(0)?))?
+        .expand((num_residues, y_t.dim(0)?))?
         .contiguous()?
         .gather(&nn_idx, 1)?;
 

@@ -170,8 +170,8 @@ impl LigandMPNN {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ferritin_core::load_structure;
     use ferritin_test_data::TestFile;
-
     fn setup_test_data() -> AtomCollection {
         let (protfile, _handle) = TestFile::protein_01().create_temp().unwrap();
         load_structure(protfile).unwrap()

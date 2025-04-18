@@ -24,7 +24,7 @@ struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let esm_model = ESM2Models::ESM2_T6_8M;
+    let esm_model = ESM2Models::T6_8M;
     // let esm_model = ESM2Models::ESM2_T12_35M;
     // let esm_model = ESM2Models::ESM2_T30_150M;
     // let esm_model = ESM2Models::ESM2_T33_650M;

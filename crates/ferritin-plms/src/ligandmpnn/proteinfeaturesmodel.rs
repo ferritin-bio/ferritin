@@ -153,7 +153,7 @@ impl ProteinFeaturesModel {
         // Temporary implementation until chain labels are supported
         let chain_labels = Tensor::zeros_like(r_idx)?;
         let x = (self.augment_eps > 0.0)
-            .then(|| (x + x.randn_like(0.0, self.augment_eps as f64)?))
+            .then(|| x + x.randn_like(0.0, self.augment_eps as f64)?)
             .unwrap_or_else(|| Ok(x.clone()))?;
         let b = (&x.narrow(2, 1, 1)? - &x.narrow(2, 0, 1)?)?
             .squeeze(2)?

@@ -5,6 +5,8 @@
 //!
 //! Lifted and modified from: https://github.com/rerun-io/revy/blob/main/src/conversions.rs
 
+#[cfg(all(feature = "bevy", feature = "rerun"))]
+
 use bevy::{math::Vec3A, prelude::*, render::mesh::VertexAttributeValues};
 use itertools::Itertools;
 

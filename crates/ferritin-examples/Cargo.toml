@@ -10,8 +10,11 @@ description.workspace = true
 default = []
 metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 mesh = ["ferritin/mesh"]
+mesh-bevy = ["ferritin/mesh-bevy"]
+mesh-rerun = ["ferritin/mesh-rerun"]
+mesh-full = ["ferritin/mesh-full"]
 plms = ["ferritin/plms"]
-all = ["mesh", "plms", "molviewspec"]
+all = ["mesh-full", "plms", "molviewspec"]
 molviewspec = ["ferritin/molviewspec"]
 # pymol = ["ferritin/pymol"]
 
@@ -53,6 +56,7 @@ ferritin-test-data = { path = "../ferritin-test-data" }
 [[example]]
 name = "bevy_basic_ball_and_stick"
 path = "examples/bevy/basic_ball_and_stick.rs"
+required-features = ["bevy"]
 
 [[example]]
 name = "bevy_basic_putty"
@@ -69,3 +73,8 @@ path = "examples/bevy/basic_spheres.rs"
 [[example]]
 name = "bevy_screenshot"
 path = "examples/bevy/screenshot.rs"
+
+[[example]]
+name = "rerun"
+path = "examples/rerun/main.rs"
+required-features = ["rerun"]

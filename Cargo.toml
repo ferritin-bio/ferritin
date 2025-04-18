@@ -4,7 +4,7 @@ members = [
     # "crates/ferritin-cellscape",
     "crates/ferritin-core",
     "crates/ferritin-examples",
-    "crates/ferritin-molviewspec",
+    # "crates/ferritin-molviewspec",
     "crates/ferritin-onnx-models",
     "crates/ferritin-plms",
     # "crates/ferritin-pymol",
@@ -16,7 +16,6 @@ members = [
 resolver = "3"
 
 [workspace.package]
-name = "ferritin"
 version = "0.3.3-dev"
 authors = ["Zach Charlop-Powers<zach.charlop.powers@gmail.com>"]
 description = "Protein Manipulation and visualization tools"
