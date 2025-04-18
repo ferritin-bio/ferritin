@@ -779,7 +779,7 @@ XTS
 XTY
 XUA
 XUG
-Y
+y
 Y5P
 YA4
 YCO

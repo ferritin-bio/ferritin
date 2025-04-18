@@ -98,7 +98,7 @@ impl ScoreOutput {
 
             for pos in 0..seq_len {
                 let pos_logits = batch_logits.get(pos)?;
-                let probs = ops::softmax(&pos_logits, 0)?;
+                let probs = softmax(&pos_logits, 0)?;
                 let probs = probs.to_vec1::<f32>()?;
 
                 // Get the decoding order to determine the actual position

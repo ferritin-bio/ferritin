@@ -63,7 +63,7 @@ impl LMPNNFeatures for AtomCollection {
         let chain_list: Vec<String> = chain_letters
             .clone()
             .into_iter()
-            .collect::<std::collections::HashSet<_>>()
+            .collect::<HashSet<_>>()
             .into_iter()
             .collect();
         // Numeric chain labels (optional)

@@ -83,8 +83,8 @@ impl LigandMPNN {
         ))
     }
     pub fn run_model(&self, ac: AtomCollection, position: i64, temperature: f32) -> Result<Tensor> {
-        let (h_V, h_E, E_idx) = self.run_encoder(&ac)?;
-        self.run_decoder(h_V, h_E, E_idx, temperature, position)
+        let (h_v, h_e, e_idx) = self.run_encoder(&ac)?;
+        self.run_decoder(h_v, h_e, e_idx, temperature, position)
     }
     pub fn run_encoder(&self, ac: &AtomCollection) -> Result<(NdArrayF32, NdArrayF32, NdArrayI64)> {
         let device = Device::Cpu;
@@ -116,9 +116,9 @@ impl LigandMPNN {
     }
     pub fn run_decoder(
         &self,
-        h_V: NdArrayF32,
-        h_E: NdArrayF32,
-        E_idx: NdArrayI64,
+        h_v: NdArrayF32,
+        h_e: NdArrayF32,
+        e_idx: NdArrayI64,
         temperature: f32,
         position: i64,
     ) -> Result<Tensor> {
@@ -130,9 +130,9 @@ impl LigandMPNN {
             vec![temperature],
         )?)?;
         let decoder_inputs = ort::inputs![
-            "h_V" => h_V,
-            "h_E" => h_E,
-            "E_idx" => E_idx,
+            "h_v" => h_v,
+            "h_e" => h_e,
+            "e_idx" => e_idx,
             "position" => position_tensor,
             "temperature" => temp_tensor,
         ]?;

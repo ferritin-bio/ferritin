@@ -542,7 +542,7 @@ impl CIFFile {
 
     /// Parse bonds from the CIF file
     fn parse_bonds(&self, atom_ids: &[i32]) -> Result<Vec<Bond>, CIFError> {
-        let mut bonds = Vec::new();
+        let bonds = Vec::new();
 
         if self.data_blocks.is_empty() {
             return Ok(bonds);

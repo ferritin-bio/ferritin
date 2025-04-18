@@ -19,7 +19,7 @@ pub trait StructureFeatures {
     fn encode_amino_acids(&self, device: &Device) -> Result<Tensor>;
 
     /// Convert amino acid sequence to numeric representation
-    fn create_CB(&self, device: &Device) -> Result<Tensor>;
+    fn create_cb(&self, device: &Device) -> Result<Tensor>;
 
     /// Get residue indices
     fn get_res_index(&self) -> Vec<u32>;
@@ -53,7 +53,7 @@ impl StructureFeatures for AtomCollection {
     }
 
     /// Calculate CB for each residue
-    fn create_CB(&self, device: &Device) -> Result<Tensor> {
+    fn create_cb(&self, device: &Device) -> Result<Tensor> {
         // N = input_dict["X"][:, 0, :]
         //         CA = input_dict["X"][:, 1, :]
         //         C = input_dict["X"][:, 2, :]
@@ -198,12 +198,12 @@ impl StructureFeatures for AtomCollection {
             (elements.len(),),
             device,
         )?;
-        let CB = self.create_CB(device)?;
-        let (batch, res_num, _coords) = CB.dims3()?;
+        let cb = self.create_cb(device)?;
+        let (batch, res_num, _coords) = cb.dims3()?;
         let (number_of_ligand_atoms, _coords) = y.dims2()?;
         let mask = Tensor::zeros((batch, res_num), DType::F32, device)?;
         let (y, y_t, y_m, d_xy) =
-            get_nearest_neighbours(&CB, &mask, &y, &y_t, &y_m, number_of_ligand_atoms as i64)?;
+            get_nearest_neighbours(&cb, &mask, &y, &y_t, &y_m, number_of_ligand_atoms as i64)?;
         let distance_mask = d_xy.lt(cutoff_for_score)?.to_dtype(DType::F32)?;
         let y_m_first = y_m.i((.., 0))?;
         let mask = mask.squeeze(0)?;

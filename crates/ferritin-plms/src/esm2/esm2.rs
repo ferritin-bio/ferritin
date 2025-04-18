@@ -41,7 +41,7 @@
 
 use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::{
-    Embedding, LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear, ops,
+    Embedding, Linear, VarBuilder, layer_norm, linear, ops,
 };
 use serde::Deserialize;
 use tokenizers::Tokenizer;
@@ -254,7 +254,7 @@ pub struct ESM2Embeddings {
 impl ESM2Embeddings {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let vocab_size = config.vocab_size as usize;
-        let hidden_size = config.hidden_size as usize;
+        let hidden_size = config.hidden_size;
         let max_pos = config.max_position_embeddings as usize;
         let word_embeddings = vb.get((vocab_size, hidden_size), "word_embeddings.weight")?;
         let pos_embeddings = vb.get((max_pos, hidden_size), "position_embeddings.weight")?;
@@ -288,7 +288,7 @@ pub struct ESM2LMHead {
 }
 impl ESM2LMHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config, embedding: &Embedding) -> Result<Self> {
-        let hidden_size = config.hidden_size as usize;
+        let hidden_size = config.hidden_size;
         let dense = linear(hidden_size, hidden_size, vb.pp("dense"))?;
         let bias = vb.get(config.vocab_size as usize, "bias")?;
 
@@ -323,7 +323,7 @@ pub struct ESM2ContactHead {
 }
 impl ESM2ContactHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        let in_features = (config.num_hidden_layers as usize * config.num_attention_heads) as usize;
+        let in_features = (config.num_hidden_layers as usize * config.num_attention_heads);
         Ok(ESM2ContactHead {
             // contact_scale: Tensor,
             feedforward: linear(in_features, 1, vb.pp("regression"))?,
@@ -428,8 +428,8 @@ pub struct ESM1LayerNorm {
 impl ESM1LayerNorm {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         Ok(Self {
-            weight: vb.get(config.hidden_size as usize, "weight")?,
-            bias: vb.get(config.hidden_size as usize, "bias")?,
+            weight: vb.get(config.hidden_size, "weight")?,
+            bias: vb.get(config.hidden_size, "bias")?,
             eps: config.layer_norm_eps as f64,
         })
     }
@@ -462,7 +462,7 @@ pub struct ESM2Layer {
 
 impl ESM2Layer {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        let embed_dim = config.hidden_size as usize;
+        let embed_dim = config.hidden_size;
         let ffn_embed_dim = config.intermediate_size as usize;
         let multi_head = ESM2Attention::load(vb.pp("attention"), config)?;
         let fc1 = linear(embed_dim, ffn_embed_dim, vb.pp("intermediate.dense"))?;
