@@ -84,7 +84,7 @@ pub fn execute(
     };
 
     // Chain tensor is the base. Additional Tensors can be added on top.
-    let mut chain_mask_tensor = prot_features.get_chain_mask_tensor(chains_to_design, &device)?;
+    let chain_mask_tensor = prot_features.get_chain_mask_tensor(chains_to_design, &device)?;
 
     // Residue-Related -------------------------------------------
     if let Some(res) = exec.residue_control_config {

@@ -3,7 +3,7 @@ use anyhow::{Error as E, Result};
 use candle_core::{D, DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use clap::Parser;
-use ferritin_plms::{ESM2, ESM2Config as Config, device, ESM2Runner};
+use ferritin_plms::{ESM2, ESM2Config as Config, ESM2Runner, device};
 use hf_hub::{Repo, RepoType, api::sync::Api};
 use tokenizers::Tokenizer;
 pub const DTYPE: DType = DType::F32;
@@ -25,36 +25,12 @@ struct Args {
 impl Args {
     fn build_model_and_tokenizer(&self, device: &Device) -> Result<(ESM2, Tokenizer)> {
         let (model_id, revision, config) = match self.model_id.as_str() {
-            "8M" => (
-                "facebook/esm2_t6_8M_UR50D",
-                "main",
-                Config::esm2_t6_8M_ur50(),
-            ),
-            "35M" => (
-                "facebook/esm2_t12_35M_UR50D",
-                "main",
-                Config::esm2_t12_35M_ur50(),
-            ),
-            "150M" => (
-                "facebook/esm2_t30_150M_UR50D",
-                "main",
-                Config::esm2_t30_150M_ur50(),
-            ),
-            "650M" => (
-                "facebook/esm2_t33_650M_UR50D",
-                "main",
-                Config::esm2_t33_650M_ur50(),
-            ),
-            "3B" => (
-                "facebook/esm2_t36_3B_UR50D",
-                "main",
-                Config::esm2_t36_3b_ur50(),
-            ),
-            "15B" => (
-                "facebook/esm2_t48_15B_UR50D",
-                "main",
-                Config::esm2_t48_15b_ur50(),
-            ),
+            "8M" => ("facebook/esm2_t6_8M_UR50D", "main", Config::t6_8m()),
+            "35M" => ("facebook/esm2_t12_35M_UR50D", "main", Config::t12_35m()),
+            "150M" => ("facebook/esm2_t30_150M_UR50D", "main", Config::t30_150m()),
+            "650M" => ("facebook/esm2_t33_650M_UR50D", "main", Config::t33_650m()),
+            "3B" => ("facebook/esm2_t36_3B_UR50D", "main", Config::t36_3b()),
+            "15B" => ("facebook/esm2_t48_15B_UR50D", "main", Config::t48_15b()),
             _ => panic!("Invalid ESM models."),
         };
         let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());

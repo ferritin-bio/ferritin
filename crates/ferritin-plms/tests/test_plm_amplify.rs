@@ -2,8 +2,6 @@
 //!
 //! This test file validates loading and running the AMPLIFY models,
 //! particularly the AMP120M model.
-
-use candle_core::Device;
 use ferritin_plms::amplify::amplify_runner::{AmplifyModels, AmplifyRunner};
 use ferritin_plms::device;
 

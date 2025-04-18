@@ -564,10 +564,10 @@ impl Structure {
 
     // Function to generate loop mesh (thin tube connecting structured elements)
     fn generate_loop_mesh(backbone_atoms: &[BackboneAtoms], segment: &[usize]) -> Mesh {
-        let mut positions: Vec<[f32; 3]> = Vec::new();
-        let mut normals: Vec<[f32; 3]> = Vec::new();
-        let mut indices: Vec<u32> = Vec::new();
-        let mut colors: Vec<[f32; 4]> = Vec::new();
+        let positions: Vec<[f32; 3]> = Vec::new();
+        let normals: Vec<[f32; 3]> = Vec::new();
+        let indices: Vec<u32> = Vec::new();
+        let colors: Vec<[f32; 4]> = Vec::new();
 
         // Parameters for loop
         let tube_radius = 0.2; // Thin tube for loops (Å)
@@ -628,7 +628,7 @@ impl Structure {
         );
 
         // Create combined mesh from all segments
-        let mut combined_mesh =
+        let combined_mesh =
             Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
 
         // First, group the secondary structures into segments of the same type
@@ -728,7 +728,7 @@ impl Structure {
         for (i, mesh) in valid_meshes.iter().enumerate().skip(1) {
             println!("Merging mesh {} with {} vertices", i, mesh.count_vertices());
             let before_count = combined_mesh.count_vertices();
-            combined_mesh.merge(mesh);
+            let _ = combined_mesh.merge(mesh);
             let after_count = combined_mesh.count_vertices();
             println!(
                 "After merge: {} vertices (added {})",
@@ -762,7 +762,7 @@ impl Structure {
                 sphere_mesh
             })
             .reduce(|mut acc, mesh| {
-                acc.merge(&mesh);
+                let _ = acc.merge(&mesh);
                 acc
             })
             .unwrap();
@@ -806,7 +806,7 @@ impl Structure {
                     Some(cylinder_mesh)
                 })
                 .for_each(|cylinder_mesh| {
-                    combined_mesh.merge(&cylinder_mesh);
+                    let _ = combined_mesh.merge(&cylinder_mesh);
                 });
         } else {
             println!("No-Bonds found!!")
@@ -834,7 +834,7 @@ impl Structure {
                 sphere_mesh
             })
             .reduce(|mut acc, mesh| {
-                acc.merge(&mesh);
+                let _ = acc.merge(&mesh);
                 acc
             })
             .unwrap()

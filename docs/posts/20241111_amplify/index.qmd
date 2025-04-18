@@ -27,7 +27,7 @@ cargo run --example amplify
 AMPLIFY.forward():  calculating logits
 Encoded Logits Dimension: Tensor[dims 1, 14, 27; f32],
 indices: [25, 11, 21, 17, 7, 15, 8, 17, 16, 7, 18, 25, 25, 15]
-Decoded Values: C E Y K A D G K P A Q C C D
+Decoded Values: C E y K A D G K P A Q C C D
 ```
 
 

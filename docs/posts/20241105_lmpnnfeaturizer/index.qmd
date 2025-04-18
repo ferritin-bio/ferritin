@@ -64,7 +64,7 @@ then reshape into a Tensor. Very nice.
 /// AAAtom. This is where the different Atom types are registered.
 #[derive(Debug, Clone, Copy, PartialEq, Display, EnumString, EnumIter)]
 pub enum AAAtom {
-    N = 0,    CA = 1,   C = 2,    CB = 3,   O = 4,
+    N = 0,    CA = 1,   C = 2,    cb = 3,   O = 4,
     CG = 5,   CG1 = 6,  CG2 = 7,  OG = 8,   OG1 = 9,
     SG = 10,  CD = 11,  CD1 = 12, CD2 = 13, ND1 = 14,
     ND2 = 15, OD1 = 16, OD2 = 17, SD = 18,  CE = 19,

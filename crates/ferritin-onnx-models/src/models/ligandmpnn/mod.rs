@@ -10,7 +10,7 @@ use crate::{ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64}
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use candle_nn::ops;
-use ferritin_core::{AtomCollection, StructureFeatures, load_structure};
+use ferritin_core::{AtomCollection, StructureFeatures};
 use ferritin_plms::ligandmpnn::utilities::int_to_aa1;
 use ferritin_plms::types::PseudoProbability;
 use hf_hub::api::sync::Api;
@@ -83,8 +83,8 @@ impl LigandMPNN {
         ))
     }
     pub fn run_model(&self, ac: AtomCollection, position: i64, temperature: f32) -> Result<Tensor> {
-        let (h_V, h_E, E_idx) = self.run_encoder(&ac)?;
-        self.run_decoder(h_V, h_E, E_idx, temperature, position)
+        let (h_v, h_e, e_idx) = self.run_encoder(&ac)?;
+        self.run_decoder(h_v, h_e, e_idx, temperature, position)
     }
     pub fn run_encoder(&self, ac: &AtomCollection) -> Result<(NdArrayF32, NdArrayF32, NdArrayI64)> {
         let device = Device::Cpu;
@@ -116,9 +116,9 @@ impl LigandMPNN {
     }
     pub fn run_decoder(
         &self,
-        h_V: NdArrayF32,
-        h_E: NdArrayF32,
-        E_idx: NdArrayI64,
+        h_v: NdArrayF32,
+        h_e: NdArrayF32,
+        e_idx: NdArrayI64,
         temperature: f32,
         position: i64,
     ) -> Result<Tensor> {
@@ -130,9 +130,9 @@ impl LigandMPNN {
             vec![temperature],
         )?)?;
         let decoder_inputs = ort::inputs![
-            "h_V" => h_V,
-            "h_E" => h_E,
-            "E_idx" => E_idx,
+            "h_v" => h_v,
+            "h_e" => h_e,
+            "e_idx" => e_idx,
             "position" => position_tensor,
             "temperature" => temp_tensor,
         ]?;

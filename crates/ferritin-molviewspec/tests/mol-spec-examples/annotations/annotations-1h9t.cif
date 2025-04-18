@@ -25,7 +25,7 @@ A   84  231  '#008800'  'Acyl-CoA binding'     .
 B    9   83  '#cc8800'  'DNA-binding'          .
 B   84  231  '#008888'  'Acyl-CoA binding'     .
 C    .    .  '#1100aa'  'DNA X'                .
-D    .    .  '#dddddd'  'DNA Y'                .
+D    .    .  '#dddddd'  'DNA y'                .
 E    .    .  '#ffff00'  'Gold'                 .
 H    .    .  '#ffff00'  'Gold'                 .
 F    .    .  '#00dd00'  'Chloride'             .

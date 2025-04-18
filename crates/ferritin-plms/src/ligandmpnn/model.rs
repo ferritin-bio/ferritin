@@ -11,7 +11,6 @@ use crate::types::PseudoProbability;
 use candle_core::safetensors;
 use candle_core::{D, DType, Device, IndexOp, Module, Result, Tensor};
 use candle_nn::encoding::one_hot;
-use candle_nn::ops;
 use candle_nn::ops::{log_softmax, softmax};
 use candle_nn::{Dropout, Embedding, LayerNorm, Linear, VarBuilder, embedding, layer_norm, linear};
 use candle_transformers::generation::LogitsProcessor;
@@ -98,7 +97,7 @@ impl ScoreOutput {
 
             for pos in 0..seq_len {
                 let pos_logits = batch_logits.get(pos)?;
-                let probs = ops::softmax(&pos_logits, 0)?;
+                let probs = softmax(&pos_logits, 0)?;
                 let probs = probs.to_vec1::<f32>()?;
 
                 // Get the decoding order to determine the actual position

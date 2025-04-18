@@ -47,7 +47,7 @@ fn screenshot_saving(
     screenshot_saving: Query<Entity, With<Capturing>>,
     windows: Query<Entity, With<Window>>,
 ) {
-    let Ok(window) = windows.get_single() else {
+    let Ok(window) = windows.single() else {
         return;
     };
     match screenshot_saving.iter().count() {
@@ -79,7 +79,7 @@ fn take_screenshot_and_exit(mut commands: Commands, mut exit: EventWriter<AppExi
         .spawn(Screenshot::primary_window())
         .observe(save_to_disk(path));
 
-    exit.send(AppExit::Success);
+    exit.write(AppExit::Success);
 }
 
 #[derive(Component)]

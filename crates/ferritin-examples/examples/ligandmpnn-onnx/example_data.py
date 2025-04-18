@@ -10,7 +10,7 @@ aa_dict = {
     0: 'A', 1: 'C', 2: 'D', 3: 'E', 4: 'F',
     5: 'G', 6: 'H', 7: 'I', 8: 'K', 9: 'L',
     10: 'M', 11: 'N', 12: 'P', 13: 'Q', 14: 'R',
-    15: 'S', 16: 'T', 17: 'V', 18: 'W', 19: 'Y',
+    15: 'S', 16: 'T', 17: 'V', 18: 'W', 19: 'y',
     20: 'X'
 }
 
@@ -44,9 +44,9 @@ def test_ligand_feature_extractor():
 
     # Extract required features
     coords = feature_dict['X']  # [L,4,3] - backbone coordinates
-    ligand_coords = feature_dict['Y']  # [M,3] - ligand coordinates
+    ligand_coords = feature_dict['y']  # [M,3] - ligand coordinates
     ligand_types = feature_dict['Y_t']  # [M] - ligand atom types
-    ligand_mask = feature_dict['Y_m']  # [M] - ligand mask
+    ligand_mask = feature_dict['y_m']  # [M] - ligand mask
 
     # Add batch dimension and reshape ligand features
     coords = coords.unsqueeze(0)  # [1,L,4,3]
@@ -65,7 +65,7 @@ def test_ligand_feature_extractor():
 
     # Run feature extraction
     with torch.no_grad():
-        V, Y_nodes, Y_edges, E_idx = feature_extractor(
+        V, Y_nodes, Y_edges, e_idx = feature_extractor(
             coords,
             ligand_coords,
             ligand_types,
@@ -163,13 +163,13 @@ def test_and_export_ligand_mpnn():
 
     # Test forward pass
     with torch.no_grad():
-          h_V, h_E, E_idx = model(coords, ligand_coords, ligand_types, ligand_mask)
+          h_v, h_e, e_idx = model(coords, ligand_coords, ligand_types, ligand_mask)
 
           # Calculate logits for first few positions
           num_positions = 5
           for pos in range(num_positions):
               # Get logits for this position
-              pos_logits = h_V[0, pos]  # [hidden_dim]
+              pos_logits = h_v[0, pos]  # [hidden_dim]
 
               # Only consider the first 20 amino acids (exclude X)
               pos_logits = pos_logits[:20]  # Take only first 20 logits
@@ -192,15 +192,15 @@ def test_and_export_ligand_mpnn():
         (coords, ligand_coords, ligand_types, ligand_mask),
         "ligand_encoder.onnx",
         input_names=['coords', 'ligand_coords', 'ligand_types', 'ligand_mask'],
-        output_names=['h_V', 'h_E', 'E_idx'],
+        output_names=['h_v', 'h_e', 'e_idx'],
         dynamic_axes={
             'coords': {0: 'batch', 1: 'sequence'},
             'ligand_coords': {0: 'batch', 1: 'sequence', 2: 'num_atoms'},
             'ligand_types': {0: 'batch', 1: 'sequence', 2: 'num_atoms'},
             'ligand_mask': {0: 'batch', 1: 'sequence', 2: 'num_atoms'},
-            'h_V': {0: 'batch', 1: 'sequence'},
-            'h_E': {0: 'batch', 1: 'sequence'},
-            'E_idx': {0: 'batch', 1: 'sequence'}
+            'h_v': {0: 'batch', 1: 'sequence'},
+            'h_e': {0: 'batch', 1: 'sequence'},
+            'e_idx': {0: 'batch', 1: 'sequence'}
         },
         opset_version=11,
         do_constant_folding=True
@@ -224,8 +224,8 @@ def test_and_export_ligand_mpnn():
 
     # Compare outputs
     print("\nComparing PyTorch and ONNX outputs:")
-    torch_outputs = [h_V, h_E, E_idx]
-    for torch_out, onnx_out, name in zip(torch_outputs, ort_outputs, ['h_V', 'h_E', 'E_idx']):
+    torch_outputs = [h_v, h_e, e_idx]
+    for torch_out, onnx_out, name in zip(torch_outputs, ort_outputs, ['h_v', 'h_e', 'e_idx']):
         max_diff = np.abs(torch_out.cpu().numpy() - onnx_out).max()
         print(f"{name} max difference: {max_diff:.6f}")
 
@@ -275,9 +275,9 @@ def test_ligand_mpnn_sequences():
 
         # Prepare inputs
         coords = feature_dict['X'].unsqueeze(0)  # [1,L,4,3]
-        ligand_coords = feature_dict['Y'].unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1, -1)
+        ligand_coords = feature_dict['y'].unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1, -1)
         ligand_types = feature_dict['Y_t'].long().unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1)
-        ligand_mask = feature_dict['Y_m'].unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1)
+        ligand_mask = feature_dict['y_m'].unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1)
 
         print(f"\nStructure details:")
         print(f"Protein length: {coords.shape[1]}")
@@ -287,11 +287,11 @@ def test_ligand_mpnn_sequences():
         print("\nPyTorch inference:")
         try:
             with torch.no_grad():
-                h_V, h_E, E_idx = model(coords, ligand_coords, ligand_types, ligand_mask)
+                h_v, h_e, e_idx = model(coords, ligand_coords, ligand_types, ligand_mask)
                 print("PyTorch inference successful")
-                print(f"h_V shape: {h_V.shape}")
-                print(f"h_E shape: {h_E.shape}")
-                print(f"E_idx shape: {E_idx.shape}")
+                print(f"h_v shape: {h_v.shape}")
+                print(f"h_e shape: {h_e.shape}")
+                print(f"e_idx shape: {e_idx.shape}")
         except Exception as e:
             print(f"Error during PyTorch inference: {str(e)}")
             continue
@@ -329,7 +329,7 @@ def test_ligand_mpnn_sequences():
         for pos in range(num_positions):
             try:
                 # Get PyTorch logits and probabilities
-                pt_logits = h_V[0, pos, :20].cpu()
+                pt_logits = h_v[0, pos, :20].cpu()
                 pt_probs = torch.softmax(pt_logits / 0.1, dim=-1)
 
                 # Get ONNX logits and probabilities
@@ -359,14 +359,14 @@ def test_ligand_mpnn_sequences():
         # Overall statistics
         try:
             print("\nOverall comparison:")
-            h_V_diff = np.abs(h_V.cpu().numpy() - onnx_h_V).max()
-            h_E_diff = np.abs(h_E.cpu().numpy() - onnx_h_E).max()
-            E_idx_diff = np.abs(E_idx.cpu().numpy() - onnx_E_idx).max()
+            h_V_diff = np.abs(h_v.cpu().numpy() - onnx_h_V).max()
+            h_E_diff = np.abs(h_e.cpu().numpy() - onnx_h_E).max()
+            E_idx_diff = np.abs(e_idx.cpu().numpy() - onnx_E_idx).max()
 
             print(f"Maximum differences:")
-            print(f"h_V: {h_V_diff:.6f}")
-            print(f"h_E: {h_E_diff:.6f}")
-            print(f"E_idx: {E_idx_diff:.6f}")
+            print(f"h_v: {h_V_diff:.6f}")
+            print(f"h_e: {h_E_diff:.6f}")
+            print(f"e_idx: {E_idx_diff:.6f}")
         except Exception as e:
             print(f"Error calculating overall statistics: {str(e)}")
 
@@ -419,9 +419,9 @@ def export_ligand_mpnn_decoder():
 
     # Create example inputs for export
     B, L = 1, 141  # Batch size and sequence length
-    h_V = torch.randn(B, L, 128, device=device)
-    h_E = torch.randn(B, L, 16, 128, device=device)
-    E_idx = torch.randint(0, L, (B, L, 16), device=device)
+    h_v = torch.randn(B, L, 128, device=device)
+    h_e = torch.randn(B, L, 16, 128, device=device)
+    e_idx = torch.randint(0, L, (B, L, 16), device=device)
     position = torch.tensor([0], device=device)
     temperature = torch.tensor([0.1], device=device)
 
@@ -429,14 +429,14 @@ def export_ligand_mpnn_decoder():
     print("\nExporting decoder to ONNX...")
     torch.onnx.export(
         decoder,
-        (h_V, h_E, E_idx, position, temperature),
+        (h_v, h_e, e_idx, position, temperature),
         "ligand_decoder.onnx",
-        input_names=['h_V', 'h_E', 'E_idx', 'position', 'temperature'],
+        input_names=['h_v', 'h_e', 'e_idx', 'position', 'temperature'],
         output_names=['logits'],
         dynamic_axes={
-            'h_V': {0: 'batch', 1: 'sequence'},
-            'h_E': {0: 'batch', 1: 'sequence'},
-            'E_idx': {0: 'batch', 1: 'sequence'},
+            'h_v': {0: 'batch', 1: 'sequence'},
+            'h_e': {0: 'batch', 1: 'sequence'},
+            'e_idx': {0: 'batch', 1: 'sequence'},
             'logits': {0: 'batch'}
         },
         opset_version=11,
@@ -449,16 +449,16 @@ def export_ligand_mpnn_decoder():
 
     # Prepare inputs
     ort_inputs = {
-        'h_V': h_V.cpu().numpy(),
-        'h_E': h_E.cpu().numpy(),
-        'E_idx': E_idx.cpu().numpy(),
+        'h_v': h_v.cpu().numpy(),
+        'h_e': h_e.cpu().numpy(),
+        'e_idx': e_idx.cpu().numpy(),
         'position': position.cpu().numpy(),
         'temperature': temperature.cpu().numpy()
     }
 
     # Compare outputs
     with torch.no_grad():
-        pt_output = decoder(h_V, h_E, E_idx, position, temperature)
+        pt_output = decoder(h_v, h_e, e_idx, position, temperature)
         onnx_output = ort_session.run(None, ort_inputs)[0]
 
         max_diff = np.abs(pt_output.cpu().numpy() - onnx_output).max()
@@ -538,9 +538,9 @@ def test_ligand_mpnn_full():
 
         # Prepare inputs
         coords = feature_dict['X'].unsqueeze(0)  # [1,L,4,3]
-        ligand_coords = feature_dict['Y'].unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1, -1)
+        ligand_coords = feature_dict['y'].unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1, -1)
         ligand_types = feature_dict['Y_t'].long().unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1)
-        ligand_mask = feature_dict['Y_m'].unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1)
+        ligand_mask = feature_dict['y_m'].unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1)
 
         print(f"\nStructure details:")
         print(f"Protein length: {coords.shape[1]}")
@@ -623,9 +623,9 @@ def test_ligand_mpnn_full():
             for pos in range(5):
                 # Prepare decoder inputs
                 ort_decoder_inputs = {
-                    'h_V': onnx_h_V,
-                    'h_E': onnx_h_E,
-                    'E_idx': onnx_E_idx,
+                    'h_v': onnx_h_V,
+                    'h_e': onnx_h_E,
+                    'e_idx': onnx_E_idx,
                     'position': np.array([pos], dtype=np.int64),
                     'temperature': np.array([temp], dtype=np.float32)
                 }
@@ -661,9 +661,9 @@ def test_ligand_mpnn_full():
         E_idx_diff = np.abs(pt_E_idx.cpu().numpy() - onnx_E_idx).max()
 
         print(f"Maximum differences:")
-        print(f"h_V: {h_V_diff:.6f}")
-        print(f"h_E: {h_E_diff:.6f}")
-        print(f"E_idx: {E_idx_diff:.6f}")
+        print(f"h_v: {h_V_diff:.6f}")
+        print(f"h_e: {h_E_diff:.6f}")
+        print(f"e_idx: {E_idx_diff:.6f}")
 
         # Compare decoder outputs at multiple positions
         print("\nComparing decoder outputs:")
@@ -681,9 +681,9 @@ def test_ligand_mpnn_full():
 
                 # ONNX decoder
                 ort_decoder_inputs = {
-                    'h_V': onnx_h_V,
-                    'h_E': onnx_h_E,
-                    'E_idx': onnx_E_idx,
+                    'h_v': onnx_h_V,
+                    'h_e': onnx_h_E,
+                    'e_idx': onnx_E_idx,
                     'position': np.array([pos], dtype=np.int64),
                     'temperature': np.array([0.1], dtype=np.float32)
                 }
