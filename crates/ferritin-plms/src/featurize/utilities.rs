@@ -475,22 +475,17 @@ pub fn linspace(
     }
 }
 
-pub fn linspace_f32(
-    start: f32, // Changed to f32
-    stop: f32,  // Changed to f32
-    steps: usize,
-    device: &Device,
-) -> Result<Tensor> {
-    if steps == 0 {
-        Tensor::from_vec(Vec::<f32>::new(), steps, device) // Changed to f32
-    } else if steps == 1 {
-        Tensor::from_vec(vec![start], steps, device)
-    } else {
-        let delta = (stop - start) / (steps - 1) as f32; // Changed to f32
-        let vs = (0..steps)
-            .map(|step| start + step as f32 * delta)
-            .collect::<Vec<_>>();
-        Tensor::from_vec(vs, steps, device)
+pub fn linspace_f32(start: f32, stop: f32, steps: usize, device: &Device) -> Result<Tensor> {
+    match steps {
+        0 => Tensor::from_vec(Vec::<f32>::new(), steps, device),
+        1 => Tensor::from_vec(vec![start], steps, device),
+        _ => {
+            let delta = (stop - start) / (steps - 1) as f32;
+            let vs = (0..steps)
+                .map(|step| start + step as f32 * delta)
+                .collect::<Vec<_>>();
+            Tensor::from_vec(vs, steps, device)
+        }
     }
 }
 

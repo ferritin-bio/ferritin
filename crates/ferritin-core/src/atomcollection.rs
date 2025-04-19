@@ -423,6 +423,10 @@ mod tests {
         // Count of atoms in all residues should match total atom count
         let total_atoms_in_residues: usize = residues.iter().map(|r| r.atom_count()).sum();
         assert_eq!(total_atoms_in_residues, ac.get_size());
+
+        for atm in first_residue.iter_atoms() {
+            println!("Atm Name: {}", atm.atom_name());
+        }
     }
 
     #[test]

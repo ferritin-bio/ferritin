@@ -23,6 +23,7 @@ pub trait StructureFeatures {
     /// Convert amino acid sequence to numeric representation
     fn create_cb(&self, device: &Device) -> Result<Tensor>;
 
+    /// Prepare for ProteinMPNN
     fn featurize_lmpnn(&self, device: &Device) -> Result<ProteinFeatures>; // need more control over this featurization process
 
     /// Get residue indices
@@ -336,10 +337,11 @@ impl StructureFeatures for AtomCollection {
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
         for (idx, residue) in self.iter_residues_aminoacid().enumerate() {
-            println!("residue-Type: {}", residue.residue_name());
+            println!("----- residue-Type: {} -----", residue.residue_name());
             for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
                 println!("Atom-Type: {}", atom_type);
                 if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
+                    println!("  Atom: {}", atom.atom_name());
                     let [x, y, z] = atom.coords();
                     let base_idx = (idx * 37 + atom_type as usize) * 3;
                     atom37_data[base_idx] = *x;
