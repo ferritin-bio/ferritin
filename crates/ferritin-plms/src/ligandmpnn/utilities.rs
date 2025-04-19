@@ -432,7 +432,7 @@ define_residues! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ligandmpnn::proteinfeatures::LMPNNFeatures;
+    use crate::StructureFeatures;
     use ferritin_core::info::elements::Element;
     use ferritin_core::load_structure;
     use ferritin_test_data::TestFile;

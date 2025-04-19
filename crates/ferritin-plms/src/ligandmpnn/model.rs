@@ -7,6 +7,7 @@ use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::proteinfeatures::ProteinFeatures;
 use super::proteinfeaturesmodel::ProteinFeaturesModel;
 use super::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
+// use crate::featurize::StructureFeatures;
 use crate::types::PseudoProbability;
 use candle_core::safetensors;
 use candle_core::{D, DType, Device, IndexOp, Module, Result, Tensor};
