@@ -10,7 +10,7 @@ aa_dict = {
     0: 'A', 1: 'C', 2: 'D', 3: 'E', 4: 'F',
     5: 'G', 6: 'H', 7: 'I', 8: 'K', 9: 'L',
     10: 'M', 11: 'N', 12: 'P', 13: 'Q', 14: 'R',
-    15: 'S', 16: 'T', 17: 'V', 18: 'W', 19: 'y',
+    15: 'S', 16: 'T', 17: 'V', 18: 'W', 19: 'Y',
     20: 'X'
 }
 
@@ -45,7 +45,7 @@ def test_ligand_feature_extractor():
     # Extract required features
     coords = feature_dict['X']  # [L,4,3] - backbone coordinates
     ligand_coords = feature_dict['y']  # [M,3] - ligand coordinates
-    ligand_types = feature_dict['Y_t']  # [M] - ligand atom types
+    ligand_types = feature_dict['y_t']  # [M] - ligand atom types
     ligand_mask = feature_dict['y_m']  # [M] - ligand mask
 
     # Add batch dimension and reshape ligand features
@@ -276,7 +276,7 @@ def test_ligand_mpnn_sequences():
         # Prepare inputs
         coords = feature_dict['X'].unsqueeze(0)  # [1,L,4,3]
         ligand_coords = feature_dict['y'].unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1, -1)
-        ligand_types = feature_dict['Y_t'].long().unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1)
+        ligand_types = feature_dict['y_t'].long().unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1)
         ligand_mask = feature_dict['y_m'].unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1)
 
         print(f"\nStructure details:")
@@ -539,7 +539,7 @@ def test_ligand_mpnn_full():
         # Prepare inputs
         coords = feature_dict['X'].unsqueeze(0)  # [1,L,4,3]
         ligand_coords = feature_dict['y'].unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1, -1)
-        ligand_types = feature_dict['Y_t'].long().unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1)
+        ligand_types = feature_dict['y_t'].long().unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1)
         ligand_mask = feature_dict['y_m'].unsqueeze(0).unsqueeze(0).expand(-1, coords.shape[1], -1)
 
         print(f"\nStructure details:")

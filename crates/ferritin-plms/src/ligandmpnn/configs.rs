@@ -14,8 +14,8 @@
 //! - `RunConfig` - Runtime execution parameters// Core Configs for handling CLI ARGs and Model Params
 
 use super::model::ProteinMPNN;
-use super::proteinfeatures::LMPNNFeatures;
 use super::proteinfeatures::ProteinFeatures;
+use crate::StructureFeatures;
 use anyhow::Error;
 use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device, Tensor};

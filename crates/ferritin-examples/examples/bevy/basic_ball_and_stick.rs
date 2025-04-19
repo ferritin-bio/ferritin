@@ -49,9 +49,17 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(feature = "mesh-bevy"))]
+fn main() -> Result<(), anyhow::Error> {
+    println!("This example requires the mesh-bevy feature. Run with --features mesh-bevy");
+    Ok(())
+}
+
+#[cfg(feature = "mesh-bevy")]
 #[derive(Component)]
 struct MainCamera;
 
+#[cfg(feature = "mesh-bevy")]
 fn setup(mut commands: Commands) {
     // Add a camera
     commands.spawn((

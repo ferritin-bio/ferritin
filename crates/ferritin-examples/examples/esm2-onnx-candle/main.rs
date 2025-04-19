@@ -75,8 +75,8 @@ use ferritin_onnx_models::{ESM2, ESM2Models};
 
 fn main() -> Result<()> {
     let sequence = "MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFESFGDLSTPDAVMGNPKVKAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPENFRLLGNVLVCVLAHHFGKEFTPPVQAAYQKVVAGVANALAHKYH";
-    let model_path = ESM2::load_model_path(ESM2Models::ESM2_T6_8M)?;
-    let onnx_model = ESM2::new(ESM2Models::ESM2_T6_8M)?;
+    let model_path = ESM2::load_model_path(ESM2Models::T6_8M)?;
+    let onnx_model = ESM2::new(ESM2Models::T6_8M)?;
 
     // Test tokenization
     let tokens = onnx_model

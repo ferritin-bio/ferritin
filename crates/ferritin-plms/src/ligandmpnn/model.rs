@@ -6,7 +6,7 @@
 use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::proteinfeatures::ProteinFeatures;
 use super::proteinfeaturesmodel::ProteinFeaturesModel;
-use super::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
+use crate::featurize::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
 use crate::types::PseudoProbability;
 use candle_core::safetensors;
 use candle_core::{D, DType, Device, IndexOp, Module, Result, Tensor};
@@ -124,7 +124,6 @@ impl ScoreOutput {
                 }
             }
         }
-
         // Sort by position and then by probability (descending)
         all_probabilities.sort_by(|a, b| {
             a.position.cmp(&b.position).then(
@@ -133,7 +132,6 @@ impl ScoreOutput {
                     .unwrap_or(std::cmp::Ordering::Equal),
             )
         });
-
         Ok(all_probabilities)
     }
     pub fn save_as_safetensors(&self, filename: String) -> Result<()> {
@@ -142,12 +140,10 @@ impl ScoreOutput {
         tensors.insert("log_probs".to_string(), self.log_probs.clone());
         tensors.insert("logits".to_string(), self.logits.clone());
         tensors.insert("decoding_order".to_string(), self.decoding_order.clone());
-
         // Create directory if it doesn't exist
         if let Some(parent) = std::path::Path::new(&filename).parent() {
             std::fs::create_dir_all(parent)?;
         }
-
         let _ = safetensors::save(&tensors, &filename);
         Ok(())
     }

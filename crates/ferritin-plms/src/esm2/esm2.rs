@@ -1,6 +1,5 @@
 // ESM2 Model Architecture
 // ======================
-
 //              ┌─────────────────┐
 //              │  Input Tokens   │
 //              └────────┬────────┘
@@ -40,9 +39,7 @@
 //         └──────────────┘         └─────────────────┘
 
 use candle_core::{D, DType, Device, Module, Result, Tensor};
-use candle_nn::{
-    Embedding, Linear, VarBuilder, linear, ops,
-};
+use candle_nn::{Embedding, Linear, VarBuilder, linear, ops};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
 

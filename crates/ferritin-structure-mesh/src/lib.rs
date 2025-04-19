@@ -13,10 +13,15 @@
 //! - Optional integrations with Bevy and Rerun
 //!
 pub mod colors;
-pub mod conversions;
 pub mod plugin;
 pub mod structure;
-pub use colors::ColorScheme;
-pub use conversions::ToRerun;
 pub use plugin::{StructurePlugin, StructureSettings};
+
+#[cfg(feature = "rerun")]
+pub mod conversions;
+
+#[cfg(feature = "rerun")]
+pub use conversions::ToRerun;
+
+pub use colors::ColorScheme;
 pub use structure::{RenderOptions, Structure};

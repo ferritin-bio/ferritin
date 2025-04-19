@@ -1,6 +1,7 @@
 //! Module for loading PDBs into Bevy via the Plugin system
 //!
 //! Over time this would be a good candidate for factoring out
+//!
 use super::{ColorScheme, RenderOptions, Structure};
 use bevy::prelude::*;
 use ferritin_core::{AtomCollection, load_structure};

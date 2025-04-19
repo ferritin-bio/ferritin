@@ -10,6 +10,6 @@
 //! - Evolutionary features from MSA profiles
 
 mod structure_features;
-mod utilities;
+pub mod utilities;
 
 pub use structure_features::StructureFeatures;

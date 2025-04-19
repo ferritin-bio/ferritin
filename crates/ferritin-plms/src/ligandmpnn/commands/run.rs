@@ -1,32 +1,9 @@
+use crate::device;
 use crate::ligandmpnn::configs::{
     AABiasConfig, LigandMPNNConfig, MPNNExecConfig, MembraneMPNNConfig, ModelTypes, MultiPDBConfig,
     ResidueControl, RunConfig,
 };
-use candle_core::utils::{cuda_is_available, metal_is_available};
-use candle_core::{Device, Result};
 use rand::Rng;
-
-pub fn device(cpu: bool) -> Result<Device> {
-    if cpu {
-        Ok(Device::Cpu)
-    } else if cuda_is_available() {
-        Ok(Device::new_cuda(0)?)
-    } else if metal_is_available() {
-        Ok(Device::new_metal(0)?)
-    } else {
-        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-        {
-            println!(
-                "Running on CPU, to run on GPU(metal), build this example with `--features metal`"
-            );
-        }
-        #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-        {
-            println!("Running on CPU, to run on GPU, build this example with `--features cuda`");
-        }
-        Ok(Device::Cpu)
-    }
-}
 
 pub fn execute(
     pdb_path: String,
@@ -38,12 +15,10 @@ pub fn execute(
     membrane_mpnn_specific: MembraneMPNNConfig,
     multi_pdb_config: MultiPDBConfig,
 ) -> anyhow::Result<()> {
-    // todo - whats the best way to handle device?
-    let device = device(false)?;
-
+    let device = device()?;
     let exec = MPNNExecConfig::new(
         device.clone(),
-        pdb_path, // will need to omdify this for multiple
+        pdb_path,
         run_config,
         Some(residue_control_config),
         Some(aa_bias_config),
@@ -53,27 +28,22 @@ pub fn execute(
     )?;
 
     // Create Default Values ------------------------------------------------------------
-    //
     let model_type = exec
         .run_config
         .model_type
         .unwrap_or(ModelTypes::ProteinMPNN);
-
     let seed = exec.run_config.seed.unwrap_or_else(|| {
         let mut rng = rand::rng();
         rng.random_range(0..99999)
     });
-
     let temperature = exec.run_config.temperature.unwrap_or(0.1);
     let save_stats = exec.run_config.save_stats.unwrap_or(false);
 
     // Load The model ------------------------------------------------------------
-
     let model = exec.load_model(model_type)?;
     let mut prot_features = exec.generate_protein_features()?;
 
     // Calculate Masks  ------------------------------------------------------------
-
     println!("Generating Chains to Design. Tensor of [B,L]");
     let chains_to_design: Vec<String> = match &exec.residue_control_config {
         None => prot_features.chain_letters.clone(),
@@ -82,7 +52,6 @@ pub fn execute(
             Some(chains) => chains.split(' ').map(String::from).collect(),
         },
     };
-
     // Chain tensor is the base. Additional Tensors can be added on top.
     let chain_mask_tensor = prot_features.get_chain_mask_tensor(chains_to_design, &device)?;
 

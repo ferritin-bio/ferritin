@@ -10,8 +10,9 @@ use crate::{ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64}
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use candle_nn::ops;
-use ferritin_core::{AtomCollection, StructureFeatures};
-use ferritin_plms::ligandmpnn::utilities::int_to_aa1;
+use ferritin_core::AtomCollection;
+use ferritin_plms::featurize::StructureFeatures;
+use ferritin_plms::featurize::utilities::int_to_aa1;
 use ferritin_plms::types::PseudoProbability;
 use hf_hub::api::sync::Api;
 use ndarray::ArrayBase;
@@ -170,8 +171,8 @@ impl LigandMPNN {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ferritin_core::load_structure;
     use ferritin_test_data::TestFile;
-
     fn setup_test_data() -> AtomCollection {
         let (protfile, _handle) = TestFile::protein_01().create_temp().unwrap();
         load_structure(protfile).unwrap()

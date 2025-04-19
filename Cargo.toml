@@ -4,7 +4,7 @@ members = [
     # "crates/ferritin-cellscape",
     "crates/ferritin-core",
     "crates/ferritin-examples",
-    "crates/ferritin-molviewspec",
+    # "crates/ferritin-molviewspec",
     "crates/ferritin-onnx-models",
     "crates/ferritin-plms",
     # "crates/ferritin-pymol",
@@ -16,7 +16,6 @@ members = [
 resolver = "3"
 
 [workspace.package]
-name = "ferritin"
 version = "0.3.3-dev"
 authors = ["Zach Charlop-Powers<zach.charlop.powers@gmail.com>"]
 description = "Protein Manipulation and visualization tools"
@@ -27,13 +26,13 @@ edition = "2024"
 anyhow = "1.0"
 bevy = { version = "0.16.0-rc.5", default-features = false }
 bon = "3.6.1"
-candle-core = "0.9.0-alpha.4"
-candle-metal-kernels = "0.9.0-alpha.4"
-candle-nn = "0.9.0-alpha.4"
-candle-onnx = "0.9.0-alpha.4"
-candle-transformers = "0.9.0-alpha.4"
+candle-core = "0.9.0-alpha.5"
+candle-metal-kernels = "0.9.0-alpha.5"
+candle-nn = "0.9.0-alpha.5"
+candle-onnx = "0.9.0-alpha.5"
+candle-transformers = "0.9.0-alpha.5"
 chrono = "0.4"
-clap = { version = "4.5.36", features = ["derive"] }
+clap = { version = "4.5.37", features = ["derive"] }
 hf-hub = "0.4.2"
 itertools = "0.14.0"
 ndarray = "0.16"

@@ -1,9 +1,9 @@
 use anyhow::Result;
-use candle_core::pickle::PthTensors;
 use candle_core::DType;
+use candle_core::pickle::PthTensors;
 use candle_nn::VarBuilder;
 use ferritin_core::load_structure;
-use ferritin_plms::{LMPNNFeatures, ProteinMPNN, ProteinMPNNConfig, device};
+use ferritin_plms::{ProteinMPNN, ProteinMPNNConfig, StructureFeatures, device};
 use ferritin_test_data::TestFile;
 
 fn main() -> Result<()> {
@@ -19,7 +19,7 @@ fn main() -> Result<()> {
     let pconf = ProteinMPNNConfig::proteinmpnn();
     let pmpnn = ProteinMPNN::load(vb, &pconf)?;
 
-    let features = ac.featurize(&device_a.clone())?;
+    let features = ac.featurize_lmpnn(&device_a.clone())?;
     println!("Features");
 
     let scores = pmpnn.simple_decode(&features)?;

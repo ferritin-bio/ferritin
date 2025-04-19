@@ -1,6 +1,8 @@
 use super::configs::ProteinMPNNConfig;
 use super::proteinfeatures::ProteinFeatures;
-use super::utilities::{compute_nearest_neighbors, cross_product, gather_edges, linspace_f32};
+use crate::featurize::utilities::{
+    compute_nearest_neighbors, cross_product, gather_edges, linspace_f32,
+};
 use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::encoding::one_hot;
 use candle_nn::{LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear};
@@ -153,7 +155,7 @@ impl ProteinFeaturesModel {
         // Temporary implementation until chain labels are supported
         let chain_labels = Tensor::zeros_like(r_idx)?;
         let x = (self.augment_eps > 0.0)
-            .then(|| (x + x.randn_like(0.0, self.augment_eps as f64)?))
+            .then(|| x + x.randn_like(0.0, self.augment_eps as f64)?)
             .unwrap_or_else(|| Ok(x.clone()))?;
         let b = (&x.narrow(2, 1, 1)? - &x.narrow(2, 0, 1)?)?
             .squeeze(2)?
