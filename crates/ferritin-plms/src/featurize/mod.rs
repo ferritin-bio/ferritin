@@ -1,3 +1,5 @@
+//!  Protein->Tensor utilities useful for Machine Learning
+
 mod structure_features;
 mod utilities;
 

@@ -10,18 +10,7 @@
 //! - Evolutionary features from MSA profiles
 use super::utilities::aa1to_int;
 use candle_core::{Device, Result, Tensor};
-// use ferritin_core::info::elements::Element;
 use std::collections::{HashMap, HashSet};
-// use super::utilities::{AAAtom, aa1to_int, aa3to1};
-// use crate::ligandmpnn::utilities::calculate_cb;
-// use ferritin_core::AtomCollection;
-// use itertools::MultiUnzip;
-// use strum::IntoEnumIterator;
-
-// // Helper Fns --------------------------------------
-// fn is_heavy_atom(element: &Element) -> bool {
-//     !matches!(element, Element::H | Element::He)
-// }
 
 pub struct ProteinFeatures {
     /// protein amino acids sequences as 1D Tensor of u32

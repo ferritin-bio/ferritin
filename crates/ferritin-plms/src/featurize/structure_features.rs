@@ -12,17 +12,6 @@ fn is_heavy_atom(element: &Element) -> bool {
     !matches!(element, Element::H | Element::He)
 }
 
-// /// Convert the AtomCollection into a struct that can be passed to a model.
-// pub trait LMPNNFeatures {
-//     fn encode_amino_acids(&self, device: &Device) -> Result<Tensor>; // ( residue types )
-//     fn featurize(&self, device: &Device) -> Result<ProteinFeatures>; // need more control over this featurization process
-//     fn get_res_index(&self) -> Vec<u32>;
-//     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O, xyz]
-//     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>; // [residues, N/CA/C/O....37, xyz]
-//     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>; // ( positions , elements, mask )
-//     fn to_pdb(&self); //
-// }
-
 ///. Trait defining Protein->Tensor utilities useful for Machine Learning
 pub trait StructureFeatures {
     /// Convert amino acid sequence to numeric representation
@@ -265,11 +254,12 @@ impl StructureFeatures for AtomCollection {
         Ok(cb)
     }
 
+    // Convert AtomCollection to ProteinFeatures
     fn featurize_lmpnn(&self, device: &Device) -> Result<ProteinFeatures> {
         let x_37 = self.to_numeric_atom37(device)?;
         let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F32, device)?;
         let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
-        let cb = self.calculate_cb(&x_37);
+        let cb = self.create_cb(device);
         let chain_labels = self.get_resids(); //  <-- need to double-check shape. I think this is all-atom
         let residue_ids = self.get_res_index();
         let residue_length = residue_ids.len();
@@ -318,9 +308,7 @@ impl StructureFeatures for AtomCollection {
     /// create numeric Tensor of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
-
         let mut backbone_data = vec![0f32; res_count * 4 * 3];
-
         for residue in self.iter_residues_aminoacid() {
             let resid = residue.residue_id() as usize;
             let backbone_atoms = [
@@ -388,13 +376,11 @@ impl StructureFeatures for AtomCollection {
                 .iter_atoms()
                 .filter(|atom| is_heavy_atom(atom.element()))
                 .collect();
-
             for atom in atoms {
                 coords.push(*atom.coords());
                 elements.push(*atom.element());
             }
         }
-
         // raw starting tensors
         let y = Tensor::from_slice(&coords.concat(), (coords.len(), 3), device)?;
         let y_m = Tensor::ones_like(&y)?;
@@ -419,7 +405,33 @@ impl StructureFeatures for AtomCollection {
         let y = y.unsqueeze(0)?;
         let y_t = y_t.to_dtype(DType::I64)?.unsqueeze(0)?;
         let y_m = y_m.unsqueeze(0)?; // mask_xy??
-
         Ok((y, y_t, y_m))
     }
+    // fn to_numeric_ligand_atoms2(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
+    //     let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
+    //         .iter_residues()
+    //         .filter(|residue| {
+    //             let res_name = &residue.residue_name();
+    //             !residue.is_amino_acid() && *res_name != "HOH" && *res_name != "WAT"
+    //         })
+    //         .flat_map(|residue| {
+    //             residue
+    //                 .iter_atoms()
+    //                 .filter(|atom| is_heavy_atom(atom.element()))
+    //                 .map(|atom| (*atom.coords(), *atom.element()))
+    //                 .collect::<Vec<_>>()
+    //         })
+    //         .multiunzip();
+    //     let y = Tensor::from_slice(&coords.concat(), (coords.len(), 3), device)?;
+    //     let y_t = Tensor::from_slice(
+    //         &elements
+    //             .iter()
+    //             .map(|e| e.atomic_number() as f32)
+    //             .collect::<Vec<_>>(),
+    //         (elements.len(),),
+    //         device,
+    //     )?;
+    //     let y_m = Tensor::ones_like(&y)?;
+    //     Ok((y, y_t, y_m))
+    // }
 }
