@@ -125,8 +125,15 @@ impl LMPNNFeatures for AtomCollection {
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
         for (idx, residue) in self.iter_residues_aminoacid().enumerate() {
+            println!(
+                "Resname {}, {} ---------------",
+                idx,
+                residue.residue_name()
+            );
             for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
+                println!("atom_type {:?}", atom_type);
                 if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
+                    println!("Atom {:?}", atom.atom_name());
                     let [x, y, z] = atom.coords();
                     let base_idx = (idx * 37 + atom_type as usize) * 3;
                     atom37_data[base_idx] = *x;

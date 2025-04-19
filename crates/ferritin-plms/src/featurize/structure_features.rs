@@ -1,8 +1,8 @@
 //!  Protein->Tensor utilities useful for Machine Learning
 use super::utilities::{AAAtom, aa1to_int, aa3to1, get_nearest_neighbours};
-use crate::AtomCollection;
-use crate::info::elements::Element;
 use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
+use ferritin_core::AtomCollection;
+use ferritin_core::info::elements::Element;
 use strum::IntoEnumIterator;
 
 // Helper Fns --------------------------------------
@@ -140,9 +140,10 @@ impl StructureFeatures for AtomCollection {
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0f32; res_count * 37 * 3];
-
         for (idx, residue) in self.iter_residues_aminoacid().enumerate() {
+            println!("residue-Type: {}", residue.residue_name());
             for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
+                println!("Atom-Type: {}", atom_type);
                 if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
                     let [x, y, z] = atom.coords();
                     let base_idx = (idx * 37 + atom_type as usize) * 3;

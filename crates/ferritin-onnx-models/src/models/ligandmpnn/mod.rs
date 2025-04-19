@@ -10,7 +10,8 @@ use crate::{ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64}
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use candle_nn::ops;
-use ferritin_core::{AtomCollection, StructureFeatures};
+use ferritin_core::AtomCollection;
+use ferritin_plms::featurize::structure_features::StructureFeatures;
 use ferritin_plms::ligandmpnn::utilities::int_to_aa1;
 use ferritin_plms::types::PseudoProbability;
 use hf_hub::api::sync::Api;

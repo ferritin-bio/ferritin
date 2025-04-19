@@ -76,9 +76,7 @@ mod tests {
             result.err()
         );
         let atom_collection = result.unwrap();
-        println!("atom_collection: {:?}", atom_collection.get_coords());
         assert_eq!(atom_collection.get_size(), 1356);
-        // This includes Water Molecules
         let max_resid = atom_collection.get_resids().iter().max().unwrap_or(&0);
         assert_eq!(*max_resid, 176);
     }

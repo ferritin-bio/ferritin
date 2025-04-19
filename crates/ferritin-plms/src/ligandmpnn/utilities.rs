@@ -191,7 +191,7 @@ pub fn cross_product(a: &Tensor, b: &Tensor) -> Result<Tensor> {
     let b1 = b.narrow(last_dim, 1, 1)?;
     let b2 = b.narrow(last_dim, 2, 1)?;
 
-    // Compute cross product components
+    // Compute cross produAAct components
     let c0 = ((&a1 * &b2)? - (&a2 * &b1)?)?;
     let c1 = ((&a2 * &b0)? - (&a0 * &b2)?)?;
     let c2 = ((&a0 * &b1)? - (&a1 * &b0)?)?;
@@ -503,7 +503,7 @@ mod tests {
                 .unwrap()
                 .to_vec1()
                 .unwrap();
-            println!("ACTUAL: {:?}", actual);
+            println!("ACTUAL: {:?},{:?}", atom_name, actual);
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
         }
     }
@@ -514,7 +514,6 @@ mod tests {
         let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
         let ac = load_structure(pdb_file).unwrap();
         let ac_backbone_tensor: Tensor = ac.to_numeric_atom37(&device).expect("REASON");
-        // batch size of 1154 residues; all atoms; positions
         assert_eq!(ac_backbone_tensor.dims(), &[1, 154, 37, 3]);
 
         // Check my residue coords in the Tensor
@@ -580,11 +579,21 @@ mod tests {
             ("OXT", (0, 0, 36, ..), vec![0.0, 0.0, 0.0]),
         ];
         for (atom_name, (b, i, j, k), expected) in allatom_coords {
+            println!(
+                "Backbone dims for CB: {:?}",
+                ac_backbone_tensor.i((0, 0, 3, ..))
+            );
+
             let actual: Vec<f32> = ac_backbone_tensor
                 .i((b, i, j, k))
                 .unwrap()
                 .to_vec1()
                 .unwrap();
+
+            println!(
+                "Atomname//Actual/Expected: {:?},{:?},{:?}",
+                atom_name, actual, expected
+            );
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
         }
     }
