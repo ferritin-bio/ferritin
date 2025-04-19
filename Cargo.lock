@@ -2301,9 +2301,9 @@ dependencies = [
 
 [[package]]
 name = "candle-core"
-version = "0.9.0-alpha.4"
+version = "0.9.0-alpha.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e7ed82a2d7c16511c7f51ff65f2d1e7063afea4b66156bf60f0c508bb9d5347"
+checksum = "a9574d9fbf3764cf6beafc4772f325808670a0776b73d8069cb15f3800d17936"
 dependencies = [
  "byteorder",
  "candle-metal-kernels",
@@ -2326,10 +2326,11 @@ dependencies = [
 
 [[package]]
 name = "candle-metal-kernels"
-version = "0.9.0-alpha.4"
+version = "0.9.0-alpha.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a7871c10b10a3ec13a7e473b89510593e199411d416162d22826839d34dbe02"
+checksum = "0aef44860332c7acf3fc6a7962bd6a22d193a81400f7b269570aaecaa1ba1062"
 dependencies = [
+ "half",
  "metal 0.27.0",
  "once_cell",
  "thiserror 1.0.69",
@@ -2338,9 +2339,9 @@ dependencies = [
 
 [[package]]
 name = "candle-nn"
-version = "0.9.0-alpha.4"
+version = "0.9.0-alpha.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db0f6adca488bdf3cd13a437cca14b0276709fa21a7d3b792e07503b10d22b45"
+checksum = "3718ef88e70f6fbc21caa164cb98928c6a2fb0b17a91923fc9836c4e843af4fc"
 dependencies = [
  "candle-core",
  "candle-metal-kernels",
@@ -2355,9 +2356,9 @@ dependencies = [
 
 [[package]]
 name = "candle-onnx"
-version = "0.9.0-alpha.4"
+version = "0.9.0-alpha.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a862d9efbbc23237ecec5d41a078200c25ce4beab6186db7155225002bffed63"
+checksum = "d35fded0ab588b269d7dcb7ea24faa654ec29e334f09305eb83ccf129c303c88"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -2367,9 +2368,9 @@ dependencies = [
 
 [[package]]
 name = "candle-transformers"
-version = "0.9.0-alpha.4"
+version = "0.9.0-alpha.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4407deb098fd73531b3c2da6f0229516832d681d872e9d7e6f6ff553f416916"
+checksum = "5ef12e4795249186bc5b78e98ae9986c05c870085b4d4c2e7f18d3119ec3301b"
 dependencies = [
  "byteorder",
  "candle-core",
@@ -2518,9 +2519,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.36"
+version = "4.5.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2df961d8c8a0d08aa9945718ccf584145eee3f3aa06cddbeac12933781102e04"
+checksum = "eccb054f56cbd38340b380d4a8e69ef1f02f1af43db2f0cc817a4774d80ae071"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -2528,9 +2529,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.36"
+version = "4.5.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "132dbda40fb6753878316a489d5a1242a8ef2f0d9e47ba01c951ea8aa7d013a5"
+checksum = "efd9466fac8543255d3b1fcad4762c5e116ffe808c8a3043d4263cd4fd4862a2"
 dependencies = [
  "anstream",
  "anstyle",
