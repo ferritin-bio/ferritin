@@ -12,7 +12,7 @@ use candle_core::{Device, Tensor};
 use candle_nn::ops;
 use ferritin_core::AtomCollection;
 use ferritin_plms::featurize::StructureFeatures;
-use ferritin_plms::ligandmpnn::utilities::int_to_aa1;
+use ferritin_plms::featurize::utilities::int_to_aa1;
 use ferritin_plms::types::PseudoProbability;
 use hf_hub::api::sync::Api;
 use ndarray::ArrayBase;

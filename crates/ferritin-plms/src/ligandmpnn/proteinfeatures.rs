@@ -8,7 +8,7 @@
 //! - Geometric features like distances, angles
 //! - Chemical features like hydrophobicity, charge
 //! - Evolutionary features from MSA profiles
-use super::utilities::aa1to_int;
+use crate::featurize::utilities::aa1to_int;
 use candle_core::{Device, Result, Tensor};
 use std::collections::{HashMap, HashSet};
 

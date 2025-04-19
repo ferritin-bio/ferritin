@@ -1,6 +1,8 @@
 use super::configs::ProteinMPNNConfig;
 use super::proteinfeatures::ProteinFeatures;
-use super::utilities::{compute_nearest_neighbors, cross_product, gather_edges, linspace_f32};
+use crate::featurize::utilities::{
+    compute_nearest_neighbors, cross_product, gather_edges, linspace_f32,
+};
 use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::encoding::one_hot;
 use candle_nn::{LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear};

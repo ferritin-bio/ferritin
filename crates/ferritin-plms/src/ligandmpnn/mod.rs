@@ -8,6 +8,5 @@ pub mod configs;
 pub mod model;
 pub mod proteinfeatures;
 mod proteinfeaturesmodel;
-pub mod utilities;
 pub use configs::ProteinMPNNConfig;
 pub use model::ProteinMPNN;

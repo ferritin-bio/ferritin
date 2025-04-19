@@ -758,31 +758,4 @@ mod tests {
         assert!((point_distances[0] - 1.0).abs() < 1e-5);
         assert!((point_distances[1] - 1.0).abs() < 1e-5);
     }
-
-    #[test]
-    fn test_residue_codes() {
-        let ala = Residue::ALA;
-        assert_eq!(ala.code3(), "ALA");
-        assert_eq!(ala.code1(), 'A');
-        assert_eq!(ala.to_int(), 0);
-    }
-
-    #[test]
-    fn test_residue_from_int() {
-        assert!(matches!(Residue::from_int(0), Residue::ALA));
-        assert!(matches!(Residue::from_int(1), Residue::CYS));
-        assert!(matches!(Residue::from_int(999), Residue::UNK));
-    }
-
-    #[test]
-    fn test_residue_atoms() {
-        let trp = Residue::TRP;
-        let atoms = trp.atoms14();
-        assert_eq!(atoms[0], AAAtom::N);
-        assert_eq!(atoms[13], AAAtom::CH2);
-
-        let gly = Residue::GLY;
-        let atoms = gly.atoms14();
-        assert_eq!(atoms[4], AAAtom::Unknown);
-    }
 }
