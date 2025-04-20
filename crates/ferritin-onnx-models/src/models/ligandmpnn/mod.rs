@@ -11,6 +11,7 @@ use anyhow::Result;
 use candle_core::{Device, Tensor};
 use candle_nn::ops;
 use ferritin_core::AtomCollection;
+use ferritin_plms::device;
 use ferritin_plms::featurize::StructureFeatures;
 use ferritin_plms::featurize::utilities::int_to_aa1;
 use ferritin_plms::types::PseudoProbability;
@@ -23,7 +24,7 @@ use ort::{
         builder::{GraphOptimizationLevel, SessionBuilder},
     },
 };
-use std::path::PathBuf;
+use std::{any::Any, path::PathBuf};
 
 type NdArrayF32 = ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<ndarray::IxDynImpl>>;
 type NdArrayI64 = ArrayBase<ndarray::OwnedRepr<i64>, ndarray::Dim<ndarray::IxDynImpl>>;
@@ -88,20 +89,41 @@ impl LigandMPNN {
         self.run_decoder(h_v, h_e, e_idx, temperature, position)
     }
     pub fn run_encoder(&self, ac: &AtomCollection) -> Result<(NdArrayF32, NdArrayF32, NdArrayI64)> {
-        let device = Device::Cpu;
+        let device = device()?;
         let encoder_model = self.session.clone().commit_from_file(&self.encoder_path)?;
         let x_bb = ac.to_numeric_backbone_atoms(&device)?;
+
         let (lig_coords, lig_elements, lig_mask) = ac.to_numeric_ligand_atoms(&device)?;
+        println!("x_bb shape: {:?}", x_bb.shape());
+        println!("x_bb dtype: {:?}", x_bb.dtype());
+        println!("lig_coords shape: {:?}", lig_coords.shape());
+        println!("lig_coords dtype: {:?}", lig_coords.dtype());
+        println!("lig_elements shape: {:?}", lig_elements.shape());
+        println!("lig_elements dtype: {:?}", lig_elements.dtype());
+        println!("lig_mask shape: {:?}", lig_mask.shape());
+        println!("lig_mask dtype: {:?}", lig_mask.dtype());
         let coords_nd = tensor_to_ndarray_f32(x_bb)?;
         let lig_coords_nd = tensor_to_ndarray_f32(lig_coords)?;
         let lig_types_nd = tensor_to_ndarray_i64(lig_elements)?;
         let lig_mask_nd = tensor_to_ndarray_f32(lig_mask)?;
+
+        println!("lig_coords_nd shape: {:?}", lig_coords_nd.shape());
+        println!("lig_coords_nd dtype: {:?}", lig_coords_nd.type_id());
+        println!("lig_types_nd shape: {:?}", lig_types_nd.shape());
+        println!(
+            "lig_elemenlig_types_ndts dtype: {:?}",
+            lig_types_nd.type_id()
+        );
+        println!("lig_lig_mask_ndmask shape: {:?}", lig_mask_nd.shape());
+        println!("lig_mask_nd dtype: {:?}", lig_mask_nd.type_id());
+
         let encoder_inputs = ort::inputs![
             "coords" => coords_nd,
             "ligand_coords" => lig_coords_nd,
             "ligand_types" => lig_types_nd,
             "ligand_mask" => lig_mask_nd
         ]?;
+
         let encoder_outputs = encoder_model.run(encoder_inputs)?;
         Ok((
             encoder_outputs["h_V"]
@@ -189,6 +211,7 @@ mod tests {
     fn test_encoder_output_dimensions() -> Result<()> {
         let model = LigandMPNN::new()?;
         let ac = setup_test_data();
+        println!("Data is setup");
 
         let (h_v, h_e, e_idx) = model.run_encoder(&ac)?;
         println!("h_v shape: {:?}", h_v.shape());

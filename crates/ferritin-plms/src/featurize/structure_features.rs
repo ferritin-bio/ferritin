@@ -230,7 +230,7 @@ impl StructureFeatures for AtomCollection {
         let y_t = Tensor::from_slice(
             &elements
                 .iter()
-                .map(|e| e.atomic_number() as f32)
+                .map(|e| e.atomic_number() as i64)
                 .collect::<Vec<_>>(),
             (elements.len(),),
             device,
