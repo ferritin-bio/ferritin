@@ -3852,7 +3852,6 @@ name = "ferritin-core"
 version = "0.3.3-dev"
 dependencies = [
  "anyhow",
- "either",
  "ferritin-test-data",
  "itertools 0.14.0",
 ]

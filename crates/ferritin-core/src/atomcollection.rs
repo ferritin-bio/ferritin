@@ -9,7 +9,6 @@ use super::info::constants::get_bonds_canonical20;
 use super::views::chain::ChainView;
 use super::views::residue::ResidueView;
 use crate::info::elements::Element;
-use either::Either;
 use itertools::{Itertools, izip};
 
 /// Atom Collection
@@ -278,50 +277,21 @@ impl AtomCollection {
         })
     }
 
-    // Add to AtomCollection implementation
     pub fn iter_residues(&self) -> impl Iterator<Item = ResidueView<'_>> {
         let residue_starts = self.get_residue_starts();
         let atom_starts: Vec<usize> = residue_starts.iter().map(|&idx| idx as usize).collect();
-
-        // Check if we have residues
-        // if atom_starts.is_empty() {
-        //     return std::iter::empty();
-        // }
-        // // Get the last atom index before moving atom_starts
-        // let last_idx = atom_starts.len() - 1;
-        // let last_atom_idx = atom_starts[last_idx];
-        // let atom_size = self.get_size();
-
-        // // Create iterators for all but the last residue
-        // let main_residues = (0..atom_starts.len() - 1)
-        //     .map(move |i| ResidueView::new(self, atom_starts[i], atom_starts[i + 1]));
-
-        // // Handle the last residue separately - using the saved value
-        // let last_residue = std::iter::once(ResidueView::new(self, last_atom_idx, atom_size));
-
-        // // Chain the two iterators
-        // main_residues.chain(last_residue)
-        // Use a uniform return approach with either...or
-        if atom_starts.is_empty() {
-            Either::Left(std::iter::empty())
-        } else {
-            // Get the last atom index
-            let last_idx = atom_starts.len() - 1;
-            let last_atom_idx = atom_starts[last_idx];
-            let atom_size = self.get_size();
-
-            // Create iterators for all but the last residue
-            let main_residues = (0..atom_starts.len() - 1)
-                .map(move |i| ResidueView::new(self, atom_starts[i], atom_starts[i + 1]));
-
-            // Handle the last residue separately
-            let last_residue = std::iter::once(ResidueView::new(self, last_atom_idx, atom_size));
-
-            // Chain the two iterators
-            Either::Right(main_residues.chain(last_residue))
-        }
+        let atom_size = self.get_size();
+        // Create a copy of the last element if it exists
+        // Generate pairs for all residues
+        let last_atom_idx = atom_starts.last().copied();
+        (0..atom_starts.len().saturating_sub(1))
+            .map(move |i| ResidueView::new(self, atom_starts[i], atom_starts[i + 1]))
+            .chain(
+                last_atom_idx
+                    .map(|idx| ResidueView::new(self, idx, atom_size))
+                    .into_iter(),
+            )
     }
-
     /// Iterates over amino acid residues in the collection
     ///
     /// Returns a filtered iterator that only includes standard amino acid residues
