@@ -493,6 +493,7 @@ pub fn linspace_f32(start: f32, stop: f32, steps: usize, device: &Device) -> Res
 mod tests {
     use super::*;
     use crate::StructureFeatures;
+    use anyhow::Result;
     use ferritin_core::info::elements::Element;
     use ferritin_core::load_structure;
     use ferritin_test_data::TestFile;
@@ -525,10 +526,10 @@ mod tests {
     }
 
     #[test]
-    fn test_atom_backbone_tensor() {
+    fn test_atom_backbone_tensor() -> Result<()> {
         let device = Device::Cpu;
-        let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let ac = load_structure(pdb_file).unwrap();
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp()?;
+        let ac = load_structure(pdb_file)?;
         let ac_backbone_tensor: Tensor = ac.to_numeric_backbone_atoms(&device).expect("REASON");
         // batch size of 1;154 residues; N/CA/C/O; positions
         assert_eq!(ac_backbone_tensor.dims(), &[1, 154, 4, 3]);
@@ -558,18 +559,14 @@ mod tests {
 
         for (atom_name, (b, i, j, k), expected) in backbone_coords {
             // assert_eq!(ac_backbone_tensor.dims(), &[1, 154, 4, 3])
-            let actual: Vec<f32> = ac_backbone_tensor
-                .i((b, i, j, k))
-                .unwrap()
-                .to_vec1()
-                .unwrap();
-            println!("ACTUAL: {:?},{:?}", atom_name, actual);
+            let actual: Vec<f32> = ac_backbone_tensor.i((b, i, j, k))?.to_vec1()?;
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_all_atom37_tensor() {
+    fn test_all_atom37_tensor() -> Result<()> {
         let device = Device::Cpu;
         let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
         let ac = load_structure(pdb_file).unwrap();
@@ -639,36 +636,25 @@ mod tests {
             ("OXT", (0, 0, 36, ..), vec![0.0, 0.0, 0.0]),
         ];
         for (atom_name, (b, i, j, k), expected) in allatom_coords {
-            println!(
-                "Backbone dims for CB: {:?}",
-                ac_backbone_tensor.i((0, 0, 3, ..))
-            );
-
             let actual: Vec<f32> = ac_backbone_tensor
                 .i((b, i, j, k))
                 .unwrap()
                 .to_vec1()
                 .unwrap();
-
-            println!(
-                "Atomname//Actual/Expected: {:?},{:?},{:?}",
-                atom_name, actual, expected
-            );
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_ligand_tensor() {
+    fn test_ligand_tensor() -> Result<()> {
         let device = Device::Cpu;
         let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
         let ac = load_structure(pdb_file).unwrap();
         let (ligand_coords, ligand_elements, _) =
             ac.to_numeric_ligand_atoms(&device).expect("REASON");
-
-        // 54 residues; N/CA/C/O; positions
-        assert_eq!(ligand_coords.dims(), &[54, 3]);
-
+        // 154 residues; 54 other atoms.
+        assert_eq!(ligand_coords.dims(), &[1, 154, 54, 3]);
         // Check my residue coords in the Tensor
         //
         // HETATM 1222 S  S   . SO4 B 2 .   ? 30.746 18.706  28.896  1.00 47.98  ? 157 SO4 A S   1
@@ -677,22 +663,21 @@ mod tests {
         // HETATM 1225 O  O3  . SO4 B 2 .   ? 29.468 18.179  29.331  1.00 47.79  ? 157 SO4 A O3  1
         // HETATM 1226 O  O4  . SO4 B 2 .   ? 31.722 18.578  29.881  1.00 47.85  ? 157 SO4 A O4  1
         let allatom_coords = [
-            ("S", (0, ..), vec![30.746, 18.706, 28.896]),
-            ("O1", (1, ..), vec![30.697, 20.077, 28.620]),
-            ("O2", (2, ..), vec![31.104, 18.021, 27.725]),
-            ("O3", (3, ..), vec![29.468, 18.179, 29.331]),
-            ("O4", (4, ..), vec![31.722, 18.578, 29.881]),
+            ("S", (0, 0, 0, ..), vec![30.746, 18.706, 28.896]),
+            ("O1", (0, 0, 1, ..), vec![30.697, 20.077, 28.620]),
+            ("O2", (0, 0, 2, ..), vec![31.104, 18.021, 27.725]),
+            ("O3", (0, 0, 3, ..), vec![29.468, 18.179, 29.331]),
+            ("O4", (0, 0, 4, ..), vec![31.722, 18.578, 29.881]),
         ];
-
-        for (atom_name, (i, j), expected) in allatom_coords {
-            let actual: Vec<f32> = ligand_coords.i((i, j)).unwrap().to_vec1().unwrap();
+        for (atom_name, (b, l, i, j), expected) in allatom_coords {
+            let actual: Vec<f32> = ligand_coords.i((b, l, i, ..))?.to_vec1()?;
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
         }
 
         // Now check the elements
         let elements: Vec<&str> = ligand_elements
-            .to_vec1::<f32>()
-            .unwrap()
+            .i((0, 0, ..))?
+            .to_vec1::<i64>()?
             .into_iter()
             .map(|elem| Element::new(elem as usize).unwrap().symbol())
             .collect();
@@ -701,6 +686,8 @@ mod tests {
         assert_eq!(elements[1], "O");
         assert_eq!(elements[2], "O");
         assert_eq!(elements[3], "O");
+
+        Ok(())
     }
 
     #[test]

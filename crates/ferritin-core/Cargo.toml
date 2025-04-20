@@ -8,9 +8,7 @@ description.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-candle-core.workspace = true
 itertools.workspace = true
-strum.workspace = true
 
 [dev-dependencies]
 ferritin-test-data = { path = "../ferritin-test-data" }

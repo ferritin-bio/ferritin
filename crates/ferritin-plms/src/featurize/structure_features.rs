@@ -4,9 +4,10 @@ use crate::ligandmpnn::proteinfeatures::ProteinFeatures;
 use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
 use ferritin_core::AtomCollection;
 use ferritin_core::info::elements::Element;
-use itertools::MultiUnzip;
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
+
+const LIGAND_CUTOFF_SCORE: f32 = 5.;
 
 // Helper Fns --------------------------------------
 fn is_heavy_atom(element: &Element) -> bool {
@@ -60,16 +61,7 @@ impl StructureFeatures for AtomCollection {
 
     /// Calculate CB for each residue
     fn create_cb(&self, device: &Device) -> Result<Tensor> {
-        // N = input_dict["X"][:, 0, :]
-        //         CA = input_dict["X"][:, 1, :]
-        //         C = input_dict["X"][:, 2, :]
-        //         b = CA - N
-        //         c = C - CA
-        //         a = torch.cross(b, c, axis=-1)
-        //         CB = -0.58273431 * a + 0.56802827 * b - 0.54067466 * c + CA
-        //
-        let backbone = self.to_numeric_backbone_atoms(device)?;
-        let backbone = backbone.squeeze(0)?; // remove batch dim for calc
+        let backbone = self.to_numeric_backbone_atoms(device)?.squeeze(0)?;
 
         // Extract N, CA, C coordinates
         let n = backbone.i((.., 0, ..))?;
@@ -82,8 +74,8 @@ impl StructureFeatures for AtomCollection {
         let c_coeff = -0.54067466_f64;
 
         // Calculate vectors
-        let b = (&ca - &n)?; // CA - N
-        let c = (&c - &ca)?; // C - CA
+        let b = (&ca - &n)?;
+        let c = (&c - &ca)?;
 
         // Manual cross product components
         // a_x = b_y * c_z - b_z * c_y
@@ -121,9 +113,9 @@ impl StructureFeatures for AtomCollection {
             .iter_residues_aminoacid()
             .map(|res| res.chain_id().to_string())
             .collect();
-        let chain_list: Vec<String> = chain_letters
-            .clone()
-            .into_iter()
+        let chain_list: Vec<String> = self
+            .iter_residues_aminoacid()
+            .map(|res| res.chain_id().to_string())
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
@@ -161,45 +153,34 @@ impl StructureFeatures for AtomCollection {
     /// create numeric Tensor of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
-        let mut backbone_data = vec![0f32; res_count * 4 * 3];
+        let mut backbone_data = Vec::with_capacity(res_count * 4 * 3);
+
         for residue in self.iter_residues_aminoacid() {
-            let resid = residue.residue_id() as usize;
-            let backbone_atoms = [
-                residue.find_atom_by_name("N"),
-                residue.find_atom_by_name("CA"),
-                residue.find_atom_by_name("C"),
-                residue.find_atom_by_name("O"),
-            ];
-            for (atom_idx, maybe_atom) in backbone_atoms.iter().enumerate() {
-                if let Some(atom) = maybe_atom {
+            for atom_name in ["N", "CA", "C", "O"] {
+                if let Some(atom) = residue.find_atom_by_name(atom_name) {
                     let [x, y, z] = atom.coords();
-                    let base_idx = (resid * 4 + atom_idx) * 3;
-                    backbone_data[base_idx] = *x;
-                    backbone_data[base_idx + 1] = *y;
-                    backbone_data[base_idx + 2] = *z;
+                    backbone_data.extend_from_slice(&[*x, *y, *z]);
+                } else {
+                    backbone_data.extend_from_slice(&[0.0, 0.0, 0.0]);
                 }
             }
         }
-        // Create tensor with shape [1,residues, 4, 3]
         Tensor::from_vec(backbone_data, (1, res_count, 4, 3), &device)
     }
 
     /// create numeric Tensor of shape [1, <sequence-length>, 37, 3]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
-        let mut atom37_data = vec![0f32; res_count * 37 * 3];
-        for (idx, residue) in self.iter_residues_aminoacid().enumerate() {
+        let mut atom37_data = vec![0.0; res_count * 37 * 3];
+        for (res_idx, residue) in self.iter_residues_aminoacid().enumerate() {
             for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
                 if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
                     let [x, y, z] = atom.coords();
-                    let base_idx = (idx * 37 + atom_type as usize) * 3;
-                    atom37_data[base_idx] = *x;
-                    atom37_data[base_idx + 1] = *y;
-                    atom37_data[base_idx + 2] = *z;
+                    let base_idx = (res_idx * 37 + atom_type as usize) * 3;
+                    atom37_data[base_idx..base_idx + 3].copy_from_slice(&[*x, *y, *z]);
                 }
             }
         }
-        // Create tensor with shape [batch, residues, 37, 3]
         Tensor::from_vec(atom37_data, (1, res_count, 37, 3), &device)
     }
 
@@ -212,21 +193,26 @@ impl StructureFeatures for AtomCollection {
     //  - y_m: 3D tensor of dimensions: (<batch=1>, <num_residues>, <number_of_ligand_atoms>))
     //
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
-        let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
-            .iter_residues()
-            .filter(|residue| {
-                let res_name = &residue.residue_name();
-                !residue.is_amino_acid() && *res_name != "HOH" && *res_name != "WAT"
-            })
-            .flat_map(|residue| {
-                residue
-                    .iter_atoms()
-                    .filter(|atom| is_heavy_atom(atom.element()))
-                    .map(|atom| (*atom.coords(), *atom.element()))
-                    .collect::<Vec<_>>()
-            })
-            .multiunzip();
+        let mut coords = Vec::new();
+        let mut elements = Vec::new();
+        for residue in self.iter_residues() {
+            let res_name = residue.residue_name();
+            if residue.is_amino_acid() || res_name == "HOH" || res_name == "WAT" {
+                continue;
+            }
+            let atoms: Vec<_> = residue
+                .iter_atoms()
+                .filter(|atom| is_heavy_atom(atom.element()))
+                .collect();
+            for atom in atoms {
+                coords.push(*atom.coords());
+                elements.push(*atom.element());
+            }
+        }
+
+        // raw starting tensors
         let y = Tensor::from_slice(&coords.concat(), (coords.len(), 3), device)?;
+        let y_m = Tensor::ones_like(&y)?;
         let y_t = Tensor::from_slice(
             &elements
                 .iter()
@@ -235,7 +221,19 @@ impl StructureFeatures for AtomCollection {
             (elements.len(),),
             device,
         )?;
-        let y_m = Tensor::ones_like(&y)?;
+        let cb = self.create_cb(device)?;
+        let (batch, res_num, _coords) = cb.dims3()?;
+        let (number_of_ligand_atoms, _coords) = y.dims2()?;
+        let mask = Tensor::zeros((batch, res_num), DType::F32, device)?;
+        let (y, y_t, y_m, d_xy) =
+            get_nearest_neighbours(&cb, &mask, &y, &y_t, &y_m, number_of_ligand_atoms as i64)?;
+        let distance_mask = d_xy.lt(LIGAND_CUTOFF_SCORE)?.to_dtype(DType::F32)?;
+        let y_m_first = y_m.i((.., 0))?;
+        let mask = mask.squeeze(0)?;
+        let _mask_xy = distance_mask.mul(&mask)?.mul(&y_m_first)?;
+        let y = y.unsqueeze(0)?;
+        let y_t = y_t.to_dtype(DType::I64)?.unsqueeze(0)?;
+        let y_m = y_m.unsqueeze(0)?;
         Ok((y, y_t, y_m))
     }
 }
