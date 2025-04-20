@@ -111,9 +111,9 @@ impl StructureFeatures for AtomCollection {
             .iter_residues_aminoacid()
             .map(|res| res.chain_id().to_string())
             .collect();
-        let chain_list: Vec<String> = chain_letters
-            .clone()
-            .into_iter()
+        let chain_list: Vec<String> = self
+            .iter_residues_aminoacid()
+            .map(|res| res.chain_id().to_string())
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
@@ -163,7 +163,6 @@ impl StructureFeatures for AtomCollection {
                 }
             }
         }
-
         Tensor::from_vec(backbone_data, (1, res_count, 4, 3), &device)
     }
 
