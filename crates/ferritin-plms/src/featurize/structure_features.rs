@@ -4,7 +4,6 @@ use crate::ligandmpnn::proteinfeatures::ProteinFeatures;
 use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
 use ferritin_core::AtomCollection;
 use ferritin_core::info::elements::Element;
-use itertools::MultiUnzip;
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
 
@@ -60,16 +59,7 @@ impl StructureFeatures for AtomCollection {
 
     /// Calculate CB for each residue
     fn create_cb(&self, device: &Device) -> Result<Tensor> {
-        // N = input_dict["X"][:, 0, :]
-        //         CA = input_dict["X"][:, 1, :]
-        //         C = input_dict["X"][:, 2, :]
-        //         b = CA - N
-        //         c = C - CA
-        //         a = torch.cross(b, c, axis=-1)
-        //         CB = -0.58273431 * a + 0.56802827 * b - 0.54067466 * c + CA
-        //
-        let backbone = self.to_numeric_backbone_atoms(device)?;
-        let backbone = backbone.squeeze(0)?; // remove batch dim for calc
+        let backbone = self.to_numeric_backbone_atoms(device)?.squeeze(0)?;
 
         // Extract N, CA, C coordinates
         let n = backbone.i((.., 0, ..))?;
@@ -82,8 +72,8 @@ impl StructureFeatures for AtomCollection {
         let c_coeff = -0.54067466_f64;
 
         // Calculate vectors
-        let b = (&ca - &n)?; // CA - N
-        let c = (&c - &ca)?; // C - CA
+        let b = (&ca - &n)?;
+        let c = (&c - &ca)?;
 
         // Manual cross product components
         // a_x = b_y * c_z - b_z * c_y
