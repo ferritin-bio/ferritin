@@ -18,14 +18,16 @@ impl<'a> ChainView<'a> {
     }
     pub fn iter_residues(&self) -> impl Iterator<Item = ResidueView<'_>> {
         let residue_indices = self.data.get_residue_start_indices().unwrap();
+        let chain_id = self.chain_id();
+        
+        // Generate atom indices for all residues in this chain's range
         let atom_indices: Vec<usize> = (self.start_residue_idx
             ..=self
                 .end_residue_idx
                 .min(residue_indices.len().saturating_sub(1)))
             .map(|idx| residue_indices[idx] as usize)
             .collect();
-        // Get the last atom index if it exists
-        let last_atom_idx = atom_indices.last().copied();
+        
         // Get the end atom index for the last residue
         let last_residue_end_idx = if self.end_residue_idx < residue_indices.len().saturating_sub(1)
         {
@@ -35,19 +37,33 @@ impl<'a> ChainView<'a> {
             // If it's the final residue, use the structure's end
             self.data.get_size()
         };
-        // Generate normal residue views
-        (0..atom_indices.len().saturating_sub(1))
-            .map(move |i| ResidueView::new(self.data, atom_indices[i], atom_indices[i + 1]))
-            // Add the last residue only if there are any indices
-            .chain(
-                last_atom_idx
-                    .map(|idx| ResidueView::new(self.data, idx, last_residue_end_idx))
-                    .into_iter(),
-            )
+        
+        // Build the residue views collection
+        let mut residues = Vec::new();
+        
+        // Create residue views for all but the last residue
+        for i in 0..atom_indices.len().saturating_sub(1) {
+            let start_idx = atom_indices[i];
+            let end_idx = atom_indices[i + 1];
+            
+            // Only include residues that match this chain's ID
+            if self.data.get_chain_id(start_idx) == chain_id {
+                residues.push(ResidueView::new(self.data, start_idx, end_idx));
+            }
+        }
+        
+        // Add the last residue if it exists and matches the chain ID
+        if let Some(&last_idx) = atom_indices.last() {
+            if self.data.get_chain_id(last_idx) == chain_id {
+                residues.push(ResidueView::new(self.data, last_idx, last_residue_end_idx));
+            }
+        }
+        
+        residues.into_iter()
     }
     // Get the number of residues in this chain
     pub fn residue_count(&self) -> usize {
-        self.end_residue_idx - self.start_residue_idx
+        self.iter_residues().count()
     }
 }
 
