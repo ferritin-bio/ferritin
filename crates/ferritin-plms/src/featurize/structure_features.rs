@@ -169,19 +169,16 @@ impl StructureFeatures for AtomCollection {
     /// create numeric Tensor of shape [1, <sequence-length>, 37, 3]
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
-        let mut atom37_data = vec![0f32; res_count * 37 * 3];
-        for (idx, residue) in self.iter_residues_aminoacid().enumerate() {
+        let mut atom37_data = vec![0.0; res_count * 37 * 3];
+        for (res_idx, residue) in self.iter_residues_aminoacid().enumerate() {
             for atom_type in AAAtom::iter().filter(|&a| a != AAAtom::Unknown) {
                 if let Some(atom) = residue.find_atom_by_name(&atom_type.to_string()) {
                     let [x, y, z] = atom.coords();
-                    let base_idx = (idx * 37 + atom_type as usize) * 3;
-                    atom37_data[base_idx] = *x;
-                    atom37_data[base_idx + 1] = *y;
-                    atom37_data[base_idx + 2] = *z;
+                    let base_idx = (res_idx * 37 + atom_type as usize) * 3;
+                    atom37_data[base_idx..base_idx + 3].copy_from_slice(&[*x, *y, *z]);
                 }
             }
         }
-        // Create tensor with shape [batch, residues, 37, 3]
         Tensor::from_vec(atom37_data, (1, res_count, 37, 3), &device)
     }
 
