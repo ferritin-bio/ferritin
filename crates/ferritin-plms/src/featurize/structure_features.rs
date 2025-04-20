@@ -151,26 +151,19 @@ impl StructureFeatures for AtomCollection {
     /// create numeric Tensor of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
-        let mut backbone_data = vec![0f32; res_count * 4 * 3];
+        let mut backbone_data = Vec::with_capacity(res_count * 4 * 3);
+
         for residue in self.iter_residues_aminoacid() {
-            let resid = residue.residue_id() as usize;
-            let backbone_atoms = [
-                residue.find_atom_by_name("N"),
-                residue.find_atom_by_name("CA"),
-                residue.find_atom_by_name("C"),
-                residue.find_atom_by_name("O"),
-            ];
-            for (atom_idx, maybe_atom) in backbone_atoms.iter().enumerate() {
-                if let Some(atom) = maybe_atom {
+            for atom_name in ["N", "CA", "C", "O"] {
+                if let Some(atom) = residue.find_atom_by_name(atom_name) {
                     let [x, y, z] = atom.coords();
-                    let base_idx = (resid * 4 + atom_idx) * 3;
-                    backbone_data[base_idx] = *x;
-                    backbone_data[base_idx + 1] = *y;
-                    backbone_data[base_idx + 2] = *z;
+                    backbone_data.extend_from_slice(&[*x, *y, *z]);
+                } else {
+                    backbone_data.extend_from_slice(&[0.0, 0.0, 0.0]);
                 }
             }
         }
-        // Create tensor with shape [1,residues, 4, 3]
+
         Tensor::from_vec(backbone_data, (1, res_count, 4, 3), &device)
     }
 
