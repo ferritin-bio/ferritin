@@ -233,7 +233,7 @@ impl StructureFeatures for AtomCollection {
         let _mask_xy = distance_mask.mul(&mask)?.mul(&y_m_first)?;
         let y = y.unsqueeze(0)?;
         let y_t = y_t.to_dtype(DType::I64)?.unsqueeze(0)?;
-        let y_m = y_m.unsqueeze(0)?; /
+        let y_m = y_m.unsqueeze(0)?;
         Ok((y, y_t, y_m))
     }
 }
