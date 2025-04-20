@@ -19,12 +19,10 @@ impl<'a> ChainView<'a> {
     pub fn iter_residues(&self) -> Box<dyn Iterator<Item = ResidueView<'_>> + '_> {
         let residue_indices = self.data.get_residue_start_indices().unwrap();
         // Convert relevant section of residue indices to atom indices
-        let mut atom_indices: Vec<usize> = Vec::new();
-        for residue_idx in self.start_residue_idx..=self.end_residue_idx {
-            if residue_idx < residue_indices.len() {
-                atom_indices.push(residue_indices[residue_idx] as usize);
-            }
-        }
+        let atom_indices: Vec<usize> = (self.start_residue_idx..=self.end_residue_idx)
+            .filter(|&idx| idx < residue_indices.len())
+            .map(|idx| residue_indices[idx] as usize)
+            .collect();
         // If the list is empty, return an empty iterator
         if atom_indices.is_empty() {
             return Box::new(std::iter::empty());

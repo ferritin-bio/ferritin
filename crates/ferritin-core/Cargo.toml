@@ -9,6 +9,7 @@ description.workspace = true
 [dependencies]
 anyhow.workspace = true
 itertools.workspace = true
+either.workspace = true
 
 [dev-dependencies]
 ferritin-test-data = { path = "../ferritin-test-data" }
