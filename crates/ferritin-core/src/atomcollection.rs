@@ -276,7 +276,6 @@ impl AtomCollection {
             }
         })
     }
-
     pub fn iter_residues(&self) -> impl Iterator<Item = ResidueView<'_>> {
         let residue_starts = self.get_residue_starts();
         let atom_starts: Vec<usize> = residue_starts.iter().map(|&idx| idx as usize).collect();
