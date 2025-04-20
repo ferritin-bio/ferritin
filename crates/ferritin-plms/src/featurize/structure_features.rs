@@ -7,6 +7,8 @@ use ferritin_core::info::elements::Element;
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
 
+const LIGAND_CUTOFF_SCORE: f32 = 5.;
+
 // Helper Fns --------------------------------------
 fn is_heavy_atom(element: &Element) -> bool {
     !matches!(element, Element::H | Element::He)
@@ -191,10 +193,6 @@ impl StructureFeatures for AtomCollection {
     //  - y_m: 3D tensor of dimensions: (<batch=1>, <num_residues>, <number_of_ligand_atoms>))
     //
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
-        // Todo: fix this.
-        let cutoff_for_score = 5.;
-
-        // Iterate through residues one at a time
         let mut coords = Vec::new();
         let mut elements = Vec::new();
         for residue in self.iter_residues() {
@@ -206,7 +204,6 @@ impl StructureFeatures for AtomCollection {
                 .iter_atoms()
                 .filter(|atom| is_heavy_atom(atom.element()))
                 .collect();
-
             for atom in atoms {
                 coords.push(*atom.coords());
                 elements.push(*atom.element());
@@ -230,14 +227,13 @@ impl StructureFeatures for AtomCollection {
         let mask = Tensor::zeros((batch, res_num), DType::F32, device)?;
         let (y, y_t, y_m, d_xy) =
             get_nearest_neighbours(&cb, &mask, &y, &y_t, &y_m, number_of_ligand_atoms as i64)?;
-        let distance_mask = d_xy.lt(cutoff_for_score)?.to_dtype(DType::F32)?;
+        let distance_mask = d_xy.lt(LIGAND_CUTOFF_SCORE)?.to_dtype(DType::F32)?;
         let y_m_first = y_m.i((.., 0))?;
         let mask = mask.squeeze(0)?;
         let _mask_xy = distance_mask.mul(&mask)?.mul(&y_m_first)?;
         let y = y.unsqueeze(0)?;
         let y_t = y_t.to_dtype(DType::I64)?.unsqueeze(0)?;
-        let y_m = y_m.unsqueeze(0)?; // mask_xy??
-
+        let y_m = y_m.unsqueeze(0)?; /
         Ok((y, y_t, y_m))
     }
 }
