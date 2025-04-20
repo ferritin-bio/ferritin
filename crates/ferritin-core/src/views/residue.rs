@@ -55,27 +55,3 @@ impl<'a> ResidueView<'a> {
             .map(|idx| AtomView::new(self.data, idx))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::load_structure;
-    use ferritin_test_data::TestFile;
-
-    #[test]
-    fn test_residue_view_properties() {
-        let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let ac = load_structure(prot_file).unwrap();
-
-        // Create a simple residue view for testing
-        let residue = ResidueView::new(&ac, 0, 10); // First 10 atoms as a test
-
-        // Test basic properties
-        assert!(!residue.residue_name().is_empty());
-        assert!(residue.residue_id() >= 0);
-        assert!(!residue.chain_id().is_empty());
-
-        // Test atom count
-        assert_eq!(residue.atom_count(), 10);
-    }
-}

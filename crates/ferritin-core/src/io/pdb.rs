@@ -2,7 +2,7 @@
 //!
 //! Adapted from: https://github.com/biotite-dev/fastpdb/tree/main
 //! Converted to use native Rust structures instead of Python/NumPy bindings.
-
+//!
 use crate::info::elements::Element;
 use crate::{AtomCollection, Bond, BondOrder};
 use anyhow::Result;
@@ -216,11 +216,9 @@ impl PDBFile {
             // Parse atom ID
             atom_ids.push(parse_number::<i32>(&line[6..11])?);
         }
-
         // Parse bonds if available
         let bonds = self.parse_bonds(&atom_ids)?;
         let bonds_option = if bonds.is_empty() { None } else { Some(bonds) };
-
         let atom_collection = AtomCollection::new(
             size,
             coords,
@@ -232,7 +230,6 @@ impl PDBFile {
             chain_ids,
             bonds_option,
         );
-
         Ok(atom_collection)
     }
 
@@ -243,7 +240,6 @@ impl PDBFile {
         for (i, &id) in atom_ids.iter().enumerate() {
             atom_id_to_index.insert(id, i as i32);
         }
-
         let mut bonds: Vec<Bond> = Vec::new();
         for line in self.lines.iter() {
             if line.starts_with("CONECT") && line.len() >= 16 {
@@ -255,7 +251,6 @@ impl PDBFile {
                             if i + 5 > line.len() {
                                 break;
                             }
-
                             if let Ok(bonded_id) = parse_number::<i32>(&line[i..i + 5]) {
                                 if let Some(&bonded_index) = atom_id_to_index.get(&bonded_id) {
                                     bonds.push(Bond::new(
@@ -273,7 +268,6 @@ impl PDBFile {
                 }
             }
         }
-
         Ok(bonds)
     }
 
