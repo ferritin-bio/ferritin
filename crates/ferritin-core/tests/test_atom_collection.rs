@@ -1,4 +1,4 @@
-use ferritin_core::load_structure;
+use ferritin_core::{AtomView, ChainView, ResidueView, load_structure};
 use ferritin_test_data::TestFile;
 
 #[test]
@@ -26,10 +26,6 @@ fn test_chain_view() {
         assert_eq!(residue.chain_id(), chain_id);
     }
 }
-
-use super::*;
-use crate::load_structure;
-use ferritin_test_data::TestFile;
 
 #[test]
 fn test_residue_view_properties() {

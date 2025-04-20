@@ -1,11 +1,7 @@
 use anyhow::{Error as E, Result};
-// use candle_core::safetensors::load;
-use candle_core::{D, DType, Device, Tensor};
-use candle_nn::VarBuilder;
+use candle_core::DType;
 use clap::Parser;
-use ferritin_plms::{ESM2, ESM2Config as Config, ESM2Runner, device};
-use hf_hub::{Repo, RepoType, api::sync::Api};
-use tokenizers::Tokenizer;
+use ferritin_plms::{ESM2Models, ESM2Runner, device};
 pub const DTYPE: DType = DType::F32;
 
 #[derive(Parser, Debug, Clone)]
@@ -17,96 +13,32 @@ struct Args {
     /// Protein String
     #[arg(long)]
     protein_string: Option<String>,
-    /// Path to a protein FASTA file
-    #[arg(long)]
-    protein_fasta: Option<std::path::PathBuf>,
-}
-
-impl Args {
-    fn build_model_and_tokenizer(&self, device: &Device) -> Result<(ESM2, Tokenizer)> {
-        let (model_id, revision, config) = match self.model_id.as_str() {
-            "8M" => ("facebook/esm2_t6_8M_UR50D", "main", Config::t6_8m()),
-            "35M" => ("facebook/esm2_t12_35M_UR50D", "main", Config::t12_35m()),
-            "150M" => ("facebook/esm2_t30_150M_UR50D", "main", Config::t30_150m()),
-            "650M" => ("facebook/esm2_t33_650M_UR50D", "main", Config::t33_650m()),
-            "3B" => ("facebook/esm2_t36_3B_UR50D", "main", Config::t36_3b()),
-            "15B" => ("facebook/esm2_t48_15B_UR50D", "main", Config::t48_15b()),
-            _ => panic!("Invalid ESM models."),
-        };
-        let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());
-        let api = Api::new()?;
-        let api = api.repo(repo);
-        let weights = api.get("model.safetensors")?;
-        // let tensors = load(&weights, &device)?;
-        // for (name, tensor) in tensors.iter() {
-        //     println!("Name: {}, Shape: {:?}", name, tensor.shape());
-        // }
-        let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[weights], DTYPE, &device)? };
-        let tokenizer = ESM2::load_tokenizer()?;
-        let model = ESM2::load(vb, config)?;
-        println!("Loaded!");
-        Ok((model, tokenizer))
-    }
+    // /// Path to a protein FASTA file
+    // #[arg(long)]
+    // protein_fasta: Option<std::path::PathBuf>,
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
     println!("Loading the Model and Tokenizer.......");
-    let device = device()?;
-    let (model, tokenizer) = args.build_model_and_tokenizer(&device)?;
-    let protein_sequences = if let Some(seq) = args.protein_string {
-        vec![seq]
-    } else if let Some(fasta_path) = args.protein_fasta {
-        todo!("fasta processing unimplimented")
-        // std::fs::read_to_string(fasta_path)?
-    } else {
-        return Err(E::msg(
-            "Either protein_string or protein_fasta must be provided",
-        ));
+    let model_enum = match args.model_id.as_str() {
+        "8M" => ESM2Models::T6_8M,
+        "35M" => ESM2Models::T12_35M,
+        "150M" => ESM2Models::T30_150M,
+        "650M" => ESM2Models::T33_650M,
+        "3B" => ESM2Models::T36_3B,
+        "15B" => ESM2Models::T48_15B,
+        _ => return Err(E::msg("Invalid model ID")),
     };
-    for prot in protein_sequences.iter() {
-        let tokens = tokenizer
-            .encode(prot.to_string(), false)
-            .map_err(E::msg)?
-            .get_ids()
-            .to_vec();
-        let token_ids = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
-        println!("Encoding.......");
-        let encoded = model.forward(&token_ids)?;
-        println!("Predicting.......");
-        let predictions = encoded.logits.argmax(D::Minus1)?;
-        println!("predictions: {:?}", predictions);
-        println!("Input string: {}", prot);
-        println!("Decoding.......");
-        let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
-        let decoded = tokenizer.decode(indices.as_slice(), true);
-        if let Ok(decoded_str) = &decoded {
-            println!("Decoded output: {:?}", decoded_str.replace(" ", ""));
-        } else {
-            println!("Decoding failed!");
-        }
-        // Calculate similarity between input and output
-        if let Ok(decoded_str) = decoded {
-            let decoded_str = decoded_str.replace(" ", "");
-            let input_chars: Vec<char> = prot.chars().collect();
-            let output_chars: Vec<char> = decoded_str.chars().collect();
-            let min_len = std::cmp::min(input_chars.len(), output_chars.len());
-            let matches = input_chars
-                .iter()
-                .zip(output_chars.iter())
-                .take(min_len)
-                .filter(|(a, b)| a == b)
-                .count();
-            let similarity = if min_len > 0 {
-                matches as f32 / min_len as f32
-            } else {
-                0.0
-            };
-            println!(
-                "Similarity score: {:.2} ({} matching out of {})",
-                similarity, matches, min_len
-            );
-        }
-    }
+    let modelrunner = ESM2Runner::load_model(model_enum, device()?)?;
+    println!("Encoding.......");
+    let prot_string = args
+        .protein_string
+        .expect("a protein sting must be provided");
+    let output = modelrunner.run_forward(&prot_string)?;
+    println!("Predicting.......");
+    let output_sequence = modelrunner.decode_logits(output)?;
+    println!("Decoded sequence: {:?}", output_sequence);
+
     Ok(())
 }

@@ -3907,7 +3907,6 @@ dependencies = [
  "ferritin-core",
  "ferritin-test-data",
  "hf-hub",
- "itertools 0.14.0",
  "rand 0.9.1",
  "serde",
  "serde_json",

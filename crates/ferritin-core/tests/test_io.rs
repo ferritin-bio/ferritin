@@ -1,4 +1,4 @@
-use ferritin_core::{load_structure}
+use ferritin_core::load_structure;
 use ferritin_test_data::TestFile;
 
 #[test]

@@ -17,6 +17,7 @@ pub mod info;
 mod io;
 mod views;
 
-pub use self::atomcollection::AtomCollection;
-pub use self::bonds::{Bond, BondOrder};
-pub use self::io::{load_structure, load_structure_from_string};
+pub use atomcollection::AtomCollection;
+pub use bonds::{Bond, BondOrder};
+pub use io::{load_structure, load_structure_from_string};
+pub use views::{AtomView, ChainView, ResidueView};
