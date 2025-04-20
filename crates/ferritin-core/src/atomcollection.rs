@@ -139,7 +139,6 @@ impl AtomCollection {
         }
         let aa_bond_info = get_bonds_canonical20();
         let residue_starts = self.get_residue_starts();
-        // Iterate through residues
         let mut bonds = Vec::new();
         for res_i in 0..residue_starts.len() - 1 {
             let curr_start_i = residue_starts[res_i] as usize;
@@ -147,7 +146,6 @@ impl AtomCollection {
             if let Some(bond_dict_for_res) =
                 aa_bond_info.get(&self.res_names[curr_start_i].as_str())
             {
-                // Iterate through bonds in this residue
                 for &(atom_name1, atom_name2, bond_type) in bond_dict_for_res {
                     let atom_indices1: Vec<usize> = (curr_start_i..next_start_i)
                         .filter(|&i| self.atom_names[i] == atom_name1)
@@ -155,7 +153,6 @@ impl AtomCollection {
                     let atom_indices2: Vec<usize> = (curr_start_i..next_start_i)
                         .filter(|&i| self.atom_names[i] == atom_name2)
                         .collect();
-
                     // Create all possible bond combinations
                     for &i in &atom_indices1 {
                         for &j in &atom_indices2 {
@@ -231,14 +228,12 @@ impl AtomCollection {
         );
         starts
     }
-
     pub fn get_residue_start_indices(&self) -> Option<&Vec<i32>> {
         self.residue_start_indices.as_ref()
     }
     /// A new chain starts when the chain ID changes from one atom to the next.
     fn get_chain_starts(&self) -> Vec<usize> {
         let mut starts = vec![0];
-
         starts.extend(
             self.chain_ids
                 .iter()
@@ -250,7 +245,6 @@ impl AtomCollection {
                     },
                 ),
         );
-
         starts
     }
 
@@ -298,7 +292,6 @@ impl AtomCollection {
         if atom_starts.is_empty() {
             return Box::new(std::iter::empty());
         }
-
         // Get the last atom index before moving atom_starts
         let last_idx = atom_starts.len() - 1;
         let last_atom_idx = atom_starts[last_idx];
@@ -322,37 +315,6 @@ impl AtomCollection {
         self.iter_residues()
             .filter(|residue| residue.is_amino_acid())
     }
-
-    // pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueAtoms> {
-    //     self.iter_residues_all()
-    //         .filter(|residue| residue.is_amino_acid())
-    // }
-    // pub fn select(&self) -> AtomSelector {
-    //     AtomSelector::new(self)
-    // }
-    // pub fn select_by_chain(&self, chain_id: &str) -> Selection {
-    //     let indices: Vec<usize> = self
-    //         .chain_ids
-    //         .iter()
-    //         .enumerate()
-    //         .filter(|&(_, &ref chain)| chain == chain_id)
-    //         .map(|(i, _)| i)
-    //         .collect();
-    //     Selection::new(indices)
-    // }
-    // pub fn select_by_residue(&self, res_name: &str) -> Selection {
-    //     let indices: Vec<usize> = self
-    //         .res_names
-    //         .iter()
-    //         .enumerate()
-    //         .filter(|(_, name)| name.as_str() == res_name)
-    //         .map(|(i, _)| i)
-    //         .collect();
-    //     Selection::new(indices)
-    // }
-    // pub fn view(&self, selection: Selection) -> AtomView {
-    //     AtomView::new(self, selection)
-    // }
 }
 
 #[cfg(test)]
