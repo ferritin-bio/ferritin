@@ -211,36 +211,6 @@ impl StructureFeatures for AtomCollection {
     //  - y_t: 1D tensor of dimension = <num_residues>
     //  - y_m: 3D tensor of dimensions: (<batch=1>, <num_residues>, <number_of_ligand_atoms>))
     //
-    // fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
-    //     let (coords, elements): (Vec<[f32; 3]>, Vec<Element>) = self
-    //         .iter_residues()
-    //         .filter(|residue| {
-    //             let res_name = &residue.residue_name();
-    //             !residue.is_amino_acid() && *res_name != "HOH" && *res_name != "WAT"
-    //         })
-    //         .flat_map(|residue| {
-    //             residue
-    //                 .iter_atoms()
-    //                 .filter(|atom| is_heavy_atom(atom.element()))
-    //                 .map(|atom| (*atom.coords(), *atom.element()))
-    //                 .collect::<Vec<_>>()
-    //         })
-    //         .multiunzip();
-    //     let y = Tensor::from_slice(&coords.concat(), (coords.len(), 3), device)?;
-    //     let y_t = Tensor::from_slice(
-    //         &elements
-    //             .iter()
-    //             .map(|e| e.atomic_number() as i64)
-    //             .collect::<Vec<_>>(),
-    //         (elements.len(),),
-    //         device,
-    //     )?;
-    //     let y_m = Tensor::ones_like(&y)?;
-    //     println!("y shape: {:?}", y.shape());
-    //     println!("y_t shape: {:?}", y_t.shape());
-    //     println!("y_m shape: {:?}", y_m.shape());
-    //     Ok((y, y_t, y_m))
-    // }
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
         // Todo: fix this.
         let cutoff_for_score = 5.;
