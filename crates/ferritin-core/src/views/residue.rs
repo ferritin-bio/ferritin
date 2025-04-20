@@ -21,32 +21,25 @@ impl<'a> ResidueView<'a> {
     pub fn atom_count(&self) -> usize {
         self.end_atom_idx - self.start_atom_idx
     }
-
     pub fn chain_id(&self) -> &str {
         self.data.get_chain_id(self.start_atom_idx)
     }
-
     pub fn is_amino_acid(&self) -> bool {
         is_amino_acid(self.residue_name())
     }
-
     // Add methods for other residue types
     pub fn is_nucleotide(&self) -> bool {
         is_nucleotide(self.residue_name())
     }
-
     pub fn is_carbohydrate(&self) -> bool {
         is_carbohydrate(self.residue_name())
     }
-
     pub fn iter_atoms(&self) -> impl Iterator<Item = AtomView<'_>> + '_ {
         (self.start_atom_idx..self.end_atom_idx).map(move |idx| AtomView::new(self.data, idx))
     }
-
     pub fn residue_id(&self) -> i32 {
         *self.data.get_res_id(self.start_atom_idx)
     }
-
     pub fn residue_name(&self) -> &str {
         &self.data.get_res_name(self.start_atom_idx)
     }

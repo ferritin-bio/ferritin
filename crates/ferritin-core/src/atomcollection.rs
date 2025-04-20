@@ -57,7 +57,6 @@ impl AtomCollection {
             residue_start_indices: None,
             chain_start_indices: None,
         };
-
         ac.calculate_chain_indices();
         ac
     }
@@ -131,7 +130,6 @@ impl AtomCollection {
         // return np.sqrt(vector_dot(diff, diff))
         unimplemented!()
     }
-
     pub fn connect_via_residue_names(&mut self) {
         if self.bonds.is_some() {
             println!("Bonds already in place. Not overwriting.");
@@ -255,12 +253,8 @@ impl AtomCollection {
     pub fn iter_chains(&self) -> impl Iterator<Item = ChainView<'_>> {
         // Make sure indices are calculated
         let chain_starts = match &self.chain_start_indices {
-            Some(indices) => indices.clone(), // Clone to avoid reference type issues
-            None => {
-                // This is suboptimal as it recalculates every time if not pre-calculated
-                // Default to a single chain if none calculated
-                vec![0]
-            }
+            Some(indices) => indices.clone(),
+            None => Vec::new(),
         };
 
         (0..chain_starts.len()).map(move |i| {
@@ -271,7 +265,7 @@ impl AtomCollection {
                 // If it's the last chain, go to the end of the structure
                 match &self.residue_start_indices {
                     Some(indices) => indices.len(),
-                    None => self.size, // Fallback if residue indices not calculated
+                    None => self.size,
                 }
             };
 

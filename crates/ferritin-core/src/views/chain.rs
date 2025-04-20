@@ -16,10 +16,8 @@ impl<'a> ChainView<'a> {
         let first_atom_idx = residue_starts[self.start_residue_idx] as usize;
         self.data.get_chain_id(first_atom_idx)
     }
-
     pub fn iter_residues(&self) -> Box<dyn Iterator<Item = ResidueView<'_>> + '_> {
         let residue_indices = self.data.get_residue_start_indices().unwrap();
-
         // Convert relevant section of residue indices to atom indices
         let mut atom_indices: Vec<usize> = Vec::new();
         for residue_idx in self.start_residue_idx..=self.end_residue_idx {
@@ -27,12 +25,10 @@ impl<'a> ChainView<'a> {
                 atom_indices.push(residue_indices[residue_idx] as usize);
             }
         }
-
         // If the list is empty, return an empty iterator
         if atom_indices.is_empty() {
             return Box::new(std::iter::empty());
         }
-
         // Make a copy of the last atom index for use after we move atom_indices
         let last_atom_idx = *atom_indices.last().unwrap();
 
@@ -43,7 +39,6 @@ impl<'a> ChainView<'a> {
                 .map(move |i| ResidueView::new(self.data, atom_indices[i], atom_indices[i + 1]));
             Box::new(iter)
         } else {
-            // For most residues
             let main_residues = (0..atom_indices.len() - 1)
                 .map(move |i| ResidueView::new(self.data, atom_indices[i], atom_indices[i + 1]));
 
@@ -53,31 +48,13 @@ impl<'a> ChainView<'a> {
                 last_atom_idx,
                 self.data.get_size(),
             ));
-
             Box::new(main_residues.chain(last_residue))
         }
     }
-
     // Get the number of residues in this chain
     pub fn residue_count(&self) -> usize {
         self.end_residue_idx - self.start_residue_idx
     }
-
-    // // Get a view of all atoms in this chain
-    // pub fn atom_view(&self) -> AtomView<'a> {
-    //     // Create a selection of all atoms in this chain
-    //     let residue_starts = self.data.residue_start_indices.as_ref().unwrap();
-    //     let first_atom = residue_starts[self.start_residue_idx] as usize;
-    //     let last_atom = if self.end_residue_idx < residue_starts.len() {
-    //         residue_starts[self.end_residue_idx] as usize - 1
-    //     } else {
-    //         self.data.size - 1 // Last atom in structure
-    //     };
-
-    //     let indices: Vec<usize> = (first_atom..=last_atom).collect();
-    //     let selection = Selection::new(indices);
-    //     AtomView::new(self.data, selection)
-    // }
 }
 
 #[cfg(test)]
@@ -89,11 +66,9 @@ mod tests {
     fn test_chain_view() {
         let (prot_file, _temp) = TestFile::protein_04().create_temp().unwrap();
         let mut ac = load_structure(prot_file).unwrap();
-
         // Calculate indices first
         ac.calculate_chain_indices();
 
-        // Get chains
         let chains: Vec<_> = ac.iter_chains().collect();
         assert!(chains.len() > 0);
 
