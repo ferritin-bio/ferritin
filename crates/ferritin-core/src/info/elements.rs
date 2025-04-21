@@ -6,7 +6,6 @@
 use std::convert::TryInto;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// All elements from the periodic system.
 #[allow(missing_docs)]
 pub enum Element {

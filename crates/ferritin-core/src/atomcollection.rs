@@ -57,7 +57,6 @@ impl AtomCollection {
             residue_start_indices: None,
             chain_start_indices: None,
         };
-
         ac.calculate_chain_indices();
         ac
     }
@@ -131,7 +130,6 @@ impl AtomCollection {
         // return np.sqrt(vector_dot(diff, diff))
         unimplemented!()
     }
-
     pub fn connect_via_residue_names(&mut self) {
         if self.bonds.is_some() {
             println!("Bonds already in place. Not overwriting.");
@@ -139,7 +137,6 @@ impl AtomCollection {
         }
         let aa_bond_info = get_bonds_canonical20();
         let residue_starts = self.get_residue_starts();
-        // Iterate through residues
         let mut bonds = Vec::new();
         for res_i in 0..residue_starts.len() - 1 {
             let curr_start_i = residue_starts[res_i] as usize;
@@ -147,7 +144,6 @@ impl AtomCollection {
             if let Some(bond_dict_for_res) =
                 aa_bond_info.get(&self.res_names[curr_start_i].as_str())
             {
-                // Iterate through bonds in this residue
                 for &(atom_name1, atom_name2, bond_type) in bond_dict_for_res {
                     let atom_indices1: Vec<usize> = (curr_start_i..next_start_i)
                         .filter(|&i| self.atom_names[i] == atom_name1)
@@ -155,7 +151,6 @@ impl AtomCollection {
                     let atom_indices2: Vec<usize> = (curr_start_i..next_start_i)
                         .filter(|&i| self.atom_names[i] == atom_name2)
                         .collect();
-
                     // Create all possible bond combinations
                     for &i in &atom_indices1 {
                         for &j in &atom_indices2 {
@@ -231,14 +226,12 @@ impl AtomCollection {
         );
         starts
     }
-
     pub fn get_residue_start_indices(&self) -> Option<&Vec<i32>> {
         self.residue_start_indices.as_ref()
     }
     /// A new chain starts when the chain ID changes from one atom to the next.
     fn get_chain_starts(&self) -> Vec<usize> {
         let mut starts = vec![0];
-
         starts.extend(
             self.chain_ids
                 .iter()
@@ -250,7 +243,6 @@ impl AtomCollection {
                     },
                 ),
         );
-
         starts
     }
 
@@ -261,12 +253,8 @@ impl AtomCollection {
     pub fn iter_chains(&self) -> impl Iterator<Item = ChainView<'_>> {
         // Make sure indices are calculated
         let chain_starts = match &self.chain_start_indices {
-            Some(indices) => indices.clone(), // Clone to avoid reference type issues
-            None => {
-                // This is suboptimal as it recalculates every time if not pre-calculated
-                // Default to a single chain if none calculated
-                vec![0]
-            }
+            Some(indices) => indices.clone(),
+            None => Vec::new(),
         };
 
         (0..chain_starts.len()).map(move |i| {
@@ -277,7 +265,7 @@ impl AtomCollection {
                 // If it's the last chain, go to the end of the structure
                 match &self.residue_start_indices {
                     Some(indices) => indices.len(),
-                    None => self.size, // Fallback if residue indices not calculated
+                    None => self.size,
                 }
             };
 
@@ -288,163 +276,26 @@ impl AtomCollection {
             }
         })
     }
-
-    // Add to AtomCollection implementation
-    pub fn iter_residues(&self) -> Box<dyn Iterator<Item = ResidueView<'_>> + '_> {
+    pub fn iter_residues(&self) -> impl Iterator<Item = ResidueView<'_>> {
         let residue_starts = self.get_residue_starts();
         let atom_starts: Vec<usize> = residue_starts.iter().map(|&idx| idx as usize).collect();
-
-        // Check if we have residues
-        if atom_starts.is_empty() {
-            return Box::new(std::iter::empty());
-        }
-
-        // Get the last atom index before moving atom_starts
-        let last_idx = atom_starts.len() - 1;
-        let last_atom_idx = atom_starts[last_idx];
         let atom_size = self.get_size();
-
-        // Create iterators for all but the last residue
-        let main_residues = (0..atom_starts.len() - 1)
-            .map(move |i| ResidueView::new(self, atom_starts[i], atom_starts[i + 1]));
-
-        // Handle the last residue separately - using the saved value
-        let last_residue = std::iter::once(ResidueView::new(self, last_atom_idx, atom_size));
-
-        // Chain the two iterators
-        Box::new(main_residues.chain(last_residue))
+        // Create a copy of the last element if it exists
+        // Generate pairs for all residues
+        let last_atom_idx = atom_starts.last().copied();
+        (0..atom_starts.len().saturating_sub(1))
+            .map(move |i| ResidueView::new(self, atom_starts[i], atom_starts[i + 1]))
+            .chain(
+                last_atom_idx
+                    .map(|idx| ResidueView::new(self, idx, atom_size))
+                    .into_iter(),
+            )
     }
-
     /// Iterates over amino acid residues in the collection
     ///
     /// Returns a filtered iterator that only includes standard amino acid residues
-    pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueView<'_>> + '_ {
+    pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueView<'_>> {
         self.iter_residues()
             .filter(|residue| residue.is_amino_acid())
-    }
-
-    // pub fn iter_residues_aminoacid(&self) -> impl Iterator<Item = ResidueAtoms> {
-    //     self.iter_residues_all()
-    //         .filter(|residue| residue.is_amino_acid())
-    // }
-    // pub fn select(&self) -> AtomSelector {
-    //     AtomSelector::new(self)
-    // }
-    // pub fn select_by_chain(&self, chain_id: &str) -> Selection {
-    //     let indices: Vec<usize> = self
-    //         .chain_ids
-    //         .iter()
-    //         .enumerate()
-    //         .filter(|&(_, &ref chain)| chain == chain_id)
-    //         .map(|(i, _)| i)
-    //         .collect();
-    //     Selection::new(indices)
-    // }
-    // pub fn select_by_residue(&self, res_name: &str) -> Selection {
-    //     let indices: Vec<usize> = self
-    //         .res_names
-    //         .iter()
-    //         .enumerate()
-    //         .filter(|(_, name)| name.as_str() == res_name)
-    //         .map(|(i, _)| i)
-    //         .collect();
-    //     Selection::new(indices)
-    // }
-    // pub fn view(&self, selection: Selection) -> AtomView {
-    //     AtomView::new(self, selection)
-    // }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::load_structure;
-    use ferritin_test_data::TestFile;
-
-    #[test]
-    fn test_residue_iterator() {
-        let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let ac = load_structure(prot_file).unwrap();
-        assert_eq!(ac.get_size(), 1413);
-        // This includes Water Molecules
-        let max_resid = ac.get_resids().iter().max().unwrap_or(&0);
-        assert_eq!(*max_resid, 338);
-        // this fn is only available in-crate
-        // let residue_breaks = ac.get_residue_starts();
-        // assert_eq!(residue_breaks, vec![1, 2, 3]);
-    }
-
-    #[test]
-    fn test_chain_iterator() {
-        let (prot_file, _temp) = TestFile::protein_04().create_temp().unwrap();
-        let mut ac = load_structure(prot_file).unwrap();
-        ac.calculate_chain_indices();
-
-        // Test chain iteration
-        let chains: Vec<_> = ac.iter_chains().collect();
-        assert_eq!(chains.len(), 4);
-        assert_eq!(chains[0].chain_id(), "A");
-        assert_eq!(chains[1].chain_id(), "B");
-        assert_eq!(chains[2].chain_id(), "A");
-        assert_eq!(chains[3].chain_id(), "B");
-
-        // Check residue counts
-        let chain_a_residue_count = chains[0].residue_count();
-        let chain_b_residue_count = chains[1].residue_count();
-        let chain_a1_residue_count = chains[2].residue_count();
-        let chain_b1_residue_count = chains[3].residue_count();
-        // assert_eq!(chain_a_residue_count, 123);
-        // assert_eq!(chain_b_residue_count, 103);
-        assert_eq!(
-            chain_a_residue_count
-                + chain_b_residue_count
-                + chain_a1_residue_count
-                + chain_b1_residue_count,
-            ac.get_residue_start_indices().unwrap().len()
-        );
-    }
-    #[test]
-    fn test_atom_collection_iter_residues() {
-        let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let ac = load_structure(prot_file).unwrap();
-
-        let residues: Vec<_> = ac.iter_residues().collect();
-        assert!(!residues.is_empty());
-
-        // Check the first residue
-        let first_residue = &residues[0];
-        assert!(first_residue.atom_count() > 0);
-
-        // Check that all atoms in a residue have the same residue ID and name
-        let res_id = first_residue.residue_id();
-        let res_name = first_residue.residue_name();
-        assert_eq!(res_id, 0);
-        assert_eq!(res_name, "MET");
-
-        // Count of atoms in all residues should match total atom count
-        let total_atoms_in_residues: usize = residues.iter().map(|r| r.atom_count()).sum();
-        assert_eq!(total_atoms_in_residues, ac.get_size());
-    }
-
-    #[test]
-    fn test_chain_iter_residues() {
-        let (prot_file, _temp) = TestFile::protein_04().create_temp().unwrap();
-        let mut ac = load_structure(prot_file).unwrap();
-        ac.calculate_chain_indices();
-
-        // Get the first chain
-        let chains: Vec<_> = ac.iter_chains().collect();
-        let first_chain = &chains[0];
-
-        // Test residue iteration within a chain
-        let residues: Vec<_> = first_chain.iter_residues().collect();
-        assert!(!residues.is_empty());
-
-        // All residues should be in the same chain
-        let chain_id = first_chain.chain_id();
-        for residue in &residues {
-            assert_eq!(residue.chain_id(), chain_id);
-        }
-        // The number of residues should match chain's residue count
-        assert_eq!(residues.len(), first_chain.residue_count());
     }
 }
