@@ -5,7 +5,7 @@
 
 use super::ColorScheme;
 use bevy::prelude::*;
-use bevy::render::mesh::{Indices, PrimitiveTopology};
+use bevy::render::mesh::PrimitiveTopology;
 use bevy::render::render_asset::RenderAssetUsages;
 use bon::Builder;
 use ferritin_core::AtomCollection;

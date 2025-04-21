@@ -568,8 +568,8 @@ mod tests {
     #[test]
     fn test_all_atom37_tensor() -> Result<()> {
         let device = Device::Cpu;
-        let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let ac = load_structure(pdb_file).unwrap();
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp()?;
+        let ac = load_structure(pdb_file)?;
         let ac_backbone_tensor: Tensor = ac.to_numeric_atom37(&device).expect("REASON");
         assert_eq!(ac_backbone_tensor.dims(), &[1, 154, 37, 3]);
 
@@ -637,10 +637,8 @@ mod tests {
         ];
         for (atom_name, (b, i, j, k), expected) in allatom_coords {
             let actual: Vec<f32> = ac_backbone_tensor
-                .i((b, i, j, k))
-                .unwrap()
-                .to_vec1()
-                .unwrap();
+                .i((b, i, j, k))?
+                .to_vec1()?;
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
         }
         Ok(())
@@ -649,8 +647,8 @@ mod tests {
     #[test]
     fn test_ligand_tensor() -> Result<()> {
         let device = Device::Cpu;
-        let (pdb_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-        let ac = load_structure(pdb_file).unwrap();
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp()?;
+        let ac = load_structure(pdb_file)?;
         let (ligand_coords, ligand_elements, _) =
             ac.to_numeric_ligand_atoms(&device).expect("REASON");
         // 154 residues; 54 other atoms.

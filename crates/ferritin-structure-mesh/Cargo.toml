@@ -17,5 +17,3 @@ rerun = { workspace = true, optional = false }
 default = []
 
 [dev-dependencies]
-anyhow.workspace = true
-ferritin-test-data = { path = "../ferritin-test-data" }
