@@ -39,7 +39,7 @@
 //         └──────────────┘         └─────────────────┘
 
 use candle_core::{D, DType, Device, Module, Result, Tensor};
-use candle_nn::{Embedding, Linear, VarBuilder, linear, ops};
+use candle_nn::{Embedding, LayerNorm, Linear, VarBuilder, linear, ops};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
 
@@ -264,8 +264,6 @@ impl ESM2Embeddings {
     }
 }
 
-use candle_nn::LayerNorm;
-
 pub struct ESM2LMHead {
     dense: Linear,
     layer_norm: LayerNorm,
@@ -278,7 +276,11 @@ impl ESM2LMHead {
         let bias = vb.get(config.vocab_size as usize, "bias")?;
 
         // Use candle_nn::LayerNorm
-        let layer_norm = candle_nn::layer_norm(hidden_size, config.layer_norm_eps as f64, vb.pp("layer_norm"))?;
+        let layer_norm = candle_nn::layer_norm(
+            hidden_size,
+            config.layer_norm_eps as f64,
+            vb.pp("layer_norm"),
+        )?;
 
         let decoder = Linear::new(embedding.embeddings().clone(), Some(bias));
         Ok(ESM2LMHead {
@@ -405,7 +407,6 @@ impl ESM2Attention {
     }
 }
 
-
 // Full transformer layer
 pub struct ESM2Layer {
     self_attn: ESM2Attention,
@@ -422,8 +423,13 @@ impl ESM2Layer {
         let multi_head = ESM2Attention::load(vb.pp("attention"), config)?;
         let fc1 = linear(embed_dim, ffn_embed_dim, vb.pp("intermediate.dense"))?;
         let fc2 = linear(ffn_embed_dim, embed_dim, vb.pp("output.dense"))?;
-        let self_attn_layer_norm = candle_nn::layer_norm(embed_dim, config.layer_norm_eps as f64, vb.pp("attention.LayerNorm"))?;
-        let final_layer_norm = candle_nn::layer_norm(embed_dim, config.layer_norm_eps as f64, vb.pp("LayerNorm"))?;
+        let self_attn_layer_norm = candle_nn::layer_norm(
+            embed_dim,
+            config.layer_norm_eps as f64,
+            vb.pp("attention.LayerNorm"),
+        )?;
+        let final_layer_norm =
+            candle_nn::layer_norm(embed_dim, config.layer_norm_eps as f64, vb.pp("LayerNorm"))?;
 
         Ok(Self {
             self_attn: multi_head,
@@ -469,7 +475,11 @@ impl ESM2 {
         let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), &config)?;
 
         // Use candle_nn::LayerNorm for final layer norm
-        let layer_norm_after = candle_nn::layer_norm(config.hidden_size, config.layer_norm_eps as f64, vb.pp("esm.encoder.emb_layer_norm_after"))?;
+        let layer_norm_after = candle_nn::layer_norm(
+            config.hidden_size,
+            config.layer_norm_eps as f64,
+            vb.pp("esm.encoder.emb_layer_norm_after"),
+        )?;
 
         let lm_head = ESM2LMHead::load(
             vb.pp("lm_head"),
