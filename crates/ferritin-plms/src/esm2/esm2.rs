@@ -244,22 +244,15 @@ impl RotaryEmbedding {
 
 pub struct ESM2Embeddings {
     pub(crate) word_embeddings: Embedding,
-    position_embeddings: Embedding,
-    position_ids: Tensor,
     embedding_scale: f64,
 }
 impl ESM2Embeddings {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let vocab_size = config.vocab_size as usize;
         let hidden_size = config.hidden_size;
-        let max_pos = config.max_position_embeddings as usize;
         let word_embeddings = vb.get((vocab_size, hidden_size), "word_embeddings.weight")?;
-        let pos_embeddings = vb.get((max_pos, hidden_size), "position_embeddings.weight")?;
-        let position_ids = vb.get((1, max_pos), "position_ids")?;
         Ok(Self {
             word_embeddings: Embedding::new(word_embeddings, hidden_size),
-            position_embeddings: Embedding::new(pos_embeddings, hidden_size),
-            position_ids,
             embedding_scale: (hidden_size as f64).sqrt(),
         })
     }
@@ -267,14 +260,7 @@ impl ESM2Embeddings {
         self.word_embeddings.forward(x)
     }
     pub fn forward(&self, input_ids: &Tensor) -> Result<Tensor> {
-        let token_embeddings = self.embed_tokens(input_ids)?;
-        let seq_length = input_ids.dim(1)?;
-        let position_ids = self
-            .position_ids
-            .narrow(1, 0, seq_length)?
-            .to_dtype(DType::U32)?;
-        let position_embeddings = self.position_embeddings.forward(&position_ids)?;
-        token_embeddings.add(&position_embeddings)
+        self.embed_tokens(input_ids)? * self.embedding_scale
     }
 }
 
