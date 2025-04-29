@@ -417,17 +417,10 @@ impl ESM1LayerNorm {
         })
     }
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        // First compute mean over the last dimension
         let means = x.mean_keepdim(D::Minus1)?;
         let x_zeromean = x.broadcast_sub(&means)?;
-
-        // Compute variance along last dimension
         let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
-
-        // Normalize with sqrt(variance + eps)
         let x_norm = x_zeromean.broadcast_div(&(variances + self.eps)?.sqrt()?)?;
-
-        // Apply scale and shift
         x_norm
             .broadcast_mul(&self.weight)?
             .broadcast_add(&self.bias)
