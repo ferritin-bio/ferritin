@@ -220,15 +220,12 @@ impl RotaryEmbedding {
         // Get the appropriate positional embeddings for this sequence length
         let cos = self.cos_cache.narrow(0, 0, seq_len)?;
         let sin = self.sin_cache.narrow(0, 0, seq_len)?;
-        // Reshape to match the dimensions of query and key tensors
         let cos = cos.unsqueeze(0)?; // Shape becomes (1, seq_len, head_dim)
         let sin = sin.unsqueeze(0)?; // Shape becomes (1, seq_len, head_dim)
-        // Apply rotary embeddings to query
         let query_rot = rotate_half(query)?;
         let query_rotated = query
             .broadcast_mul(&cos)?
             .add(&query_rot.broadcast_mul(&sin)?)?;
-        // Apply rotary embeddings to key
         let key_rot = rotate_half(key)?;
         let key_rotated = key
             .broadcast_mul(&cos)?
@@ -271,14 +268,11 @@ impl ESM2LMHead {
         let hidden_size = config.hidden_size;
         let dense = linear(hidden_size, hidden_size, vb.pp("dense"))?;
         let bias = vb.get(config.vocab_size as usize, "bias")?;
-
-        // Use candle_nn::LayerNorm
         let layer_norm = candle_nn::layer_norm(
             hidden_size,
             config.layer_norm_eps as f64,
             vb.pp("layer_norm"),
         )?;
-
         let decoder = Linear::new(embedding.embeddings().clone(), Some(bias));
         Ok(ESM2LMHead {
             dense,
