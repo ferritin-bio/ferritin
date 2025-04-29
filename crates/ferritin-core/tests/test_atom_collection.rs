@@ -1,4 +1,4 @@
-use ferritin_core::{AtomView, ChainView, ResidueView, load_structure};
+use ferritin_core::{ResidueView, load_structure};
 use ferritin_test_data::TestFile;
 
 #[test]

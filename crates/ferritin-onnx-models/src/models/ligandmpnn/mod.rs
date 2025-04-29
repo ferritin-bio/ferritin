@@ -8,7 +8,7 @@
 //!
 use crate::{ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64};
 use anyhow::Result;
-use candle_core::{Device, Tensor};
+use candle_core::Tensor;
 use candle_nn::ops;
 use ferritin_core::AtomCollection;
 use ferritin_plms::device;
