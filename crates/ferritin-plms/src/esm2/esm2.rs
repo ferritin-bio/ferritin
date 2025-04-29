@@ -264,9 +264,11 @@ impl ESM2Embeddings {
     }
 }
 
+use candle_nn::LayerNorm;
+
 pub struct ESM2LMHead {
     dense: Linear,
-    layer_norm: ESM1LayerNorm,
+    layer_norm: LayerNorm,
     decoder: Linear,
 }
 impl ESM2LMHead {
@@ -275,8 +277,8 @@ impl ESM2LMHead {
         let dense = linear(hidden_size, hidden_size, vb.pp("dense"))?;
         let bias = vb.get(config.vocab_size as usize, "bias")?;
 
-        // Use custom ESM1LayerNorm
-        let layer_norm = ESM1LayerNorm::load(vb.pp("layer_norm"), config)?;
+        // Use candle_nn::LayerNorm
+        let layer_norm = candle_nn::layer_norm(hidden_size, config.layer_norm_eps as f64, vb.pp("layer_norm"))?;
 
         let decoder = Linear::new(embedding.embeddings().clone(), Some(bias));
         Ok(ESM2LMHead {
@@ -289,8 +291,8 @@ impl ESM2LMHead {
         // Apply dense layer and GELU activation
         let hidden = xs.apply(&self.dense)?.gelu()?;
 
-        // Apply custom layer norm
-        let normalized = self.layer_norm.forward(&hidden)?;
+        // Apply standard layer norm
+        let normalized = hidden.apply(&self.layer_norm)?;
 
         // Apply decoder (projection to vocabulary)
         normalized.apply(&self.decoder)
@@ -403,37 +405,14 @@ impl ESM2Attention {
     }
 }
 
-pub struct ESM1LayerNorm {
-    weight: Tensor,
-    bias: Tensor,
-    eps: f64,
-}
-impl ESM1LayerNorm {
-    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        Ok(Self {
-            weight: vb.get(config.hidden_size, "weight")?,
-            bias: vb.get(config.hidden_size, "bias")?,
-            eps: config.layer_norm_eps as f64,
-        })
-    }
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let means = x.mean_keepdim(D::Minus1)?;
-        let x_zeromean = x.broadcast_sub(&means)?;
-        let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
-        let x_norm = x_zeromean.broadcast_div(&(variances + self.eps)?.sqrt()?)?;
-        x_norm
-            .broadcast_mul(&self.weight)?
-            .broadcast_add(&self.bias)
-    }
-}
 
 // Full transformer layer
 pub struct ESM2Layer {
     self_attn: ESM2Attention,
-    self_attn_layer_norm: ESM1LayerNorm,
+    self_attn_layer_norm: LayerNorm,
     fc1: Linear,
     fc2: Linear,
-    final_layer_norm: ESM1LayerNorm,
+    final_layer_norm: LayerNorm,
 }
 
 impl ESM2Layer {
@@ -443,8 +422,8 @@ impl ESM2Layer {
         let multi_head = ESM2Attention::load(vb.pp("attention"), config)?;
         let fc1 = linear(embed_dim, ffn_embed_dim, vb.pp("intermediate.dense"))?;
         let fc2 = linear(ffn_embed_dim, embed_dim, vb.pp("output.dense"))?;
-        let self_attn_layer_norm = ESM1LayerNorm::load(vb.pp("attention.LayerNorm"), config)?;
-        let final_layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
+        let self_attn_layer_norm = candle_nn::layer_norm(embed_dim, config.layer_norm_eps as f64, vb.pp("attention.LayerNorm"))?;
+        let final_layer_norm = candle_nn::layer_norm(embed_dim, config.layer_norm_eps as f64, vb.pp("LayerNorm"))?;
 
         Ok(Self {
             self_attn: multi_head,
@@ -457,14 +436,14 @@ impl ESM2Layer {
     fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
         // Input: [seq_len, batch_size, embed_dim]
         // Apply layer norm and then attention
-        let norm_x = self.self_attn_layer_norm.forward(xs)?;
+        let norm_x = xs.apply(&self.self_attn_layer_norm)?;
         let (attn_out, attn) = self.self_attn.forward(&norm_x, &norm_x, &norm_x)?;
 
         // Residual connection
         let x = (attn_out + xs)?;
 
         // Apply layer norm and then feed-forward network
-        let norm_x2 = self.final_layer_norm.forward(&x)?;
+        let norm_x2 = x.apply(&self.final_layer_norm)?;
         let ffn_out = norm_x2.apply(&self.fc1)?.gelu()?.apply(&self.fc2)?;
 
         // Another residual connection
@@ -476,7 +455,7 @@ impl ESM2Layer {
 pub struct ESM2 {
     embeddings: ESM2Embeddings,
     layers: Vec<ESM2Layer>,
-    layer_norm_after: ESM1LayerNorm,
+    layer_norm_after: LayerNorm,
     lm_head: ESM2LMHead,
     contact_head: ESM2ContactHead,
 }
@@ -489,9 +468,8 @@ impl ESM2 {
             .collect::<Result<Vec<_>>>()?;
         let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), &config)?;
 
-        // Use custom ESM1LayerNorm for final layer norm
-        let layer_norm_after =
-            ESM1LayerNorm::load(vb.pp("esm.encoder.emb_layer_norm_after"), &config)?;
+        // Use candle_nn::LayerNorm for final layer norm
+        let layer_norm_after = candle_nn::layer_norm(config.hidden_size, config.layer_norm_eps as f64, vb.pp("esm.encoder.emb_layer_norm_after"))?;
 
         let lm_head = ESM2LMHead::load(
             vb.pp("lm_head"),
