@@ -39,7 +39,7 @@
 //         └──────────────┘         └─────────────────┘
 
 use candle_core::{D, DType, Device, Module, Result, Tensor};
-use candle_nn::{Embedding, Linear, VarBuilder, linear, ops};
+use candle_nn::{Embedding, LayerNorm, Linear, VarBuilder, linear, ops};
 use serde::Deserialize;
 use tokenizers::Tokenizer;
 
@@ -217,22 +217,15 @@ impl RotaryEmbedding {
     }
     fn forward(&self, query: &Tensor, key: &Tensor) -> Result<(Tensor, Tensor)> {
         let (_batch, seq_len, _head_dim) = query.dims3()?;
-
         // Get the appropriate positional embeddings for this sequence length
         let cos = self.cos_cache.narrow(0, 0, seq_len)?;
         let sin = self.sin_cache.narrow(0, 0, seq_len)?;
-
-        // Reshape to match the dimensions of query and key tensors
         let cos = cos.unsqueeze(0)?; // Shape becomes (1, seq_len, head_dim)
         let sin = sin.unsqueeze(0)?; // Shape becomes (1, seq_len, head_dim)
-
-        // Apply rotary embeddings to query
         let query_rot = rotate_half(query)?;
         let query_rotated = query
             .broadcast_mul(&cos)?
             .add(&query_rot.broadcast_mul(&sin)?)?;
-
-        // Apply rotary embeddings to key
         let key_rot = rotate_half(key)?;
         let key_rotated = key
             .broadcast_mul(&cos)?
@@ -260,13 +253,14 @@ impl ESM2Embeddings {
         self.word_embeddings.forward(x)
     }
     pub fn forward(&self, input_ids: &Tensor) -> Result<Tensor> {
-        self.embed_tokens(input_ids)? * self.embedding_scale
+        self.embed_tokens(input_ids)?
+            .affine(self.embedding_scale, 0.0)
     }
 }
 
 pub struct ESM2LMHead {
     dense: Linear,
-    layer_norm: ESM1LayerNorm,
+    layer_norm: LayerNorm,
     decoder: Linear,
 }
 impl ESM2LMHead {
@@ -274,10 +268,11 @@ impl ESM2LMHead {
         let hidden_size = config.hidden_size;
         let dense = linear(hidden_size, hidden_size, vb.pp("dense"))?;
         let bias = vb.get(config.vocab_size as usize, "bias")?;
-
-        // Use custom ESM1LayerNorm
-        let layer_norm = ESM1LayerNorm::load(vb.pp("layer_norm"), config)?;
-
+        let layer_norm = candle_nn::layer_norm(
+            hidden_size,
+            config.layer_norm_eps as f64,
+            vb.pp("layer_norm"),
+        )?;
         let decoder = Linear::new(embedding.embeddings().clone(), Some(bias));
         Ok(ESM2LMHead {
             dense,
@@ -286,13 +281,8 @@ impl ESM2LMHead {
         })
     }
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        // Apply dense layer and GELU activation
         let hidden = xs.apply(&self.dense)?.gelu()?;
-
-        // Apply custom layer norm
-        let normalized = self.layer_norm.forward(&hidden)?;
-
-        // Apply decoder (projection to vocabulary)
+        let normalized = hidden.apply(&self.layer_norm)?;
         normalized.apply(&self.decoder)
     }
 }
@@ -386,8 +376,9 @@ impl ESM2Attention {
 
         // Calculate attention scores with proper scaling
         // todo: review for parity with ESM2-py
+        // Calculate scale using f64 as required by the affine method
         let scale = (self.head_dim as f64).powf(-0.5);
-        let attention_scores = (q.matmul(&k.transpose(1, 2)?)? * scale)?;
+        let attention_scores = q.matmul(&k.transpose(1, 2)?)?.affine(scale, 0.0)?; // Bias is f64 literal
 
         // Apply softmax to get attention weights
         let attention_weights = ops::softmax_last_dim(&attention_scores)?;
@@ -403,37 +394,13 @@ impl ESM2Attention {
     }
 }
 
-pub struct ESM1LayerNorm {
-    weight: Tensor,
-    bias: Tensor,
-    eps: f64,
-}
-impl ESM1LayerNorm {
-    pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
-        Ok(Self {
-            weight: vb.get(config.hidden_size, "weight")?,
-            bias: vb.get(config.hidden_size, "bias")?,
-            eps: config.layer_norm_eps as f64,
-        })
-    }
-    fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        let means = x.mean_keepdim(D::Minus1)?;
-        let x_zeromean = x.broadcast_sub(&means)?;
-        let variances = x_zeromean.powf(2.0)?.mean_keepdim(D::Minus1)?;
-        let x_norm = x_zeromean.broadcast_div(&(variances + self.eps)?.sqrt()?)?;
-        x_norm
-            .broadcast_mul(&self.weight)?
-            .broadcast_add(&self.bias)
-    }
-}
-
 // Full transformer layer
 pub struct ESM2Layer {
     self_attn: ESM2Attention,
-    self_attn_layer_norm: ESM1LayerNorm,
+    self_attn_layer_norm: LayerNorm,
     fc1: Linear,
     fc2: Linear,
-    final_layer_norm: ESM1LayerNorm,
+    final_layer_norm: LayerNorm,
 }
 
 impl ESM2Layer {
@@ -443,8 +410,13 @@ impl ESM2Layer {
         let multi_head = ESM2Attention::load(vb.pp("attention"), config)?;
         let fc1 = linear(embed_dim, ffn_embed_dim, vb.pp("intermediate.dense"))?;
         let fc2 = linear(ffn_embed_dim, embed_dim, vb.pp("output.dense"))?;
-        let self_attn_layer_norm = ESM1LayerNorm::load(vb.pp("attention.LayerNorm"), config)?;
-        let final_layer_norm = ESM1LayerNorm::load(vb.pp("LayerNorm"), config)?;
+        let self_attn_layer_norm = candle_nn::layer_norm(
+            embed_dim,
+            config.layer_norm_eps as f64,
+            vb.pp("attention.LayerNorm"),
+        )?;
+        let final_layer_norm =
+            candle_nn::layer_norm(embed_dim, config.layer_norm_eps as f64, vb.pp("LayerNorm"))?;
 
         Ok(Self {
             self_attn: multi_head,
@@ -457,17 +429,11 @@ impl ESM2Layer {
     fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
         // Input: [seq_len, batch_size, embed_dim]
         // Apply layer norm and then attention
-        let norm_x = self.self_attn_layer_norm.forward(xs)?;
+        let norm_x = xs.apply(&self.self_attn_layer_norm)?;
         let (attn_out, attn) = self.self_attn.forward(&norm_x, &norm_x, &norm_x)?;
-
-        // Residual connection
         let x = (attn_out + xs)?;
-
-        // Apply layer norm and then feed-forward network
-        let norm_x2 = self.final_layer_norm.forward(&x)?;
+        let norm_x2 = x.apply(&self.final_layer_norm)?;
         let ffn_out = norm_x2.apply(&self.fc1)?.gelu()?.apply(&self.fc2)?;
-
-        // Another residual connection
         Ok(((ffn_out + x)?, attn))
     }
 }
@@ -476,7 +442,7 @@ impl ESM2Layer {
 pub struct ESM2 {
     embeddings: ESM2Embeddings,
     layers: Vec<ESM2Layer>,
-    layer_norm_after: ESM1LayerNorm,
+    layer_norm_after: LayerNorm,
     lm_head: ESM2LMHead,
     contact_head: ESM2ContactHead,
 }
@@ -488,11 +454,11 @@ impl ESM2 {
             .map(|i| ESM2Layer::load(vb.pp(format!("esm.encoder.layer.{}", i)), &config))
             .collect::<Result<Vec<_>>>()?;
         let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), &config)?;
-
-        // Use custom ESM1LayerNorm for final layer norm
-        let layer_norm_after =
-            ESM1LayerNorm::load(vb.pp("esm.encoder.emb_layer_norm_after"), &config)?;
-
+        let layer_norm_after = candle_nn::layer_norm(
+            config.hidden_size,
+            config.layer_norm_eps as f64,
+            vb.pp("esm.encoder.emb_layer_norm_after"),
+        )?;
         let lm_head = ESM2LMHead::load(
             vb.pp("lm_head"),
             &config,
@@ -514,24 +480,18 @@ impl ESM2 {
             .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
     }
     pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
-        // x = self.embed_scale * self.embed_tokens(tokens)
         let mut xs = self.embeddings.forward(x)?;
-
         // Transpose to sequence-first format for transformer processing
         xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
-
         // Process through transformer layers
         for (_layer_idx, layer) in self.layers.iter().enumerate() {
             let (new_xs, _attn) = layer.forward(&xs)?;
             xs = new_xs;
         }
-
         // Apply final layer normalization
         xs = self.layer_norm_after.forward(&xs)?;
-
         // Transpose back to batch-first format for output
         xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
-
         // Apply language model head to get logits
         let logits = self.lm_head.forward(&xs)?;
 
