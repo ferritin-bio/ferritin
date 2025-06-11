@@ -21,6 +21,7 @@ use ort::{
         Session,
         builder::{GraphOptimizationLevel, SessionBuilder},
     },
+    value::Tensor as OrtTensor,
 };
 use std::path::PathBuf;
 use tokenizers::Tokenizer;
@@ -49,6 +50,7 @@ impl ESM2 {
             tokenizer,
         })
     }
+
     pub fn load_model_path(model: ESM2Models) -> Result<PathBuf> {
         let api = Api::new()?;
         let repo_id = match model {
@@ -61,11 +63,13 @@ impl ESM2 {
         let model_path = api.model(repo_id).get("model.onnx")?;
         Ok(model_path)
     }
+
     pub fn load_tokenizer() -> Result<Tokenizer> {
         let tokenizer_bytes = include_bytes!("tokenizer.json");
         Tokenizer::from_bytes(tokenizer_bytes)
             .map_err(|e| anyhow!("Failed to load tokenizer: {}", e))
     }
+
     fn create_session() -> Result<SessionBuilder> {
         ort::init()
             .with_name("ESM2")
@@ -75,25 +79,33 @@ impl ESM2 {
             .with_optimization_level(GraphOptimizationLevel::Level1)?
             .with_intra_threads(1)?)
     }
+
     pub fn run_model(&self, sequence: &str) -> Result<Tensor> {
-        let model = self.session.clone().commit_from_file(&self.model_path)?;
+        let mut model = self.session.clone().commit_from_file(&self.model_path)?;
         let tokens = self
             .tokenizer
             .encode(sequence, false)
             .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
         let token_ids = tokens.get_ids();
         let shape = (1, tokens.len());
+
         // Todo: Are we masking this correctly?
         let mask_array: Array2<i64> = Array2::from_shape_vec(shape, vec![1; tokens.len()])?;
         let tokens_array: Array2<i64> = Array2::from_shape_vec(
             shape,
             token_ids.iter().map(|&x| x as i64).collect::<Vec<_>>(),
         )?;
-        let outputs =
-            model.run(ort::inputs!["input_ids" => tokens_array,"attention_mask" => mask_array]?)?;
-        let logits = outputs["logits"].try_extract_tensor::<f32>()?.to_owned();
+
+        let inputs = ort::inputs![
+            "input_ids" => OrtTensor::from_array(tokens_array)?,
+            "attention_mask" => OrtTensor::from_array(mask_array)?
+        ];
+
+        let outputs = model.run(inputs)?;
+        let logits = outputs["logits"].try_extract_array::<f32>()?.to_owned();
         Ok(ndarray_to_tensor_f32(logits)?)
     }
+
     // Softmax and simplify
     pub fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<PseudoProbability>> {
         let tensor = ops::softmax(tensor, D::Minus1)?;
@@ -126,6 +138,7 @@ impl ESM2 {
 mod tests {
     use super::*;
 
+    #[test]
     fn test_tokenizer_load() -> Result<()> {
         let tokenizer = ESM2::load_tokenizer()?;
         let text = "MLKLRV";
