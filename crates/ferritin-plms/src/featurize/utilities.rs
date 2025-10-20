@@ -636,9 +636,7 @@ mod tests {
             ("OXT", (0, 0, 36, ..), vec![0.0, 0.0, 0.0]),
         ];
         for (atom_name, (b, i, j, k), expected) in allatom_coords {
-            let actual: Vec<f32> = ac_backbone_tensor
-                .i((b, i, j, k))?
-                .to_vec1()?;
+            let actual: Vec<f32> = ac_backbone_tensor.i((b, i, j, k))?.to_vec1()?;
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
         }
         Ok(())
