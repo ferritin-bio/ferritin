@@ -36,7 +36,7 @@ hf-hub = "0.4.3"
 itertools = "0.14.0"
 ndarray = "0.16.1"
 ort = "=2.0.0-rc.10"
-rerun = "0.26.0"
+rerun = "0.25"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.145"
 strum = { version = "0.27.2", features = ["derive"] }
