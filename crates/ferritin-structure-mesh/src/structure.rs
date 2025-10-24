@@ -5,8 +5,6 @@
 
 use super::ColorScheme;
 use bevy::prelude::*;
-use bevy::render::mesh::PrimitiveTopology;
-use bevy::render::render_asset::RenderAssetUsages;
 use bon::Builder;
 use ferritin_core::AtomCollection;
 
@@ -56,34 +54,37 @@ impl Structure {
 
     // Placeholder implementations of rendering methods
     fn render_wireframe(&self) -> Mesh {
-        Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::default())
+        Mesh::new(
+            bevy::mesh::PrimitiveTopology::LineList,
+            bevy::asset::RenderAssetUsages::default(),
+        )
     }
 
     fn render_cartoon(&self) -> Mesh {
         Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::default(),
+            bevy::mesh::PrimitiveTopology::TriangleList,
+            bevy::asset::RenderAssetUsages::default(),
         )
     }
 
     fn render_ballandstick(&self) -> Mesh {
         Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::default(),
+            bevy::mesh::PrimitiveTopology::TriangleList,
+            bevy::asset::RenderAssetUsages::default(),
         )
     }
 
     fn render_spheres(&self) -> Mesh {
         Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::default(),
+            bevy::mesh::PrimitiveTopology::TriangleList,
+            bevy::asset::RenderAssetUsages::default(),
         )
     }
 
     fn render_putty(&self) -> Mesh {
         Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::default(),
+            bevy::mesh::PrimitiveTopology::TriangleList,
+            bevy::asset::RenderAssetUsages::default(),
         )
     }
 }
