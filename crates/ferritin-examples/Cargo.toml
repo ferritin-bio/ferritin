@@ -30,7 +30,7 @@ ferritin-plms = { path = "../ferritin-plms" }
 ferritin-onnx-models = { path = "../ferritin-onnx-models" }
 ferritin-structure-mesh = { path = "../ferritin-structure-mesh" }
 hf-hub.workspace = true
-rerun = { workspace = true, features = ["native_viewer"] }
+# rerun = { workspace = true, features = ["native_viewer"] }
 
 # The metal feature is defined above, and we don't need to redefine it conditionally
 
@@ -38,13 +38,13 @@ rerun = { workspace = true, features = ["native_viewer"] }
 candle-metal-kernels.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-tokenizers = { version = "0.21.1", default-features = false, features = [
+tokenizers = { version = "0.21.4", default-features = false, features = [
     "unstable_wasm",
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 hf-hub.workspace = true
-tokenizers = { version = "0.21.1" } # full features for non-wasm
+tokenizers = { version = "0.21.4" } # full features for non-wasm
 
 
 [dev-dependencies]
