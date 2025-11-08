@@ -7,7 +7,8 @@ license.workspace = true
 description.workspace = true
 
 [features]
-default = ["plms", "mesh"]
+default = ["plms", "mesh", "bevy"]
+bevy = []
 metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 mesh = ["ferritin/mesh"]
 plms = ["ferritin/plms"]
@@ -59,18 +60,22 @@ required-features = ["bevy"]
 [[example]]
 name = "bevy_basic_putty"
 path = "examples/bevy/basic_putty.rs"
+required-features = ["bevy"]
 
 [[example]]
 name = "bevy_basic_snapshot"
 path = "examples/bevy/basic_snapshot.rs"
+required-features = ["bevy"]
 
 [[example]]
 name = "bevy_basic_spheres"
 path = "examples/bevy/basic_spheres.rs"
+required-features = ["bevy"]
 
 [[example]]
 name = "bevy_screenshot"
 path = "examples/bevy/screenshot.rs"
+required-features = ["bevy"]
 
 [[example]]
 name = "rerun"
