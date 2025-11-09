@@ -73,7 +73,7 @@ impl LigandMPNN {
         ort::init()
             .with_name("LigandMPNN")
             .with_execution_providers([CUDAExecutionProvider::default().build()])
-            .commit()?;
+            .commit();
         Ok(Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level1)?
             .with_intra_threads(1)?)

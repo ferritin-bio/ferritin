@@ -129,7 +129,7 @@ impl UnifiedTransformerBlock {
     pub fn load(vb: VarBuilder, config: &ESMCConfig, layer: usize) -> Result<Self> {
         let ESMCConfig {
             ffn_type,
-            
+
             use_plain_attn,
             n_layers_geom,
             residue_scaling_factor,

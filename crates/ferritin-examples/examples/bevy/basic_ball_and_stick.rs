@@ -49,7 +49,6 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-
 #[derive(Component)]
 struct MainCamera;
 

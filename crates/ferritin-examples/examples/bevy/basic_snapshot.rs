@@ -4,8 +4,6 @@ use bevy::{
     app::AppExit,
     prelude::*,
     render::view::screenshot::{Capturing, Screenshot, save_to_disk},
-    window::SystemCursorIcon,
-    winit::cursor::CursorIcon,
 };
 use ferritin_structure_mesh::{ColorScheme, RenderOptions, StructurePlugin, StructureSettings};
 use ferritin_test_data::TestFile;
@@ -43,27 +41,25 @@ fn main() -> Result<()> {
 }
 
 fn screenshot_saving(
-    mut commands: Commands,
+    _commands: Commands,
     screenshot_saving: Query<Entity, With<Capturing>>,
-    windows: Query<Entity, With<Window>>,
+    _windows: Query<Entity, With<Window>>,
 ) {
-    let Ok(window) = windows.single() else {
-        return;
-    };
+    // TODO: Update cursor icon API for Bevy 0.17
+    // Cursor icon management has changed in Bevy 0.17
+    // See: https://bevyengine.org/learn/migration-guides/0.16-0.17/
     match screenshot_saving.iter().count() {
         0 => {
-            commands.entity(window).remove::<CursorIcon>();
+            // commands.entity(window).remove::<SystemCursorIcon>();
         }
         x if x > 0 => {
-            commands
-                .entity(window)
-                .insert(CursorIcon::from(SystemCursorIcon::Progress));
+            // commands.entity(window).insert(SystemCursorIcon::Progress);
         }
         _ => {}
     }
 }
 
-fn take_screenshot_and_exit(mut commands: Commands, mut exit: EventWriter<AppExit>) {
+fn take_screenshot_and_exit(mut commands: Commands, mut exit: MessageWriter<AppExit>) {
     // Wait a few frames to make sure everything is properly initialized
     static mut FRAME_COUNT: u32 = 0;
     unsafe {

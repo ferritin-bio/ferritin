@@ -74,7 +74,7 @@ impl ESM2 {
         ort::init()
             .with_name("ESM2")
             .with_execution_providers([CUDAExecutionProvider::default().build()])
-            .commit()?;
+            .commit();
         Ok(Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level1)?
             .with_intra_threads(1)?)

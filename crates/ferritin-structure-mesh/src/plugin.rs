@@ -51,14 +51,14 @@ impl Plugin for StructurePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(StructureFiles(self.initial_files.clone()))
             .add_systems(Startup, load_initial_proteins)
-            .add_event::<LoadProteinEvent>();
+            .add_message::<LoadProteinEvent>();
     }
 }
 
 #[derive(Resource)]
 struct StructureFiles(Vec<(PathBuf, StructureSettings)>);
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct LoadProteinEvent(pub PathBuf);
 
 fn load_initial_proteins(
