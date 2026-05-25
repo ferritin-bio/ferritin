@@ -76,8 +76,10 @@ impl ESM2 {
             .with_execution_providers([CUDAExecutionProvider::default().build()])
             .commit();
         Ok(Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Level1)?
-            .with_intra_threads(1)?)
+            .with_optimization_level(GraphOptimizationLevel::Level1)
+            .map_err(|e| anyhow!("ORT session config error: {}", e))?
+            .with_intra_threads(1)
+            .map_err(|e| anyhow!("ORT session config error: {}", e))?)
     }
 
     pub fn run_model(&self, sequence: &str) -> Result<Tensor> {

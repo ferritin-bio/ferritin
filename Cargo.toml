@@ -23,22 +23,22 @@ license = "MIT OR Apache-2.0"
 edition = "2024"
 
 [workspace.dependencies]
-anyhow = "1.0.100"
-bevy = { version = "0.17.2", default-features = false }
-bon = "3.8.1"
-candle-core = "0.9.2-alpha.1"
-candle-metal-kernels = "0.9.2-alpha.1"
-candle-nn = "0.9.2-alpha.1"
-candle-onnx = "0.9.2-alpha.1"
-candle-transformers = "0.9.2-alpha.1"
-clap = { version = "4.5.51", features = ["derive"] }
-hf-hub = "0.4.3"
+anyhow = "1.0.102"
+bevy = { version = "0.18.1", default-features = false }
+bon = "3.9.1"
+candle-core =  "0.10.2"
+candle-metal-kernels = "0.10.2"
+candle-nn = "0.10.2"
+candle-onnx = "0.10.2"
+candle-transformers = "0.10.2"
+clap = { version = "4.6.1", features = ["derive"] }
+hf-hub = "0.5.0"
 itertools = "0.14.0"
 ndarray = "0.17"
-ort = { git = "https://github.com/pykeio/ort" }
+ort = "2.0.0-rc.12"
 # rerun = "0.26"
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
-strum = { version = "0.27.2", features = ["derive"] }
-tempfile = "3.23.0"
-tokenizers = { version = "0.22.1", features = ["onig"] }
+serde_json = "1.0.150"
+strum = { version = "0.28", features = ["derive"] }
+tempfile = "3.27.0"
+tokenizers = { version = "0.23.1", features = ["onig"] }
