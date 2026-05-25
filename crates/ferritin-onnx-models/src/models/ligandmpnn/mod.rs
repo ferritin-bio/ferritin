@@ -7,7 +7,7 @@
 //!
 //!
 use crate::{ndarray_to_tensor_f32, tensor_to_ndarray_f32, tensor_to_ndarray_i64};
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use candle_core::Tensor;
 use candle_nn::ops;
 use ferritin_core::AtomCollection;
@@ -75,8 +75,10 @@ impl LigandMPNN {
             .with_execution_providers([CUDAExecutionProvider::default().build()])
             .commit();
         Ok(Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Level1)?
-            .with_intra_threads(1)?)
+            .with_optimization_level(GraphOptimizationLevel::Level1)
+            .map_err(|e| anyhow!("ORT session config error: {}", e))?
+            .with_intra_threads(1)
+            .map_err(|e| anyhow!("ORT session config error: {}", e))?)
     }
 
     fn load_model_paths(model_type: ModelType) -> Result<(PathBuf, PathBuf)> {

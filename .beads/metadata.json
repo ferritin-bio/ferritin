@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "ferritin",
+  "project_id": "34b1b469-9b68-41a3-8d12-832871eee630"
+}
