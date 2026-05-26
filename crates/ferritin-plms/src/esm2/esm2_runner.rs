@@ -76,7 +76,7 @@ impl ESM2Runner {
             .get_ids()
             .to_vec();
         let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
-        let encoded = self.model.forward(&token_ids)?;
+        let encoded = self.model.forward(&token_ids, None)?;
         Ok(encoded)
     }
     pub fn decode_logits(&self, output: ESM2Output) -> Result<String> {

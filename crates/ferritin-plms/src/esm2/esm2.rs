@@ -237,7 +237,12 @@ impl RotaryEmbedding {
 
 pub struct ESM2Embeddings {
     pub(crate) word_embeddings: Embedding,
-    embedding_scale: f64,
+    /// Whether to apply ESM-2 token dropout compensation (always true for ESM-2 checkpoints).
+    /// Masked token positions are zeroed in the embedding; all embeddings are scaled by
+    /// (1 - mask_ratio_train) / (1 - mask_ratio_observed) to compensate.
+    /// See: https://github.com/huggingface/transformers/blob/main/src/transformers/models/esm/modeling_esm.py
+    token_dropout: bool,
+    mask_token_id: u32,
 }
 impl ESM2Embeddings {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
@@ -246,15 +251,54 @@ impl ESM2Embeddings {
         let word_embeddings = vb.get((vocab_size, hidden_size), "word_embeddings.weight")?;
         Ok(Self {
             word_embeddings: Embedding::new(word_embeddings, hidden_size),
-            embedding_scale: (hidden_size as f64).sqrt(),
+            // ESM-2 does NOT use an embedding scale; that was ESM-1 only.
+            token_dropout: config.token_dropout,
+            mask_token_id: config.mask_token_id as u32,
         })
     }
     pub fn embed_tokens(&self, x: &Tensor) -> Result<Tensor> {
         self.word_embeddings.forward(x)
     }
-    pub fn forward(&self, input_ids: &Tensor) -> Result<Tensor> {
-        self.embed_tokens(input_ids)?
-            .affine(self.embedding_scale, 0.0)
+    /// Forward pass for ESM-2 embeddings.
+    ///
+    /// `attention_mask`: optional `(batch, seq_len)` mask (1 = real token, 0 = pad).
+    /// When `token_dropout` is enabled the mask is used to compute the compensation
+    /// scale; if omitted all positions are treated as real tokens.
+    pub fn forward(&self, input_ids: &Tensor, attention_mask: Option<&Tensor>) -> Result<Tensor> {
+        let mut embeddings = self.embed_tokens(input_ids)?;
+
+        if self.token_dropout {
+            let device = input_ids.device();
+            let (batch, seq_len) = input_ids.dims2()?;
+            let hidden_size = embeddings.dim(D::Minus1)?;
+
+            // Zero out positions where the input is the mask token.
+            let mask_full = Tensor::full(self.mask_token_id, (batch, seq_len), device)?;
+            let is_mask = input_ids.eq(&mask_full)?; // (batch, seq_len), dtype U8 (0/1)
+            let is_mask_3d =
+                is_mask
+                    .unsqueeze(D::Minus1)?
+                    .broadcast_as((batch, seq_len, hidden_size))?;
+            embeddings = is_mask_3d.where_cond(&embeddings.zeros_like()?, &embeddings)?;
+
+            // Scale embeddings to compensate for the masking used during training.
+            // mask_ratio_train is hardcoded to 0.15 * 0.8 = 0.12 across all ESM-2 runs.
+            let mask_ratio_train = 0.12f32;
+            let src_lengths = match attention_mask {
+                Some(am) => am.sum(1)?.to_dtype(DType::F32)?,
+                None => Tensor::full(seq_len as f32, (batch,), device)?,
+            };
+            let num_masked = is_mask.sum(1)?.to_dtype(DType::F32)?;
+            let mask_ratio_observed = (num_masked / &src_lengths)?;
+            let denominator = (Tensor::ones(&[batch], DType::F32, device)? - &mask_ratio_observed)?;
+            let scale = (Tensor::full(1.0f32 - mask_ratio_train, (batch,), device)? / denominator)?
+                .unsqueeze(1)?
+                .unsqueeze(2)?
+                .to_dtype(embeddings.dtype())?;
+            embeddings = embeddings.broadcast_mul(&scale)?;
+        }
+
+        Ok(embeddings)
     }
 }
 
@@ -281,7 +325,8 @@ impl ESM2LMHead {
         })
     }
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let hidden = xs.apply(&self.dense)?.gelu()?;
+        // HF comment: "Using F.gelu yields subtly wrong results" — use the exact erf-based gelu.
+        let hidden = xs.apply(&self.dense)?.gelu_erf()?;
         let normalized = hidden.apply(&self.layer_norm)?;
         normalized.apply(&self.decoder)
     }
@@ -479,8 +524,13 @@ impl ESM2 {
         Tokenizer::from_bytes(tokenizer_bytes)
             .map_err(|e| candle_core::Error::Msg(format!("Failed to load tokenizer: {}", e)))
     }
-    pub fn forward(&self, x: &Tensor) -> Result<ESM2Output> {
-        let mut xs = self.embeddings.forward(x)?;
+    /// Run a forward pass.
+    ///
+    /// `attention_mask`: optional `(batch, seq_len)` tensor (1 = real token, 0 = pad).
+    /// Used for token-dropout compensation in the embeddings; pass `None` for single-
+    /// sequence inference where no padding is present.
+    pub fn forward(&self, x: &Tensor, attention_mask: Option<&Tensor>) -> Result<ESM2Output> {
+        let mut xs = self.embeddings.forward(x, attention_mask)?;
         // Transpose to sequence-first format for transformer processing
         xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
         // Process through transformer layers
@@ -514,6 +564,81 @@ pub struct ESM2Output {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Token dropout compensation: with no masked tokens in the sequence the scale
+    /// factor should be (1 - 0.12) / (1 - 0) = 0.88, so every embedding value is
+    /// multiplied by 0.88 relative to the raw word-embedding lookup.
+    #[test]
+    fn test_token_dropout_scale_no_masked_tokens() -> Result<()> {
+        let device = Device::Cpu;
+        // Minimal config: one token, one dimension, token_dropout=true, mask_token_id=32
+        let config = ESM2Config {
+            vocab_size: 33,
+            hidden_size: 4,
+            token_dropout: true,
+            mask_token_id: 32,
+            num_attention_heads: 1,
+            num_hidden_layers: 1,
+            intermediate_size: 8,
+            ..ESM2Config::t6_8m()
+        };
+        // Build a tiny embedding table: all-ones weights.
+        let weight = Tensor::ones(
+            (config.vocab_size as usize, config.hidden_size),
+            DType::F32,
+            &device,
+        )?;
+        let embeddings = ESM2Embeddings {
+            word_embeddings: Embedding::new(weight, config.hidden_size),
+            token_dropout: config.token_dropout,
+            mask_token_id: config.mask_token_id as u32,
+        };
+        // Input: token id 0 (not the mask token), shape (1, 1)
+        let input_ids = Tensor::new(&[[0u32]], &device)?;
+        let out = embeddings.forward(&input_ids, None)?;
+        // Expected: 1.0 * 0.88 = 0.88
+        let val = out.flatten_all()?.to_vec1::<f32>()?[0];
+        let expected = (1.0 - 0.12_f32) / (1.0 - 0.0);
+        assert!(
+            (val - expected).abs() < 1e-5,
+            "token dropout scale wrong: got {val}, expected {expected}"
+        );
+        Ok(())
+    }
+
+    /// With one out of two tokens being a mask token, the observed ratio is 0.5,
+    /// and the masked position should be zeroed while the scale becomes
+    /// (1 - 0.12) / (1 - 0.5) = 1.76.
+    #[test]
+    fn test_token_dropout_scale_half_masked() -> Result<()> {
+        let device = Device::Cpu;
+        let hidden = 4usize;
+        let vocab = 33usize;
+        let mask_id = 32u32;
+        let weight = Tensor::ones((vocab, hidden), DType::F32, &device)?;
+        let embeddings = ESM2Embeddings {
+            word_embeddings: Embedding::new(weight, hidden),
+            token_dropout: true,
+            mask_token_id: mask_id,
+        };
+        // Batch=1, SeqLen=2: first token real (id=0), second token mask (id=32)
+        let input_ids = Tensor::new(&[[0u32, mask_id]], &device)?;
+        let out = embeddings.forward(&input_ids, None)?; // (1, 2, 4)
+        let vals: Vec<f32> = out.flatten_all()?.to_vec1()?;
+        // masked position (second token) should be 0
+        for &v in &vals[hidden..] {
+            assert!(v.abs() < 1e-6, "masked position should be 0, got {v}");
+        }
+        // real position (first token) should be scaled
+        let expected_scale = (1.0 - 0.12_f32) / (1.0 - 0.5);
+        for &v in &vals[..hidden] {
+            assert!(
+                (v - expected_scale).abs() < 1e-4,
+                "real token scale wrong: got {v}, expected {expected_scale}"
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_tokenizer_load() -> Result<()> {
