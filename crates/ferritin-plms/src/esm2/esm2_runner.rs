@@ -6,6 +6,7 @@ use anyhow::{Error as E, Result, anyhow};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use hf_hub::{Repo, RepoType, api::sync::Api};
+use serde_json;
 use tokenizers::Tokenizer;
 
 const ESM2_DTYPE: DType = DType::F32;
@@ -44,12 +45,20 @@ pub struct ESM2Runner {
     tokenizer: Tokenizer,
 }
 impl ESM2Runner {
-    // from hf-hub
+    /// Load model from HuggingFace hub, downloading config.json, tokenizer files, and weights.
     pub fn load_model(modeltype: ESM2Models, device: Device) -> Result<ESM2Runner> {
-        let (model_id, revision, config) = ESM2Models::get_model_files(modeltype);
+        let (model_id, revision, fallback_config) = ESM2Models::get_model_files(modeltype);
         let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());
         let api = Api::new()?;
         let api = api.repo(repo);
+        // Try to load config from HF hub; fall back to hardcoded config if unavailable.
+        let config = match api.get("config.json") {
+            Ok(config_path) => {
+                let config_str = std::fs::read_to_string(config_path)?;
+                serde_json::from_str::<ESM2Config>(&config_str).unwrap_or(fallback_config)
+            }
+            Err(_) => fallback_config,
+        };
         let weights_filename = api.get("model.safetensors")?;
         let vb = unsafe {
             VarBuilder::from_mmaped_safetensors(&[weights_filename], ESM2_DTYPE, &device)?
@@ -67,9 +76,30 @@ impl ESM2Runner {
             .get_ids()
             .to_vec();
         let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
-        let encoded = self.model.forward(&token_ids)?;
+        let encoded = self.model.forward(&token_ids, None)?;
         Ok(encoded)
     }
+    /// Predict residue-residue contact probabilities for a single protein sequence.
+    ///
+    /// Returns a `(seq_len, seq_len)` contact probability matrix (BOS/EOS stripped,
+    /// so dimensions equal the number of amino acids in `prot_sequence`).
+    pub fn predict_contacts(&self, prot_sequence: &str) -> Result<Tensor> {
+        let device = self.model.get_device();
+        let tokens = self
+            .tokenizer
+            .encode(prot_sequence.to_string(), false)
+            .map_err(E::msg)?
+            .get_ids()
+            .to_vec();
+        let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
+        // squeeze batch dim: (1, L, L) → (L, L)
+        self.model
+            .predict_contacts(&token_ids, None)
+            .map_err(E::msg)?
+            .squeeze(0)
+            .map_err(E::msg)
+    }
+
     pub fn decode_logits(&self, output: ESM2Output) -> Result<String> {
         // Get the predicted token IDs by taking argmax along the vocabulary dimension
         let predicted_token_ids = output.logits.argmax(2)?;

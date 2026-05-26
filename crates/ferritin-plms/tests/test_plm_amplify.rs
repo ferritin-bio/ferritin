@@ -7,7 +7,7 @@ use ferritin_plms::device;
 use support::model_harness::{TEST_SEQUENCE, run_remote_amplify_prediction_smoke};
 
 fn load_amplify_120m() -> AmplifyRunner {
-    AmplifyRunner::load_model(AmplifyModels::AMP120M, device().unwrap())
+    AmplifyRunner::load_model(AmplifyModels::AMP120M, device(false).unwrap())
         .expect("Failed to load AMPLIFY 120M model")
 }
 

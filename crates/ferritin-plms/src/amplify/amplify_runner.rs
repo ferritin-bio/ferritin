@@ -3,7 +3,7 @@
 //! Class for loading and running the AMPLIFY models
 
 use super::super::types::{ContactMap, PseudoProbability};
-use super::amplify::{AMPLIFY, ModelOutput};
+use super::amplify::{AMPLIFY, AmplifyOutput};
 use super::config::AMPLIFYConfig;
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{D, DType, Device, Tensor};
@@ -55,7 +55,7 @@ impl AmplifyRunner {
         let model = AMPLIFY::load(vb, &config)?;
         Ok(AmplifyRunner { model, tokenizer })
     }
-    pub fn run_forward(&self, prot_sequence: &str) -> Result<ModelOutput> {
+    pub fn run_forward(&self, prot_sequence: &str) -> Result<AmplifyOutput> {
         let device = self.model.get_device();
         let tokens = self
             .tokenizer
@@ -71,7 +71,7 @@ impl AmplifyRunner {
         &self,
         prot_sequence: &str,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let model_output = self.run_forward(prot_sequence)?;
+        let model_output: AmplifyOutput = self.run_forward(prot_sequence)?;
         let predictions = model_output.logits.argmax(D::Minus1)?;
         let indices: Vec<u32> = predictions.to_vec2()?[0].to_vec();
         let decoded = self.tokenizer.decode(indices.as_slice(), true)?;
@@ -79,13 +79,13 @@ impl AmplifyRunner {
         Ok(decoded)
     }
     pub fn get_pseudo_probabilities(&self, prot_sequence: &str) -> Result<Vec<PseudoProbability>> {
-        let model_output = self.run_forward(prot_sequence)?;
+        let model_output: AmplifyOutput = self.run_forward(prot_sequence)?;
         let predictions = model_output.logits;
         let outputs = self.extract_logits(&predictions)?;
         Ok(outputs)
     }
     pub fn get_contact_map(&self, prot_sequence: &str) -> Result<Vec<ContactMap>> {
-        let model_output = self.run_forward(prot_sequence)?;
+        let model_output: AmplifyOutput = self.run_forward(prot_sequence)?;
         let contact_map_tensor = model_output.get_contact_map()?;
         let averaged = contact_map_tensor.clone().unwrap().max_keepdim(D::Minus1)?;
         let (position1, position2, val) = averaged.dims3()?;

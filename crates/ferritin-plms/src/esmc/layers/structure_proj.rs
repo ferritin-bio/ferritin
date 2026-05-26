@@ -1,8 +1,8 @@
 use candle_core::{Module, Result, Tensor};
 use candle_nn::{layer_norm, linear, GELU};
 
-use crate::esm::utils::constants::physics::BB_COORDINATES;
-use crate::esm::utils::structure::affine3d::{Affine3D, RotationMatrix};
+use crate::esmc::utils::constants::physics::BB_COORDINATES;
+use crate::esmc::utils::structure::affine3d::{Affine3D, RotationMatrix};
 
 pub struct Dim6RotStructureHead {
     ffn1: linear::Linear,

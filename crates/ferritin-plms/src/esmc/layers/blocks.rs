@@ -1,7 +1,7 @@
 use super::attention::MultiHeadAttention;
 use super::geom_attention::GeometricReasoningOriginalImpl;
-use crate::esm::models::esmc::{ESMCConfig, FfnType};
-// use crate::esm::utils::structure::affine3d::Affine3D;
+use crate::esmc::models::esmc::{ESMCConfig, FfnType};
+// use crate::esmc::utils::structure::affine3d::Affine3D;
 use candle_core::{D, Module, Result, Tensor};
 use candle_nn::{self as nn, VarBuilder};
 
