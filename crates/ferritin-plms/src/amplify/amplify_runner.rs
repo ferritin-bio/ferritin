@@ -106,7 +106,7 @@ impl AmplifyRunner {
                         position_2: j,
                         amino_acid_2: self
                             .tokenizer
-                            .decode(&[i as u32], true)
+                            .decode(&[j as u32], true)
                             .ok()
                             .and_then(|s| s.chars().next())
                             .unwrap_or('?'),

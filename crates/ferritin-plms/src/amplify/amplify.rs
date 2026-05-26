@@ -33,18 +33,14 @@ pub struct AMPLIFY {
     config: AMPLIFYConfig,
 }
 impl AMPLIFY {
-    fn process_attention_mask(
-        &self,
-        pad_mask: Option<&Tensor>,
-        num_attention_heads: i64,
-    ) -> Result<Option<Tensor>> {
+    fn process_attention_mask(&self, pad_mask: Option<&Tensor>) -> Result<Option<Tensor>> {
         match pad_mask {
             None => Ok(None),
-            Some(mask) if mask.sum_all()?.to_scalar::<f32>()? == 0.0 => Ok(None),
             Some(mask) => {
                 let batch_size = mask.dim(0)?;
                 let seq_length = mask.dim(D::Minus1)?;
-                let num_heads = num_attention_heads as usize;
+                let num_heads = self.config.num_attention_heads;
+                // (batch, seq) -> (batch, 1, 1, seq) -> (batch, heads, seq, seq)
                 mask.unsqueeze(1)?
                     .unsqueeze(1)?
                     .expand((batch_size, num_heads, seq_length, seq_length))
@@ -61,8 +57,7 @@ impl AMPLIFY {
     ) -> Result<AmplifyOutput> {
         let mut hidden_states = vec![];
         let mut attentions = vec![];
-        let attention_mask =
-            self.process_attention_mask(pad_mask, self.transformer_encoder.len() as i64)?;
+        let attention_mask = self.process_attention_mask(pad_mask)?;
         let freqs_cis = self.freqs_cis.narrow(0, 0, src.dim(1)?)?;
         let mut x = self.encoder.forward(src)?.contiguous()?;
         for layer in self.transformer_encoder.iter() {
@@ -166,13 +161,15 @@ pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<
         let imag = x.narrow(4, 1, 1)?.squeeze(4)?;
         let freqs_cos = freqs_cis.narrow(4, 0, 1)?.squeeze(4)?;
         let freqs_sin = freqs_cis.narrow(4, 1, 1)?.squeeze(4)?;
-        let real = real.mul(&freqs_cos)?.sub(&imag.mul(&freqs_sin)?)?;
-        let imag = real.mul(&freqs_sin)?.add(&imag.mul(&freqs_cos)?)?;
-        Tensor::stack(&[real, imag], 4)
+        // Complex rotation: (real + i*imag) * (cos + i*sin)
+        // new_real = real*cos - imag*sin
+        // new_imag = real*sin + imag*cos  (must use original `real`, not new_real)
+        let new_real = real.mul(&freqs_cos)?.sub(&imag.mul(&freqs_sin)?)?;
+        let new_imag = real.mul(&freqs_sin)?.add(&imag.mul(&freqs_cos)?)?;
+        Tensor::stack(&[new_real, new_imag], 4)
     };
     let xq_out = complex_mul(&xq)?.reshape((b_sz, seq_len, h, headdim))?;
     let xk_out = complex_mul(&xk)?.reshape((b_sz, seq_len, h, headdim))?;
-    let xk_out = xk_out.reshape((b_sz, seq_len, h, headdim))?;
     Ok((xq_out, xk_out))
 }
 
@@ -226,19 +223,12 @@ impl EncoderBlock {
         let x = x.add(&ff)?;
         Ok((x, contacts))
     }
-    /// process the FFN Block using swiglu
+    /// Process the FFN block using SwiGLU activation.
+    /// w12 projects to 2×intermediate_size; we split and gate with silu.
     fn ffn_forward(&self, x: &Tensor) -> Result<Tensor> {
-        let (batch, seq_len, _hidden_dim) = x.dims3()?;
-        let mut batch_shape = vec![batch, seq_len];
-        let x_flat = x.flatten_to(1)?;
-        let w12_out = self.w12.forward(&x_flat)?;
-        let chunks = w12_out.chunk(2, 1)?;
-        let x1 = &chunks[0];
-        let x2 = &chunks[1];
-        let hidden = x1.silu()?.mul(x2)?;
-        let output = self.w3.forward(&hidden)?;
-        batch_shape.push(output.dim(1)?);
-        output.reshape(batch_shape)
+        let chunks = self.w12.forward(x)?.chunk(2, D::Minus1)?;
+        let hidden = chunks[0].silu()?.mul(&chunks[1])?;
+        self.w3.forward(&hidden)
     }
     fn scaled_dot_product_attention(
         &self,
@@ -277,24 +267,12 @@ impl EncoderBlock {
         let xk = xk.reshape(shape)?;
         let xv = xv.reshape(shape)?;
         let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
-        // need to handle pad_mask better ....
-        let pad_mask = if let Some(mask) = pad_mask {
-            let (batch_size, seq_len) = (x.dim(0)?, x.dim(1)?);
-            let mask = mask.unsqueeze(1)?.unsqueeze(1)?.expand((
-                batch_size,
-                self.num_heads,
-                seq_len,
-                seq_len,
-            ))?;
-            Some(mask)
-        } else {
-            None
-        };
+        // pad_mask arrives pre-expanded to (batch, heads, seq, seq) from process_attention_mask
         let attn = self.scaled_dot_product_attention(
             &xq.permute((0, 2, 1, 3))?.contiguous()?,
             &xk.permute((0, 2, 1, 3))?.contiguous()?,
             &xv.permute((0, 2, 1, 3))?.contiguous()?,
-            pad_mask.as_ref(),
+            pad_mask,
             self.dropout_prob,
             false,
         )?;
@@ -407,5 +385,239 @@ impl AmplifyOutput {
         let proximity_map = normalized.permute((1, 2, 0))?; //  # (residues, residues, map)
 
         Ok(Some(proximity_map))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use candle_core::{Device, Tensor};
+
+    // -----------------------------------------------------------------------
+    // apply_rotary_emb correctness
+    // -----------------------------------------------------------------------
+
+    /// A zero-angle rotation (cos=1, sin=0) must be the identity.
+    /// freqs_cis shape: (seq, half_dim, 2) with cos=1, sin=0 everywhere.
+    #[test]
+    fn test_rotary_emb_identity() -> Result<()> {
+        let device = Device::Cpu;
+        let (b, seq, h, d) = (1usize, 4, 2, 8);
+        let half = d / 2;
+
+        // xq: all ones
+        let xq = Tensor::ones(&[b, seq, h, d], candle_core::DType::F32, &device)?;
+        let xk = Tensor::ones(&[b, seq, h, d], candle_core::DType::F32, &device)?;
+
+        // freqs_cis: cos=1, sin=0  →  identity rotation
+        let mut cos_sin = vec![0f32; seq * half * 2];
+        for i in 0..seq * half {
+            cos_sin[i * 2] = 1.0; // cos
+            cos_sin[i * 2 + 1] = 0.0; // sin
+        }
+        let freqs_cis = Tensor::from_vec(cos_sin, &[seq, half, 2], &device)?;
+
+        let (xq_out, xk_out) = apply_rotary_emb(&xq, &xk, &freqs_cis)?;
+
+        let xq_vals: Vec<f32> = xq_out.flatten_all()?.to_vec1()?;
+        let xk_vals: Vec<f32> = xk_out.flatten_all()?.to_vec1()?;
+        for v in xq_vals.iter().chain(xk_vals.iter()) {
+            assert!(
+                (v - 1.0).abs() < 1e-5,
+                "identity rotation should preserve all-ones input, got {v}"
+            );
+        }
+        Ok(())
+    }
+
+    /// A 90-degree rotation (cos=0, sin=1): real→-imag, imag→real.
+    /// Input: real=1, imag=0  →  expected output: new_real=0, new_imag=1.
+    #[test]
+    fn test_rotary_emb_90deg() -> Result<()> {
+        let device = Device::Cpu;
+        let (b, seq, h, d) = (1usize, 1, 1, 2); // d=2 so half=1
+        let half = d / 2; // 1
+
+        // xq: [real=1.0, imag=0.0]
+        let xq = Tensor::from_vec(vec![1.0f32, 0.0], &[b, seq, h, d], &device)?;
+        let xk = xq.clone();
+
+        // freqs_cis: cos=0, sin=1  →  90-degree rotation
+        let freqs_cis = Tensor::from_vec(vec![0.0f32, 1.0], &[seq, half, 2], &device)?;
+
+        let (xq_out, _) = apply_rotary_emb(&xq, &xk, &freqs_cis)?;
+        let vals: Vec<f32> = xq_out.flatten_all()?.to_vec1()?;
+
+        // new_real = 1*0 - 0*1 = 0
+        // new_imag = 1*1 + 0*0 = 1
+        assert!(
+            vals[0].abs() < 1e-5,
+            "new_real should be 0 after 90-deg rotation, got {}",
+            vals[0]
+        );
+        assert!(
+            (vals[1] - 1.0).abs() < 1e-5,
+            "new_imag should be 1 after 90-deg rotation, got {}",
+            vals[1]
+        );
+        Ok(())
+    }
+
+    /// Verify the old shadowing bug would have given a wrong answer.
+    /// With the bug: new_imag = new_real*sin + imag*cos (uses wrong real).
+    /// This test passes only because we fixed it.
+    #[test]
+    fn test_rotary_emb_non_trivial() -> Result<()> {
+        let device = Device::Cpu;
+        let (b, seq, h, d) = (1usize, 1, 1, 2);
+        let half = d / 2;
+
+        // real=3, imag=4; angle=pi/6: cos=√3/2, sin=1/2
+        let cos = (std::f32::consts::PI / 6.0).cos();
+        let sin = (std::f32::consts::PI / 6.0).sin();
+        let (r, im) = (3.0f32, 4.0f32);
+
+        let xq = Tensor::from_vec(vec![r, im], &[b, seq, h, d], &device)?;
+        let freqs_cis = Tensor::from_vec(vec![cos, sin], &[seq, half, 2], &device)?;
+
+        let (xq_out, _) = apply_rotary_emb(&xq, &xq.clone(), &freqs_cis)?;
+        let vals: Vec<f32> = xq_out.flatten_all()?.to_vec1()?;
+
+        let expected_real = r * cos - im * sin;
+        let expected_imag = r * sin + im * cos; // uses original r, not expected_real
+        assert!(
+            (vals[0] - expected_real).abs() < 1e-5,
+            "new_real mismatch: got {}, expected {expected_real}",
+            vals[0]
+        );
+        assert!(
+            (vals[1] - expected_imag).abs() < 1e-5,
+            "new_imag mismatch: got {}, expected {expected_imag}",
+            vals[1]
+        );
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // ffn_forward shape
+    // -----------------------------------------------------------------------
+
+    /// After simplification, ffn_forward must preserve (batch, seq, hidden) shape.
+    #[test]
+    fn test_ffn_forward_shape() -> Result<()> {
+        use candle_nn::{VarBuilder, VarMap};
+        let device = Device::Cpu;
+        let cfg = crate::amplify::config::AMPLIFYConfig::amp_120m();
+        let varmap = VarMap::new();
+        let vb = VarBuilder::from_varmap(&varmap, candle_core::DType::F32, &device);
+        // Load a single encoder block (layer 0)
+        let block = EncoderBlock::load(vb.pp("transformer_encoder"), &cfg, 0)?;
+
+        let (batch, seq) = (2usize, 7usize);
+        let x = Tensor::randn(0f32, 1f32, &[batch, seq, cfg.hidden_size], &device)?;
+        let out = block.ffn_forward(&x)?;
+        assert_eq!(
+            out.shape().dims(),
+            &[batch, seq, cfg.hidden_size],
+            "ffn_forward shape mismatch"
+        );
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // process_attention_mask: correct head count
+    // -----------------------------------------------------------------------
+
+    /// Verify that process_attention_mask expands to (batch, num_attention_heads, seq, seq),
+    /// NOT (batch, num_hidden_layers, seq, seq). Uses a 1-layer config so load is fast.
+    #[test]
+    fn test_process_attention_mask_shape() -> Result<()> {
+        use candle_nn::{VarBuilder, VarMap};
+        let device = Device::Cpu;
+        // Minimal 1-layer config so AMPLIFY::load is fast
+        let cfg = crate::amplify::config::AMPLIFYConfig {
+            num_hidden_layers: 1,
+            hidden_size: 64,
+            num_attention_heads: 4,
+            intermediate_size: 256,
+            vocab_size: 27,
+            max_length: 32,
+            ..crate::amplify::config::AMPLIFYConfig::amp_120m()
+        };
+        let varmap = VarMap::new();
+        let vb = VarBuilder::from_varmap(&varmap, candle_core::DType::F32, &device);
+        let model = AMPLIFY::load(vb, &cfg)?;
+
+        let (batch, seq) = (2usize, 10usize);
+        let mask = Tensor::ones(&[batch, seq], candle_core::DType::F32, &device)?;
+        let expanded = model
+            .process_attention_mask(Some(&mask))?
+            .expect("expected Some mask");
+
+        // Must be heads (4), not layers (1) — they differ, so this catches the old bug
+        assert_eq!(
+            expanded.shape().dims(),
+            &[batch, cfg.num_attention_heads, seq, seq],
+            "mask must expand to (batch, num_attention_heads, seq, seq)"
+        );
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // precompute_freqs_cis shape
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_precompute_freqs_cis_shape() -> Result<()> {
+        let head_dim = 64;
+        let seq_len = 128;
+        let freqs = precompute_freqs_cis(head_dim, seq_len)?;
+        assert_eq!(
+            freqs.shape().dims(),
+            &[seq_len, head_dim / 2, 2],
+            "freqs_cis shape should be (seq_len, head_dim/2, 2)"
+        );
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // AmplifyOutput contact map
+    // -----------------------------------------------------------------------
+
+    /// Builds a minimal AmplifyOutput with synthetic attention tensors and
+    /// checks that get_contact_map returns the right shape.
+    #[test]
+    fn test_contact_map_output_shape() -> Result<()> {
+        let device = Device::Cpu;
+        // Simulate 2 layers, 4 heads, seq_len=9 (including BOS/EOS)
+        let (layers, heads, seq_len) = (2usize, 4usize, 9usize);
+        let attn_shape = &[1usize, heads, seq_len, seq_len];
+        let single = Tensor::rand(0f32, 1f32, attn_shape, &device)?;
+        let attentions: Vec<Tensor> = (0..layers).map(|_| single.clone()).collect();
+
+        let output = AmplifyOutput {
+            logits: Tensor::zeros(
+                &[1usize, seq_len, 27usize],
+                candle_core::DType::F32,
+                &device,
+            )?,
+            hidden_states: None,
+            attentions: Some(attentions),
+        };
+
+        let contact_map = output.get_contact_map()?.expect("expected contact map");
+        // BOS and EOS stripped: seq_len - 2
+        let expected = seq_len - 2;
+        assert_eq!(
+            contact_map.shape().dims()[0],
+            expected,
+            "contact map dim 0 should be seq_len-2"
+        );
+        assert_eq!(
+            contact_map.shape().dims()[1],
+            expected,
+            "contact map dim 1 should be seq_len-2"
+        );
+        Ok(())
     }
 }
