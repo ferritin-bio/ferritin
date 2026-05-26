@@ -96,7 +96,7 @@ impl LigandMPNN {
     }
 
     pub fn run_encoder(&self, ac: &AtomCollection) -> Result<(NdArrayF32, NdArrayF32, NdArrayI64)> {
-        let device = device()?;
+        let device = device(false)?;
         let mut encoder_model = self.session.clone().commit_from_file(&self.encoder_path)?;
         let x_bb = ac.to_numeric_backbone_atoms(&device)?;
         let (lig_coords, lig_elements, lig_mask) = ac.to_numeric_ligand_atoms(&device)?;

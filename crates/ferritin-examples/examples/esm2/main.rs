@@ -7,16 +7,20 @@ pub const DTYPE: DType = DType::F32;
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    /// Run on CPU rather than on GPU.
+    #[arg(long)]
+    cpu: bool,
     /// Which ESM2 Model to use
     #[arg(long, value_parser = ["8M", "35M", "150M", "650M", "3B", "15B"], default_value = "35M")]
     model_id: String,
-    /// Protein String
+    /// Protein sequence to evaluate. Defaults to a short demo sequence.
     #[arg(long)]
     protein_string: Option<String>,
-    // /// Path to a protein FASTA file
-    // #[arg(long)]
-    // protein_fasta: Option<std::path::PathBuf>,
 }
+
+// A short real protein sequence (Ubiquitin, human) used as the default demo.
+const DEFAULT_SEQUENCE: &str =
+    "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG";
 
 fn main() -> Result<()> {
     let args = Args::parse();
@@ -30,11 +34,12 @@ fn main() -> Result<()> {
         "15B" => ESM2Models::T48_15B,
         _ => return Err(E::msg("Invalid model ID")),
     };
-    let modelrunner = ESM2Runner::load_model(model_enum, device()?)?;
+    let modelrunner = ESM2Runner::load_model(model_enum, device(args.cpu)?)?;
     println!("Encoding.......");
-    let prot_string = args
-        .protein_string
-        .expect("a protein sting must be provided");
+    let prot_string = args.protein_string.unwrap_or_else(|| {
+        println!("No --protein-string provided, using default demo sequence.");
+        DEFAULT_SEQUENCE.to_string()
+    });
     let output = modelrunner.run_forward(&prot_string)?;
     println!("Predicting.......");
     let output_sequence = modelrunner.decode_logits(output)?;

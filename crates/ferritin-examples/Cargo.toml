@@ -81,3 +81,19 @@ required-features = ["bevy"]
 name = "rerun"
 path = "examples/rerun/main.rs"
 required-features = ["rerun"]
+
+[[example]]
+name = "amplify"
+path = "examples/amplify/main.rs"
+
+[[example]]
+name = "esm2"
+path = "examples/esm2/main.rs"
+
+[[example]]
+name = "esmc"
+path = "examples/esmc/main.rs"
+
+[[example]]
+name = "ligandmpnn"
+path = "examples/ligandmpnn/main.rs"

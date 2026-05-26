@@ -58,7 +58,7 @@ impl AMPLIFY {
         pad_mask: Option<&Tensor>,
         output_hidden_states: bool,
         output_attentions: bool,
-    ) -> Result<ModelOutput> {
+    ) -> Result<AmplifyOutput> {
         let mut hidden_states = vec![];
         let mut attentions = vec![];
         let attention_mask =
@@ -84,7 +84,7 @@ impl AMPLIFY {
         } else {
             self.decoder.forward(&x)?
         };
-        Ok(ModelOutput {
+        Ok(AmplifyOutput {
             logits,
             hidden_states: if output_hidden_states {
                 Some(hidden_states)
@@ -361,13 +361,13 @@ impl EncoderBlock {
 ///
 ///  logits -> distribution of the sequences.
 ///  attentions -> contact map
-pub struct ModelOutput {
+pub struct AmplifyOutput {
     pub logits: Tensor,
     pub hidden_states: Option<Vec<Tensor>>,
     pub attentions: Option<Vec<Tensor>>,
 }
 
-impl ModelOutput {
+impl AmplifyOutput {
     /// "Perform average product correct, used for contact prediction."
     /// https://github.com/chandar-lab/AMPLIFY/blob/rc-0.1/examples/utils.py#L83
     /// "Perform average product correct, used for contact prediction."

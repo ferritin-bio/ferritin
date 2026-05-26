@@ -15,7 +15,7 @@ pub fn execute(
     membrane_mpnn_specific: MembraneMPNNConfig,
     multi_pdb_config: MultiPDBConfig,
 ) -> anyhow::Result<()> {
-    let device = device()?;
+    let device = device(false)?;
     let exec = MPNNExecConfig::new(
         device.clone(),
         pdb_path,

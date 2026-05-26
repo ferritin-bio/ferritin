@@ -5,7 +5,7 @@
 //! cargo run --example amplify
 //! cargo run --example amplify --features metal
 //! ```
-pub use amplify::amplify::{AMPLIFY, ModelOutput};
+pub use amplify::amplify::{AMPLIFY, AmplifyOutput};
 pub use amplify::amplify_runner::{AmplifyModels, AmplifyRunner};
 pub use amplify::config::AMPLIFYConfig;
 use candle_core::utils::{cuda_is_available, metal_is_available};
@@ -26,9 +26,13 @@ pub mod types;
 
 /// Returns the best available device for computation.
 ///
-/// Prioritizes CUDA GPU if available, then Metal GPU on supported platforms,
+/// If `cpu` is true, always returns `Device::Cpu` regardless of available hardware.
+/// Otherwise prioritizes CUDA GPU if available, then Metal GPU on supported platforms,
 /// and falls back to CPU if no GPU acceleration is available.
-pub fn device() -> Result<Device> {
+pub fn device(cpu: bool) -> Result<Device> {
+    if cpu {
+        return Ok(Device::Cpu);
+    }
     if cuda_is_available() {
         Ok(Device::new_cuda(0)?)
     } else if metal_is_available() {

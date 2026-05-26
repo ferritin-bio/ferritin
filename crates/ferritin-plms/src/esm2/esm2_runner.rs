@@ -6,6 +6,7 @@ use anyhow::{Error as E, Result, anyhow};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use hf_hub::{Repo, RepoType, api::sync::Api};
+use serde_json;
 use tokenizers::Tokenizer;
 
 const ESM2_DTYPE: DType = DType::F32;
@@ -44,12 +45,20 @@ pub struct ESM2Runner {
     tokenizer: Tokenizer,
 }
 impl ESM2Runner {
-    // from hf-hub
+    /// Load model from HuggingFace hub, downloading config.json, tokenizer files, and weights.
     pub fn load_model(modeltype: ESM2Models, device: Device) -> Result<ESM2Runner> {
-        let (model_id, revision, config) = ESM2Models::get_model_files(modeltype);
+        let (model_id, revision, fallback_config) = ESM2Models::get_model_files(modeltype);
         let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());
         let api = Api::new()?;
         let api = api.repo(repo);
+        // Try to load config from HF hub; fall back to hardcoded config if unavailable.
+        let config = match api.get("config.json") {
+            Ok(config_path) => {
+                let config_str = std::fs::read_to_string(config_path)?;
+                serde_json::from_str::<ESM2Config>(&config_str).unwrap_or(fallback_config)
+            }
+            Err(_) => fallback_config,
+        };
         let weights_filename = api.get("model.safetensors")?;
         let vb = unsafe {
             VarBuilder::from_mmaped_safetensors(&[weights_filename], ESM2_DTYPE, &device)?
