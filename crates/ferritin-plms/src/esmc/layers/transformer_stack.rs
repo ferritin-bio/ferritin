@@ -1,6 +1,6 @@
-use crate::esm::layers::blocks::UnifiedTransformerBlock;
-use crate::esm::models::esmc::ESMCConfig;
-// use crate::esm::utils::structure::affine3d::Affine3D;
+use crate::esmc::layers::blocks::UnifiedTransformerBlock;
+use crate::esmc::models::esmc::ESMCConfig;
+// use crate::esmc::utils::structure::affine3d::Affine3D;
 use candle_core::Result;
 use candle_nn::{self as nn, LayerNorm, LayerNormConfig};
 

@@ -1,6 +1,6 @@
-use crate::esm::models::esmc::ESMC;
-use crate::esm::tokenization::get_model_tokenizers;
-use crate::esm::utils::constants::models::{ESM3_OPEN_SMALL, ESMC_300M};
+use crate::esmc::models::esmc::ESMC;
+use crate::esmc::tokenization::get_model_tokenizers;
+use crate::esmc::utils::constants::models::{ESM3_OPEN_SMALL, ESMC_300M};
 use candle_core::{Device, Result, Tensor};
 use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use std::collections::HashMap;

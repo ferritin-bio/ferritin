@@ -1,18 +1,18 @@
-use crate::esm::layers::regression_head::RegressionHead;
-use crate::esm::layers::transformer_stack::TransformerStack;
-// use crate::esm::pretrained::load_local_model;
-// use crate::esm::sdk::api::ESMProtein;
-// use crate::esm::sdk::api::ESMProteinTensor;
-// use crate::esm::sdk::api::ForwardTrackData;
-// use crate::esm::sdk::api::LogitsConfig;
-// use crate::esm::sdk::api::LogitsOutput;
-use crate::esm::tokenization::TokenizerCollection;
-use crate::esm::tokenization::sequence_tokenizer::EsmSequenceTokenizer;
+use crate::esmc::layers::regression_head::RegressionHead;
+use crate::esmc::layers::transformer_stack::TransformerStack;
+// use crate::esmc::pretrained::load_local_model;
+// use crate::esmc::sdk::api::ESMProtein;
+// use crate::esmc::sdk::api::ESMProteinTensor;
+// use crate::esmc::sdk::api::ForwardTrackData;
+// use crate::esmc::sdk::api::LogitsConfig;
+// use crate::esmc::sdk::api::LogitsOutput;
+use crate::esmc::tokenization::TokenizerCollection;
+use crate::esmc::tokenization::sequence_tokenizer::EsmSequenceTokenizer;
 use candle_core::{Result, Tensor};
 use candle_nn::{self as nn, VarBuilder};
-// use crate::esm::utils::decoding::decode_sequence;
-// use crate::esm::utils::encoding::tokenize_sequence;
-// use crate::esm::utils::sampling::BatchedESMProteinTensor;
+// use crate::esmc::utils::decoding::decode_sequence;
+// use crate::esmc::utils::encoding::tokenize_sequence;
+// use crate::esmc::utils::sampling::BatchedESMProteinTensor;
 
 #[derive(Debug)]
 struct ESMCOutput {

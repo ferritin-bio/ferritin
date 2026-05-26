@@ -10,16 +10,16 @@ pub use amplify::amplify_runner::{AmplifyModels, AmplifyRunner};
 pub use amplify::config::AMPLIFYConfig;
 use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{Device, Result};
-pub use esm::models::esmc::{ESMC, ESMCConfig};
 pub use esm2::esm2::{ESM2, ESM2Config};
 pub use esm2::esm2_runner::{ESM2Models, ESM2Runner};
+pub use esmc::models::esmc::{ESMC, ESMCConfig};
 pub use featurize::StructureFeatures;
 pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
 
 pub mod amplify;
-pub mod esm;
 pub mod esm2;
+pub mod esmc;
 pub mod featurize;
 pub mod ligandmpnn;
 pub mod types;

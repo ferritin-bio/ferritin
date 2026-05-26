@@ -1,4 +1,4 @@
-use crate::esm::models::esmc::ESMCConfig;
+use crate::esmc::models::esmc::ESMCConfig;
 use candle_core::{Result, Tensor};
 use candle_nn::{self as nn, LayerNorm, LayerNormConfig, Linear, VarBuilder};
 

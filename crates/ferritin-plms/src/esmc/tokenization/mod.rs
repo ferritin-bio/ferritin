@@ -1,5 +1,5 @@
 pub mod sequence_tokenizer;
-use crate::esm::utils::constants::models::{ESM3_OPEN_SMALL, normalize_model_name};
+use crate::esmc::utils::constants::models::{ESM3_OPEN_SMALL, normalize_model_name};
 use anyhow::{Result, anyhow};
 use sequence_tokenizer::EsmSequenceTokenizer;
 
