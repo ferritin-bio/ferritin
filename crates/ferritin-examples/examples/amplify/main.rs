@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use ferritin_plms::{AmplifyModels, AmplifyOutput, AmplifyRunner, device};
+use ferritin_plms::{AmplifyModels, AmplifyRunner, device};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

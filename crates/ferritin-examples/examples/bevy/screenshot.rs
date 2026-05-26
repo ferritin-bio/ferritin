@@ -3,7 +3,6 @@
 use bevy::{
     prelude::*,
     render::view::screenshot::{Capturing, Screenshot, save_to_disk},
-    window::SystemCursorIcon,
 };
 
 fn main() {

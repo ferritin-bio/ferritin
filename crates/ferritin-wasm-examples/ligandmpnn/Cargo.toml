@@ -13,13 +13,13 @@ lto = true
 
 [dependencies]
 candle-core = { workspace = true }
-leptos = "0.7.8"
+leptos = "0.8.19"
 console_error_panic_hook = "0.1.7"
 uuid = { version = "1.16", features = ["v4", "js", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 web-sys = { version = "0.3.77", features = ["Storage"] }
-getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom = { version = "0.4.2", features = ["wasm_js"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.50"
