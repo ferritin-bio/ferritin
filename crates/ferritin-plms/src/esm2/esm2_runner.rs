@@ -79,6 +79,27 @@ impl ESM2Runner {
         let encoded = self.model.forward(&token_ids, None)?;
         Ok(encoded)
     }
+    /// Predict residue-residue contact probabilities for a single protein sequence.
+    ///
+    /// Returns a `(seq_len, seq_len)` contact probability matrix (BOS/EOS stripped,
+    /// so dimensions equal the number of amino acids in `prot_sequence`).
+    pub fn predict_contacts(&self, prot_sequence: &str) -> Result<Tensor> {
+        let device = self.model.get_device();
+        let tokens = self
+            .tokenizer
+            .encode(prot_sequence.to_string(), false)
+            .map_err(E::msg)?
+            .get_ids()
+            .to_vec();
+        let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
+        // squeeze batch dim: (1, L, L) → (L, L)
+        self.model
+            .predict_contacts(&token_ids, None)
+            .map_err(E::msg)?
+            .squeeze(0)
+            .map_err(E::msg)
+    }
+
     pub fn decode_logits(&self, output: ESM2Output) -> Result<String> {
         // Get the predicted token IDs by taking argmax along the vocabulary dimension
         let predicted_token_ids = output.logits.argmax(2)?;

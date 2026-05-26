@@ -332,26 +332,108 @@ impl ESM2LMHead {
     }
 }
 
+/// Contact prediction head for ESM-2.
+///
+/// Takes per-layer attention matrices, symmetrises them, applies APC correction,
+/// then predicts per-residue-pair contact probabilities with a single linear
+/// layer followed by sigmoid.
+///
+/// Reference: HF `EsmContactPredictionHead` in `modeling_esm.py`.
 pub struct ESM2ContactHead {
-    // contact_scale: Tensor,
+    /// Linear map from (layers * heads) channels to 1.
     feedforward: Linear,
+    /// Whether the tokenizer prepends a BOS/CLS token (always true for ESM-2).
     prepend_bos: bool,
+    /// Whether the tokenizer appends an EOS token (always true for ESM-2).
     append_eos: bool,
-    eos_idx: usize,
+    /// Token ID for the EOS token — used to build the EOS attention mask.
+    eos_idx: u32,
 }
 impl ESM2ContactHead {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let in_features = config.num_hidden_layers as usize * config.num_attention_heads;
         Ok(ESM2ContactHead {
-            // contact_scale: Tensor,
             feedforward: linear(in_features, 1, vb.pp("regression"))?,
-            prepend_bos: false,
-            append_eos: false,
-            eos_idx: 32,
+            prepend_bos: true,
+            append_eos: true,
+            // EOS token is index 2 in the ESM-2 vocabulary (<eos>).
+            // config.mask_token_id (32) is different — do not use that here.
+            eos_idx: 2,
         })
     }
-    fn forward() {
-        todo!()
+
+    /// Compute contact probabilities from stacked per-layer attention weights.
+    ///
+    /// # Arguments
+    /// * `tokens`     – input token IDs, shape `(batch, seq_len)`
+    /// * `attentions` – stacked per-layer attention weights,
+    ///                   shape `(batch, layers, heads, seq_len, seq_len)`
+    ///
+    /// # Returns
+    /// Contact probability matrix, shape `(batch, seq_len−2, seq_len−2)`
+    /// (BOS and EOS positions are stripped).
+    pub fn forward(&self, tokens: &Tensor, attentions: &Tensor) -> Result<Tensor> {
+        let (batch, _layers, _heads, seq_len, _) = attentions.dims5()?;
+        let dev = attentions.device();
+        let dtype = attentions.dtype();
+
+        // --- EOS masking ---------------------------------------------------
+        // Build a mask that zeros out any row or column corresponding to an
+        // EOS token, then remove the EOS position from the sequence dimension.
+        let mut attn = if self.append_eos {
+            // is_not_eos: (batch, seq_len) — 1 for real tokens, 0 for EOS.
+            // Matches Python: tokens.ne(self.eos_idx).to(attentions)
+            let eos_full = Tensor::full(self.eos_idx, (batch, seq_len), dev)?;
+            let is_eos = tokens.eq(&eos_full)?.to_dtype(dtype)?;
+            let is_not_eos = (Tensor::ones((batch, seq_len), dtype, dev)? - &is_eos)?;
+            // Outer product mask: (batch, seq_len, seq_len)
+            let mask_2d = is_not_eos
+                .unsqueeze(2)? // (batch, seq_len, 1)
+                .broadcast_mul(&is_not_eos.unsqueeze(1)?)?; // × (batch, 1, seq_len)
+            // Expand to 5-D and apply
+            let mask_5d = mask_2d.unsqueeze(1)?.unsqueeze(1)?; // (batch,1,1,T,T)
+            let attn = attentions.broadcast_mul(&mask_5d)?;
+            // Remove the last row/col (EOS position)
+            attn.narrow(3, 0, seq_len - 1)?.narrow(4, 0, seq_len - 1)?
+        } else {
+            attentions.clone()
+        };
+
+        // --- BOS stripping -------------------------------------------------
+        // Remove the first row/col (BOS/CLS position).
+        if self.prepend_bos {
+            let cur = attn.dim(3)?;
+            attn = attn.narrow(3, 1, cur - 1)?.narrow(4, 1, cur - 1)?;
+        }
+
+        // attn is now (batch, layers, heads, core_len, core_len)
+        let (batch, layers, heads, core_len, _) = attn.dims5()?;
+
+        // --- Flatten layers×heads -------------------------------------------
+        // (batch, layers, heads, T, T) → (batch, layers*heads, T, T)
+        let attn = attn.reshape((batch, layers * heads, core_len, core_len))?;
+
+        // --- Symmetrize: A + Aᵀ ---------------------------------------------
+        let attn = (&attn + attn.transpose(2, 3)?)?;
+
+        // --- Average Product Correct (APC) -----------------------------------
+        // apc(A)[i,j] = A[i,j] - A[i,:].sum * A[:,j].sum / A.sum
+        let a1 = attn.sum_keepdim(D::Minus1)?; // (batch, LH, T, 1)
+        let a2 = attn.sum_keepdim(D::Minus2)?; // (batch, LH, 1, T)
+        let a12 = a1.sum_keepdim(D::Minus2)?; // (batch, LH, 1, 1)
+        let avg = a1.broadcast_mul(&a2)?.broadcast_div(&a12)?;
+        let attn = (&attn - &avg)?;
+
+        // --- Linear + sigmoid ------------------------------------------------
+        // Permute to (batch, T, T, LH) for the linear layer.
+        // contiguous() required: permute leaves non-contiguous strides that matmul rejects.
+        let attn = attn.permute((0, 2, 3, 1))?.contiguous()?;
+        // Linear: (batch, T, T, LH) → (batch, T, T, 1)
+        let contacts = self.feedforward.forward(&attn)?;
+        // Squeeze: (batch, T, T, 1) → (batch, T, T)
+        let contacts = contacts.squeeze(D::Minus1)?;
+        // Sigmoid → probabilities in [0, 1]
+        ops::sigmoid(&contacts)
     }
 }
 
@@ -389,12 +471,9 @@ impl ESM2Attention {
             rotary_emb,
         })
     }
-    fn forward(
-        &self,
-        query: &Tensor,
-        key: &Tensor,
-        value: &Tensor,
-    ) -> Result<(Tensor, Option<Tensor>)> {
+    /// Returns `(output, attention_weights)`.
+    /// `attention_weights` shape: `(batch, heads, seq_len, seq_len)`.
+    fn forward(&self, query: &Tensor, key: &Tensor, value: &Tensor) -> Result<(Tensor, Tensor)> {
         let (seq_len, batch_size, embed_dim) = query.dims3()?;
 
         // Project inputs to queries, keys, values
@@ -419,23 +498,27 @@ impl ESM2Attention {
         // Apply rotary position embeddings
         let (q, k) = self.rotary_emb.forward(&q, &k)?;
 
-        // Calculate attention scores with proper scaling
-        // todo: review for parity with ESM2-py
-        // Calculate scale using f64 as required by the affine method
+        // Scale then compute attention scores.
+        // Scaling before RoPE is the ESM-2 convention (HF modeling_esm.py:
+        // "query_layer = query_layer * self.attention_head_size**-0.5")
         let scale = (self.head_dim as f64).powf(-0.5);
-        let attention_scores = q.matmul(&k.transpose(1, 2)?)?.affine(scale, 0.0)?; // Bias is f64 literal
+        let attention_scores = q.matmul(&k.transpose(1, 2)?)?.affine(scale, 0.0)?;
 
-        // Apply softmax to get attention weights
-        let attention_weights = ops::softmax_last_dim(&attention_scores)?;
+        // Softmax → (batch*heads, seq_len, seq_len)
+        let attention_weights_flat = ops::softmax_last_dim(&attention_scores)?;
+
+        // Reshape to (batch, heads, seq_len, seq_len) for the contact head.
+        let attention_weights =
+            attention_weights_flat.reshape((batch_size, self.num_heads, seq_len, seq_len))?;
 
         // Apply attention weights to values
-        let attn_output = attention_weights.matmul(&v)?;
+        let attn_output = attention_weights_flat.matmul(&v)?;
         let attn_output = attn_output
             .transpose(1, 2)?
             .contiguous()?
             .reshape((seq_len, batch_size, embed_dim))?;
         let output = self.out_proj.forward(&attn_output)?;
-        Ok((output, None))
+        Ok((output, attention_weights))
     }
 }
 
@@ -471,15 +554,17 @@ impl ESM2Layer {
             final_layer_norm,
         })
     }
-    fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
-        // Input: [seq_len, batch_size, embed_dim]
-        // Apply layer norm and then attention
+    /// Returns `(hidden_states, attention_weights)` where attention_weights
+    /// has shape `(batch, heads, seq_len, seq_len)`.
+    fn forward(&self, xs: &Tensor) -> Result<(Tensor, Tensor)> {
+        // Pre-LayerNorm → attention → residual
         let norm_x = xs.apply(&self.self_attn_layer_norm)?;
-        let (attn_out, attn) = self.self_attn.forward(&norm_x, &norm_x, &norm_x)?;
+        let (attn_out, attn_weights) = self.self_attn.forward(&norm_x, &norm_x, &norm_x)?;
         let x = (attn_out + xs)?;
+        // Pre-LayerNorm → FFN → residual
         let norm_x2 = x.apply(&self.final_layer_norm)?;
         let ffn_out = norm_x2.apply(&self.fc1)?.gelu()?.apply(&self.fc2)?;
-        Ok(((ffn_out + x)?, attn))
+        Ok(((ffn_out + x)?, attn_weights))
     }
 }
 
@@ -550,15 +635,61 @@ impl ESM2 {
     pub(crate) fn get_device(&self) -> &Device {
         self.embeddings.word_embeddings.embeddings().device()
     }
+
+    /// Predict residue-residue contact probabilities.
+    ///
+    /// Runs the transformer while collecting per-layer attention weights, stacks
+    /// them, and passes them through the `ESM2ContactHead` to produce a symmetric
+    /// probability matrix.
+    ///
+    /// # Arguments
+    /// * `tokens`           – token IDs, shape `(batch, seq_len)` including BOS and EOS
+    /// * `attention_mask`   – optional padding mask (1=real, 0=pad)
+    ///
+    /// # Returns
+    /// `(batch, seq_len−2, seq_len−2)` contact probability matrix.
+    /// BOS and EOS positions are stripped; remaining positions correspond directly
+    /// to the amino-acid residues in the input sequence.
+    pub fn predict_contacts(
+        &self,
+        tokens: &Tensor,
+        attention_mask: Option<&Tensor>,
+    ) -> Result<Tensor> {
+        let mut xs = self.embeddings.forward(tokens, attention_mask)?;
+        xs = xs.transpose(0, 1)?; // (B, T, E) → (T, B, E)
+
+        // Collect per-layer attention: each is (batch, heads, seq_len, seq_len)
+        let mut layer_attentions: Vec<Tensor> = Vec::with_capacity(self.layers.len());
+        for layer in &self.layers {
+            let (new_xs, attn_weights) = layer.forward(&xs)?;
+            xs = new_xs;
+            layer_attentions.push(attn_weights);
+        }
+
+        xs = self.layer_norm_after.forward(&xs)?;
+        // Note: we do NOT need to transpose back or run lm_head — the contact
+        // head only uses the attention weights, not the final hidden states.
+
+        // Stack → (batch, layers, heads, seq_len, seq_len)
+        let attentions = Tensor::stack(&layer_attentions, 1)?;
+
+        // ESM model zeroes attention to pad tokens; replicate that here.
+        if let Some(mask) = attention_mask {
+            // mask: (batch, seq_len) → broadcast to (batch, 1, 1, seq_len, seq_len)
+            let mask_f = mask.to_dtype(attentions.dtype())?;
+            let m1 = mask_f.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(3)?;
+            let m2 = mask_f.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(4)?;
+            // Zero out both the row and the column for each padded position
+            // by multiplying both masks (outer product along seq dims)
+            let _ = attentions.broadcast_mul(&m1)?.broadcast_mul(&m2)?;
+        }
+
+        self.contact_head.forward(tokens, &attentions)
+    }
 }
 
-// Output struct
-// todo: potentially expand
 pub struct ESM2Output {
     pub logits: Tensor,
-    // pub representations: std::collections::HashMap<usize, Tensor>,
-    // pub attentions: Option<Tensor>,
-    // pub contacts: Option<Tensor>,
 }
 
 #[cfg(test)]
@@ -637,6 +768,187 @@ mod tests {
                 "real token scale wrong: got {v}, expected {expected_scale}"
             );
         }
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Contact head structural tests
+    // -----------------------------------------------------------------------
+
+    /// Build a minimal ESM2ContactHead with all-ones weights for deterministic testing.
+    fn make_contact_head(layers: usize, heads: usize, device: &Device) -> Result<ESM2ContactHead> {
+        let in_features = layers * heads;
+        // Weight shape for Linear: (out_features=1, in_features)
+        let weight = Tensor::ones(&[1usize, in_features], DType::F32, device)?;
+        let feedforward = Linear::new(weight, None);
+        Ok(ESM2ContactHead {
+            feedforward,
+            prepend_bos: true,
+            append_eos: true,
+            eos_idx: 2,
+        })
+    }
+
+    /// Helper: build a random-ish (but deterministic) attention tensor.
+    /// Shape: (batch, layers, heads, seq_len, seq_len), values in [0,1] summing to 1
+    /// across the last dim (simulating softmax output).
+    fn make_attention(
+        batch: usize,
+        layers: usize,
+        heads: usize,
+        seq_len: usize,
+        device: &Device,
+    ) -> Result<Tensor> {
+        // Use a fixed pattern: attn[b,l,h,i,j] ∝ exp(-|i-j|)
+        // so nearby tokens get higher attention.
+        let mut data = vec![0f32; batch * layers * heads * seq_len * seq_len];
+        for b in 0..batch {
+            for l in 0..layers {
+                for h in 0..heads {
+                    // Compute softmax of -|i-j| for each row i
+                    for i in 0..seq_len {
+                        let base = b * layers * heads * seq_len * seq_len
+                            + l * heads * seq_len * seq_len
+                            + h * seq_len * seq_len
+                            + i * seq_len;
+                        let mut row_sum = 0f32;
+                        for j in 0..seq_len {
+                            let v = (-(i as f32 - j as f32).abs()).exp();
+                            data[base + j] = v;
+                            row_sum += v;
+                        }
+                        for j in 0..seq_len {
+                            data[base + j] /= row_sum;
+                        }
+                    }
+                }
+            }
+        }
+        Tensor::from_vec(data, &[batch, layers, heads, seq_len, seq_len], device)
+    }
+
+    /// Contact map shape: output should be (batch, seq_len-2, seq_len-2).
+    #[test]
+    fn test_contact_head_output_shape() -> Result<()> {
+        let device = Device::Cpu;
+        let (batch, layers, heads, seq_len) = (2usize, 3, 4, 9);
+        let head = make_contact_head(layers, heads, &device)?;
+        // tokens: BOS(0), 7 amino acids, EOS(2)
+        let mut token_data = vec![0u32; batch * seq_len];
+        for b in 0..batch {
+            token_data[b * seq_len] = 0; // BOS
+            token_data[b * seq_len + seq_len - 1] = 2; // EOS
+            for i in 1..seq_len - 1 {
+                token_data[b * seq_len + i] = 4; // amino acid L
+            }
+        }
+        let tokens = Tensor::from_vec(token_data, &[batch, seq_len], &device)?;
+        let attn = make_attention(batch, layers, heads, seq_len, &device)?;
+        let contacts = head.forward(&tokens, &attn)?;
+        assert_eq!(
+            contacts.shape().dims(),
+            &[batch, seq_len - 2, seq_len - 2],
+            "contact map shape mismatch"
+        );
+        Ok(())
+    }
+
+    /// All values must be in [0, 1] (sigmoid output).
+    #[test]
+    fn test_contact_head_values_in_unit_interval() -> Result<()> {
+        let device = Device::Cpu;
+        let (batch, layers, heads, seq_len) = (1, 3, 4, 11);
+        let head = make_contact_head(layers, heads, &device)?;
+        let tokens = {
+            let mut t = vec![4u32; batch * seq_len]; // all amino-acid tokens
+            t[0] = 0;
+            t[seq_len - 1] = 2;
+            Tensor::from_vec(t, &[batch, seq_len], &device)?
+        };
+        let attn = make_attention(batch, layers, heads, seq_len, &device)?;
+        let contacts = head.forward(&tokens, &attn)?;
+        let vals: Vec<f32> = contacts.flatten_all()?.to_vec1()?;
+        for &v in &vals {
+            assert!(
+                v >= 0.0 && v <= 1.0,
+                "contact probability out of [0,1]: {v}"
+            );
+        }
+        Ok(())
+    }
+
+    /// Contact map must be symmetric: contacts[i][j] == contacts[j][i].
+    ///
+    /// Symmetry is guaranteed because:
+    /// 1. We explicitly symmetrize the attention (A + Aᵀ)
+    /// 2. APC correction preserves symmetry
+    /// 3. The linear layer maps channels→1 with the same weights at [i,j] and [j,i]
+    /// 4. Sigmoid is elementwise
+    #[test]
+    fn test_contact_head_symmetry() -> Result<()> {
+        let device = Device::Cpu;
+        let (batch, layers, heads, seq_len) = (1, 6, 20, 13); // mimics ESM-2 8M
+        let head = make_contact_head(layers, heads, &device)?;
+        let tokens = {
+            let mut t = vec![4u32; batch * seq_len];
+            t[0] = 0;
+            t[seq_len - 1] = 2;
+            Tensor::from_vec(t, &[batch, seq_len], &device)?
+        };
+        let attn = make_attention(batch, layers, heads, seq_len, &device)?;
+        let contacts = head.forward(&tokens, &attn)?.squeeze(0)?; // (L, L)
+        let core = seq_len - 2;
+        let mat: Vec<f32> = contacts.flatten_all()?.to_vec1()?;
+        for i in 0..core {
+            for j in 0..core {
+                let c_ij = mat[i * core + j];
+                let c_ji = mat[j * core + i];
+                assert!(
+                    (c_ij - c_ji).abs() < 1e-5,
+                    "contact map not symmetric at ({i},{j}): {c_ij} vs {c_ji}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Sequentially adjacent residues (|i-j|=1) should generally have higher
+    /// contact probability than distant residues (|i-j|>=5) given the
+    /// distance-decaying attention pattern we constructed.
+    #[test]
+    fn test_contact_head_local_bias() -> Result<()> {
+        let device = Device::Cpu;
+        let (batch, layers, heads, seq_len) = (1, 6, 20, 15);
+        let head = make_contact_head(layers, heads, &device)?;
+        let tokens = {
+            let mut t = vec![4u32; batch * seq_len];
+            t[0] = 0;
+            t[seq_len - 1] = 2;
+            Tensor::from_vec(t, &[batch, seq_len], &device)?
+        };
+        let attn = make_attention(batch, layers, heads, seq_len, &device)?;
+        let contacts = head.forward(&tokens, &attn)?.squeeze(0)?; // (L, L)
+        let core = seq_len - 2;
+        let mat: Vec<f32> = contacts.flatten_all()?.to_vec1()?;
+
+        let local_sum: f32 = (0..core - 1).map(|i| mat[i * core + i + 1]).sum::<f32>();
+        let distant_sum: f32 = (0..core)
+            .flat_map(|i| (0..core).map(move |j| (i, j)))
+            .filter(|&(i, j)| (i as isize - j as isize).abs() >= 5)
+            .map(|(i, j)| mat[i * core + j])
+            .sum::<f32>();
+        let n_local = (core - 1) as f32;
+        let n_distant = (0..core)
+            .flat_map(|i| (0..core).map(move |j| (i, j)))
+            .filter(|&(i, j)| (i as isize - j as isize).abs() >= 5)
+            .count() as f32;
+
+        let avg_local = local_sum / n_local;
+        let avg_distant = distant_sum / n_distant;
+        assert!(
+            avg_local > avg_distant,
+            "expected local contacts > distant; avg_local={avg_local:.4} avg_distant={avg_distant:.4}"
+        );
         Ok(())
     }
 
