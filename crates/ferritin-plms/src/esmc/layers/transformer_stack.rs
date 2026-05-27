@@ -2,7 +2,7 @@ use crate::esmc::layers::blocks::UnifiedTransformerBlock;
 use crate::esmc::models::esmc::ESMCConfig;
 // use crate::esmc::utils::structure::affine3d::Affine3D;
 use candle_core::{Module, Result, Tensor};
-use candle_nn::{self as nn, LayerNorm, LayerNormConfig};
+use candle_nn::{self as nn, LayerNorm};
 
 pub struct TransformerStack {
     /*
@@ -38,13 +38,9 @@ impl TransformerStack {
             )?);
         }
 
-        // let ln_conf = LayerNormConfig::from(1e-5);
-        let ln_conf = LayerNormConfig {
-            eps: 1e-5,
-            remove_mean: true,
-            affine: false,
-        };
-        let norm = nn::layer_norm(*d_model, ln_conf, vb.pp("norm"))?;
+        // transformer.norm has weight but no bias in the checkpoint.
+        let norm_weight = vb.pp("norm").get((*d_model,), "weight")?;
+        let norm = LayerNorm::new_no_bias(norm_weight, 1e-5);
 
         Ok(Self { blocks, norm })
     }

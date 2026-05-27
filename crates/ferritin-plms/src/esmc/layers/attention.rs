@@ -1,7 +1,7 @@
 use crate::esmc::layers::rotary::RotaryEmbedding;
 use crate::esmc::models::esmc::ESMCConfig;
 use candle_core::{Module, Result, Tensor};
-use candle_nn::{self as nn, LayerNormConfig, VarBuilder};
+use candle_nn::{self as nn, LayerNorm, LayerNormConfig, VarBuilder};
 // use scaled_dot_product_attention;
 
 pub struct MultiHeadAttention {
@@ -51,20 +51,26 @@ impl MultiHeadAttention {
         } = config;
 
         let d_head = d_model / n_heads;
-        // let ln_conf = LayerNormConfig::from(1e-5);
-        let ln_conf = LayerNormConfig {
-            eps: 1e-5,
-            remove_mean: true,
-            affine: false,
-        };
-        let layernorm = nn::layer_norm(*d_model, ln_conf, vb.pp("layernorm_qkv.0"))?;
+
+        // layernorm_qkv.0 has both weight and bias in the checkpoint.
+        let layernorm = nn::layer_norm(
+            *d_model,
+            LayerNormConfig::from(1e-5),
+            vb.pp("layernorm_qkv.0"),
+        )?;
         let linear = nn::linear_no_bias(*d_model, d_model * 3, vb.pp("layernorm_qkv.1"))?;
         let layernorm_qkv = nn::seq().add(layernorm).add(linear);
         let out_proj = nn::linear_no_bias(*d_model, *d_model, vb.pp("out_proj"))?;
-        // note: only handling the True case for the moment
-        // let  qk_layernorm = true
-        let q_ln = Box::new(nn::layer_norm(*d_model, ln_conf, vb.pp("q_ln"))?);
-        let k_ln = Box::new(nn::layer_norm(*d_model, ln_conf, vb.pp("k_ln"))?);
+
+        // q_ln / k_ln have weight but no bias in the checkpoint — use new_no_bias.
+        let q_ln: Box<dyn Module> = {
+            let w = vb.pp("q_ln").get((*d_model,), "weight")?;
+            Box::new(LayerNorm::new_no_bias(w, 1e-5))
+        };
+        let k_ln: Box<dyn Module> = {
+            let w = vb.pp("k_ln").get((*d_model,), "weight")?;
+            Box::new(LayerNorm::new_no_bias(w, 1e-5))
+        };
 
         let rotary = RotaryEmbedding::load(vb.pp("rotary"), config)?;
 
