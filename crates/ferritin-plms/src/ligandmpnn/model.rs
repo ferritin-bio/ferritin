@@ -170,6 +170,7 @@ impl Module for PositionWiseFeedForward {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct EncLayer {
     num_hidden: usize,
     num_in: usize,
@@ -291,6 +292,7 @@ impl EncLayer {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct DecLayer {
     num_hidden: usize,
     num_in: usize,
@@ -849,7 +851,7 @@ impl ProteinMPNN {
                     decoding_order,
                 })
             }
-            Some(symmetry_residues) => {
+            Some(_symmetry_residues) => {
                 todo!()
             }
         }
@@ -880,7 +882,7 @@ impl ProteinMPNN {
         let symmetry_residues: Option<Vec<i32>> = None;
 
         let (mask_fw, mask_bw, e_idx, decoding_order) = match symmetry_residues {
-            Some(symmetry_residues) => {
+            Some(_symmetry_residues) => {
                 todo!();
             }
             None => {

@@ -2,6 +2,7 @@ use crate::esmc::models::esmc::ESMCConfig;
 use candle_core::{Result, Tensor};
 use candle_nn::{self as nn, LayerNorm, LayerNormConfig, Linear, VarBuilder};
 
+#[allow(dead_code)]
 pub struct GeometricReasoningOriginalImpl {
     c_s: usize,
     v_heads: usize,

@@ -1,5 +1,5 @@
 use crate::esmc::models::esmc::ESMCConfig;
-use candle_core::{Device, Result, Tensor};
+use candle_core::{D, Device, Result, Tensor};
 use candle_nn::VarBuilder;
 
 // NOTE: This implementation is based on LLaMA 2's rotary embeddings
@@ -38,6 +38,7 @@ use candle_nn::VarBuilder;
 //     Tensor::cat(&[&x_rot_out, &x_pass], -1)
 // }
 
+#[allow(dead_code)]
 pub struct RotaryEmbedding {
     dim: usize,
     base: f64,
@@ -111,7 +112,10 @@ impl RotaryEmbedding {
         // pos_idx_in_fp32=True,
 
         let inv_freq = Self::compute_inv_freq(rotary_dims, base, device)?;
-        let arange = Tensor::arange(0., (rotary_dims as f64) / 2., device)? * 2.;
+        // Build scale tensor in F32; candle operator overloads only accept f64 scalars.
+        let arange = Tensor::arange(0u32, (rotary_dims / 2) as u32, device)?
+            .to_dtype(candle_core::DType::F32)?
+            * 2.0f64;
         let scale = {
             let numerator = (&arange? + (0.4 * rotary_dims as f64))?;
             let denominator = 1.4 * rotary_dims as f64;
@@ -134,12 +138,52 @@ impl RotaryEmbedding {
         })
     }
 
+    /// Compute cos/sin for `seqlen` positions using `self.inv_freq`.
+    /// Returns `(cos, sin)` each of shape `(seqlen, d_head)`.
+    fn compute_cos_sin(&self, seqlen: usize) -> Result<(Tensor, Tensor)> {
+        let device = self.inv_freq.device();
+        // positions: (seqlen,)
+        let t = Tensor::arange(0u32, seqlen as u32, device)?.to_dtype(candle_core::DType::F32)?;
+        // freqs: (seqlen, d_head/2)
+        let freqs = t.unsqueeze(1)?.matmul(&self.inv_freq.unsqueeze(0)?)?;
+        // repeat to (seqlen, d_head) by cat([freqs, freqs], dim=1)
+        let emb = Tensor::cat(&[&freqs, &freqs], 1)?;
+        Ok((emb.cos()?, emb.sin()?))
+    }
+
+    /// Apply rotary embeddings to query and key tensors.
+    /// q, k: `(B, n_heads, L, d_head)`
+    /// Returns rotated `(q, k)` of the same shapes.
+    pub fn forward(&self, q: &Tensor, k: &Tensor) -> Result<(Tensor, Tensor)> {
+        let seqlen = q.dim(2)?;
+        let (cos, sin) = self.compute_cos_sin(seqlen)?;
+        // cos/sin: (seqlen, d_head) → broadcast to (1, 1, seqlen, d_head)
+        let cos = cos.unsqueeze(0)?.unsqueeze(0)?;
+        let sin = sin.unsqueeze(0)?.unsqueeze(0)?;
+        let q_rot = Self::apply_rotary(q, &cos, &sin)?;
+        let k_rot = Self::apply_rotary(k, &cos, &sin)?;
+        Ok((q_rot, k_rot))
+    }
+
+    /// Rotate x by cos/sin: x_rot = x * cos + rotate_half(x) * sin
+    /// For non-interleaved: rotate_half([x1, x2]) = [-x2, x1]
+    fn apply_rotary(x: &Tensor, cos: &Tensor, sin: &Tensor) -> Result<Tensor> {
+        let d = x.dim(D::Minus1)?;
+        let half = d / 2;
+        let x1 = x.narrow(D::Minus1, 0, half)?;
+        let x2 = x.narrow(D::Minus1, half, half)?;
+        let x_rotated = Tensor::cat(&[&x2.neg()?, &x1], D::Minus1)?;
+        x.broadcast_mul(cos)? + x_rotated.broadcast_mul(sin)?
+    }
+
     fn compute_inv_freq(rotary_dims: usize, base: f64, device: &Device) -> Result<Tensor> {
+        // Emit f32 values so inv_freq stays F32 and avoids dtype
+        // mismatches when matmul'd with the F32 position tensor.
         Tensor::from_iter(
             (0..rotary_dims)
                 .step_by(2)
                 .map(|i| i as f32 / rotary_dims as f32)
-                .map(|theta| base.powf(-theta as f64)),
+                .map(|theta| base.powf(-theta as f64) as f32),
             device,
         )
     }

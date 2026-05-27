@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // use cached::proc_macro::cached;
 // use huggingface_hub::snapshot_download;
 // use std::env;

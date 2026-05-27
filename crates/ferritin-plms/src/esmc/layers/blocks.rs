@@ -170,6 +170,32 @@ impl UnifiedTransformerBlock {
     }
 }
 
+impl UnifiedTransformerBlock {
+    pub fn forward(&self, x: &Tensor, sequence_id: Option<&Tensor>) -> Result<Tensor> {
+        let mut x = x.clone();
+
+        // Plain (standard) attention path
+        if self.use_plain_attn {
+            if let Some(attn) = &self.attn {
+                let r1 = attn.forward(&x, sequence_id)?;
+                x = (&x + &(&r1 / self.scaling_factor)?)?;
+            }
+        }
+
+        // Geometric attention path (currently disabled/None in load())
+        if self.use_geom_attn {
+            if let Some(_geom_attn) = &self.geom_attn {
+                // geom_attn not yet implemented; skip silently
+            }
+        }
+
+        // Feed-forward
+        let r3 = self.ffn.forward(&x)?;
+        let r3 = (&r3 / self.scaling_factor)?;
+        &x + &r3
+    }
+}
+
 // impl Module for UnifiedTransformerBlock {
 //     fn forward(&self, x: &Tensor) -> Result<Tensor> {
 //         let mut x = x.clone();

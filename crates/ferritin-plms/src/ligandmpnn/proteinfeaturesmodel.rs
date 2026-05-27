@@ -9,10 +9,12 @@ use candle_nn::{LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, line
 
 const RBF_MIN_DISTANCE: f32 = 2.0;
 const RBF_MAX_DISTANCE: f32 = 22.0;
+#[allow(dead_code)]
 const NUMERICAL_STABILITY_EPSILON: f32 = 1e-6;
 
 #[derive(Clone, Debug)]
 /// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L669
+#[allow(dead_code)]
 pub struct ProteinFeaturesModel {
     edge_features: usize,
     node_features: usize,
@@ -129,6 +131,7 @@ impl ProteinFeaturesModel {
         Ok(rbf_a_b)
     }
     /// Euclidean distance calculation
+    #[allow(dead_code)]
     fn compute_pairwise_distances(&self, a: &Tensor, b: &Tensor) -> Result<Tensor> {
         const EPSILON: f64 = 1e-6; // Numerical stability constant
         let a_expanded = a.unsqueeze(2)?;
@@ -138,6 +141,7 @@ impl ProteinFeaturesModel {
         let distances = (squared_distances + EPSILON)?.sqrt()?;
         Ok(distances)
     }
+    #[allow(dead_code)]
     fn gather_edge_distances(&self, distances: &Tensor, edge_indices: &Tensor) -> Result<Tensor> {
         distances
             .unsqueeze(D::Minus1)?

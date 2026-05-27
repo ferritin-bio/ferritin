@@ -1,47 +1,80 @@
 use crate::esmc::layers::regression_head::RegressionHead;
 use crate::esmc::layers::transformer_stack::TransformerStack;
-// use crate::esmc::pretrained::load_local_model;
-// use crate::esmc::sdk::api::ESMProtein;
-// use crate::esmc::sdk::api::ESMProteinTensor;
-// use crate::esmc::sdk::api::ForwardTrackData;
-// use crate::esmc::sdk::api::LogitsConfig;
-// use crate::esmc::sdk::api::LogitsOutput;
 use crate::esmc::tokenization::TokenizerCollection;
 use crate::esmc::tokenization::sequence_tokenizer::EsmSequenceTokenizer;
-use candle_core::{Result, Tensor};
-use candle_nn::{self as nn, VarBuilder};
-// use crate::esmc::utils::decoding::decode_sequence;
-// use crate::esmc::utils::encoding::tokenize_sequence;
-// use crate::esmc::utils::sampling::BatchedESMProteinTensor;
+use candle_core::{DType, Device, Result, Tensor};
+use candle_nn::{self as nn, Module, VarBuilder};
 
+// ---------------------------------------------------------------------------
+// Output types
+// ---------------------------------------------------------------------------
+
+/// Output of the ESMC forward pass.
 #[derive(Debug)]
-struct ESMCOutput {
-    sequence_logits: Tensor,
-    embeddings: Option<Tensor>,
+pub struct ESMCOutput {
+    /// Per-residue sequence logits of shape `(B, L, vocab_size)`.
+    pub sequence_logits: Tensor,
+    /// Final hidden states of shape `(B, L, d_model)`.
+    pub embeddings: Option<Tensor>,
+    /// Hidden states from every transformer layer `(n_layers, B, L, d_model)`,
+    /// present only when `output_hidden_states = true`.
+    pub hidden_states: Option<Tensor>,
 }
+
+/// Configuration for the `logits()` wrapper.
+#[derive(Debug, Default)]
+pub struct LogitsConfig {
+    /// Include sequence logits in the output.
+    pub sequence: bool,
+    /// Include the final embedding tensor.
+    pub return_embeddings: bool,
+    /// Include per-layer hidden states.
+    pub return_hidden_states: bool,
+}
+
+/// Output of the `logits()` wrapper.
+#[derive(Debug)]
+pub struct LogitsOutput {
+    /// Sequence logits `(B, L, vocab_size)`, present when `LogitsConfig::sequence = true`.
+    pub sequence_logits: Option<Tensor>,
+    /// Final embeddings `(B, L, d_model)`, present when `LogitsConfig::return_embeddings = true`.
+    pub embeddings: Option<Tensor>,
+    /// Per-layer hidden states, present when `LogitsConfig::return_hidden_states = true`.
+    pub hidden_states: Option<Tensor>,
+}
+
+// ---------------------------------------------------------------------------
+// Tokenizer enum
+// ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy)]
 pub enum ESMTokenizer {
     Esm3OpenSmall,
 }
+
 impl ESMTokenizer {
     pub fn get_model_tokenizers(&self) -> TokenizerCollection {
         match self {
-            ESMTokenizer::Esm3OpenSmall => {
-                let esm_tokenizer = EsmSequenceTokenizer::default();
-                TokenizerCollection {
-                    sequence: esm_tokenizer,
-                }
-            }
+            ESMTokenizer::Esm3OpenSmall => TokenizerCollection {
+                sequence: EsmSequenceTokenizer::default(),
+            },
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// FFN type
+// ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy)]
 pub enum FfnType {
     SWIGLU,
     GLU,
 }
+
+// ---------------------------------------------------------------------------
+// Model config
+// ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 pub struct ESMCConfig {
@@ -51,7 +84,6 @@ pub struct ESMCConfig {
     pub v_head_transformer: Option<usize>,
     pub ffn_type: FfnType,
     pub tokenizer: ESMTokenizer,
-    // oringal above.
     pub use_plain_attn: bool,
     pub n_layers_geom: usize,
     pub scale_residue: bool,
@@ -60,7 +92,7 @@ pub struct ESMCConfig {
     pub bias: bool,
     pub qk_layernorm: bool,
     pub expansion_ratio: f64,
-    // reg
+    // regression head dims
     pub regression_head_output_dim: usize,
     pub regression_head_hidden_dim: usize,
     pub embedding_dim: usize,
@@ -68,13 +100,6 @@ pub struct ESMCConfig {
 
 impl ESMCConfig {
     pub fn esmc_300m() -> Self {
-        //
-        //    residue_scaling_factor=  if scale_residue {
-        //         (n_layers as f64 / 36.0).sqrt()
-        //     } else {
-        //         1.0
-        //     },
-
         Self {
             d_model: 960,
             n_heads: 15,
@@ -91,42 +116,34 @@ impl ESMCConfig {
             qk_layernorm: true,
             expansion_ratio: 8.0 / 3.0,
             regression_head_output_dim: 64,
-            regression_head_hidden_dim: 960, // d_model
+            regression_head_hidden_dim: 960,
             embedding_dim: 64,
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Model
+// ---------------------------------------------------------------------------
 
 pub struct ESMC {
     embed: candle_nn::Embedding,
     transformer: TransformerStack,
     sequence_head: RegressionHead,
     tokenizer: EsmSequenceTokenizer,
+    device: Device,
 }
 
 impl ESMC {
-    // pub fn new(
-    //     d_model: usize,
-    //     n_heads: usize,
-    //     n_layers: usize,
-    //     tokenizer: EsmSequenceTokenizer,
-    // ) -> Self {
-    //     Self {
-    //         embed: nn::embedding(64, d_model, Default::default())?,
-    //         transformer: TransformerStack::new(d_model, n_heads, None, n_layers, 0)?,
-    //         sequence_head: RegressionHead::new(d_model, 64)?,
-    //         tokenizer,
-    //     }
-    // }
-
     pub fn load(vb: VarBuilder, config: ESMCConfig) -> Result<Self> {
         let ESMCConfig {
             d_model,
             tokenizer,
             embedding_dim,
             ..
-        } = config;
+        } = config.clone();
 
+        let device = vb.device().clone();
         let tokenizer_collection = tokenizer.get_model_tokenizers();
 
         Ok(Self {
@@ -134,76 +151,114 @@ impl ESMC {
             transformer: TransformerStack::load(vb.pp("transformer"), &config)?,
             sequence_head: RegressionHead::load(vb.pp("sequence_head"), &config)?,
             tokenizer: tokenizer_collection.sequence,
+            device,
         })
     }
 
-    // pub fn from_pretrained(model_name: impl Into<String>, device: Option<Device>) -> Result<Self> {
-    //     let device = device.unwrap_or(Device::cuda_if_available()?);
-    //     let model = load_local_model(&model_name.into(), &device)?;
-    //     if device.is_cuda() {
-    //         model.to_dtype(DType::BF16)?;
-    //     }
-    //     Ok(model)
-    // }
+    // ---------------------------------------------------------------------------
+    // Core forward pass
+    // ---------------------------------------------------------------------------
 
-    // pub fn forward(
-    //     &self,
-    //     sequence_tokens: Option<&Tensor>,
-    //     sequence_id: Option<&Tensor>,
-    // ) -> Result<ESMCOutput> {
-    //     let sequence_id = sequence_id
-    //         .unwrap_or({ &(sequence_tokens.unwrap().eq(self.tokenizer.pad_token_id)?)? });
+    /// Forward pass of the ESMC model.
+    ///
+    /// # Arguments
+    /// * `sequence_tokens` – token IDs of shape `(B, L)` (u32 integers).
+    /// * `sequence_id` – optional boolean mask of shape `(B, L)` where `true`
+    ///   means the position is a real (non-pad) token.  When `None`, all
+    ///   positions are treated as real tokens.
+    /// * `output_hidden_states` – when `true`, every transformer layer's
+    ///   output is stacked into `ESMCOutput::hidden_states`.
+    pub fn forward(
+        &self,
+        sequence_tokens: &Tensor,
+        sequence_id: Option<&Tensor>,
+        output_hidden_states: bool,
+    ) -> Result<ESMCOutput> {
+        use crate::esmc::tokenization::sequence_tokenizer::EsmTokenizerBase;
 
-    //     let x = self.embed.forward(sequence_tokens.unwrap())?;
-    //     let (x, _) = self.transformer.forward(&x, Some(sequence_id))?;
-    //     let sequence_logits = self.sequence_head.forward(&x)?;
+        // Build a boolean mask from padding tokens when not supplied.
+        let owned_mask;
+        let sequence_id = match sequence_id {
+            Some(s) => s,
+            None => {
+                let pad_id = self.tokenizer.pad_token_id();
+                owned_mask = sequence_tokens.ne(pad_id)?;
+                &owned_mask
+            }
+        };
 
-    //     Ok(ESMCOutput {
-    //         sequence_logits,
-    //         embeddings: Some(x),
-    //     })
-    // }
+        // Embed tokens: (B, L) → (B, L, d_model)
+        let x = self.embed.forward(sequence_tokens)?;
 
-    // pub fn encode(&self, input: &ESMProtein) -> Result<ESMProteinTensor> {
-    //     let sequence_tokens = if let Some(seq) = &input.sequence {
-    //         Some(tokenize_sequence(seq, &self.tokenizer, true)?)
-    //     } else {
-    //         None
-    //     };
+        // Transformer stack
+        let (x, hidden_states) =
+            self.transformer
+                .forward(&x, Some(sequence_id), output_hidden_states)?;
 
-    //     Ok(ESMProteinTensor::new(sequence_tokens)?.to_device(&self.device())?)
-    // }
+        // Stack hidden states along a new leading dimension: (n_layers, B, L, d_model)
+        let hidden_states = hidden_states.map(|hs| Tensor::stack(&hs, 0)).transpose()?;
 
-    // pub fn decode(&self, input: &ESMProteinTensor) -> Result<ESMProtein> {
-    //     let sequence = input.sequence.as_ref().ok_or("Missing sequence")?;
-    //     let sequence = decode_sequence(&sequence.slice(1..-1)?, &self.tokenizer)?;
-    //     Ok(ESMProtein::new(Some(sequence)))
-    // }
+        // Sequence head: (B, L, d_model) → (B, L, vocab_size)
+        let sequence_logits = self.sequence_head.forward(&x)?;
 
-    // pub fn logits(&self, input: &ESMProteinTensor, config: &LogitsConfig) -> Result<LogitsOutput> {
-    //     let input = if !input.is_batched() {
-    //         BatchedESMProteinTensor::from_protein_tensor(input)?
-    //     } else {
-    //         input.clone()
-    //     };
+        Ok(ESMCOutput {
+            sequence_logits,
+            embeddings: Some(x),
+            hidden_states,
+        })
+    }
 
-    //     candle_core::no_grad(|| {
-    //         let output = self.forward(Some(&input.sequence), None)?;
+    // ---------------------------------------------------------------------------
+    // Convenience wrappers
+    // ---------------------------------------------------------------------------
 
-    //         Ok(LogitsOutput {
-    //             logits: ForwardTrackData {
-    //                 sequence: if config.sequence {
-    //                     Some(output.sequence_logits)
-    //                 } else {
-    //                     None
-    //                 },
-    //             },
-    //             embeddings: if config.return_embeddings {
-    //                 output.embeddings
-    //             } else {
-    //                 None
-    //             },
-    //         })
-    //     })
-    // }
+    /// Tokenize a raw amino-acid sequence string into a 1-D token-ID tensor
+    /// (shape `(L+2,)` including BOS/EOS), suitable for batching or direct
+    /// use as the `sequence_tokens` argument to `forward()`.
+    pub fn encode(&self, sequence: &str) -> Result<Tensor> {
+        let token_ids = self.tokenizer.tokenize_sequence(sequence, true);
+        let len = token_ids.len();
+        Tensor::from_vec(token_ids, len, &self.device)
+    }
+
+    /// Decode a 1-D or 2-D token-ID tensor back to an amino-acid string.
+    ///
+    /// Handles a batched `(1, L)` tensor by squeezing the batch dimension.
+    /// Special tokens (BOS, PAD, EOS, MASK) are stripped.
+    pub fn decode(&self, tokens: &Tensor) -> Result<String> {
+        let tokens = match tokens.dims().len() {
+            2 => tokens.squeeze(0)?,
+            _ => tokens.clone(),
+        };
+        let ids = tokens.to_dtype(DType::U32)?.to_vec1::<u32>()?;
+        Ok(self.tokenizer.decode_sequence(&ids))
+    }
+
+    /// Run a no-grad forward pass and return logits / embeddings.
+    ///
+    /// `tokens` should be a `(B, L)` or `(L,)` tensor of token IDs.
+    /// A missing batch dimension is added automatically.
+    pub fn logits(&self, tokens: &Tensor, config: LogitsConfig) -> Result<LogitsOutput> {
+        // Ensure batch dimension.
+        let tokens = match tokens.dims().len() {
+            1 => tokens.unsqueeze(0)?,
+            _ => tokens.clone(),
+        };
+
+        let output = self.forward(&tokens, None, config.return_hidden_states)?;
+
+        Ok(LogitsOutput {
+            sequence_logits: if config.sequence {
+                Some(output.sequence_logits)
+            } else {
+                None
+            },
+            embeddings: if config.return_embeddings {
+                output.embeddings
+            } else {
+                None
+            },
+            hidden_states: output.hidden_states,
+        })
+    }
 }
