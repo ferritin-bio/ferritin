@@ -177,7 +177,7 @@ impl LigandMPNN {
         Ok(amino_acid_probs)
     }
 
-    pub fn get_all_locations(&self, temp: f32) -> Result<Vec<PseudoProbability>> {
+    pub fn get_all_locations(&self, _temp: f32) -> Result<Vec<PseudoProbability>> {
         todo!()
     }
 }

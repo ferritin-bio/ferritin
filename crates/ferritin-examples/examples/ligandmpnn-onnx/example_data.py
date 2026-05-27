@@ -558,14 +558,14 @@ def test_ligand_mpnn_full():
             # Generate sequence
             temperatures = [0.1, 0.5, 1.0]
 
-            for temp in temperatures:
-                print(f"\nTemperature: {temp}")
+            for _temp in temperatures:
+                print(f"\nTemperature: {_temp}")
                 sequence = []
                 decoder_time = 0
 
                 for pos in range(5):  # Generate first 5 positions
                     position = torch.tensor([pos], device=device)
-                    temperature = torch.tensor([temp], device=device)
+                    temperature = torch.tensor([_temp], device=device)
 
                     # Get logits for current position
                     start_time = time.time()
@@ -579,7 +579,7 @@ def test_ligand_mpnn_full():
                     decoder_time += time.time() - start_time
 
                     # Convert to probabilities
-                    probs = torch.softmax(logits[0, :20] / temp, dim=-1)
+                    probs = torch.softmax(logits[0, :20] / _temp, dim=-1)
 
                     # Get top predictions
                     top_probs, top_indices = torch.topk(probs, k=5)
@@ -615,8 +615,8 @@ def test_ligand_mpnn_full():
         print(f"ONNX encoder time: {encoder_time:.4f}s")
 
         # Generate sequence with different temperatures
-        for temp in temperatures:
-            print(f"\nTemperature: {temp}")
+        for _temp in temperatures:
+            print(f"\nTemperature: {_temp}")
             sequence = []
             decoder_time = 0
 
@@ -627,7 +627,7 @@ def test_ligand_mpnn_full():
                     'h_e': onnx_h_E,
                     'e_idx': onnx_E_idx,
                     'position': np.array([pos], dtype=np.int64),
-                    'temperature': np.array([temp], dtype=np.float32)
+                    'temperature': np.array([_temp], dtype=np.float32)
                 }
 
                 # Run decoder
@@ -636,7 +636,7 @@ def test_ligand_mpnn_full():
                 decoder_time += time.time() - start_time
 
                 # Convert to probabilities
-                probs = torch.softmax(torch.tensor(onnx_logits[0, :20]) / temp, dim=-1)
+                probs = torch.softmax(torch.tensor(onnx_logits[0, :20]) / _temp, dim=-1)
 
                 # Get top predictions
                 top_probs, top_indices = torch.topk(probs, k=5)

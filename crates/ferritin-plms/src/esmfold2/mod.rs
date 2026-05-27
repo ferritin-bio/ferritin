@@ -1,0 +1,16 @@
+//! ESMFold2 input builder types.
+//!
+//! This module provides the input data structures for the ESMFold2
+//! structure-prediction model from EvolutionaryScale. It is ported from
+//! the Python `esm.models.esmfold2` SDK.
+//!
+//! The primary entry point is [`input_types::StructurePredictionInput`], which
+//! is assembled from [`input_types::ProteinInput`], [`input_types::DNAInput`],
+//! and [`input_types::LigandInput`] chains using a builder API.
+
+pub mod input_types;
+
+pub use input_types::{
+    ChainInput, DNAInput, LigandInput, Modification, ProteinInput, StructurePredictionInput,
+    validate_dna_sequence, validate_protein_sequence,
+};
