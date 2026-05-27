@@ -1,6 +1,6 @@
 use crate::esmc::layers::rotary::RotaryEmbedding;
 use crate::esmc::models::esmc::ESMCConfig;
-use candle_core::{Module, Result};
+use candle_core::{Module, Result, Tensor};
 use candle_nn::{self as nn, LayerNormConfig, VarBuilder};
 // use scaled_dot_product_attention;
 
@@ -78,6 +78,58 @@ impl MultiHeadAttention {
             k_ln,
             rotary,
         })
+    }
+
+    pub fn forward(&self, x: &Tensor, sequence_id: Option<&Tensor>) -> Result<Tensor> {
+        let (b, l, _) = x.dims3()?;
+        // QKV projection: (B, L, d_model) → (B, L, 3*d_model) → split
+        let qkv = self.layernorm_qkv.forward(x)?;
+        let chunks = qkv.chunk(3, candle_core::D::Minus1)?;
+        let (q, k, v) = (&chunks[0], &chunks[1], &chunks[2]);
+
+        // Per-head layer norms
+        let q = self.q_ln.forward(q)?;
+        let k = self.k_ln.forward(k)?;
+
+        // Reshape to (B, n_heads, L, d_head) for rotary + SDPA
+        let q = q
+            .reshape((b, l, self.n_heads, self.d_head))?
+            .transpose(1, 2)?;
+        let k = k
+            .reshape((b, l, self.n_heads, self.d_head))?
+            .transpose(1, 2)?;
+        let v = v
+            .reshape((b, l, self.n_heads, self.d_head))?
+            .transpose(1, 2)?;
+
+        // Apply rotary positional embeddings
+        let (q, k) = self.rotary.forward(&q, &k)?;
+
+        // Scaled dot-product attention
+        let scale = (self.d_head as f64).sqrt().recip();
+        let attn =
+            (q.matmul(&k.transpose(candle_core::D::Minus1, candle_core::D::Minus2)?)? * scale)?;
+
+        // Optional key-padding mask from sequence_id (True = real token, False = pad)
+        let attn = if let Some(seq_id) = sequence_id {
+            // seq_id: (B, L) bool-like; build (B, 1, 1, L) mask so padded keys are masked out
+            let mask = seq_id
+                .unsqueeze(1)?
+                .unsqueeze(1)?
+                .broadcast_as(attn.shape())?;
+            let neg_inf = (Tensor::ones_like(&attn)? * f64::NEG_INFINITY)?;
+            mask.where_cond(&attn, &neg_inf)?
+        } else {
+            attn
+        };
+
+        let attn = candle_nn::ops::softmax(&attn, candle_core::D::Minus1)?;
+
+        // Weighted sum over values, reshape back to (B, L, d_model)
+        let context = attn.matmul(&v)?; // (B, n_heads, L, d_head)
+        let context = context.transpose(1, 2)?.reshape((b, l, self.d_model))?;
+
+        self.out_proj.forward(&context)
     }
 
     // fn apply_rotary(&self, q: &Tensor, k: &Tensor) -> Result<(Tensor, Tensor)> {

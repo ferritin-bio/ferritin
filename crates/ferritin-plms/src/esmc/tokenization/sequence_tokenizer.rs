@@ -82,6 +82,55 @@ impl Default for EsmSequenceTokenizer {
     }
 }
 
+impl EsmSequenceTokenizer {
+    /// Tokenize an amino-acid sequence string into token IDs.
+    ///
+    /// Looks up each character in `SEQUENCE_VOCAB`. Unknown characters map to
+    /// the `<unk>` token (index 3). When `add_special_tokens` is true, prepends
+    /// BOS (`<cls>` = 0) and appends EOS (`<eos>` = 2).
+    pub fn tokenize_sequence(&self, sequence: &str, add_special_tokens: bool) -> Vec<u32> {
+        use std::collections::HashMap;
+        let vocab: HashMap<&str, u32> = SEQUENCE_VOCAB
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (*s, i as u32))
+            .collect();
+        let unk_id = *vocab.get("<unk>").unwrap_or(&3);
+
+        let mut tokens = Vec::with_capacity(sequence.len() + 2);
+        if add_special_tokens {
+            tokens.push(*vocab.get("<cls>").unwrap_or(&0));
+        }
+        for ch in sequence.chars() {
+            let s = ch.to_string();
+            let id = vocab.get(s.as_str()).copied().unwrap_or(unk_id);
+            tokens.push(id);
+        }
+        if add_special_tokens {
+            tokens.push(*vocab.get("<eos>").unwrap_or(&2));
+        }
+        tokens
+    }
+
+    /// Decode token IDs back to an amino-acid sequence string.
+    ///
+    /// Skips the standard special tokens (BOS=0, PAD=1, EOS=2, MASK=32) and
+    /// concatenates the remaining vocabulary entries.
+    pub fn decode_sequence(&self, token_ids: &[u32]) -> String {
+        const SPECIAL: [u32; 4] = [0, 1, 2, 32]; // cls, pad, eos, mask
+        let mut result = String::new();
+        for &id in token_ids {
+            if SPECIAL.contains(&id) {
+                continue;
+            }
+            if let Some(tok) = SEQUENCE_VOCAB.get(id as usize) {
+                result.push_str(tok);
+            }
+        }
+        result
+    }
+}
+
 impl EsmTokenizerBase for EsmSequenceTokenizer {
     fn encode(&self) -> Result<()> {
         todo!()

@@ -1,7 +1,7 @@
 use crate::esmc::layers::blocks::UnifiedTransformerBlock;
 use crate::esmc::models::esmc::ESMCConfig;
 // use crate::esmc::utils::structure::affine3d::Affine3D;
-use candle_core::Result;
+use candle_core::{Module, Result, Tensor};
 use candle_nn::{self as nn, LayerNorm, LayerNormConfig};
 
 pub struct TransformerStack {
@@ -48,6 +48,37 @@ impl TransformerStack {
 
         Ok(Self { blocks, norm })
     }
+    /// Run the full transformer stack.
+    ///
+    /// - `x`: `(B, L, d_model)`
+    /// - `sequence_id`: optional `(B, L)` boolean mask (True = real token, False = pad)
+    /// - `output_hidden_states`: if true, returns hidden state after every block as a Vec
+    ///
+    /// Returns `(final_hidden, hidden_states_per_layer_if_requested)`.
+    pub fn forward(
+        &self,
+        x: &Tensor,
+        sequence_id: Option<&Tensor>,
+        output_hidden_states: bool,
+    ) -> Result<(Tensor, Option<Vec<Tensor>>)> {
+        let mut x = x.clone();
+        let mut hidden_states: Option<Vec<Tensor>> = if output_hidden_states {
+            Some(Vec::with_capacity(self.blocks.len()))
+        } else {
+            None
+        };
+
+        for block in &self.blocks {
+            x = block.forward(&x, sequence_id)?;
+            if let Some(ref mut hs) = hidden_states {
+                hs.push(x.clone());
+            }
+        }
+
+        let x = self.norm.forward(&x)?;
+        Ok((x, hidden_states))
+    }
+
     // pub fn new(
     //     d_model: i64,
     //     n_heads: i64,
