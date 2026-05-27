@@ -21,7 +21,7 @@
 
 pub mod layers;
 pub mod models;
-// pub mod pretrained;  // WIP: requires snapshot_download() and LOCAL_MODEL_REGISTRY
+pub mod pretrained;
 // pub mod sdk;         // WIP: uses undefined abc crate and protein_chain/complex types
 pub mod tokenization;
 pub mod utils;

@@ -108,7 +108,7 @@ impl ESMCConfig {
             ffn_type: FfnType::SWIGLU,
             tokenizer: ESMTokenizer::Esm3OpenSmall,
             use_plain_attn: true,
-            n_layers_geom: 1,
+            n_layers_geom: 0,
             scale_residue: true,
             residue_scaling_factor: (30f64 / 36.).sqrt(),
             mask_and_zero_frameless: false,
@@ -117,6 +117,50 @@ impl ESMCConfig {
             expansion_ratio: 8.0 / 3.0,
             regression_head_output_dim: 64,
             regression_head_hidden_dim: 960,
+            embedding_dim: 64,
+        }
+    }
+
+    pub fn esmc_600m() -> Self {
+        Self {
+            d_model: 1152,
+            n_heads: 18,
+            n_layers: 36,
+            v_head_transformer: None,
+            ffn_type: FfnType::SWIGLU,
+            tokenizer: ESMTokenizer::Esm3OpenSmall,
+            use_plain_attn: true,
+            n_layers_geom: 0,
+            scale_residue: true,
+            residue_scaling_factor: (36f64 / 36.).sqrt(), // = 1.0
+            mask_and_zero_frameless: false,
+            bias: false,
+            qk_layernorm: true,
+            expansion_ratio: 8.0 / 3.0,
+            regression_head_output_dim: 64,
+            regression_head_hidden_dim: 1152,
+            embedding_dim: 64,
+        }
+    }
+
+    pub fn esmc_6b() -> Self {
+        Self {
+            d_model: 2560,
+            n_heads: 40,
+            n_layers: 80,
+            v_head_transformer: None,
+            ffn_type: FfnType::SWIGLU,
+            tokenizer: ESMTokenizer::Esm3OpenSmall,
+            use_plain_attn: true,
+            n_layers_geom: 0,
+            scale_residue: true,
+            residue_scaling_factor: (80f64 / 36.).sqrt(),
+            mask_and_zero_frameless: false,
+            bias: false,
+            qk_layernorm: true,
+            expansion_ratio: 8.0 / 3.0,
+            regression_head_output_dim: 64,
+            regression_head_hidden_dim: 2560,
             embedding_dim: 64,
         }
     }
