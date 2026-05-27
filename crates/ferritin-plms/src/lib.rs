@@ -12,7 +12,7 @@ use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{Device, Result};
 pub use esm2::esm2::{ESM2, ESM2Config};
 pub use esm2::esm2_runner::{ESM2Models, ESM2Runner};
-pub use esmc::models::esmc::{ESMC, ESMCConfig};
+pub use esmc::models::esmc::{ESMC, ESMCConfig, ESMCOutput, LogitsConfig, LogitsOutput};
 pub use featurize::StructureFeatures;
 pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;

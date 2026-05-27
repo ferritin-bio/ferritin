@@ -106,7 +106,7 @@ impl MultiHeadAttention {
         let (q, k) = self.rotary.forward(&q, &k)?;
 
         // Scaled dot-product attention
-        let scale = (self.d_head as f64).sqrt().recip();
+        let scale = (self.d_head as f64).sqrt().recip(); // f64 scalar — candle Mul<f64> overload
         let attn =
             (q.matmul(&k.transpose(candle_core::D::Minus1, candle_core::D::Minus2)?)? * scale)?;
 

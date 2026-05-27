@@ -111,7 +111,10 @@ impl RotaryEmbedding {
         // pos_idx_in_fp32=True,
 
         let inv_freq = Self::compute_inv_freq(rotary_dims, base, device)?;
-        let arange = Tensor::arange(0., (rotary_dims as f64) / 2., device)? * 2.;
+        // Build scale tensor in F32; candle operator overloads only accept f64 scalars.
+        let arange = Tensor::arange(0u32, (rotary_dims / 2) as u32, device)?
+            .to_dtype(candle_core::DType::F32)?
+            * 2.0f64;
         let scale = {
             let numerator = (&arange? + (0.4 * rotary_dims as f64))?;
             let denominator = 1.4 * rotary_dims as f64;
@@ -173,11 +176,13 @@ impl RotaryEmbedding {
     }
 
     fn compute_inv_freq(rotary_dims: usize, base: f64, device: &Device) -> Result<Tensor> {
+        // Emit f32 values so inv_freq stays F32 and avoids dtype
+        // mismatches when matmul'd with the F32 position tensor.
         Tensor::from_iter(
             (0..rotary_dims)
                 .step_by(2)
                 .map(|i| i as f32 / rotary_dims as f32)
-                .map(|theta| base.powf(-theta as f64)),
+                .map(|theta| base.powf(-theta as f64) as f32),
             device,
         )
     }
