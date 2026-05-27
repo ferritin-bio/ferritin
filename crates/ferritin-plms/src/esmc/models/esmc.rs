@@ -181,7 +181,7 @@ impl ESMC {
         let sequence_id = match sequence_id {
             Some(s) => s,
             None => {
-                let pad_id = self.tokenizer.pad_token_id() as u32;
+                let pad_id = self.tokenizer.pad_token_id();
                 owned_mask = sequence_tokens.ne(pad_id)?;
                 &owned_mask
             }

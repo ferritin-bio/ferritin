@@ -507,7 +507,7 @@ mod tests {
     fn test_ffn_forward_shape() -> Result<()> {
         use candle_nn::{VarBuilder, VarMap};
         let device = Device::Cpu;
-        let cfg = crate::amplify::config::AMPLIFYConfig::amp_120m();
+        let cfg = AMPLIFYConfig::amp_120m();
         let varmap = VarMap::new();
         let vb = VarBuilder::from_varmap(&varmap, candle_core::DType::F32, &device);
         // Load a single encoder block (layer 0)
@@ -535,14 +535,14 @@ mod tests {
         use candle_nn::{VarBuilder, VarMap};
         let device = Device::Cpu;
         // Minimal 1-layer config so AMPLIFY::load is fast
-        let cfg = crate::amplify::config::AMPLIFYConfig {
+        let cfg = AMPLIFYConfig {
             num_hidden_layers: 1,
             hidden_size: 64,
             num_attention_heads: 4,
             intermediate_size: 256,
             vocab_size: 27,
             max_length: 32,
-            ..crate::amplify::config::AMPLIFYConfig::amp_120m()
+            ..AMPLIFYConfig::amp_120m()
         };
         let varmap = VarMap::new();
         let vb = VarBuilder::from_varmap(&varmap, candle_core::DType::F32, &device);

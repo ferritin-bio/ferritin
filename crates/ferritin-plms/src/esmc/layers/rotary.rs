@@ -172,7 +172,7 @@ impl RotaryEmbedding {
         let x1 = x.narrow(D::Minus1, 0, half)?;
         let x2 = x.narrow(D::Minus1, half, half)?;
         let x_rotated = Tensor::cat(&[&x2.neg()?, &x1], D::Minus1)?;
-        (x.broadcast_mul(cos)? + x_rotated.broadcast_mul(sin)?)
+        x.broadcast_mul(cos)? + x_rotated.broadcast_mul(sin)?
     }
 
     fn compute_inv_freq(rotary_dims: usize, base: f64, device: &Device) -> Result<Tensor> {

@@ -192,7 +192,7 @@ impl UnifiedTransformerBlock {
         // Feed-forward
         let r3 = self.ffn.forward(&x)?;
         let r3 = (&r3 / self.scaling_factor)?;
-        (&x + &r3)
+        &x + &r3
     }
 }
 
