@@ -26,6 +26,7 @@ use ferritin_test_data::TestFile;
 
 /// Responsible for taking CLI args and returning the Features and Model
 ///
+#[allow(dead_code)]
 pub struct MPNNExecConfig {
     pub(crate) protein_inputs: String, // Todo: make this optionally plural
     pub(crate) run_config: RunConfig,
@@ -250,9 +251,11 @@ impl ProteinMPNNConfig {
             vocab: 21,
         }
     }
+    #[allow(dead_code)]
     fn ligandmpnn() {
         todo!()
     }
+    #[allow(dead_code)]
     fn membranempnn() {
         todo!()
     }

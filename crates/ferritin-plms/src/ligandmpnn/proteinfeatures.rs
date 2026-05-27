@@ -12,6 +12,7 @@ use crate::featurize::utilities::aa1to_int;
 use candle_core::{Device, Result, Tensor};
 use std::collections::{HashMap, HashSet};
 
+#[allow(dead_code)]
 pub struct ProteinFeatures {
     /// protein amino acids sequences as 1D Tensor of u32
     pub(crate) s: Tensor,

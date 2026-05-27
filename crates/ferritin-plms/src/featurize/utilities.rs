@@ -45,11 +45,13 @@ pub fn int_to_aa1(aa_int: u32) -> char {
     }
 }
 
+#[allow(dead_code)]
 const ALPHABET: [char; 21] = [
     'A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W',
     'Y', 'X',
 ];
 
+#[allow(dead_code)]
 const ELEMENT_LIST: [&str; 118] = [
     "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl",
     "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As",
@@ -403,6 +405,7 @@ pub fn gather_nodes_t(nodes: &Tensor, neighbor_idx: &Tensor) -> Result<Tensor> {
     nodes.gather(&idx_flat, 1)
 }
 
+#[allow(dead_code)]
 fn get_seq_rec(s: &Tensor, s_pred: &Tensor, mask: &Tensor) -> Result<Tensor> {
     // S: true sequence shape=[batch, length]
     // S_pred: predicted sequence shape=[batch, length]
@@ -419,6 +422,7 @@ fn get_seq_rec(s: &Tensor, s_pred: &Tensor, mask: &Tensor) -> Result<Tensor> {
     average.squeeze(1)
 }
 
+#[allow(dead_code)]
 fn get_score(s: &Tensor, log_probs: &Tensor, mask: &Tensor) -> Result<(Tensor, Tensor)> {
     //     S : true sequence shape=[batch, length]
     //     log_probs : predicted sequence shape=[batch, length]

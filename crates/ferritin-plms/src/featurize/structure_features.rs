@@ -104,8 +104,8 @@ impl StructureFeatures for AtomCollection {
         let x_37 = self.to_numeric_atom37(device)?;
         let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F32, device)?;
         let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
-        let cb = self.create_cb(device);
-        let chain_labels = self.get_resids(); //  <-- need to double-check shape. I think this is all-atom
+        let _cb = self.create_cb(device);
+        let _chain_labels = self.get_resids(); //  <-- need to double-check shape. I think this is all-atom
         let residue_ids = self.get_res_index();
         let residue_length = residue_ids.len();
         let r_idx = Tensor::from_iter(residue_ids, device)?.reshape((1, residue_length))?;

@@ -57,7 +57,7 @@ impl EsmSequenceTokenizer {
             AddedToken::from(chain_break_token, true),
         ];
 
-        tokenizer.add_special_tokens(special_tokens);
+        let _ = tokenizer.add_special_tokens(special_tokens);
 
         let post_processor = TemplateProcessing::builder()
             .try_single(Template::try_from(format!("{} $A {}", cls_token, eos_token)).unwrap())?

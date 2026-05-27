@@ -181,6 +181,7 @@ fn rotate_half(x: &Tensor) -> Result<Tensor> {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct RotaryEmbedding {
     inv_freq: Tensor,
     max_seq_len: usize,
@@ -666,7 +667,7 @@ impl ESM2 {
             layer_attentions.push(attn_weights);
         }
 
-        xs = self.layer_norm_after.forward(&xs)?;
+        let _ = self.layer_norm_after.forward(&xs)?;
         // Note: we do NOT need to transpose back or run lm_head — the contact
         // head only uses the attention weights, not the final hidden states.
 

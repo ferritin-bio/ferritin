@@ -38,6 +38,7 @@ use candle_nn::VarBuilder;
 //     Tensor::cat(&[&x_rot_out, &x_pass], -1)
 // }
 
+#[allow(dead_code)]
 pub struct RotaryEmbedding {
     dim: usize,
     base: f64,
