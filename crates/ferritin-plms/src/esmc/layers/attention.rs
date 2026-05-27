@@ -111,10 +111,14 @@ impl MultiHeadAttention {
         // Apply rotary positional embeddings
         let (q, k) = self.rotary.forward(&q, &k)?;
 
-        // Scaled dot-product attention
-        let scale = (self.d_head as f64).sqrt().recip(); // f64 scalar — candle Mul<f64> overload
-        let attn =
-            (q.matmul(&k.transpose(candle_core::D::Minus1, candle_core::D::Minus2)?)? * scale)?;
+        // Scaled dot-product attention.
+        // k must be made contiguous after transpose — Metal (and some CPU paths) require
+        // contiguous tensors for batched matmul.
+        let scale = (self.d_head as f64).sqrt().recip();
+        let k_t = k
+            .transpose(candle_core::D::Minus1, candle_core::D::Minus2)?
+            .contiguous()?;
+        let attn = (q.contiguous()?.matmul(&k_t)? * scale)?;
 
         // Optional key-padding mask from sequence_id (True = real token, False = pad)
         let attn = if let Some(seq_id) = sequence_id {
@@ -132,8 +136,11 @@ impl MultiHeadAttention {
         let attn = candle_nn::ops::softmax(&attn, candle_core::D::Minus1)?;
 
         // Weighted sum over values, reshape back to (B, L, d_model)
-        let context = attn.matmul(&v)?; // (B, n_heads, L, d_head)
-        let context = context.transpose(1, 2)?.reshape((b, l, self.d_model))?;
+        let context = attn.matmul(&v.contiguous()?)?; // (B, n_heads, L, d_head)
+        let context = context
+            .transpose(1, 2)?
+            .contiguous()?
+            .reshape((b, l, self.d_model))?;
 
         self.out_proj.forward(&context)
     }
