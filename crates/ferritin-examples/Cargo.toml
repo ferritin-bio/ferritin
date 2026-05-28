@@ -95,5 +95,9 @@ name = "esmc"
 path = "examples/esmc/main.rs"
 
 [[example]]
+name = "esmfold2"
+path = "examples/esmfold2/main.rs"
+
+[[example]]
 name = "ligandmpnn"
 path = "examples/ligandmpnn/main.rs"

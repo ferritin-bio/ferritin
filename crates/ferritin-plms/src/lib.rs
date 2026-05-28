@@ -17,6 +17,9 @@ pub use esmc::pretrained::{ESMCModels, ESMCRunner};
 pub use esmfold2::config::ESMFold2Config;
 pub use esmfold2::output::ESMFold2Output;
 pub use esmfold2::pretrained::{ESMFold2Models, ESMFold2Runner};
+pub use esmfold2::{
+    ChainInput, DNAInput, LigandInput, Modification, ProteinInput, StructurePredictionInput,
+};
 pub use featurize::StructureFeatures;
 pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
