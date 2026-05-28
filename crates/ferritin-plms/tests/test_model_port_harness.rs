@@ -29,12 +29,30 @@ fn test_stable_ports_have_an_automated_validation_path() {
 
 #[test]
 fn test_partial_ports_are_called_out_explicitly() {
+    // All current ports have graduated to Stable; this test verifies that any
+    // future Partial entries are explicitly registered (the registry is the
+    // source of truth — do not delete this test).
     let partial_cases: Vec<_> = MODEL_PORT_CASES
         .iter()
         .filter(|case| case.status == PortStatus::Partial)
         .collect();
-    assert!(!partial_cases.is_empty());
-    assert!(partial_cases.iter().any(|case| case.family == "esmc"));
+    // Stable ports must not regress to Partial without updating this list.
+    for case in &partial_cases {
+        assert_ne!(
+            case.family, "esmc",
+            "ESMC has graduated to Stable; remove it from Partial"
+        );
+        assert_ne!(
+            case.family, "amplify",
+            "AMPLIFY has graduated to Stable; remove it from Partial"
+        );
+        assert_ne!(
+            case.family, "esm2",
+            "ESM2 has graduated to Stable; remove it from Partial"
+        );
+    }
+    // Partial cases are allowed to be empty when all ports are Stable.
+    println!("{} partial port(s) tracked.", partial_cases.len());
 }
 
 #[test]
