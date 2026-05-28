@@ -11,6 +11,7 @@
 pub mod config;
 pub mod input_types;
 pub mod layers;
+pub mod mmcif;
 pub mod model;
 pub mod output;
 pub mod pretrained;

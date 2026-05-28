@@ -633,6 +633,22 @@ impl ESM2 {
 
         Ok(ESM2Output { logits })
     }
+    /// Run the transformer and return per-residue hidden states **before** the LM head.
+    ///
+    /// Shape: `(batch, seq_len, hidden_size)`. Equivalent to `forward` but skips
+    /// the final `lm_head` projection, giving raw contextualised embeddings.
+    pub fn embed(&self, x: &Tensor, attention_mask: Option<&Tensor>) -> Result<Tensor> {
+        let mut xs = self.embeddings.forward(x, attention_mask)?;
+        xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
+        for (_layer_idx, layer) in self.layers.iter().enumerate() {
+            let (new_xs, _attn) = layer.forward(&xs)?;
+            xs = new_xs;
+        }
+        xs = self.layer_norm_after.forward(&xs)?;
+        xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
+        Ok(xs)
+    }
+
     pub(crate) fn get_device(&self) -> &Device {
         self.embeddings.word_embeddings.embeddings().device()
     }

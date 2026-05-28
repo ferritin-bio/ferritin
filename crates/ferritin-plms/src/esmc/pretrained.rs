@@ -31,6 +31,7 @@
 //! code works against both the wrapped and unwrapped formats.
 
 use crate::esmc::models::esmc::{ESMC, ESMCConfig};
+use crate::plm_runner::PlmRunner;
 use anyhow::Result;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
@@ -106,5 +107,16 @@ impl ESMCRunner {
         output
             .embeddings
             .ok_or_else(|| anyhow::anyhow!("ESMC forward() returned no embeddings"))
+    }
+}
+
+impl PlmRunner for ESMCRunner {
+    /// Delegate to `embed_sequence`, returning per-residue embeddings `(1, L, d_model)`.
+    fn embed(&self, sequence: &str) -> Result<Tensor> {
+        self.embed_sequence(sequence)
+    }
+
+    fn model_name(&self) -> &str {
+        "esmc"
     }
 }

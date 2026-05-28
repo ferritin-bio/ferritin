@@ -27,7 +27,9 @@ pub mod esmc;
 pub mod esmfold2;
 pub mod featurize;
 pub mod ligandmpnn;
+pub mod plm_runner;
 pub mod types;
+pub use plm_runner::PlmRunner;
 
 /// Returns the best available device for computation.
 ///

@@ -2,6 +2,7 @@
 //!
 //! Class for loading and running the ESM2 models
 use super::esm2::{ESM2, ESM2Config, ESM2Output};
+use crate::plm_runner::PlmRunner;
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
@@ -115,5 +116,26 @@ impl ESM2Runner {
             .map_err(|e| anyhow!("Failed to decode tokens: {}", e))?
             .replace(" ", "");
         Ok(decoded_sequence)
+    }
+}
+
+impl PlmRunner for ESM2Runner {
+    /// Run the ESM2 transformer and return per-residue embeddings (pre-LM-head).
+    ///
+    /// Shape: `(1, L, hidden_size)` where `L` includes BOS and EOS tokens.
+    fn embed(&self, sequence: &str) -> Result<Tensor> {
+        let device = self.model.get_device();
+        let tokens = self
+            .tokenizer
+            .encode(sequence.to_string(), false)
+            .map_err(E::msg)?
+            .get_ids()
+            .to_vec();
+        let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
+        Ok(self.model.embed(&token_ids, None)?)
+    }
+
+    fn model_name(&self) -> &str {
+        "esm2"
     }
 }
