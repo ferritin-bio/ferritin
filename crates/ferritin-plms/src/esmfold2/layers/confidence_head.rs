@@ -1,7 +1,7 @@
 //! Confidence head: predicts pLDDT, pAE, pDE, and distogram.
 //!
 //! Architecture:
-//! 1. 4-layer Pairformer trunk refines (single, pair) — TODO
+//! 1. 4-layer Pairformer trunk refines (single, pair)
 //! 2. Four linear heads project to logit bins:
 //!    - pLDDT:     single → 50 bins  → softmax → weighted mean → scalar [0,1]
 //!    - pAE:       pair   → 64 bins  → softmax → weighted mean → matrix [Å]
@@ -10,13 +10,14 @@
 //!
 //! Weight layout (rooted at `confidence_head`):
 //! ```text
-//! trunk.blocks.{0..3}.*   — 4-layer Pairformer (TODO)
+//! trunk.blocks.{0..3}.*   — 4-layer Pairformer (8 heads, d_pair=256)
 //! plddt_head.weight        — linear d_single → num_plddt_bins (no bias)
 //! pae_head.weight          — linear d_pair   → num_pae_bins   (no bias)
 //! pde_head.weight          — linear d_pair   → num_pde_bins   (no bias)
 //! distogram_head.weight    — linear d_pair   → distogram_bins (no bias)
 //! ```
 
+use super::pairformer::PairformerBlock;
 use candle_core::{DType, Result, Tensor};
 use candle_nn::{self as nn, Module, VarBuilder, ops::softmax};
 
@@ -68,13 +69,16 @@ pub struct ConfidenceOutput {
 
 /// 4-layer Pairformer confidence head.
 pub struct ConfidenceHead {
-    // TODO: trunk: PairformerTrunk (4 layers)
+    trunk: Vec<PairformerBlock>,
     plddt_head: nn::Linear,
     pae_head: nn::Linear,
     pde_head: nn::Linear,
     distogram_head: nn::Linear,
     num_plddt_bins: usize,
 }
+
+/// Number of attention heads in the confidence head Pairformer trunk (same as folding trunk).
+const CONFIDENCE_N_HEADS: usize = 8;
 
 impl ConfidenceHead {
     /// Load the confidence head from a `VarBuilder` rooted at `confidence_head.*`.
@@ -87,8 +91,14 @@ impl ConfidenceHead {
         num_pde_bins: usize,
         distogram_bins: usize,
     ) -> Result<Self> {
-        // TODO: load Pairformer trunk from vb.pp("trunk")
+        let n_trunk_layers = 4;
+        let trunk = (0..n_trunk_layers)
+            .map(|i| {
+                PairformerBlock::load(vb.pp(format!("trunk.blocks.{i}")), d_pair, CONFIDENCE_N_HEADS)
+            })
+            .collect::<Result<Vec<_>>>()?;
         Ok(Self {
+            trunk,
             plddt_head: nn::linear_no_bias(d_single, num_plddt_bins, vb.pp("plddt_head"))?,
             pae_head: nn::linear_no_bias(d_pair, num_pae_bins, vb.pp("pae_head"))?,
             pde_head: nn::linear_no_bias(d_pair, num_pde_bins, vb.pp("pde_head"))?,
@@ -103,20 +113,24 @@ impl ConfidenceHead {
     /// * `single` — `[B, N_tok, d_single]`
     /// * `pair`   — `[B, N_tok, N_tok, d_pair]`
     pub fn forward(&self, single: &Tensor, pair: &Tensor) -> Result<ConfidenceOutput> {
-        // TODO: run 4-layer Pairformer trunk to refine (single, pair)
+        // Refine pair with 4-layer Pairformer trunk (single passes through)
+        let mut pair = pair.clone();
+        for block in &self.trunk {
+            pair = block.forward(&pair)?;
+        }
 
         // pLDDT: [B, N, d_single] → [B, N, 50] → scalar [B, N]
         let plddt_logits = self.plddt_head.forward(single)?;
         let plddt = plddt_from_logits(&plddt_logits)?;
 
         // pAE: [B, N, N, d_pair] → [B, N, N, 64]
-        let pae_logits = self.pae_head.forward(pair)?;
+        let pae_logits = self.pae_head.forward(&pair)?;
 
         // pDE: [B, N, N, d_pair] → [B, N, N, 64]
-        let pde_logits = self.pde_head.forward(pair)?;
+        let pde_logits = self.pde_head.forward(&pair)?;
 
         // Distogram: [B, N, N, d_pair] → [B, N, N, 39]
-        let distogram_logits = self.distogram_head.forward(pair)?;
+        let distogram_logits = self.distogram_head.forward(&pair)?;
 
         Ok(ConfidenceOutput {
             plddt_logits,

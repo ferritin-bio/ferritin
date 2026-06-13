@@ -10,7 +10,7 @@
 use super::pair_init::PairInit;
 use super::pairformer::PairformerBlock;
 use candle_core::{Result, Tensor};
-use candle_nn::VarBuilder;
+use candle_nn::{self as nn, LayerNorm, LayerNormConfig, Module, VarBuilder};
 
 /// 24-layer Pairformer trunk that jointly refines single and pair representations.
 ///
@@ -19,7 +19,7 @@ use candle_nn::VarBuilder;
 pub struct FoldingTrunk {
     pair_init: PairInit,
     blocks: Vec<PairformerBlock>,
-    // TODO: norm: LayerNorm — final single-repr LayerNorm
+    single_norm: LayerNorm,
 }
 
 impl FoldingTrunk {
@@ -43,8 +43,8 @@ impl FoldingTrunk {
         let blocks = (0..n_layers)
             .map(|i| PairformerBlock::load(vb.pp(format!("blocks.{i}")), d_pair, n_heads))
             .collect::<Result<Vec<_>>>()?;
-        // TODO: load LayerNorm from vb.pp("norm")
-        Ok(Self { pair_init, blocks })
+        let single_norm = nn::layer_norm(d_single, LayerNormConfig::from(1e-5), vb.pp("norm"))?;
+        Ok(Self { pair_init, blocks, single_norm })
     }
 
     /// Initialise the pair representation from sequence and chain metadata.
@@ -78,7 +78,7 @@ impl FoldingTrunk {
         for block in &self.blocks {
             z = block.forward(&z)?;
         }
-        // TODO: apply final LayerNorm on single
-        Ok((single.clone(), z))
+        let single = self.single_norm.forward(single)?;
+        Ok((single, z))
     }
 }
