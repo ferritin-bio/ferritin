@@ -24,6 +24,7 @@ pub use featurize::StructureFeatures;
 pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
 
+pub mod utils;
 pub mod amplify;
 pub mod esm2;
 pub mod esmc;
