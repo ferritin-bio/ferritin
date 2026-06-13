@@ -6,3 +6,4 @@ pub mod diffusion;
 pub mod folding_trunk;
 pub mod lm_encoder;
 pub mod pair_init;
+pub mod pairformer;

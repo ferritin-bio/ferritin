@@ -46,6 +46,7 @@ impl ESMFold2Model {
             config.trunk_n_layers,
             config.d_single,
             config.d_pair,
+            config.trunk_n_heads,
         )?;
 
         let diffusion =
