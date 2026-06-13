@@ -53,8 +53,12 @@ impl ESMFold2Model {
 
         let confidence_head = ConfidenceHead::load(
             vb.pp("confidence_head"),
+            config.d_single,
+            config.d_pair,
             config.num_plddt_bins,
             config.num_pae_bins,
+            config.num_pde_bins,
+            config.distogram_bins,
         )?;
 
         Ok(Self {
