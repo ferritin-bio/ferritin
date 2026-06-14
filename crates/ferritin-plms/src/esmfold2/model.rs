@@ -49,8 +49,16 @@ impl ESMFold2Model {
             config.trunk_n_heads,
         )?;
 
-        let diffusion =
-            DiffusionModule::load(vb.pp("structure_head"), config.c_token, config.c_atom)?;
+        let diffusion = DiffusionModule::load(
+            vb.pp("structure_head"),
+            config.c_token,
+            config.c_atom,
+            config.d_single,
+            config.d_pair,
+            config.token_num_blocks,
+            config.token_num_heads,
+            config.fourier_dim,
+        )?;
 
         let confidence_head = ConfidenceHead::load(
             vb.pp("confidence_head"),
