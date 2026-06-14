@@ -1,5 +1,5 @@
 //! ESM3 layer implementations.
-//!
-//! Planned ports (tracking issues in parens):
-//! - TransformerStack with geometric affine3d attention (ferritin-zcf)
-//! - VQ-VAE encoder/decoder layers (ferritin-4kf)
+
+pub mod blocks;
+pub mod transformer_stack;
+// VQ-VAE encoder/decoder layers tracked by ferritin-4kf
