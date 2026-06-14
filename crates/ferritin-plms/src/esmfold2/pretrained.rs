@@ -26,9 +26,9 @@ use super::config::ESMFold2Config;
 use super::model::ESMFold2Model;
 use super::output::ESMFold2Output;
 use anyhow::Result;
-use candle_core::{DType, Device};
+use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use hf_hub::{Repo, RepoType, api::sync::Api};
+use hf_hub::HFClientSync;
 
 const ESMFOLD2_DTYPE: DType = DType::F32;
 
@@ -73,9 +73,9 @@ impl ESMFold2Runner {
         let (repo_id, config) = model_variant.model_info();
 
         eprintln!("ESMFold2Runner: downloading structure head from {repo_id}...");
-        let repo = Repo::with_revision(repo_id.to_string(), RepoType::Model, "main".to_string());
-        let api = Api::new()?;
-        let weights_path = api.repo(repo).get("model.safetensors")?;
+        let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
+        let client = HFClientSync::new()?;
+        let weights_path = client.model(owner, name).download_file().filename("model.safetensors").send()?;
         eprintln!(
             "ESMFold2Runner: weights cached at {}",
             weights_path.display()
@@ -102,29 +102,64 @@ impl ESMFold2Runner {
     /// Fold a single protein sequence.
     ///
     /// # Arguments
-    /// * `sequence` — amino-acid string (standard one-letter codes)
-    /// * `num_loops` — recycling iterations (default 3)
-    /// * `num_sampling_steps` — diffusion denoising steps (default 50 for quality, 14 for speed)
+    /// * `sequence`           — amino-acid string (standard one-letter codes)
+    /// * `num_loops`          — recycling iterations (typically 3)
+    /// * `num_sampling_steps` — diffusion denoising steps (14 fast / 50 quality)
     ///
     /// # Note
-    /// This method is a stub. The forward pass is not yet implemented.
-    /// Each layer in `src/esmfold2/layers/` has a working scaffold with the
-    /// correct type signatures and VarBuilder paths; the mathematical
-    /// implementations are the remaining work.
+    /// The ESMC-6B backbone (~12 GB) is not yet loaded.  Hidden states are
+    /// initialised to zeros and will produce physically meaningless coordinates
+    /// until the backbone is wired in.  The wiring is tracked separately.
     pub fn fold_protein(
         &self,
-        _sequence: &str,
-        _num_loops: usize,
-        _num_sampling_steps: usize,
+        sequence: &str,
+        num_loops: usize,
+        num_sampling_steps: usize,
     ) -> Result<ESMFold2Output> {
-        anyhow::bail!(
-            "ESMFold2 forward pass is not yet implemented.\n\
-             Remaining work per layer:\n\
-             - LMEncoder: 4-layer transformer blocks + 2560→384 projection\n\
-             - FoldingTrunk: 24-layer Pairformer (row/column attention + triangle updates)\n\
-             - DiffusionModule: AF3-style EDM loop (token 12-block + atom 3-block)\n\
-             - ConfidenceHead: pLDDT/pAE bins → scalar confidence\n\
-             See src/esmfold2/layers/ for the scaffolded stubs."
-        )
+        let l = sequence.len();
+        let device = &self.device;
+
+        // Stub: backbone hidden states, zeros until ESMC-6B is wired in.
+        // Shape [1, L, lm_d_model=2560].
+        let hidden_states =
+            Tensor::zeros(&[1, l, self.config.lm_d_model], ESMFOLD2_DTYPE, device)?;
+
+        // Residue indices [1, L]: 0, 1, …, L-1.
+        let res_idx: Vec<f32> = (0..l).map(|i| i as f32).collect();
+        let residue_indices = Tensor::from_vec(res_idx, &[1, l], device)?;
+
+        // Chain IDs [1, L]: all zeros (single chain).
+        let chain_ids = Tensor::zeros(&[1, l], ESMFOLD2_DTYPE, device)?;
+
+        Ok(self
+            .model
+            .forward(&hidden_states, &residue_indices, &chain_ids, num_loops, num_sampling_steps)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Integration test — downloads biohub/ESMFold2-Fast (~755 MB) and runs a
+    /// forward pass on ubiquitin (76 aa).  Skipped in CI; run with:
+    ///   cargo test -p ferritin-plms test_esmfold2_fold_protein_integration -- --ignored
+    #[test]
+    #[ignore]
+    fn test_esmfold2_fold_protein_integration() {
+        let device = Device::Cpu;
+        let runner =
+            ESMFold2Runner::from_pretrained(ESMFold2Models::Fast, device).expect("load failed");
+
+        // Ubiquitin (76 aa)
+        let seq = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG";
+        let output = runner.fold_protein(seq, 1, 2).expect("fold_protein failed");
+
+        let (_, l, d) = output.sample_atom_coords.dims3().unwrap();
+        assert_eq!(l, seq.len(), "L must equal sequence length");
+        assert_eq!(d, 3, "last dim must be 3 (x, y, z)");
+
+        let plddt_dims = output.plddt.dims().to_vec();
+        assert_eq!(plddt_dims, vec![1, seq.len()], "pLDDT shape mismatch");
     }
 }

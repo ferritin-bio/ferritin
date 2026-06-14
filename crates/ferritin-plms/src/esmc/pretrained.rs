@@ -35,7 +35,7 @@ use crate::plm_runner::PlmRunner;
 use anyhow::Result;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use hf_hub::{Repo, RepoType, api::sync::Api};
+use hf_hub::HFClientSync;
 
 const ESMC_DTYPE: DType = DType::F32;
 
@@ -74,9 +74,9 @@ impl ESMCRunner {
     /// flat (unwrapped) layout.
     pub fn from_pretrained(model: ESMCModels, device: Device) -> Result<Self> {
         let (repo_id, config) = model.model_info();
-        let repo = Repo::with_revision(repo_id.to_string(), RepoType::Model, "main".to_string());
-        let api = Api::new()?;
-        let weights_path = api.repo(repo).get("model.safetensors")?;
+        let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
+        let client = HFClientSync::new()?;
+        let weights_path = client.model(owner, name).download_file().filename("model.safetensors").send()?;
 
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[&weights_path], ESMC_DTYPE, &device)? };

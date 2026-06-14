@@ -10,7 +10,7 @@ use anyhow::{Error as E, Result, anyhow};
 use candle_core::{D, DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops;
-use hf_hub::{Repo, RepoType, api::sync::Api};
+use hf_hub::HFClientSync;
 use tokenizers::Tokenizer;
 
 const AMPLIFY_DTYPE: DType = DType::F32;
@@ -35,13 +35,13 @@ pub struct AmplifyRunner {
 impl AmplifyRunner {
     pub fn load_model(modeltype: AmplifyModels, device: Device) -> Result<AmplifyRunner> {
         let (model_id, revision) = AmplifyModels::get_model_files(modeltype);
-        let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());
+        let (owner, name) = model_id.split_once('/').unwrap_or(("", model_id));
+        let client = HFClientSync::new()?;
+        let repo = client.model(owner, name);
         let (config_filename, tokenizer_filename, weights_filename) = {
-            let api = Api::new()?;
-            let api = api.repo(repo);
-            let config = api.get("config.json")?;
-            let tokenizer = api.get("tokenizer.json")?;
-            let weights = api.get("model.safetensors")?;
+            let config = repo.download_file().filename("config.json").revision(revision).send()?;
+            let tokenizer = repo.download_file().filename("tokenizer.json").revision(revision).send()?;
+            let weights = repo.download_file().filename("model.safetensors").revision(revision).send()?;
             (config, tokenizer, weights)
         };
         let config_str = std::fs::read_to_string(config_filename)?;
