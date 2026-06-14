@@ -18,7 +18,7 @@
 //! proj.*                                — linear d_in → d_out (no bias)
 //! ```
 
-use candle_core::{D, DType, Result, Tensor};
+use candle_core::{D, Result, Tensor};
 use candle_nn::{self as nn, LayerNorm, LayerNormConfig, Module, VarBuilder};
 
 // ── Attention ─────────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ impl LMEncoder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candle_core::{Device, Tensor};
+    use candle_core::{DType, Device, Tensor};
 
     #[test]
     fn test_lm_encoder_output_shape() {

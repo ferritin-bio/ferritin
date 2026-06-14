@@ -94,7 +94,6 @@ fn setup(mut commands: Commands) {
         DirectionalLight {
             color: Color::srgb(1.0, 0.9, 0.9),
             illuminance: 10000.0,
-            shadows_enabled: true,
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.5, 0.5, 0.0)),
@@ -105,7 +104,6 @@ fn setup(mut commands: Commands) {
         DirectionalLight {
             color: Color::srgb(0.8, 0.8, 1.0),
             illuminance: 5000.0,
-            shadows_enabled: false,
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.5, -0.5, 0.0)),
@@ -116,7 +114,6 @@ fn setup(mut commands: Commands) {
         DirectionalLight {
             color: Color::srgb(0.9, 0.9, 1.0),
             illuminance: 3000.0,
-            shadows_enabled: false,
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(
@@ -131,7 +128,6 @@ fn setup(mut commands: Commands) {
     commands.spawn((
         PointLight {
             intensity: 1500.0,
-            shadows_enabled: true,
             ..default()
         },
         Transform::from_xyz(4.0, 8.0, 4.0),
@@ -142,7 +138,6 @@ fn setup(mut commands: Commands) {
         SpotLight {
             intensity: 10000.0,
             color: Color::srgb(0.8, 1.0, 0.8),
-            shadows_enabled: true,
             outer_angle: 0.6,
             ..default()
         },

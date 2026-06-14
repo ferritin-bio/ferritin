@@ -13,8 +13,8 @@ mod support;
 use anyhow::Result;
 use candle_core::Device;
 use ferritin_plms::{
+    esmc::models::esmc::{LogitsConfig, ESMC},
     ESMCConfig,
-    esmc::models::esmc::{ESMC, LogitsConfig},
 };
 
 /// GFP — used as the primary smoke-test sequence (matches the biohub model card).
@@ -171,14 +171,14 @@ fn test_esmc_300m_embed_gfp() -> Result<()> {
 fn test_esmc_300m_logits_shape() -> Result<()> {
     use candle_core::DType;
     use candle_nn::VarBuilder;
-    use ferritin_plms::{ESMCModels, ESMCRunner, esmc::pretrained::ESMCModels as Variants};
-    use hf_hub::{Repo, RepoType, api::sync::Api};
+    use ferritin_plms::esmc::pretrained::ESMCModels as Variants;
+    use hf_hub::HFClientSync;
 
     let device = Device::Cpu;
     let (repo_id, config) = Variants::ESMC300M.model_info();
-    let repo = Repo::with_revision(repo_id.to_string(), RepoType::Model, "main".to_string());
-    let api = Api::new()?;
-    let weights_path = api.repo(repo).get("model.safetensors")?;
+    let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
+    let client = HFClientSync::new()?;
+    let weights_path = client.model(owner, name).download_file().filename("model.safetensors").send()?;
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[&weights_path], DType::F32, &device)? };
     let vb_root = if vb
         .get((config.embedding_dim, config.d_model), "esmc.embed.weight")
