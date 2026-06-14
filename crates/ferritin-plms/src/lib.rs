@@ -27,6 +27,7 @@ pub use ligandmpnn::model::ProteinMPNN;
 pub mod utils;
 pub mod amplify;
 pub mod esm2;
+pub mod esm3;
 pub mod esmc;
 pub mod esmfold2;
 pub mod featurize;
