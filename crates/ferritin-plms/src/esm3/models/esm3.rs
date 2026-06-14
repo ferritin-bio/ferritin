@@ -55,7 +55,7 @@ impl ESM3Config {
             n_heads: 24,
             n_layers: 48,
             n_layers_geom: 1,
-            v_head_transformer: 128,
+            v_head_transformer: 256,
             expansion_ratio: 8.0 / 3.0,
             scale_residue: true,
             mask_and_zero_frameless: false,
