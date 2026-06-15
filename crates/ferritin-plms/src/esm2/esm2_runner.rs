@@ -53,14 +53,23 @@ impl ESM2Runner {
         let client = HFClientSync::new()?;
         let repo = client.model(owner, name);
         // Try to load config from HF hub; fall back to hardcoded config if unavailable.
-        let config = match repo.download_file().filename("config.json").revision(revision).send() {
+        let config = match repo
+            .download_file()
+            .filename("config.json")
+            .revision(revision)
+            .send()
+        {
             Ok(config_path) => {
                 let config_str = std::fs::read_to_string(config_path)?;
                 serde_json::from_str::<ESM2Config>(&config_str).unwrap_or(fallback_config)
             }
             Err(_) => fallback_config,
         };
-        let weights_filename = repo.download_file().filename("model.safetensors").revision(revision).send()?;
+        let weights_filename = repo
+            .download_file()
+            .filename("model.safetensors")
+            .revision(revision)
+            .send()?;
         let vb = unsafe {
             VarBuilder::from_mmaped_safetensors(&[weights_filename], ESM2_DTYPE, &device)?
         };

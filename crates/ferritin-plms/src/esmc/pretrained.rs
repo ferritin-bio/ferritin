@@ -76,7 +76,11 @@ impl ESMCRunner {
         let (repo_id, config) = model.model_info();
         let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
         let client = HFClientSync::new()?;
-        let weights_path = client.model(owner, name).download_file().filename("model.safetensors").send()?;
+        let weights_path = client
+            .model(owner, name)
+            .download_file()
+            .filename("model.safetensors")
+            .send()?;
 
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[&weights_path], ESMC_DTYPE, &device)? };

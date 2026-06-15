@@ -39,8 +39,7 @@ pub fn bins_to_scalar(logits: &Tensor, min_val: f64, max_val: f64) -> Result<Ten
     let centres: Vec<f32> = (0..n_bins)
         .map(|i| (min_val + i as f64 * step) as f32)
         .collect();
-    let centres = Tensor::from_vec(centres, n_bins, logits.device())?
-        .to_dtype(logits.dtype())?;
+    let centres = Tensor::from_vec(centres, n_bins, logits.device())?.to_dtype(logits.dtype())?;
 
     // Weighted sum over last dim
     (probs * centres.broadcast_as(logits.shape())?)?.sum(candle_core::D::Minus1)
@@ -94,7 +93,11 @@ impl ConfidenceHead {
         let n_trunk_layers = 4;
         let trunk = (0..n_trunk_layers)
             .map(|i| {
-                PairformerBlock::load(vb.pp(format!("trunk.blocks.{i}")), d_pair, CONFIDENCE_N_HEADS)
+                PairformerBlock::load(
+                    vb.pp(format!("trunk.blocks.{i}")),
+                    d_pair,
+                    CONFIDENCE_N_HEADS,
+                )
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(Self {
@@ -183,7 +186,10 @@ mod tests {
         let plddt = plddt_from_logits(&logits).unwrap();
         let vals = plddt.flatten_all().unwrap().to_vec1::<f32>().unwrap();
         for v in &vals {
-            assert!((*v - 0.5).abs() < 1e-4, "uniform logits → pLDDT ≈ 0.5, got {v}");
+            assert!(
+                (*v - 0.5).abs() < 1e-4,
+                "uniform logits → pLDDT ≈ 0.5, got {v}"
+            );
         }
     }
 

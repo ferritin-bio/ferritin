@@ -44,7 +44,11 @@ impl FoldingTrunk {
             .map(|i| PairformerBlock::load(vb.pp(format!("blocks.{i}")), d_pair, n_heads))
             .collect::<Result<Vec<_>>>()?;
         let single_norm = nn::layer_norm(d_single, LayerNormConfig::from(1e-5), vb.pp("norm"))?;
-        Ok(Self { pair_init, blocks, single_norm })
+        Ok(Self {
+            pair_init,
+            blocks,
+            single_norm,
+        })
     }
 
     /// Initialise the pair representation from sequence and chain metadata.

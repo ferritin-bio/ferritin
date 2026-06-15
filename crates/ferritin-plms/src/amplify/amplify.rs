@@ -305,10 +305,18 @@ impl EncoderBlock {
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
         let vb = vb.pp(layer);
         let attn_linear = |d_in, d_out, vb| {
-            if config.att_bias { linear(d_in, d_out, vb) } else { linear_no_bias(d_in, d_out, vb) }
+            if config.att_bias {
+                linear(d_in, d_out, vb)
+            } else {
+                linear_no_bias(d_in, d_out, vb)
+            }
         };
         let ffn_linear = |d_in, d_out, vb| {
-            if config.ffn_bias { linear(d_in, d_out, vb) } else { linear_no_bias(d_in, d_out, vb) }
+            if config.ffn_bias {
+                linear(d_in, d_out, vb)
+            } else {
+                linear_no_bias(d_in, d_out, vb)
+            }
         };
         let q = attn_linear(config.hidden_size, config.hidden_size, vb.pp("q"))?;
         let k = attn_linear(config.hidden_size, config.hidden_size, vb.pp("k"))?;

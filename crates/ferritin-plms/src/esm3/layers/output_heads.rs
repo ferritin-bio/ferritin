@@ -65,11 +65,7 @@ impl OutputHeads {
                 d,
                 config.n_function_tracks * config.d_function_vocab,
             )?,
-            residue_head: RegressionHead::load(
-                vb.pp("residue_head"),
-                d,
-                config.d_residue_vocab,
-            )?,
+            residue_head: RegressionHead::load(vb.pp("residue_head"), d, config.d_residue_vocab)?,
             n_function_tracks: config.n_function_tracks,
             d_function_vocab: config.d_function_vocab,
         })
@@ -84,10 +80,12 @@ impl OutputHeads {
         let (b, l, _) = x.dims3()?;
 
         // Function logits: (B, L, n_tracks * d_func_vocab) → (B, L, n_tracks, d_func_vocab)
-        let function_logits = self
-            .function_head
-            .forward(x)?
-            .reshape((b, l, self.n_function_tracks, self.d_function_vocab))?;
+        let function_logits = self.function_head.forward(x)?.reshape((
+            b,
+            l,
+            self.n_function_tracks,
+            self.d_function_vocab,
+        ))?;
 
         Ok(ESM3Output {
             sequence_logits: Some(self.sequence_head.forward(x)?),

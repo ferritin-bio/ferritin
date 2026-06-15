@@ -65,9 +65,7 @@ fn setup(
     ));
     // light
     commands.spawn((
-        PointLight {
-            ..default()
-        },
+        PointLight { ..default() },
         Transform::from_xyz(4.0, 8.0, 4.0),
     ));
     // camera

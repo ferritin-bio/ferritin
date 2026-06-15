@@ -39,9 +39,21 @@ impl AmplifyRunner {
         let client = HFClientSync::new()?;
         let repo = client.model(owner, name);
         let (config_filename, tokenizer_filename, weights_filename) = {
-            let config = repo.download_file().filename("config.json").revision(revision).send()?;
-            let tokenizer = repo.download_file().filename("tokenizer.json").revision(revision).send()?;
-            let weights = repo.download_file().filename("model.safetensors").revision(revision).send()?;
+            let config = repo
+                .download_file()
+                .filename("config.json")
+                .revision(revision)
+                .send()?;
+            let tokenizer = repo
+                .download_file()
+                .filename("tokenizer.json")
+                .revision(revision)
+                .send()?;
+            let weights = repo
+                .download_file()
+                .filename("model.safetensors")
+                .revision(revision)
+                .send()?;
             (config, tokenizer, weights)
         };
         let config_str = std::fs::read_to_string(config_filename)?;

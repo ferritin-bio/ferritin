@@ -1,8 +1,6 @@
 //! ESM3 sequence tokenization.
 
-use crate::esm3::utils::constants::{
-    SEQUENCE_BOS_TOKEN, SEQUENCE_EOS_TOKEN, SEQUENCE_VOCAB,
-};
+use crate::esm3::utils::constants::{SEQUENCE_BOS_TOKEN, SEQUENCE_EOS_TOKEN, SEQUENCE_VOCAB};
 use std::collections::HashMap;
 
 fn vocab_map() -> HashMap<&'static str, u32> {

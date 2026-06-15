@@ -12,7 +12,9 @@ use anyhow::Result;
 use candle_core::{Device, Tensor};
 use ferritin_plms::{
     ESMFold2Config, ESMFold2Output,
-    esmfold2::input_types::{DNAInput, LigandInput, Modification, ProteinInput, StructurePredictionInput},
+    esmfold2::input_types::{
+        DNAInput, LigandInput, Modification, ProteinInput, StructurePredictionInput,
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -48,7 +50,10 @@ fn test_esmfold2_protein_input_valid() {
 
 #[test]
 fn test_esmfold2_protein_input_rejects_invalid() {
-    assert!(ProteinInput::new("A", "").is_err(), "empty sequence must fail");
+    assert!(
+        ProteinInput::new("A", "").is_err(),
+        "empty sequence must fail"
+    );
     let err = ProteinInput::new("A", "MKT1YI").unwrap_err();
     assert!(err.contains("'1'"));
 }
@@ -196,7 +201,10 @@ fn test_esmfold2_fold_protein_integration() -> Result<()> {
     assert!(mmcif.contains("data_integration_test"));
     assert!(mmcif.lines().any(|l| l.starts_with("ATOM")));
 
-    println!("pLDDT mean: {:.3}", plddt_vals.iter().sum::<f32>() / plddt_vals.len() as f32);
+    println!(
+        "pLDDT mean: {:.3}",
+        plddt_vals.iter().sum::<f32>() / plddt_vals.len() as f32
+    );
     println!("mmCIF size: {} bytes", mmcif.len());
     Ok(())
 }

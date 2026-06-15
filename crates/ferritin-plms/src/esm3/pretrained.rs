@@ -22,7 +22,7 @@
 //! | `pre_vq_proj.weight`    | `pre_vq_proj.*`    |
 //! | `codebook.embeddings`   | `codebook.*`       |
 
-use crate::esm3::models::esm3::{ESM3Config, ESM3};
+use crate::esm3::models::esm3::{ESM3, ESM3Config};
 use crate::esm3::models::vqvae::{StructureTokenEncoder, VqVaeConfig};
 use crate::esm3::tokenization::sequence::tokenize_sequence;
 use crate::plm_runner::PlmRunner;
@@ -99,8 +99,7 @@ impl ESM3Runner {
     /// Embeddings are the pre-norm transformer hidden states (raw activations).
     pub fn embed_sequence(&self, sequence: &str) -> Result<Tensor> {
         let token_ids = tokenize_sequence(sequence, true);
-        let tokens =
-            Tensor::new(token_ids.as_slice(), &self.device)?.unsqueeze(0)?; // (1, L)
+        let tokens = Tensor::new(token_ids.as_slice(), &self.device)?.unsqueeze(0)?; // (1, L)
 
         let output = self.model.forward(
             Some(&tokens), // sequence_tokens

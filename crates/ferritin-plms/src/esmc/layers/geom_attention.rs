@@ -117,8 +117,8 @@ impl GeometricReasoningOriginalImpl {
         };
 
         // Mask frameless key positions with -inf
-        let neg_inf = Tensor::full(f32::NEG_INFINITY as f64, attn_bias.shape(), device)?
-            .to_dtype(dtype)?;
+        let neg_inf =
+            Tensor::full(f32::NEG_INFINITY as f64, attn_bias.shape(), device)?.to_dtype(dtype)?;
         // affine_mask: (B, L) → (B, 1, 1, L)
         let frame_mask_k = affine_mask
             .unsqueeze(1)?
@@ -153,7 +153,11 @@ impl GeometricReasoningOriginalImpl {
 
         let query_rot = vec_rot.narrow(D::Minus2, 0, self.v_heads)?; // (B, L, H, 3)
         let key_rot = vec_rot.narrow(D::Minus2, self.v_heads, self.v_heads)?;
-        let value = vec_rot.narrow(D::Minus2, 2 * self.v_heads, self.v_heads * self.num_vector_messages)?;
+        let value = vec_rot.narrow(
+            D::Minus2,
+            2 * self.v_heads,
+            self.v_heads * self.num_vector_messages,
+        )?;
 
         // ── Full-affine (rot+trans) vectors: Q_dist, K_dist ───────────────
         let vec_dist = vec_dist.reshape((b, l, self.v_heads * 2, 3))?;
@@ -225,14 +229,17 @@ impl GeometricReasoningOriginalImpl {
         let attn_out = Affine3D::apply_rot_inv(&affine.rot, &attn_out)?;
 
         // Flatten head and vector-message dims: (B, L, H*num_vm, 3) → (B, L, H*num_vm*3)
-        let mut attn_out = attn_out
-            .contiguous()?
-            .reshape((b, l, self.v_heads * self.num_vector_messages * 3))?;
+        let mut attn_out =
+            attn_out
+                .contiguous()?
+                .reshape((b, l, self.v_heads * self.num_vector_messages * 3))?;
 
         // Zero out frameless positions if requested
         if self.mask_and_zero_frameless {
             let zeros = Tensor::zeros_like(&attn_out)?;
-            let mask_exp = affine_mask.unsqueeze(D::Minus1)?.broadcast_as(attn_out.shape())?;
+            let mask_exp = affine_mask
+                .unsqueeze(D::Minus1)?
+                .broadcast_as(attn_out.shape())?;
             attn_out = mask_exp.where_cond(&attn_out, &zeros)?;
         }
 

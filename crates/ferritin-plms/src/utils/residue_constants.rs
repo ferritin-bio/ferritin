@@ -234,7 +234,7 @@ mod tests {
         assert_eq!(mapping[1], Some(1)); // CA
         assert_eq!(mapping[2], Some(2)); // C
         assert_eq!(mapping[3], Some(4)); // O
-        assert_eq!(mapping[4], None);    // no CB for GLY
+        assert_eq!(mapping[4], None); // no CB for GLY
         for i in 4..14 {
             assert_eq!(mapping[i], None, "GLY slot {i} should be None");
         }
@@ -251,7 +251,10 @@ mod tests {
     fn test_atom14_to_atom37_trp_full() {
         // TRP fills all 14 slots
         let mapping = atom14_to_atom37_for_residue("TRP");
-        assert!(mapping.iter().all(|m| m.is_some()), "TRP should fill all 14 slots");
+        assert!(
+            mapping.iter().all(|m| m.is_some()),
+            "TRP should fill all 14 slots"
+        );
     }
 
     #[test]

@@ -105,7 +105,16 @@ fn test_esm3_forward_embedding_shape_zeroed_weights() -> Result<()> {
 
     let output = model.forward(
         Some(&tokens),
-        None, None, None, None, None, None, None, None, None, None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
     )?;
 
     let expected_len = SHORT_SEQ.len() + 2; // 11
@@ -131,17 +140,38 @@ fn test_esm3_forward_logit_shapes_zeroed_weights() -> Result<()> {
 
     let output = model.forward(
         Some(&tokens),
-        None, None, None, None, None, None, None, None, None, None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
     )?;
 
     let seq_logits = output.sequence_logits.expect("sequence logits");
-    assert_eq!(seq_logits.dims(), &[1, expected_len, 64], "sequence logits shape");
+    assert_eq!(
+        seq_logits.dims(),
+        &[1, expected_len, 64],
+        "sequence logits shape"
+    );
 
     let struct_logits = output.structure_logits.expect("structure logits");
-    assert_eq!(struct_logits.dims(), &[1, expected_len, 4096], "structure logits shape");
+    assert_eq!(
+        struct_logits.dims(),
+        &[1, expected_len, 4096],
+        "structure logits shape"
+    );
 
     let func_logits = output.function_logits.expect("function logits");
-    assert_eq!(func_logits.dims(), &[1, expected_len, 8, 260], "function logits shape");
+    assert_eq!(
+        func_logits.dims(),
+        &[1, expected_len, 8, 260],
+        "function logits shape"
+    );
 
     Ok(())
 }
@@ -175,9 +205,9 @@ fn test_esm3_sm_open_embed_short_sequence() -> Result<()> {
 #[test]
 #[ignore = "requires downloading EvolutionaryScale/esm3-sm-open-v1 weights (~5 GB)"]
 fn test_esm3_sm_open_gfp_logit_shape() -> Result<()> {
-    use candle_nn::VarBuilder;
     use candle_core::DType;
     use candle_core::pickle::PthTensors;
+    use candle_nn::VarBuilder;
     use hf_hub::HFClientSync;
 
     let device = Device::Cpu;
@@ -197,7 +227,16 @@ fn test_esm3_sm_open_gfp_logit_shape() -> Result<()> {
 
     let output = model.forward(
         Some(&tokens),
-        None, None, None, None, None, None, None, None, None, None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
     )?;
 
     let expected_len = GFP.len() + 2;

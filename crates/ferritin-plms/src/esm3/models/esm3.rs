@@ -63,8 +63,8 @@ impl ESM3Config {
             bias: false,
             d_sequence_vocab: 64,
             d_structure_vocab: 4096,
-            d_ss8_vocab: 11,   // 8 + 3 special
-            d_sasa_vocab: 19,  // 16 bins + 3 special
+            d_ss8_vocab: 11,  // 8 + 3 special
+            d_sasa_vocab: 19, // 16 bins + 3 special
             n_function_tracks: 8,
             d_function_vocab: 260,
             d_residue_vocab: 1478,
@@ -154,7 +154,10 @@ impl ESM3 {
             Some((ref aff, ref mask)) => {
                 affine_ref = aff;
                 mask_ref = mask;
-                (Some(affine_ref as &Affine3D), Some(mask_ref as &candle_core::Tensor))
+                (
+                    Some(affine_ref as &Affine3D),
+                    Some(mask_ref as &candle_core::Tensor),
+                )
             }
             None => (None, None),
         };

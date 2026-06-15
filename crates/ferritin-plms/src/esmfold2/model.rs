@@ -4,7 +4,7 @@ use super::config::ESMFold2Config;
 #[allow(unused_imports)]
 use super::layers::{
     atom_encoder::AtomEncoder, // TODO: add atom_encoder field when AtomEncoder is complete
-    confidence_head::{bins_to_scalar, ConfidenceHead},
+    confidence_head::{ConfidenceHead, bins_to_scalar},
     diffusion::DiffusionModule,
     folding_trunk::FoldingTrunk,
     lm_encoder::LMEncoder,
@@ -106,7 +106,9 @@ impl ESMFold2Model {
         let mut single = self.lm_encoder.forward(hidden_states)?;
 
         // Initialise pair from sequence metadata: [B, L, L, d_pair=256]
-        let mut pair = self.folding_trunk.init_pair(&single, residue_indices, chain_ids)?;
+        let mut pair = self
+            .folding_trunk
+            .init_pair(&single, residue_indices, chain_ids)?;
 
         // Recycling loops through FoldingTrunk
         for _ in 0..num_loops {
@@ -183,7 +185,9 @@ mod tests {
         let residue_indices = Tensor::from_vec(res_idx, &[b, l], &device).unwrap();
         let chain_ids = Tensor::zeros(&[b, l], DType::F32, &device).unwrap();
 
-        let out = model.forward(&hidden, &residue_indices, &chain_ids, 1, 2).unwrap();
+        let out = model
+            .forward(&hidden, &residue_indices, &chain_ids, 1, 2)
+            .unwrap();
 
         assert_eq!(out.sample_atom_coords.dims(), &[b, l, 3]);
         assert_eq!(out.plddt.dims(), &[b, l]);

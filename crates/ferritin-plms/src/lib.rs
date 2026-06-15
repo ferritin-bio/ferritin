@@ -26,7 +26,6 @@ pub use featurize::StructureFeatures;
 pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
 
-pub mod utils;
 pub mod amplify;
 pub mod esm2;
 pub mod esm3;
@@ -36,6 +35,7 @@ pub mod featurize;
 pub mod ligandmpnn;
 pub mod plm_runner;
 pub mod types;
+pub mod utils;
 pub use plm_runner::PlmRunner;
 
 /// Returns the best available device for computation.

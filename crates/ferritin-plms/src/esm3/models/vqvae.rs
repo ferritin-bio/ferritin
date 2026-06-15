@@ -221,8 +221,7 @@ mod tests {
     fn test_vq_codebook_nearest_neighbour() -> Result<()> {
         let device = &Device::Cpu;
         // Two codebook entries: [1,0] and [-1,0]
-        let embeddings =
-            Tensor::new(&[[1f32, 0.], [-1., 0.]], device)?;
+        let embeddings = Tensor::new(&[[1f32, 0.], [-1., 0.]], device)?;
         let codebook = VqCodebook { embeddings };
 
         // z close to code 0 ([1,0]): should map to index 0
@@ -244,7 +243,10 @@ mod tests {
         assert_eq!(enc.d_model, 1024);
         assert_eq!(enc.n_heads, 1);
         assert_eq!(enc.n_layers, 2);
-        assert_eq!(enc.n_layers_geom, 2, "all layers should use geometric attention");
+        assert_eq!(
+            enc.n_layers_geom, 2,
+            "all layers should use geometric attention"
+        );
         assert_eq!(enc.v_head_transformer, 128);
         assert!(!enc.scale_residue);
         assert!(enc.mask_and_zero_frameless);

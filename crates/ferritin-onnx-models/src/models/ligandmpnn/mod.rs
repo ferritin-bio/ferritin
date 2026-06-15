@@ -86,8 +86,16 @@ impl LigandMPNN {
         let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
         let client = HFClientSync::new()?;
         Ok((
-            client.model(owner, name).download_file().filename(encoder_name).send()?,
-            client.model(owner, name).download_file().filename(decoder_name).send()?,
+            client
+                .model(owner, name)
+                .download_file()
+                .filename(encoder_name)
+                .send()?,
+            client
+                .model(owner, name)
+                .download_file()
+                .filename(decoder_name)
+                .send()?,
         ))
     }
 

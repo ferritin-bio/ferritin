@@ -59,7 +59,11 @@ impl ESM2 {
         };
         let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
         let client = HFClientSync::new()?;
-        let model_path = client.model(owner, name).download_file().filename("model.onnx").send()?;
+        let model_path = client
+            .model(owner, name)
+            .download_file()
+            .filename("model.onnx")
+            .send()?;
         Ok(model_path)
     }
 
