@@ -30,7 +30,6 @@ ferritin-core = { path = "../ferritin-core" }
 ferritin-plms = { path = "../ferritin-plms" }
 ferritin-onnx-models = { path = "../ferritin-onnx-models" }
 ferritin-structure-mesh = { path = "../ferritin-structure-mesh" }
-hf-hub.workspace = true
 # rerun = { workspace = true, features = ["native_viewer"] }
 
 # The metal feature is defined above, and we don't need to redefine it conditionally
@@ -89,6 +88,10 @@ path = "examples/amplify/main.rs"
 [[example]]
 name = "esm2"
 path = "examples/esm2/main.rs"
+
+[[example]]
+name = "esm3"
+path = "examples/esm3/main.rs"
 
 [[example]]
 name = "esmc"

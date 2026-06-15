@@ -12,6 +12,8 @@ use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{Device, Result};
 pub use esm2::esm2::{ESM2, ESM2Config};
 pub use esm2::esm2_runner::{ESM2Models, ESM2Runner};
+pub use esm3::models::esm3::ESM3Config;
+pub use esm3::pretrained::{ESM3Models, ESM3Runner};
 pub use esmc::models::esmc::{ESMC, ESMCConfig, ESMCOutput, LogitsConfig, LogitsOutput};
 pub use esmc::pretrained::{ESMCModels, ESMCRunner};
 pub use esmfold2::config::ESMFold2Config;
