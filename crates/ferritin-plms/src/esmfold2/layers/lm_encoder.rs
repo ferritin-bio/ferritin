@@ -35,7 +35,11 @@ struct LMAttention {
 impl LMAttention {
     fn load(vb: VarBuilder, d_model: usize, n_heads: usize) -> Result<Self> {
         let d_head = d_model / n_heads;
-        let norm = nn::layer_norm(d_model, LayerNormConfig::from(1e-5), vb.pp("layernorm_qkv.0"))?;
+        let norm = nn::layer_norm(
+            d_model,
+            LayerNormConfig::from(1e-5),
+            vb.pp("layernorm_qkv.0"),
+        )?;
         let qkv = nn::linear_no_bias(d_model, d_model * 3, vb.pp("layernorm_qkv.1"))?;
         let layernorm_qkv = nn::seq().add(norm).add(qkv);
         let out_proj = nn::linear_no_bias(d_model, d_model, vb.pp("out_proj"))?;
@@ -43,7 +47,14 @@ impl LMAttention {
         let q_ln = LayerNorm::new_no_bias(vb.pp("q_ln").get((d_model,), "weight")?, 1e-5);
         let k_ln = LayerNorm::new_no_bias(vb.pp("k_ln").get((d_model,), "weight")?, 1e-5);
 
-        Ok(Self { layernorm_qkv, out_proj, q_ln, k_ln, n_heads, d_head })
+        Ok(Self {
+            layernorm_qkv,
+            out_proj,
+            q_ln,
+            k_ln,
+            n_heads,
+            d_head,
+        })
     }
 
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
@@ -129,7 +140,7 @@ impl LMBlock {
 
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
         let x = (x + &self.attn.forward(x)?)?;
-        (&x + &self.ffn.forward(&x)?)
+        &x + &self.ffn.forward(&x)?
     }
 }
 

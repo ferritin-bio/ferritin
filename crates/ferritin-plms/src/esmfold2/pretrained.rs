@@ -25,6 +25,7 @@
 use super::config::ESMFold2Config;
 use super::model::ESMFold2Model;
 use super::output::ESMFold2Output;
+use crate::esmc::pretrained::{ESMCModels, ESMCRunner};
 use anyhow::Result;
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
@@ -56,6 +57,9 @@ pub struct ESMFold2Runner {
     model: ESMFold2Model,
     config: ESMFold2Config,
     device: Device,
+    /// Optional ESMC-6B backbone for producing real hidden states.
+    /// When `None`, `fold_protein` falls back to zero-initialised hidden states.
+    backbone: Option<ESMCRunner>,
 }
 
 impl ESMFold2Runner {
@@ -75,7 +79,11 @@ impl ESMFold2Runner {
         eprintln!("ESMFold2Runner: downloading structure head from {repo_id}...");
         let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
         let client = HFClientSync::new()?;
-        let weights_path = client.model(owner, name).download_file().filename("model.safetensors").send()?;
+        let weights_path = client
+            .model(owner, name)
+            .download_file()
+            .filename("model.safetensors")
+            .send()?;
         eprintln!(
             "ESMFold2Runner: weights cached at {}",
             weights_path.display()
@@ -85,9 +93,6 @@ impl ESMFold2Runner {
             VarBuilder::from_mmaped_safetensors(&[&weights_path], ESMFOLD2_DTYPE, &device)?
         };
 
-        // TODO: also load biohub/ESMC-6B backbone (~12 GB) via ESMCRunner
-        // let esmc = ESMCRunner::from_pretrained(ESMCModels::ESMC6B, device.clone())?;
-
         eprintln!("ESMFold2Runner: building model...");
         let model = ESMFold2Model::load(vb, config.clone())?;
         eprintln!("ESMFold2Runner: ready.");
@@ -96,7 +101,25 @@ impl ESMFold2Runner {
             model,
             config,
             device,
+            backbone: None,
         })
+    }
+
+    /// Load ESMFold2-Fast plus the ESMC-6B backbone for real hidden states.
+    ///
+    /// Downloads `model.safetensors` from `biohub/ESMFold2-Fast` (~755 MB) and
+    /// `model.safetensors` from `biohub/ESMC-6B` (~12 GB).  `fold_protein` will
+    /// use real ESMC-6B embeddings instead of zeros.
+    pub fn from_pretrained_with_backbone(
+        model_variant: ESMFold2Models,
+        device: Device,
+    ) -> Result<Self> {
+        let mut runner = Self::from_pretrained(model_variant, device.clone())?;
+        eprintln!("ESMFold2Runner: loading ESMC-6B backbone (~12 GB)...");
+        let backbone = ESMCRunner::from_pretrained(ESMCModels::ESMC6B, device)?;
+        eprintln!("ESMFold2Runner: backbone ready.");
+        runner.backbone = Some(backbone);
+        Ok(runner)
     }
 
     /// Fold a single protein sequence.
@@ -119,10 +142,17 @@ impl ESMFold2Runner {
         let l = sequence.len();
         let device = &self.device;
 
-        // Stub: backbone hidden states, zeros until ESMC-6B is wired in.
-        // Shape [1, L, lm_d_model=2560].
-        let hidden_states =
-            Tensor::zeros(&[1, l, self.config.lm_d_model], ESMFOLD2_DTYPE, device)?;
+        // Use real ESMC-6B embeddings when the backbone is loaded; otherwise
+        // fall back to zeros (shape-correct but physically meaningless).
+        let hidden_states = if let Some(backbone) = &self.backbone {
+            // embed_sequence returns (1, L+2, d_model) with BOS and EOS tokens.
+            let with_bos_eos = backbone.embed_sequence(sequence)?;
+            // Strip BOS (index 0) and EOS (index L+1) to get (1, L, d_model).
+            with_bos_eos.narrow(1, 1, l)?
+        } else {
+            // Shape [1, L, lm_d_model=2560].
+            Tensor::zeros(&[1, l, self.config.lm_d_model], ESMFOLD2_DTYPE, device)?
+        };
 
         // Residue indices [1, L]: 0, 1, …, L-1.
         let res_idx: Vec<f32> = (0..l).map(|i| i as f32).collect();
@@ -131,9 +161,13 @@ impl ESMFold2Runner {
         // Chain IDs [1, L]: all zeros (single chain).
         let chain_ids = Tensor::zeros(&[1, l], ESMFOLD2_DTYPE, device)?;
 
-        Ok(self
-            .model
-            .forward(&hidden_states, &residue_indices, &chain_ids, num_loops, num_sampling_steps)?)
+        Ok(self.model.forward(
+            &hidden_states,
+            &residue_indices,
+            &chain_ids,
+            num_loops,
+            num_sampling_steps,
+        )?)
     }
 }
 
@@ -161,5 +195,41 @@ mod tests {
 
         let plddt_dims = output.plddt.dims().to_vec();
         assert_eq!(plddt_dims, vec![1, seq.len()], "pLDDT shape mismatch");
+    }
+
+    /// Integration test — downloads ESMFold2-Fast (~755 MB) + ESMC-6B backbone
+    /// (~12 GB) and folds ubiquitin with real hidden states.  Asserts coords are
+    /// non-zero and pLDDT has the right shape.  Skipped in CI; run with:
+    ///   cargo test -p ferritin-plms test_esmfold2_with_backbone_integration -- --ignored
+    #[test]
+    #[ignore]
+    fn test_esmfold2_with_backbone_integration() {
+        let device = Device::Cpu;
+        let runner = ESMFold2Runner::from_pretrained_with_backbone(ESMFold2Models::Fast, device)
+            .expect("load failed");
+
+        // Ubiquitin (76 aa)
+        let seq = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG";
+        let output = runner
+            .fold_protein(seq, 3, 50)
+            .expect("fold_protein failed");
+
+        let (_, l, d) = output.sample_atom_coords.dims3().unwrap();
+        assert_eq!(l, seq.len(), "L must equal sequence length");
+        assert_eq!(d, 3, "last dim must be 3 (x, y, z)");
+
+        let plddt_dims = output.plddt.dims().to_vec();
+        assert_eq!(plddt_dims, vec![1, seq.len()], "pLDDT shape mismatch");
+
+        // Coords should be non-zero when real hidden states are used.
+        let coord_sum: f32 = output
+            .sample_atom_coords
+            .abs()
+            .unwrap()
+            .sum_all()
+            .unwrap()
+            .to_scalar()
+            .unwrap();
+        assert!(coord_sum > 0.0, "coords are all zero — backbone not wired?");
     }
 }

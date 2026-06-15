@@ -127,9 +127,9 @@ fn cross_product(a: &Tensor, b: &Tensor) -> Result<Tensor> {
     let b0 = b.narrow(D::Minus1, 0, 1)?;
     let b1 = b.narrow(D::Minus1, 1, 1)?;
     let b2 = b.narrow(D::Minus1, 2, 1)?;
-    let c0 = (a1.mul(&b2)?.sub(&a2.mul(&b1)?)?);
-    let c1 = (a2.mul(&b0)?.sub(&a0.mul(&b2)?)?);
-    let c2 = (a0.mul(&b1)?.sub(&a1.mul(&b0)?)?);
+    let c0 = a1.mul(&b2)?.sub(&a2.mul(&b1)?)?;
+    let c1 = a2.mul(&b0)?.sub(&a0.mul(&b2)?)?;
+    let c2 = a0.mul(&b1)?.sub(&a1.mul(&b0)?)?;
     Tensor::cat(&[&c0, &c1, &c2], D::Minus1)
 }
 

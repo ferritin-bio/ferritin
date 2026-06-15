@@ -49,7 +49,10 @@ struct FourierEmbedding {
 impl FourierEmbedding {
     fn load(vb: VarBuilder, fourier_dim: usize) -> Result<Self> {
         let weights = vb.get((fourier_dim / 2,), "weights")?;
-        Ok(Self { weights, dim: fourier_dim })
+        Ok(Self {
+            weights,
+            dim: fourier_dim,
+        })
     }
 
     /// `sigma` — scalar (f32); returns `[fourier_dim]`
@@ -111,12 +114,17 @@ impl TokenAttn {
         let gate = nn::ops::sigmoid(&self.gate.forward(&x_n)?)?; // [B, N, H*dh]
 
         // pair bias: [B, N, N, d_pair] → [B, N, N, H] → [B, H, N, N]
-        let pair_b = self.pair_bias.forward(pair)? // [B, N, N, H]
-            .permute((0, 3, 1, 2))?.contiguous()?; // [B, H, N, N]
+        let pair_b = self
+            .pair_bias
+            .forward(pair)? // [B, N, N, H]
+            .permute((0, 3, 1, 2))?
+            .contiguous()?; // [B, H, N, N]
 
         // → [B, H, N, dh]
         let to_heads = |t: Tensor| -> Result<Tensor> {
-            t.reshape((b, n, h, dh))?.permute((0, 2, 1, 3))?.contiguous()
+            t.reshape((b, n, h, dh))?
+                .permute((0, 2, 1, 3))?
+                .contiguous()
         };
         let q = to_heads(q)?;
         let k = to_heads(k)?;
@@ -131,12 +139,13 @@ impl TokenAttn {
 
         // [B, H, N, dh] → [B, N, H*dh]
         let out = out
-            .permute((0, 2, 1, 3))?.contiguous()? // [B, N, H, dh]
+            .permute((0, 2, 1, 3))?
+            .contiguous()? // [B, N, H, dh]
             .reshape((b, n, h * dh))?;
 
         let out = (gate * out)?;
         let out = self.out_proj.forward(&out)?;
-        (x + &out)
+        x + &out
     }
 }
 
@@ -162,7 +171,7 @@ impl TokenFfn {
         let chunks = h.chunk(2, D::Minus1)?;
         let act = (chunks[0].silu()? * &chunks[1])?;
         let out = self.down.forward(&act)?;
-        (x + &out)
+        x + &out
     }
 }
 
@@ -193,11 +202,11 @@ impl TokenBlock {
 /// produced by the folding trunk. Uses 12 token-level transformer blocks with
 /// pair bias conditioning, followed by coordinate output projection.
 pub struct DiffusionModule {
-    token_proj: nn::Linear,    // d_single → c_token
+    token_proj: nn::Linear, // d_single → c_token
     noise_emb: FourierEmbedding,
-    noise_proj: nn::Linear,    // fourier_dim → c_token
-    blocks: Vec<TokenBlock>,   // 12 blocks
-    out_proj: nn::Linear,      // c_token → 3 (Cα or token centroid)
+    noise_proj: nn::Linear,  // fourier_dim → c_token
+    blocks: Vec<TokenBlock>, // 12 blocks
+    out_proj: nn::Linear,    // c_token → 3 (Cα or token centroid)
     // TODO: atom_transformer (3 blocks, c_atom=128) for all-atom output
     c_token: usize,
     d_single: usize,
@@ -352,8 +361,8 @@ impl DiffusionModule {
 
             // Add stochastic noise when gamma > 0
             let x_hat = if gamma > 0.0 {
-                let extra_noise_std = ((sigma_hat * sigma_hat - sigma_t * sigma_t).sqrt()
-                    * self.noise_scale as f32);
+                let extra_noise_std =
+                    (sigma_hat * sigma_hat - sigma_t * sigma_t).sqrt() * self.noise_scale as f32;
                 let noise = Tensor::randn(0f32, extra_noise_std, x.shape(), &self.device)?;
                 (&x + &noise)?
             } else {

@@ -35,7 +35,7 @@ use candle_nn::{Linear, Module, VarBuilder, encoding::one_hot, linear};
 pub fn relpos_encoding(residue_indices: &Tensor, n_bins: usize) -> Result<Tensor> {
     let ri = residue_indices.to_dtype(DType::F32)?.unsqueeze(2)?; // [B, N, 1]
     let rj = residue_indices.to_dtype(DType::F32)?.unsqueeze(1)?; // [B, 1, N]
-    let diff = rj.broadcast_sub(&ri)?;                             // [B, N, N]
+    let diff = rj.broadcast_sub(&ri)?; // [B, N, N]
 
     let nb = n_bins as f64;
     let clamped = diff.clamp(-nb, nb)?;
@@ -55,7 +55,7 @@ pub fn relpos_encoding(residue_indices: &Tensor, n_bins: usize) -> Result<Tensor
 pub fn chain_pair_features(chain_ids: &Tensor) -> Result<Tensor> {
     let ci = chain_ids.to_dtype(DType::F32)?.unsqueeze(2)?; // [B, N, 1]
     let cj = chain_ids.to_dtype(DType::F32)?.unsqueeze(1)?; // [B, 1, N]
-    let diff = ci.broadcast_sub(&cj)?;                       // [B, N, N]
+    let diff = ci.broadcast_sub(&cj)?; // [B, N, N]
 
     let same = diff.abs()?.lt(0.5_f64)?.to_dtype(DType::F32)?; // [B, N, N]
     let different = (1.0_f64 - &same)?;
@@ -74,8 +74,8 @@ pub fn outer_product(a: &Tensor, b: &Tensor) -> Result<Tensor> {
     let db = b.dim(2)?;
     let ai = a.reshape((batch, n, 1, da, 1))?; // [B, N, 1, da, 1]
     let bj = b.reshape((batch, 1, n, 1, db))?; // [B, 1, N, 1, db]
-    let prod = ai.broadcast_mul(&bj)?;          // [B, N, N, da, db]
-    prod.reshape((batch, n, n, da * db))        // [B, N, N, da*db]
+    let prod = ai.broadcast_mul(&bj)?; // [B, N, N, da, db]
+    prod.reshape((batch, n, n, da * db)) // [B, N, N, da*db]
 }
 
 // ── PairInit ──────────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ impl PairInit {
         let outer = outer_product(&s_proj, &s_proj)?;
         let pair_from_outer = outer.apply(&self.outer_proj)?;
 
-        (pair_from_pos + pair_from_outer)
+        pair_from_pos + pair_from_outer
     }
 }
 
@@ -171,12 +171,26 @@ mod tests {
 
     // Helper: get a 1D slice from a 4D tensor at [b, i, j, :]
     fn get_bin_vec(t: &Tensor, b: usize, i: usize, j: usize) -> Vec<f32> {
-        t.get(b).unwrap().get(i).unwrap().get(j).unwrap().to_vec1().unwrap()
+        t.get(b)
+            .unwrap()
+            .get(i)
+            .unwrap()
+            .get(j)
+            .unwrap()
+            .to_vec1()
+            .unwrap()
     }
 
     // Helper: get a 1D slice from a 3D tensor at [b, i, :]
     fn get_pair_vec(t: &Tensor, b: usize, i: usize, j: usize) -> Vec<f32> {
-        t.get(b).unwrap().get(i).unwrap().get(j).unwrap().to_vec1().unwrap()
+        t.get(b)
+            .unwrap()
+            .get(i)
+            .unwrap()
+            .get(j)
+            .unwrap()
+            .to_vec1()
+            .unwrap()
     }
 
     #[test]
@@ -190,7 +204,9 @@ mod tests {
                 (vals[N_BINS] - 1.0).abs() < 1e-5,
                 "diagonal [{i},{i}] should be hot at bin {N_BINS}, got {vals:?}"
             );
-            let off: f32 = vals.iter().enumerate()
+            let off: f32 = vals
+                .iter()
+                .enumerate()
                 .filter(|&(k, _)| k != N_BINS)
                 .map(|(_, &v)| v)
                 .sum();
@@ -218,7 +234,10 @@ mod tests {
         let far = Tensor::from_vec(vec![0.0f32, 100.0], &[1, 2], &Device::Cpu).unwrap();
         let enc = relpos_encoding(&far, N_BINS).unwrap();
         let row = get_bin_vec(&enc, 0, 0, 1);
-        assert!((row[2 * N_BINS] - 1.0).abs() < 1e-5, "should clamp to max bin");
+        assert!(
+            (row[2 * N_BINS] - 1.0).abs() < 1e-5,
+            "should clamp to max bin"
+        );
     }
 
     #[test]
@@ -234,7 +253,10 @@ mod tests {
         let chain_ids = Tensor::zeros(&[B, N], DType::F32, &Device::Cpu).unwrap();
         let feats = chain_pair_features(&chain_ids).unwrap();
         let val = get_pair_vec(&feats, 0, 0, 1);
-        assert!((val[0] - 1.0).abs() < 1e-5, "same chain index 0 should be 1");
+        assert!(
+            (val[0] - 1.0).abs() < 1e-5,
+            "same chain index 0 should be 1"
+        );
         assert!(val[1].abs() < 1e-5, "same chain index 1 should be 0");
     }
 

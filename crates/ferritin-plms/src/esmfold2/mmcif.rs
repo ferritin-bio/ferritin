@@ -224,7 +224,7 @@ pub fn coords_to_mmcif(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candle_core::{DType, Device, Tensor};
+    use candle_core::{Device, Tensor};
 
     /// Build a small (2, 5, 3) coordinate tensor with recognizable values.
     fn make_coords(l: usize, natoms: usize) -> Tensor {

@@ -76,9 +76,15 @@ impl TriangleMult {
         // Outgoing: left[b,i,k,c] → permute(0,3,1,2) → [B,c,i,k]
         // Incoming: left[b,k,i,c] treated as [B,c,i,k] → permute(0,3,2,1) swaps the N dims
         let (left_p, right_p) = if self.outgoing {
-            (left.permute((0, 3, 1, 2))?.contiguous()?, right.permute((0, 3, 1, 2))?.contiguous()?)
+            (
+                left.permute((0, 3, 1, 2))?.contiguous()?,
+                right.permute((0, 3, 1, 2))?.contiguous()?,
+            )
         } else {
-            (left.permute((0, 3, 2, 1))?.contiguous()?, right.permute((0, 3, 2, 1))?.contiguous()?)
+            (
+                left.permute((0, 3, 2, 1))?.contiguous()?,
+                right.permute((0, 3, 2, 1))?.contiguous()?,
+            )
         };
 
         // p[b,c,i,j] = Σ_k left_p[b,c,i,k] * right_p[b,c,j,k]
@@ -88,7 +94,7 @@ impl TriangleMult {
 
         let out_g = nn::ops::sigmoid(&self.out_gate.forward(&z_n)?)?; // [B, N, N, d_pair]
         let out = (out_g * self.out_proj.forward(&p)?)?;
-        (z + &out)
+        z + &out
     }
 }
 
@@ -140,7 +146,9 @@ impl TriangleAttention {
         // Merge (B, n1) → B*n1 and split heads: [B,n1,n2,H*dh] → [B*n1, H, n2, dh]
         let bn1 = b * n1;
         let to_heads = |t: Tensor| -> Result<Tensor> {
-            t.reshape((bn1, n2, h, dh))?.permute((0, 2, 1, 3))?.contiguous()
+            t.reshape((bn1, n2, h, dh))?
+                .permute((0, 2, 1, 3))?
+                .contiguous()
         };
         let q = to_heads(q)?;
         let k = to_heads(k)?;
@@ -161,7 +169,8 @@ impl TriangleAttention {
 
         // [B*n1, H, n2, dh] → [B, n1, n2, H*dh]
         let out = out
-            .permute((0, 2, 1, 3))?.contiguous()? // [B*n1, n2, H, dh]
+            .permute((0, 2, 1, 3))?
+            .contiguous()? // [B*n1, n2, H, dh]
             .reshape((b, n1, n2, h * dh))?;
 
         let out = (gate * out)?;
@@ -176,7 +185,7 @@ impl TriangleAttention {
             let z_t = z.permute((0, 2, 1, 3))?;
             self.forward_inner(&z_t)?.permute((0, 2, 1, 3))?
         };
-        (z + &delta)
+        z + &delta
     }
 }
 
@@ -201,7 +210,7 @@ impl PairTransition {
         let h = self.norm.forward(z)?;
         let h = self.fc1.forward(&h)?.relu()?;
         let h = self.fc2.forward(&h)?;
-        (z + &h)
+        z + &h
     }
 }
 
@@ -228,18 +237,8 @@ impl PairformerBlock {
     /// `n_heads` must evenly divide `d_pair`; for the trunk, `n_heads=8`, `d_pair=256`.
     pub fn load(vb: VarBuilder, d_pair: usize, n_heads: usize) -> Result<Self> {
         Ok(Self {
-            tri_attn_row: TriangleAttention::load(
-                vb.pp("tri_attn_row"),
-                d_pair,
-                n_heads,
-                true,
-            )?,
-            tri_attn_col: TriangleAttention::load(
-                vb.pp("tri_attn_col"),
-                d_pair,
-                n_heads,
-                false,
-            )?,
+            tri_attn_row: TriangleAttention::load(vb.pp("tri_attn_row"), d_pair, n_heads, true)?,
+            tri_attn_col: TriangleAttention::load(vb.pp("tri_attn_col"), d_pair, n_heads, false)?,
             tri_mult_out: TriangleMult::load(vb.pp("tri_mult_out"), d_pair, C_HIDDEN_MULT, true)?,
             tri_mult_in: TriangleMult::load(vb.pp("tri_mult_in"), d_pair, C_HIDDEN_MULT, false)?,
             pair_trans: PairTransition::load(vb.pp("pair_trans"), d_pair)?,
