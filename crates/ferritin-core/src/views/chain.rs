@@ -12,7 +12,7 @@ impl<'a> ChainView<'a> {
     pub fn chain_id(&self) -> &str {
         // We use the first residue's first atom to identify the chain
         let residue_starts = self.data.get_residue_start_indices().unwrap();
-        let first_atom_idx = residue_starts[self.start_residue_idx] as usize;
+        let first_atom_idx = residue_starts[self.start_residue_idx];
         self.data.get_chain_id(first_atom_idx)
     }
     pub fn iter_residues(&self) -> impl Iterator<Item = ResidueView<'_>> {
@@ -24,14 +24,14 @@ impl<'a> ChainView<'a> {
             ..=self
                 .end_residue_idx
                 .min(residue_indices.len().saturating_sub(1)))
-            .map(|idx| residue_indices[idx] as usize)
+            .map(|idx| residue_indices[idx])
             .collect();
 
         // Get the end atom index for the last residue
         let last_residue_end_idx = if self.end_residue_idx < residue_indices.len().saturating_sub(1)
         {
             // If not the final residue in the structure, use the next residue's start
-            residue_indices[self.end_residue_idx + 1] as usize
+            residue_indices[self.end_residue_idx + 1]
         } else {
             // If it's the final residue, use the structure's end
             self.data.get_size()
