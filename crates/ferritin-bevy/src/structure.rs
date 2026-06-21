@@ -727,7 +727,7 @@ impl Structure {
         for (i, mesh) in valid_meshes.iter().enumerate().skip(1) {
             println!("Merging mesh {} with {} vertices", i, mesh.count_vertices());
             let before_count = combined_mesh.count_vertices();
-            combined_mesh.merge(mesh);
+            let _ = combined_mesh.merge(mesh);
             let after_count = combined_mesh.count_vertices();
             println!(
                 "After merge: {} vertices (added {})",
@@ -805,7 +805,7 @@ impl Structure {
                     Some(cylinder_mesh)
                 })
                 .for_each(|cylinder_mesh| {
-                    combined_mesh.merge(&cylinder_mesh);
+                    let _ =  combined_mesh.merge(&cylinder_mesh);
                 });
         } else {
             println!("No-Bonds found!!")
@@ -865,7 +865,7 @@ mod tests {
         let ac = load_structure(molfile).unwrap();
         let structure = Structure::builder().pdb(ac).build();
         assert_eq!(structure.pdb.get_size(), 2154);
-        let mesh = structure.to_mesh();
+        let _mesh = structure.to_mesh();
         // assert_eq!(mesh.count_vertices(), 779748);
         Ok(())
     }
