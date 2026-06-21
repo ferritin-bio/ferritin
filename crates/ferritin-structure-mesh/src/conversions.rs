@@ -5,7 +5,6 @@
 //!
 //! Lifted and modified from: https://github.com/rerun-io/revy/blob/main/src/conversions.rs
 
-#[cfg(all(feature = "bevy", feature = "rerun"))]
 use bevy::{math::Vec3A, prelude::*, render::mesh::VertexAttributeValues};
 use itertools::Itertools;
 
@@ -63,8 +62,6 @@ impl ToRerun<rerun::Transform3D> for Transform {
             self.rotation.to_rerun(),
             rerun::Scale3D::from(self.scale.to_rerun()),
         )
-        // Don't show axis - this is quite annoying in Rerun 0.20 otherwise.
-        .with_axis_length(0.0)
     }
 }
 impl ToRerun<rerun::Transform3D> for GlobalTransform {
@@ -224,8 +221,7 @@ impl ToRerun<rerun::Pinhole> for PerspectiveProjection {
         let PerspectiveProjection {
             fov,
             aspect_ratio,
-            near: _,
-            far: _,
+            ..
         } = *self;
 
         rerun::Pinhole::from_fov_and_aspect_ratio(fov, aspect_ratio)

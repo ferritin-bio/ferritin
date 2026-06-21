@@ -3,7 +3,7 @@
 //! Each residue gets a local coordinate frame defined by its backbone (N, CA, C) atoms.
 //! The rotation matrix columns are orthonormal frame axes; the translation is the CA position.
 
-use candle_core::{D, DType, Result, Tensor};
+use candle_core::{D, Result, Tensor};
 
 /// Per-residue local reference frame: rotation matrix + translation.
 ///

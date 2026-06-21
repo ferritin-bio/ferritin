@@ -17,7 +17,7 @@
 //! plus the [`PairInit`] struct that holds the learned projections.
 
 use candle_core::{DType, Result, Tensor};
-use candle_nn::{Linear, Module, VarBuilder, encoding::one_hot, linear};
+use candle_nn::{Linear, VarBuilder, encoding::one_hot, linear};
 
 // ── Pure math ─────────────────────────────────────────────────────────────
 

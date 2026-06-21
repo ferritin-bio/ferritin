@@ -155,8 +155,8 @@ impl ESM3 {
                 affine_ref = aff;
                 mask_ref = mask;
                 (
-                    Some(affine_ref as &Affine3D),
-                    Some(mask_ref as &candle_core::Tensor),
+                    Some(affine_ref),
+                    Some(mask_ref),
                 )
             }
             None => (None, None),

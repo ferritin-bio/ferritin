@@ -3,7 +3,7 @@
 //! Projects the transformer hidden state to per-track logit distributions.
 
 use crate::esm3::models::esm3::ESM3Config;
-use candle_core::{D, Module, Result, Tensor};
+use candle_core::{Module, Result, Tensor};
 use candle_nn::{self as nn, LayerNormConfig, VarBuilder};
 
 // ── Generic regression head ───────────────────────────────────────────────────

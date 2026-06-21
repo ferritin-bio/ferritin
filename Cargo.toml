@@ -37,9 +37,7 @@ hf-hub = { version = "1.0.0-rc.1", features = ["blocking"] }
 itertools = "0.15.0"
 ndarray = "0.17.2"
 ort = "2.0.0-rc.12"
-# rerun is incompatible with bevy 0.19: rerun 0.26 / re_viewer pins js-sys=0.3.77
-# but bevy 0.19 / wgpu 29 needs js-sys ^0.3.85. Blocked until one side upgrades.
-# rerun = "0.26"
+rerun = "0.33"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 strum = { version = "0.28", features = ["derive"] }

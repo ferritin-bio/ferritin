@@ -168,7 +168,7 @@ impl Structure {
             // Calculate helix position with proper spiral
             let helix_x = radius * angle.cos();
             let helix_y = radius * angle.sin();
-            let helix_z = rise_per_residue * residue_idx;
+            let _helix_z = rise_per_residue * residue_idx;
 
             // Transform to align with protein backbone
             let (axis, up) = Structure::calculate_helix_orientation(&helix_atoms, residue_idx);
@@ -563,10 +563,10 @@ impl Structure {
 
     // Function to generate loop mesh (thin tube connecting structured elements)
     fn generate_loop_mesh(backbone_atoms: &[BackboneAtoms], segment: &[usize]) -> Mesh {
-        let positions: Vec<[f32; 3]> = Vec::new();
-        let normals: Vec<[f32; 3]> = Vec::new();
-        let indices: Vec<u32> = Vec::new();
-        let colors: Vec<[f32; 4]> = Vec::new();
+        let _positions: Vec<[f32; 3]> = Vec::new();
+        let _normals: Vec<[f32; 3]> = Vec::new();
+        let _indices: Vec<u32> = Vec::new();
+        let _colors: Vec<[f32; 4]> = Vec::new();
 
         // Parameters for loop
         let tube_radius = 0.2; // Thin tube for loops (Å)
@@ -627,7 +627,7 @@ impl Structure {
         );
 
         // Create combined mesh from all segments
-        let mut combined_mesh =
+        let _combined_mesh =
             Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
 
         // First, group the secondary structures into segments of the same type

@@ -31,7 +31,7 @@
 //! pair_trans.fc2.*          — 4*d_pair → d_pair (no bias)
 //! ```
 
-use candle_core::{D, DType, Result, Tensor};
+use candle_core::{D, Result, Tensor};
 use candle_nn::{self as nn, LayerNorm, LayerNormConfig, Module, VarBuilder};
 
 // ── Triangle Multiplicative Update ───────────────────────────────────────────

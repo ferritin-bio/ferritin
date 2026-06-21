@@ -18,7 +18,7 @@
 //! ```
 
 use super::pairformer::PairformerBlock;
-use candle_core::{DType, Result, Tensor};
+use candle_core::{Result, Tensor};
 use candle_nn::{self as nn, Module, VarBuilder, ops::softmax};
 
 // ── Helpers ────────────────────────────────────────────────────────────────
