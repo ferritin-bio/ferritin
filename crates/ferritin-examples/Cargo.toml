@@ -12,6 +12,7 @@ bevy = []
 metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 mesh = ["ferritin/mesh"]
 plms = ["ferritin/plms"]
+rerun = ["dep:rerun", "ferritin-structure-mesh/rerun"]
 # all = ["mesh", "plms", "molviewspec"]
 # all = ["mesh", "plms", "molviewspec"]
 # molviewspec = ["ferritin/molviewspec"]
@@ -30,8 +31,7 @@ ferritin-core = { path = "../ferritin-core" }
 ferritin-plms = { path = "../ferritin-plms" }
 ferritin-onnx-models = { path = "../ferritin-onnx-models" }
 ferritin-structure-mesh = { path = "../ferritin-structure-mesh" }
-hf-hub.workspace = true
-# rerun = { workspace = true, features = ["native_viewer"] }
+rerun = { workspace = true, features = ["native_viewer"], optional = true }
 
 # The metal feature is defined above, and we don't need to redefine it conditionally
 
@@ -91,8 +91,16 @@ name = "esm2"
 path = "examples/esm2/main.rs"
 
 [[example]]
+name = "esm3"
+path = "examples/esm3/main.rs"
+
+[[example]]
 name = "esmc"
 path = "examples/esmc/main.rs"
+
+[[example]]
+name = "esmfold2"
+path = "examples/esmfold2/main.rs"
 
 [[example]]
 name = "ligandmpnn"

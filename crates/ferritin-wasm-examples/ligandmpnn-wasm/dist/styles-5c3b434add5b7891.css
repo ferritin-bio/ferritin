@@ -1,0 +1,50 @@
+/* --------------------- Open Props --------------------------- */
+/* the props */
+@import "https://unpkg.com/open-props";
+/* optional imports that use the props */
+@import "https://unpkg.com/open-props/normalize.min.css";
+@import "https://unpkg.com/open-props/buttons.min.css";
+/* ------------------------------------------------------------ */
+body {
+  font-family: sans-serif;
+  text-align: center;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.buttons {
+  display: flex;
+  justify-content: space-evenly;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  text-align: center;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+p,
+button {
+  margin: var(--size-6);
+}
+
+body > picture,
+button {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+  margin: 2rem;
+}
+
+/*# sourceMappingURL=data:application/json;charset=utf-8,%7B%22version%22:3,%22sourceRoot%22:%22%22,%22sources%22:%5B%22../../public/styles.scss%22%5D,%22names%22:%5B%5D,%22mappings%22:%22AAAA;AAEA;AACQ;AAER;AACQ;AACA;AAER;AAEA;EACE;EACA;;;AAGF;EACE;EACA;EACA;EACA;;;AAGF;EACE;EACA;;;AAGF;AAAA;AAAA;AAAA;AAAA;AAAA;EAME;EACA;EACA;;;AAGF;AAAA;EAEE;;;AAGF;AAAA;EAEE;EACA;EACA;EACA;EACA%22,%22file%22:%22styles.css%22%7D */

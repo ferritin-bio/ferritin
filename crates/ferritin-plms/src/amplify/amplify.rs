@@ -304,12 +304,26 @@ impl EncoderBlock {
         let intermediate_size = (config.intermediate_size * 2) / 3;
         let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
         let vb = vb.pp(layer);
-        let q = linear_no_bias(config.hidden_size, config.hidden_size, vb.pp("q"))?;
-        let k = linear_no_bias(config.hidden_size, config.hidden_size, vb.pp("k"))?;
-        let v = linear_no_bias(config.hidden_size, config.hidden_size, vb.pp("v"))?;
-        let wo = linear_no_bias(config.hidden_size, config.hidden_size, vb.pp("wo"))?;
-        let w12 = linear_no_bias(config.hidden_size, intermediate_size * 2, vb.pp("ffn.w12"))?;
-        let w3 = linear_no_bias(intermediate_size, config.hidden_size, vb.pp("ffn.w3"))?;
+        let attn_linear = |d_in, d_out, vb| {
+            if config.att_bias {
+                linear(d_in, d_out, vb)
+            } else {
+                linear_no_bias(d_in, d_out, vb)
+            }
+        };
+        let ffn_linear = |d_in, d_out, vb| {
+            if config.ffn_bias {
+                linear(d_in, d_out, vb)
+            } else {
+                linear_no_bias(d_in, d_out, vb)
+            }
+        };
+        let q = attn_linear(config.hidden_size, config.hidden_size, vb.pp("q"))?;
+        let k = attn_linear(config.hidden_size, config.hidden_size, vb.pp("k"))?;
+        let v = attn_linear(config.hidden_size, config.hidden_size, vb.pp("v"))?;
+        let wo = attn_linear(config.hidden_size, config.hidden_size, vb.pp("wo"))?;
+        let w12 = ffn_linear(config.hidden_size, intermediate_size * 2, vb.pp("ffn.w12"))?;
+        let w3 = ffn_linear(intermediate_size, config.hidden_size, vb.pp("ffn.w3"))?;
         let ffn_norm = rms_norm(config.hidden_size, config.norm_eps, vb.pp("ffn_norm"))?;
         let attention_norm =
             rms_norm(config.hidden_size, config.norm_eps, vb.pp("attention_norm"))?;

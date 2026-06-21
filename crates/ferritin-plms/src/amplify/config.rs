@@ -18,10 +18,16 @@ pub struct AMPLIFYConfig {
     pub rms_norm: bool,
     pub norm_eps: f64,
     pub hidden_act: Activation,
+    /// Apply an extra LayerNorm after the token embedding.
+    /// Both 120M and 350M pretrained models set this to `false`; no corresponding
+    /// weight exists in their safetensors, so this field is intentionally unused
+    /// at inference time.
     pub layer_norm_after_embedding: bool,
     pub layer_norm_before_last_layer: bool,
     pub vocab_size: usize,
+    /// Whether Q/K/V/output projections include a bias term.
     pub ffn_bias: bool,
+    /// Whether FFN (w12, w3) projections include a bias term.
     pub att_bias: bool,
     pub pad_token_id: usize,
     pub max_length: usize,

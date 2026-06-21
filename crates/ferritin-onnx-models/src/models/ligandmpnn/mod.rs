@@ -15,7 +15,7 @@ use ferritin_plms::device;
 use ferritin_plms::featurize::StructureFeatures;
 use ferritin_plms::featurize::utilities::int_to_aa1;
 use ferritin_plms::types::PseudoProbability;
-use hf_hub::api::sync::Api;
+use hf_hub::HFClientSync;
 use ndarray::ArrayBase;
 use ort::{
     execution_providers::CUDAExecutionProvider,
@@ -82,11 +82,20 @@ impl LigandMPNN {
     }
 
     fn load_model_paths(model_type: ModelType) -> Result<(PathBuf, PathBuf)> {
-        let api = Api::new()?;
         let (repo_id, encoder_name, decoder_name) = model_type.get_paths();
+        let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
+        let client = HFClientSync::new()?;
         Ok((
-            api.model(repo_id.to_string()).get(&encoder_name)?,
-            api.model(repo_id.to_string()).get(&decoder_name)?,
+            client
+                .model(owner, name)
+                .download_file()
+                .filename(encoder_name)
+                .send()?,
+            client
+                .model(owner, name)
+                .download_file()
+                .filename(decoder_name)
+                .send()?,
         ))
     }
 
@@ -177,7 +186,7 @@ impl LigandMPNN {
         Ok(amino_acid_probs)
     }
 
-    pub fn get_all_locations(&self, temp: f32) -> Result<Vec<PseudoProbability>> {
+    pub fn get_all_locations(&self, _temp: f32) -> Result<Vec<PseudoProbability>> {
         todo!()
     }
 }

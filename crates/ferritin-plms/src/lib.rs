@@ -12,17 +12,31 @@ use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{Device, Result};
 pub use esm2::esm2::{ESM2, ESM2Config};
 pub use esm2::esm2_runner::{ESM2Models, ESM2Runner};
+pub use esm3::models::esm3::ESM3Config;
+pub use esm3::pretrained::{ESM3Models, ESM3Runner};
 pub use esmc::models::esmc::{ESMC, ESMCConfig, ESMCOutput, LogitsConfig, LogitsOutput};
+pub use esmc::pretrained::{ESMCModels, ESMCRunner};
+pub use esmfold2::config::ESMFold2Config;
+pub use esmfold2::output::ESMFold2Output;
+pub use esmfold2::pretrained::{ESMFold2Models, ESMFold2Runner};
+pub use esmfold2::{
+    ChainInput, DNAInput, LigandInput, Modification, ProteinInput, StructurePredictionInput,
+};
 pub use featurize::StructureFeatures;
 pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
 
 pub mod amplify;
 pub mod esm2;
+pub mod esm3;
 pub mod esmc;
+pub mod esmfold2;
 pub mod featurize;
 pub mod ligandmpnn;
+pub mod plm_runner;
 pub mod types;
+pub mod utils;
+pub use plm_runner::PlmRunner;
 
 /// Returns the best available device for computation.
 ///

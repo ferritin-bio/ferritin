@@ -1,67 +1,126 @@
-use crate::esmc::models::esmc::ESMC;
-use crate::esmc::tokenization::get_model_tokenizers;
-use crate::esmc::utils::constants::models::{ESM3_OPEN_SMALL, ESMC_300M};
-use candle_core::{Device, Result, Tensor};
-use candle_hf_hub::{api::sync::Api, Repo, RepoType};
-use std::collections::HashMap;
-use std::path::PathBuf;
+//! ESMC pretrained model loading.
+//!
+//! Downloads weights from `biohub/ESMC-{300M,600M,6B}` on HuggingFace and
+//! wraps the ESMC model for sequence embedding.
+//!
+//! ## Weight key layout (`biohub/ESMC-*` safetensors)
+//!
+//! The weights are saved from `ESMCForMaskedLM`, a HuggingFace wrapper that
+//! nests the backbone under an `esmc` attribute. All backbone keys are
+//! therefore prefixed with `esmc.`:
+//!
+//! | Python (HF safetensors key)                              | Rust VarBuilder path                          |
+//! |----------------------------------------------------------|-----------------------------------------------|
+//! | `esmc.embed.weight`                                      | `embed.weight`                                |
+//! | `esmc.transformer.blocks.{i}.attn.layernorm_qkv.0.*`   | `transformer.blocks.{i}.attn.layernorm_qkv.0.*` |
+//! | `esmc.transformer.blocks.{i}.attn.layernorm_qkv.1.*`   | `transformer.blocks.{i}.attn.layernorm_qkv.1.*` |
+//! | `esmc.transformer.blocks.{i}.attn.out_proj.weight`      | `transformer.blocks.{i}.attn.out_proj.weight`   |
+//! | `esmc.transformer.blocks.{i}.attn.q_ln.weight`          | `transformer.blocks.{i}.attn.q_ln.weight`       |
+//! | `esmc.transformer.blocks.{i}.attn.k_ln.weight`          | `transformer.blocks.{i}.attn.k_ln.weight`       |
+//! | `esmc.transformer.blocks.{i}.attn.rotary.*`             | `transformer.blocks.{i}.attn.rotary.*`          |
+//! | `esmc.transformer.blocks.{i}.ffn.0.*`                   | `transformer.blocks.{i}.ffn.0.*`                |
+//! | `esmc.transformer.blocks.{i}.ffn.1.weight`              | `transformer.blocks.{i}.ffn.1.weight`           |
+//! | `esmc.transformer.blocks.{i}.ffn.3.weight`              | `transformer.blocks.{i}.ffn.3.weight`           |
+//! | `esmc.transformer.norm.weight`                           | `transformer.norm.weight`                       |
+//! | `esmc.sequence_head.0.weight/bias`                       | `sequence_head.0.weight/bias`                   |
+//! | `esmc.sequence_head.2.weight`                            | `sequence_head.2.weight`                        |
+//! | `esmc.sequence_head.3.weight/bias`                       | `sequence_head.3.weight/bias`                   |
+//!
+//! The `from_pretrained` loader auto-detects whether the `esmc.` prefix is
+//! present and sets the VarBuilder root accordingly, so the same Rust model
+//! code works against both the wrapped and unwrapped formats.
 
-// use huggingface_hub::snapshot_download;
+use crate::esmc::models::esmc::{ESMC, ESMCConfig};
+use crate::plm_runner::PlmRunner;
+use anyhow::Result;
+use candle_core::{DType, Device, Tensor};
+use candle_nn::VarBuilder;
+use hf_hub::HFClientSync;
 
-pub fn data_root(model: &str) -> PathBuf {
-    if std::env::var("INFRA_PROVIDER").is_ok() {
-        return PathBuf::new();
+const ESMC_DTYPE: DType = DType::F32;
+
+/// Available ESMC model variants hosted on HuggingFace.
+pub enum ESMCModels {
+    /// ESMC 300M — 30 layers, d_model=960 (~1.3 GB weights)
+    ESMC300M,
+    /// ESMC 600M — 36 layers, d_model=1152
+    ESMC600M,
+    /// ESMC 6B — 80 layers, d_model=2560 (backbone for ESMFold2)
+    ESMC6B,
+}
+
+impl ESMCModels {
+    /// Returns `(hf_repo_id, config)` for this variant.
+    pub fn model_info(&self) -> (&'static str, ESMCConfig) {
+        match self {
+            Self::ESMC300M => ("biohub/ESMC-300M", ESMCConfig::esmc_300m()),
+            Self::ESMC600M => ("biohub/ESMC-600M", ESMCConfig::esmc_600m()),
+            Self::ESMC6B => ("biohub/ESMC-6B", ESMCConfig::esmc_6b()),
+        }
     }
-    if model.starts_with("esm3") {
-        PathBuf::from(snapshot_download("EvolutionaryScale/esm3-sm-open-v1"))
-    } else if model.starts_with("esmc-300") {
-        PathBuf::from(snapshot_download("EvolutionaryScale/esmc-300m-2024-12"))
-    } else if model.starts_with("esmc-600") {
-        PathBuf::from(snapshot_download("EvolutionaryScale/esmc-600m-2024-12"))
-    } else {
-        panic!("{model} is an invalid model name")
+}
+
+/// Wraps a loaded ESMC model for sequence embedding inference.
+pub struct ESMCRunner {
+    model: ESMC,
+}
+
+impl ESMCRunner {
+    /// Download weights from HuggingFace and load the model.
+    ///
+    /// Handles the `ESMCForMaskedLM` wrapper prefix (`esmc.`) transparently:
+    /// probes for `esmc.embed.weight` in the safetensors and sets the
+    /// VarBuilder root to `vb.pp("esmc")` when found, otherwise uses the
+    /// flat (unwrapped) layout.
+    pub fn from_pretrained(model: ESMCModels, device: Device) -> Result<Self> {
+        let (repo_id, config) = model.model_info();
+        let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
+        let client = HFClientSync::new()?;
+        let weights_path = client
+            .model(owner, name)
+            .download_file()
+            .filename("model.safetensors")
+            .send()?;
+
+        let vb =
+            unsafe { VarBuilder::from_mmaped_safetensors(&[&weights_path], ESMC_DTYPE, &device)? };
+
+        // Detect whether weights use the HF ESMCForMaskedLM prefix "esmc."
+        // by probing for the embedding matrix at the prefixed path.
+        let vb_root = if vb
+            .get((config.embedding_dim, config.d_model), "esmc.embed.weight")
+            .is_ok()
+        {
+            vb.pp("esmc")
+        } else {
+            vb
+        };
+
+        let esmc = ESMC::load(vb_root, config)?;
+        Ok(Self { model: esmc })
+    }
+
+    /// Tokenize `sequence` and run a forward pass.
+    ///
+    /// Returns per-residue embeddings with shape `(1, L, d_model)` where
+    /// `L` includes the BOS and EOS tokens added by the tokenizer.
+    pub fn embed_sequence(&self, sequence: &str) -> Result<Tensor> {
+        let tokens = self.model.encode(sequence)?;
+        let tokens = tokens.unsqueeze(0)?;
+        let output = self.model.forward(&tokens, None, false)?;
+        output
+            .embeddings
+            .ok_or_else(|| anyhow::anyhow!("ESMC forward() returned no embeddings"))
     }
 }
 
-type ModelBuilder = Box<dyn Fn(&Device) -> Result<Box<dyn Model>>>;
+impl PlmRunner for ESMCRunner {
+    /// Delegate to `embed_sequence`, returning per-residue embeddings `(1, L, d_model)`.
+    fn embed(&self, sequence: &str) -> Result<Tensor> {
+        self.embed_sequence(sequence)
+    }
 
-pub fn esmc_300m_202412(device: &Device) -> Result<Box<dyn Model>> {
-    let tokenizer = get_model_tokenizers(ESM3_OPEN_SMALL)?.sequence;
-    let model = ESMC::new(960, 15, 30, tokenizer)?;
-    model.eval();
-    let state_dict = Tensor::load(
-        data_root("esmc-300").join("data/weights/esmc_300m_2024_12_v0.safetensors"),
-        device,
-    )?;
-    model.load_state_dict(&state_dict)?;
-    Ok(Box::new(model))
-}
-
-// lazy_static! {
-//     static ref LOCAL_MODEL_REGISTRY: HashMap<&'static str, ModelBuilder> = {
-//         let mut map = HashMap::new();
-//         map.insert(ESM3_OPEN_SMALL, Box::new(esm3_sm_open_v0));
-//         map.insert(
-//             ESM3_STRUCTURE_ENCODER_V0,
-//             Box::new(esm3_structure_encoder_v0),
-//         );
-//         map.insert(
-//             ESM3_STRUCTURE_DECODER_V0,
-//             Box::new(esm3_structure_decoder_v0),
-//         );
-//         map.insert(ESM3_FUNCTION_DECODER_V0, Box::new(esm3_function_decoder_v0));
-//         map.insert(ESMC_600M, Box::new(esmc_600m_202412));
-//         map.insert(ESMC_300M, Box::new(esmc_300m_202412));
-//         map
-//     };
-// }
-
-pub fn load_local_model(model_name: &str, device: &Device) -> Result<Box<dyn Model>> {
-    LOCAL_MODEL_REGISTRY
-        .get(model_name)
-        .ok_or_else(|| Error::ModelNotFound(model_name.to_string()))?(device)
-}
-
-pub fn register_local_model(model_name: &'static str, model_builder: ModelBuilder) {
-    LOCAL_MODEL_REGISTRY.insert(model_name, model_builder);
+    fn model_name(&self) -> &str {
+        "esmc"
+    }
 }

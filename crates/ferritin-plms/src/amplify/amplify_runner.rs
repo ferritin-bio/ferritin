@@ -5,11 +5,12 @@
 use super::super::types::{ContactMap, PseudoProbability};
 use super::amplify::{AMPLIFY, AmplifyOutput};
 use super::config::AMPLIFYConfig;
+use crate::plm_runner::PlmRunner;
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{D, DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_nn::ops;
-use hf_hub::{Repo, RepoType, api::sync::Api};
+use hf_hub::HFClientSync;
 use tokenizers::Tokenizer;
 
 const AMPLIFY_DTYPE: DType = DType::F32;
@@ -34,13 +35,25 @@ pub struct AmplifyRunner {
 impl AmplifyRunner {
     pub fn load_model(modeltype: AmplifyModels, device: Device) -> Result<AmplifyRunner> {
         let (model_id, revision) = AmplifyModels::get_model_files(modeltype);
-        let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, revision.to_string());
+        let (owner, name) = model_id.split_once('/').unwrap_or(("", model_id));
+        let client = HFClientSync::new()?;
+        let repo = client.model(owner, name);
         let (config_filename, tokenizer_filename, weights_filename) = {
-            let api = Api::new()?;
-            let api = api.repo(repo);
-            let config = api.get("config.json")?;
-            let tokenizer = api.get("tokenizer.json")?;
-            let weights = api.get("model.safetensors")?;
+            let config = repo
+                .download_file()
+                .filename("config.json")
+                .revision(revision)
+                .send()?;
+            let tokenizer = repo
+                .download_file()
+                .filename("tokenizer.json")
+                .revision(revision)
+                .send()?;
+            let weights = repo
+                .download_file()
+                .filename("model.safetensors")
+                .revision(revision)
+                .send()?;
             (config, tokenizer, weights)
         };
         let config_str = std::fs::read_to_string(config_filename)?;
@@ -142,5 +155,32 @@ impl AmplifyRunner {
             }
         }
         Ok(logit_positions)
+    }
+}
+
+impl PlmRunner for AmplifyRunner {
+    /// Run AMPLIFY and return the last-layer hidden states as per-residue embeddings.
+    ///
+    /// Shape: `(1, L, hidden_size)` where `L` includes BOS and EOS tokens.
+    fn embed(&self, sequence: &str) -> Result<Tensor> {
+        let device = self.model.get_device();
+        let tokens = self
+            .tokenizer
+            .encode(sequence.to_string(), false)
+            .map_err(E::msg)?
+            .get_ids()
+            .to_vec();
+        let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
+        let output = self.model.forward(&token_ids, None, true, false)?;
+        let mut hidden_states = output
+            .hidden_states
+            .ok_or_else(|| anyhow!("AMPLIFY forward() returned no hidden states"))?;
+        hidden_states
+            .pop()
+            .ok_or_else(|| anyhow!("AMPLIFY returned empty hidden states list"))
+    }
+
+    fn model_name(&self) -> &str {
+        "amplify"
     }
 }

@@ -88,14 +88,14 @@ pub const MODEL_PORT_CASES: &[ModelPortCase] = &[
     },
     ModelPortCase {
         family: "esmc",
-        variant: "300m-2024-12",
-        source_artifact: "huggingface pytorch checkpoint",
+        variant: "ESMC-300M",
+        source_artifact: "huggingface safetensors (biohub/ESMC-300M)",
         rust_backend: "candle",
-        status: PortStatus::Partial,
+        status: PortStatus::Stable,
         has_local_tokenizer: false,
-        has_remote_smoke: false,
+        has_remote_smoke: true,
         has_pytorch_checkpoint_test: false,
-        notes: "Config and module structure exist, but the forward/load contract is still incomplete.",
+        notes: "ESMCRunner loads weights from biohub/ESMC-300M via hf_hub. Auto-detects ESMCForMaskedLM prefix. 600M and 6B configs also available.",
     },
 ];
 

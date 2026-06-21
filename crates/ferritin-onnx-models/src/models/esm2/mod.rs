@@ -13,7 +13,7 @@ use anyhow::{Result, anyhow};
 use candle_core::{D, Tensor};
 use candle_nn::ops;
 use ferritin_plms::types::PseudoProbability;
-use hf_hub::api::sync::Api;
+use hf_hub::HFClientSync;
 use ndarray::Array2;
 use ort::{
     execution_providers::CUDAExecutionProvider,
@@ -52,15 +52,18 @@ impl ESM2 {
     }
 
     pub fn load_model_path(model: ESM2Models) -> Result<PathBuf> {
-        let api = Api::new()?;
         let repo_id = match model {
             ESM2Models::T6_8M => "zcpbx/esm2-t6-8m-UR50D-onnx",
             ESM2Models::T12_35M => "zcpbx/esm2-t12-35M-UR50D-onnx",
             ESM2Models::T30_150M => "zcpbx/esm2-t30-150M-UR50D-onnx",
-            // ESM2Models::ESM2_T33_650M => "zcpbx/esm2-t33-650M-UR50D-onnx",
-        }
-        .to_string();
-        let model_path = api.model(repo_id).get("model.onnx")?;
+        };
+        let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
+        let client = HFClientSync::new()?;
+        let model_path = client
+            .model(owner, name)
+            .download_file()
+            .filename("model.onnx")
+            .send()?;
         Ok(model_path)
     }
 

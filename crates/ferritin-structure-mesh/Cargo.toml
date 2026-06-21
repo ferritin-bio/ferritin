@@ -11,9 +11,12 @@ bevy = { workspace = true, optional = false, default-features = true }
 bon.workspace = true
 ferritin-core = { path = "../ferritin-core" }
 itertools.workspace = true
-# rerun = { workspace = true, optional = false }
+rerun = { workspace = true, optional = true }
 
 [features]
 default = []
+rerun = ["dep:rerun"]
 
 [dev-dependencies]
+anyhow.workspace = true
+ferritin-test-data = { path = "../ferritin-test-data" }

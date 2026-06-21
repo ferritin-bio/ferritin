@@ -73,7 +73,10 @@ impl Structure {
         self.create_sphere_mesh(2.0)
     }
 
-    /// Create a mesh with spheres at each atom position
+    /// Create a mesh with spheres at each atom position.
+    ///
+    /// Produces: ATTRIBUTE_POSITION, ATTRIBUTE_NORMAL, ATTRIBUTE_UV_0; U32 indices;
+    /// TriangleList topology. No ATTRIBUTE_COLOR.
     fn create_sphere_mesh(&self, radius: f32) -> Mesh {
         let mut positions = Vec::new();
         let mut normals = Vec::new();
@@ -143,5 +146,177 @@ impl Structure {
         mesh.insert_indices(bevy::mesh::Indices::U32(indices));
 
         mesh
+    }
+}
+
+// Mesh attribute contract for ferritin-structure-mesh renderers
+//
+// All render_* methods are implemented via create_sphere_mesh and produce:
+//   ATTRIBUTE_POSITION  — Float32x3, one entry per vertex
+//   ATTRIBUTE_NORMAL    — Float32x3, outward sphere normals
+//   ATTRIBUTE_UV_0      — Float32x2, lat/lon UV coordinates
+//   Indices             — U32 format, TriangleList topology
+//   ATTRIBUTE_COLOR     — NOT populated by any method in this crate
+//
+// Topology: TriangleList
+// Index format: U32
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::mesh::Indices;
+    use bevy::render::mesh::VertexAttributeValues;
+    use ferritin_core::load_structure;
+    use ferritin_test_data::TestFile;
+
+    fn load_test_structure() -> anyhow::Result<Structure> {
+        let (molfile, _handle) = TestFile::protein_01().create_temp()?;
+        let ac = load_structure(molfile)?;
+        Ok(Structure::builder().pdb(ac).build())
+    }
+
+    fn assert_mesh_has_required_attributes(mesh: &Mesh, label: &str) {
+        assert!(
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION).is_some(),
+            "{label}: missing ATTRIBUTE_POSITION"
+        );
+        assert!(
+            mesh.attribute(Mesh::ATTRIBUTE_NORMAL).is_some(),
+            "{label}: missing ATTRIBUTE_NORMAL"
+        );
+        assert!(
+            mesh.attribute(Mesh::ATTRIBUTE_UV_0).is_some(),
+            "{label}: missing ATTRIBUTE_UV_0"
+        );
+        assert!(
+            mesh.indices().is_some(),
+            "{label}: missing indices"
+        );
+    }
+
+    fn assert_indices_are_u32(mesh: &Mesh, label: &str) {
+        match mesh.indices() {
+            Some(Indices::U32(_)) => {}
+            Some(Indices::U16(_)) => panic!("{label}: expected U32 indices, got U16"),
+            None => panic!("{label}: no indices"),
+        }
+    }
+
+    fn assert_no_color_attribute(mesh: &Mesh, label: &str) {
+        assert!(
+            mesh.attribute(Mesh::ATTRIBUTE_COLOR).is_none(),
+            "{label}: ATTRIBUTE_COLOR should not be populated"
+        );
+    }
+
+    fn assert_positions_are_float32x3(mesh: &Mesh, label: &str) {
+        match mesh.attribute(Mesh::ATTRIBUTE_POSITION) {
+            Some(VertexAttributeValues::Float32x3(_)) => {}
+            other => panic!("{label}: ATTRIBUTE_POSITION is {other:?}, expected Float32x3"),
+        }
+    }
+
+    fn assert_normals_are_float32x3(mesh: &Mesh, label: &str) {
+        match mesh.attribute(Mesh::ATTRIBUTE_NORMAL) {
+            Some(VertexAttributeValues::Float32x3(_)) => {}
+            other => panic!("{label}: ATTRIBUTE_NORMAL is {other:?}, expected Float32x3"),
+        }
+    }
+
+    fn assert_uvs_are_float32x2(mesh: &Mesh, label: &str) {
+        match mesh.attribute(Mesh::ATTRIBUTE_UV_0) {
+            Some(VertexAttributeValues::Float32x2(_)) => {}
+            other => panic!("{label}: ATTRIBUTE_UV_0 is {other:?}, expected Float32x2"),
+        }
+    }
+
+    #[test]
+    fn test_render_solid_attributes() -> anyhow::Result<()> {
+        let s = load_test_structure()?;
+        let mesh = s.to_mesh(); // Solid is the default
+        assert_mesh_has_required_attributes(&mesh, "render_solid");
+        assert_indices_are_u32(&mesh, "render_solid");
+        assert_positions_are_float32x3(&mesh, "render_solid");
+        assert_normals_are_float32x3(&mesh, "render_solid");
+        assert_uvs_are_float32x2(&mesh, "render_solid");
+        assert_no_color_attribute(&mesh, "render_solid");
+        assert!(mesh.count_vertices() > 0, "render_solid: no vertices");
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_wireframe_attributes() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_01().create_temp()?;
+        let ac = load_structure(molfile)?;
+        let s = Structure::builder().pdb(ac).rendertype(RenderOptions::Wireframe).build();
+        let mesh = s.to_mesh();
+        assert_mesh_has_required_attributes(&mesh, "render_wireframe");
+        assert_indices_are_u32(&mesh, "render_wireframe");
+        assert_positions_are_float32x3(&mesh, "render_wireframe");
+        assert_normals_are_float32x3(&mesh, "render_wireframe");
+        assert_uvs_are_float32x2(&mesh, "render_wireframe");
+        assert_no_color_attribute(&mesh, "render_wireframe");
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_cartoon_attributes() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_01().create_temp()?;
+        let ac = load_structure(molfile)?;
+        let s = Structure::builder().pdb(ac).rendertype(RenderOptions::Cartoon).build();
+        let mesh = s.to_mesh();
+        assert_mesh_has_required_attributes(&mesh, "render_cartoon");
+        assert_indices_are_u32(&mesh, "render_cartoon");
+        assert_positions_are_float32x3(&mesh, "render_cartoon");
+        assert_normals_are_float32x3(&mesh, "render_cartoon");
+        assert_uvs_are_float32x2(&mesh, "render_cartoon");
+        assert_no_color_attribute(&mesh, "render_cartoon");
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_ballandstick_attributes() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_01().create_temp()?;
+        let ac = load_structure(molfile)?;
+        let s = Structure::builder().pdb(ac).rendertype(RenderOptions::BallAndStick).build();
+        let mesh = s.to_mesh();
+        assert_mesh_has_required_attributes(&mesh, "render_ballandstick");
+        assert_indices_are_u32(&mesh, "render_ballandstick");
+        assert_positions_are_float32x3(&mesh, "render_ballandstick");
+        assert_normals_are_float32x3(&mesh, "render_ballandstick");
+        assert_uvs_are_float32x2(&mesh, "render_ballandstick");
+        assert_no_color_attribute(&mesh, "render_ballandstick");
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_putty_attributes() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_01().create_temp()?;
+        let ac = load_structure(molfile)?;
+        let s = Structure::builder().pdb(ac).rendertype(RenderOptions::Putty).build();
+        let mesh = s.to_mesh();
+        assert_mesh_has_required_attributes(&mesh, "render_putty");
+        assert_indices_are_u32(&mesh, "render_putty");
+        assert_positions_are_float32x3(&mesh, "render_putty");
+        assert_normals_are_float32x3(&mesh, "render_putty");
+        assert_uvs_are_float32x2(&mesh, "render_putty");
+        assert_no_color_attribute(&mesh, "render_putty");
+        Ok(())
+    }
+
+    #[test]
+    fn test_vertex_and_index_counts_are_consistent() -> anyhow::Result<()> {
+        let s = load_test_structure()?;
+        let mesh = s.to_mesh();
+        let n_verts = mesh.count_vertices();
+        assert!(n_verts > 0, "mesh has no vertices");
+        if let Some(Indices::U32(idx)) = mesh.indices() {
+            assert!(!idx.is_empty(), "mesh has no indices");
+            assert!(
+                idx.iter().all(|&i| (i as usize) < n_verts),
+                "index out of bounds"
+            );
+        }
+        Ok(())
     }
 }
