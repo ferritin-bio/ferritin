@@ -307,7 +307,7 @@ mod tests {
         let n_bins = 4_usize;
         let d_outer = 4_usize;
 
-        let vb = VarBuilder::zeros(candle_core::DType::F32, &device);
+        let vb = VarBuilder::zeros(DType::F32, &device);
         let init = PairInit::load(vb, d_single, d_pair, n_bins, d_outer).unwrap();
 
         let single = Tensor::zeros(&[B, N, d_single], DType::F32, &device).unwrap();

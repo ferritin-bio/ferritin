@@ -5338,7 +5338,6 @@ dependencies = [
  "bon",
  "ferritin-core",
  "ferritin-test-data",
- "itertools 0.15.0",
 ]
 
 [[package]]

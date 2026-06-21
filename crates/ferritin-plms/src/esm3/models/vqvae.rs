@@ -197,7 +197,7 @@ impl StructureTokenDecoder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candle_core::{DType, Device, Tensor};
+    use candle_core::{Device, Tensor};
 
     #[test]
     fn test_vq_codebook_quantize_shape() -> Result<()> {
