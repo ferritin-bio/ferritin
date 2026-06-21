@@ -133,10 +133,12 @@ impl EsmSequenceTokenizer {
 
 impl EsmTokenizerBase for EsmSequenceTokenizer {
     fn encode(&self) -> Result<()> {
+        // TODO: implement generic encode via the HuggingFace tokenizers Tokenizer
         todo!()
     }
 
     fn decode(&self) -> Result<()> {
+        // TODO: implement generic decode via the HuggingFace tokenizers Tokenizer
         todo!()
     }
 
@@ -149,13 +151,13 @@ impl EsmTokenizerBase for EsmSequenceTokenizer {
     }
 
     fn bos_token(&self) -> &str {
+        // TODO: BOS is "<cls>" token — alias cls_token() once that method exists
         unimplemented!()
-        // self.cls_token()
     }
 
     fn bos_token_id(&self) -> u32 {
+        // TODO: BOS id is the "<cls>" token id — alias cls_token_id() once that method exists
         unimplemented!()
-        // self.cls_token_id()
     }
 
     fn eos_token(&self) -> &str {
@@ -183,12 +185,12 @@ impl EsmTokenizerBase for EsmSequenceTokenizer {
     }
 
     fn all_token_ids(&self) -> Vec<u32> {
+        // TODO: return (0..SEQUENCE_VOCAB.len() as u32).collect()
         unimplemented!()
-        // (0..self.vocab_size()).collect()
     }
 
     fn special_token_ids(&self) -> Vec<u32> {
+        // TODO: return ids for cls, pad, eos, mask, chain_break special tokens
         unimplemented!()
-        // self.tokenizer.get_special_token_ids()
     }
 }
