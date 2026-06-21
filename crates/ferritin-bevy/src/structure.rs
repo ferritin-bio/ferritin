@@ -594,37 +594,17 @@ impl Structure {
     }
 
     fn render_wireframe(&self) -> Mesh {
+        // TODO: implement wireframe rendering
         todo!()
     }
     fn render_cartoon(&self) -> Mesh {
         // Main implementation
         let backbone_atoms = Structure::extract_backbone_atoms(&self.pdb);
-        println!("Backbone atoms found: {}", backbone_atoms.len());
-
         // Extract CA positions for secondary structure detection
         let ca_positions: Vec<Vec3> = backbone_atoms.iter().map(|atom| atom.ca).collect();
-        println!("CA positions extracted: {}", ca_positions.len());
 
         // Detect secondary structures - returns Vec<SecondaryStructure>
         let secondary_structures = Structure::detect_secondary_structure(&ca_positions);
-
-        println!(
-            "Secondary structures detected: {}",
-            secondary_structures.len()
-        );
-        println!(
-            "Secondary structure types: {:?}",
-            secondary_structures
-                .iter()
-                .fold([0, 0, 0], |mut counts, &ss| {
-                    match ss {
-                        SecondaryStructure::Helix => counts[0] += 1,
-                        SecondaryStructure::Sheet => counts[1] += 1,
-                        SecondaryStructure::Loop => counts[2] += 1,
-                    }
-                    counts
-                })
-        );
 
         // Create combined mesh from all segments
         let _combined_mesh =
@@ -645,49 +625,15 @@ impl Structure {
             }
         }
 
-        println!("Segments identified: {}", segments.len());
-
         // Add the last segment
         if !current_segment.is_empty() {
             segments.push((current_type, current_segment));
         }
 
-        // // Now iterate through the segments and generate appropriate meshes
-        // for (structure_type, segment) in segments {
-        //     let segment_mesh = match structure_type {
-        //         SecondaryStructure::Helix => {
-        //             Structure::generate_alpha_helix_mesh(&backbone_atoms, &segment)
-        //         }
-        //         SecondaryStructure::Sheet => {
-        //             Structure::generate_beta_sheet_mesh(&backbone_atoms, &segment)
-        //         }
-        //         SecondaryStructure::Loop => {
-        //             Structure::generate_loop_mesh(&backbone_atoms, &segment)
-        //         }
-        //     };
-
-        //     combined_mesh.merge(&segment_mesh);
-        // }
-
         let mut valid_meshes = Vec::new();
 
         // Now iterate through the segments and generate appropriate meshes
-        for (i, (structure_type, segment)) in segments.iter().enumerate() {
-            println!(
-                "Processing segment {} of type {:?} with {} residues",
-                i,
-                structure_type,
-                segment.len()
-            );
-            println!(
-                "Segment indices: {:?}",
-                &segment[0..std::cmp::min(5, segment.len())]
-            );
-
-            // Check if segment indices are valid
-            // let valid_indices = segment.iter().all(|&idx| idx < backbone_atoms.len());
-            // println!("All segment indices valid: {}", valid_indices);
-
+        for (structure_type, segment) in segments.iter() {
             let segment_mesh = match structure_type {
                 SecondaryStructure::Helix => {
                     Structure::generate_alpha_helix_mesh(&backbone_atoms, segment)
@@ -698,11 +644,6 @@ impl Structure {
                 SecondaryStructure::Loop => Structure::generate_loop_mesh(&backbone_atoms, segment),
             };
 
-            println!(
-                "After generating segment mesh, vertex count: {}",
-                segment_mesh.count_vertices()
-            );
-
             // Only merge if we have vertices
             if segment_mesh.count_vertices() > 0 {
                 valid_meshes.push(segment_mesh);
@@ -711,35 +652,18 @@ impl Structure {
 
         // If we have any valid meshes, combine them
         if valid_meshes.is_empty() {
-            println!("No valid meshes found!");
             // Return an empty mesh since we couldn't generate anything
             return Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
         }
 
         // Start with the first mesh
         let mut combined_mesh = valid_meshes[0].clone();
-        println!(
-            "Starting with mesh of {} vertices",
-            combined_mesh.count_vertices()
-        );
 
         // Merge the rest
-        for (i, mesh) in valid_meshes.iter().enumerate().skip(1) {
-            println!("Merging mesh {} with {} vertices", i, mesh.count_vertices());
-            let before_count = combined_mesh.count_vertices();
+        for mesh in valid_meshes.iter().skip(1) {
             let _ = combined_mesh.merge(mesh);
-            let after_count = combined_mesh.count_vertices();
-            println!(
-                "After merge: {} vertices (added {})",
-                after_count,
-                after_count - before_count
-            );
         }
 
-        println!(
-            "Final combined mesh vertices: {}",
-            combined_mesh.count_vertices()
-        );
         combined_mesh
     }
 
@@ -834,7 +758,7 @@ impl Structure {
             })
             .reduce(|mut acc, mesh| {
                 let _ = acc.merge(&mesh);
-                mesh
+                acc
             })
             .unwrap()
     }
