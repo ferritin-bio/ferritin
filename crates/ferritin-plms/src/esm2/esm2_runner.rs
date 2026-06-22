@@ -3,14 +3,24 @@
 //! Class for loading and running the ESM2 models
 use super::esm2::{ESM2, ESM2Config, ESM2Output};
 use crate::plm_runner::PlmRunner;
+use crate::types::PseudoProbability;
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{DType, Device, Tensor};
+use candle_nn::ops::softmax;
 use candle_nn::VarBuilder;
 use hf_hub::HFClientSync;
 use serde_json;
 use tokenizers::Tokenizer;
 
 const ESM2_DTYPE: DType = DType::F32;
+
+// ESM2 tokenizer: indices 4-23 are the 20 standard amino acids.
+const ESM2_STD_AA: [(usize, char); 20] = [
+    (4, 'L'), (5, 'A'), (6, 'G'), (7, 'V'), (8, 'S'),
+    (9, 'E'), (10, 'R'), (11, 'T'), (12, 'I'), (13, 'D'),
+    (14, 'P'), (15, 'K'), (16, 'Q'), (17, 'N'), (18, 'F'),
+    (19, 'Y'), (20, 'M'), (21, 'H'), (22, 'W'), (23, 'C'),
+];
 
 pub enum ESM2Models {
     T6_8M,
@@ -125,6 +135,35 @@ impl ESM2Runner {
             .map_err(|e| anyhow!("Failed to decode tokens: {}", e))?
             .replace(" ", "");
         Ok(decoded_sequence)
+    }
+
+    /// Run ESM2 and return per-residue pseudo-probabilities for the 20 standard amino acids.
+    ///
+    /// BOS and EOS tokens are stripped before softmax is applied. Only amino acid / position
+    /// pairs with probability > 0.01 are included in the result.
+    pub fn get_pseudo_probabilities(&self, prot_sequence: &str) -> Result<Vec<PseudoProbability>> {
+        let output = self.run_forward(prot_sequence)?;
+        // logits: (1, L+2, vocab_size) — strip BOS at 0 and EOS at -1
+        let seq_len = output.logits.dim(1)? - 2;
+        let logits = output.logits.narrow(1, 1, seq_len)?;
+        let probs = softmax(&logits, 2)?;
+        let probs = probs.squeeze(0)?; // (L, vocab)
+        let probs_data: Vec<Vec<f32>> = probs.to_vec2()?;
+
+        let mut result = Vec::new();
+        for (pos, pos_probs) in probs_data.iter().enumerate() {
+            for (vocab_idx, aa_char) in ESM2_STD_AA.iter() {
+                let prob = pos_probs[*vocab_idx];
+                if prob > 0.01 {
+                    result.push(PseudoProbability {
+                        position: pos,
+                        pseudo_prob: prob,
+                        amino_acid: *aa_char,
+                    });
+                }
+            }
+        }
+        Ok(result)
     }
 }
 
