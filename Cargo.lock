@@ -5294,7 +5294,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin"
-version = "0.3.4-dev"
+version = "0.3.5-dev"
 dependencies = [
  "ferritin-core",
  "ferritin-plms",
@@ -5303,7 +5303,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-bevy"
-version = "0.3.4-dev"
+version = "0.3.5-dev"
 dependencies = [
  "anyhow",
  "bevy",
@@ -5314,7 +5314,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-core"
-version = "0.3.4-dev"
+version = "0.3.5-dev"
 dependencies = [
  "anyhow",
  "ferritin-test-data",
@@ -5323,7 +5323,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-examples"
-version = "0.3.4-dev"
+version = "0.3.5-dev"
 dependencies = [
  "anyhow",
  "bevy",
@@ -5343,7 +5343,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-plms"
-version = "0.3.4-dev"
+version = "0.3.5-dev"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -5362,7 +5362,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-structure-mesh"
-version = "0.3.4-dev"
+version = "0.3.5-dev"
 dependencies = [
  "anyhow",
  "bevy",
@@ -5375,7 +5375,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-test-data"
-version = "0.3.4-dev"
+version = "0.3.5-dev"
 dependencies = [
  "tempfile",
 ]

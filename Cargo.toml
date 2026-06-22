@@ -16,7 +16,7 @@ members = [
 resolver = "3"
 
 [workspace.package]
-version = "0.3.4-dev"
+version = "0.3.5-dev"
 authors = ["Zach Charlop-Powers<zach.charlop.powers@gmail.com>"]
 description = "Protein Manipulation and visualization tools"
 license = "MIT OR Apache-2.0"
