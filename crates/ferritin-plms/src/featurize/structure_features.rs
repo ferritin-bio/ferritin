@@ -102,7 +102,7 @@ impl StructureFeatures for AtomCollection {
     // Convert AtomCollection to ProteinFeatures
     fn featurize_lmpnn(&self, device: &Device) -> Result<ProteinFeatures> {
         let x_37 = self.to_numeric_atom37(device)?;
-        let x_37_m = Tensor::zeros((x_37.dim(0)?, x_37.dim(1)?), DType::F32, device)?;
+        let x_37_m = Tensor::ones((x_37.dim(0)?, x_37.dim(1)?), DType::F32, device)?;
         let (y, y_t, y_m) = self.to_numeric_ligand_atoms(device)?;
         let _cb = self.create_cb(device);
         let _chain_labels = self.get_resids(); //  <-- need to double-check shape. I think this is all-atom
@@ -208,6 +208,18 @@ impl StructureFeatures for AtomCollection {
                 coords.push(*atom.coords());
                 elements.push(*atom.element());
             }
+        }
+
+        // When there are no ligand atoms, backends like Metal cannot allocate zero-size
+        // buffers. Return a single dummy ligand slot with a zeroed mask so it has no
+        // effect on the model output.
+        if coords.is_empty() {
+            let cb = self.create_cb(device)?;
+            let (batch, res_num, _) = cb.dims3()?;
+            let y = Tensor::zeros((batch, res_num, 1, 3), DType::F32, device)?;
+            let y_t = Tensor::zeros((batch, res_num, 1), DType::I64, device)?;
+            let y_m = Tensor::zeros((batch, res_num, 1), DType::F32, device)?;
+            return Ok((y, y_t, y_m));
         }
 
         // raw starting tensors
