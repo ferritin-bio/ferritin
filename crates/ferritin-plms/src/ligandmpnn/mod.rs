@@ -6,7 +6,9 @@
 // mod commands;
 pub mod configs;
 pub mod model;
+pub mod pmpnn_runner;
 pub mod proteinfeatures;
 mod proteinfeaturesmodel;
 pub use configs::ProteinMPNNConfig;
 pub use model::ProteinMPNN;
+pub use pmpnn_runner::{ProteinMPNNModels, ProteinMPNNRunner};

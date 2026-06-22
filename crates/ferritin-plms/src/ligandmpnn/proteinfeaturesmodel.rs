@@ -237,7 +237,7 @@ impl ProteinFeaturesModel {
         let e_chains = gather_edges(&d_chains.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
         let e_positional = self
             .embeddings
-            .forward(&offset.to_dtype(DType::U32)?, &e_chains)?;
+            .forward(&offset, &e_chains.to_dtype(DType::F32)?)?;
         let e = Tensor::cat(&[e_positional, rbf_all], D::Minus1)?;
         let e = self.edge_embedding.forward(&e)?;
         let e = self.norm_edges.forward(&e)?;
@@ -265,13 +265,14 @@ impl PositionalEncodings {
     /// - [pytorch](https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L1645)
     fn forward(&self, offset: &Tensor, mask: &Tensor) -> Result<Tensor> {
         let max_rel = self.max_relative_feature as f64;
+        let offset = offset.to_dtype(DType::F32)?;
+        let mask = mask.to_dtype(DType::F32)?;
         let clipped = (offset + max_rel)?.clamp(0f64, 2.0 * max_rel)?;
-        let inverse_mask = (1.0 - mask)?;
-        let d = (clipped.mul(mask)? + inverse_mask * ((2.0 * max_rel) + 1.0))?;
+        let inverse_mask = (1.0 - &mask)?;
+        let d = (clipped.mul(&mask)? + (inverse_mask * ((2.0 * max_rel) + 1.0))?)?;
         let depth = (2 * self.max_relative_feature + 2) as i64;
-        let d_value = Tensor::full(97f32, d.dims(), d.device())?;
-        let d_normalized = (&d - &d_value)?;
-        let d_onehot = one_hot(d_normalized, depth as usize, 1f32, 0f32)?.to_dtype(DType::F32)?;
+        let d_onehot = one_hot(d.to_dtype(DType::U32)?, depth as usize, 1f32, 0f32)?
+            .to_dtype(DType::F32)?;
         self.linear.forward(&d_onehot)
     }
 }

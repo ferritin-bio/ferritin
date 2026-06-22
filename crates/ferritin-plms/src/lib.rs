@@ -25,6 +25,7 @@ pub use esmfold2::{
 pub use featurize::StructureFeatures;
 pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
+pub use ligandmpnn::pmpnn_runner::{ProteinMPNNModels, ProteinMPNNRunner};
 
 pub mod amplify;
 pub mod esm2;
