@@ -16,9 +16,11 @@ mod bonds;
 pub mod data;
 pub mod info;
 mod io;
+pub mod model;
 mod views;
 
 pub use atomcollection::AtomCollection;
 pub use bonds::{Bond, BondOrder};
 pub use io::{load_structure, load_structure_from_string};
+pub use model::{AtomicConformation, AtomicHierarchy, Bonds, Model};
 pub use views::{AtomView, ChainView, ResidueView};

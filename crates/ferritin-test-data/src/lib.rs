@@ -55,6 +55,16 @@ impl TestFile {
             suffix: "cif",
         }
     }
+    /// 1D3Z.cif
+    /// NMR solution structure of the villin headpiece subdomain, 20 models.
+    /// Each model contains 596 atoms, 36 residues, chain A.
+    /// Used as a multi-model NMR fixture to characterize and test multi-model CIF parsing.
+    pub fn multimodel_nmr_1d3z() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/structures/1D3Z.cif"),
+            suffix: "cif",
+        }
+    }
     pub fn pymol_01() -> Self {
         Self {
             filebinary: include_bytes!("../data/pymol/example.pse"),
