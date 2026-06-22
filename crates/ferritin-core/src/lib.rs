@@ -13,6 +13,7 @@
 //!
 mod atomcollection;
 mod bonds;
+pub mod data;
 pub mod info;
 mod io;
 mod views;
