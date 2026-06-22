@@ -11,7 +11,6 @@ anyhow.workspace = true
 bevy = { workspace = true, default-features = true }
 bon.workspace = true
 ferritin-core = { path = "../ferritin-core" }
-itertools.workspace = true
 
 [dev-dependencies]
 ferritin-test-data = { path = "../ferritin-test-data" }

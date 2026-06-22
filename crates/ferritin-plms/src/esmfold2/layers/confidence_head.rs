@@ -150,7 +150,7 @@ impl ConfidenceHead {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candle_core::{Device, Tensor};
+    use candle_core::{Device, DType, Tensor};
 
     const B: usize = 1;
     const N: usize = 12;

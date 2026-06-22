@@ -77,9 +77,6 @@ impl MPNNExecConfig {
             _ => panic!("not implented!"),
         }
     }
-    pub fn generate_model(self) {
-        todo!()
-    }
     pub fn generate_protein_features(&self) -> Result<ProteinFeatures, Error> {
         let device = self.device.clone();
         let base_dtype = DType::F32;
@@ -250,14 +247,6 @@ impl ProteinMPNNConfig {
             scale_factor: 1.0,
             vocab: 21,
         }
-    }
-    #[allow(dead_code)]
-    fn ligandmpnn() {
-        todo!()
-    }
-    #[allow(dead_code)]
-    fn membranempnn() {
-        todo!()
     }
 }
 

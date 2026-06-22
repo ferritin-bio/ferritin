@@ -669,7 +669,7 @@ mod tests {
             ("O3", (0, 0, 3, ..), vec![29.468, 18.179, 29.331]),
             ("O4", (0, 0, 4, ..), vec![31.722, 18.578, 29.881]),
         ];
-        for (atom_name, (b, l, i, j), expected) in allatom_coords {
+        for (atom_name, (b, l, i, _j), expected) in allatom_coords {
             let actual: Vec<f32> = ligand_coords.i((b, l, i, ..))?.to_vec1()?;
             assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
         }

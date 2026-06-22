@@ -594,7 +594,34 @@ impl Structure {
     }
 
     fn render_wireframe(&self) -> Mesh {
-        todo!()
+        // Collect Cα positions grouped by chain.
+        // Emit LineList pairs: for a chain A→B→C→D emit [A,B, B,C, C,D].
+        let mut positions: Vec<[f32; 3]> = Vec::new();
+
+        // Collect (chain_id, ca_position) for all amino-acid residues
+        let ca_by_chain: Vec<(String, Vec3)> = self
+            .pdb
+            .iter_residues_aminoacid()
+            .filter_map(|residue| {
+                residue.find_atom_by_name("CA").map(|ca| {
+                    (residue.chain_id().to_string(), Vec3::from_array(*ca.coords()))
+                })
+            })
+            .collect();
+
+        // Walk consecutive pairs; emit an edge only when both endpoints share a chain.
+        for window in ca_by_chain.windows(2) {
+            let (chain_a, pos_a) = &window[0];
+            let (chain_b, pos_b) = &window[1];
+            if chain_a == chain_b {
+                positions.push([pos_a.x, pos_a.y, pos_a.z]);
+                positions.push([pos_b.x, pos_b.y, pos_b.z]);
+            }
+        }
+
+        let mut mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::all());
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        mesh
     }
     fn render_cartoon(&self) -> Mesh {
         // Main implementation
@@ -882,6 +909,38 @@ mod tests {
         assert_eq!(structure.pdb.get_size(), 2154);
         let mesh = structure.to_mesh();
         assert!(mesh.count_vertices() > 0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_wireframe() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let ac = load_structure(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(ac)
+            .rendertype(RenderOptions::Wireframe)
+            .build();
+
+        let mesh = structure.to_mesh();
+
+        // (1) There must be vertices
+        let vertex_count = mesh.count_vertices();
+        assert!(vertex_count > 0, "wireframe mesh has no vertices");
+
+        // (2) LineList topology requires pairs — vertex count must be even
+        assert_eq!(
+            vertex_count % 2,
+            0,
+            "wireframe vertex count {vertex_count} is not even (LineList requires pairs)"
+        );
+
+        // (3) Topology must be LineList
+        assert_eq!(
+            mesh.primitive_topology(),
+            PrimitiveTopology::LineList,
+            "expected LineList topology"
+        );
+
         Ok(())
     }
 }

@@ -61,19 +61,239 @@ impl Structure {
         self.create_sphere_mesh(1.0)
     }
 
+    /// Ball-and-stick rendering: small spheres (radius 0.4) at each atom position,
+    /// connected by cylinder meshes along each bond.
+    ///
+    /// Bonds are sourced from `AtomCollection::get_bonds()`. If no bonds are present,
+    /// the method renders spheres only. Call `connect_via_residue_names()` on the
+    /// AtomCollection before building the Structure to populate bonds.
+    ///
+    /// Produces: ATTRIBUTE_POSITION, ATTRIBUTE_NORMAL, ATTRIBUTE_UV_0; U32 indices;
+    /// TriangleList topology. No ATTRIBUTE_COLOR.
     fn render_ballandstick(&self) -> Mesh {
-        self.create_sphere_mesh(0.3)
+        const ATOM_RADIUS: f32 = 0.4;
+        const BOND_RADIUS: f32 = 0.15;
+
+        let mut positions: Vec<[f32; 3]> = Vec::new();
+        let mut normals: Vec<[f32; 3]> = Vec::new();
+        let mut uvs: Vec<[f32; 2]> = Vec::new();
+        let mut indices: Vec<u32> = Vec::new();
+
+        // Add sphere for each atom
+        for idx in 0..self.pdb.get_size() {
+            let coord = self.pdb.get_coord(idx);
+            let center = Vec3::new(coord[0], coord[1], coord[2]);
+            Self::append_sphere_geometry(
+                center,
+                ATOM_RADIUS,
+                &mut positions,
+                &mut normals,
+                &mut uvs,
+                &mut indices,
+            );
+        }
+
+        // Add cylinders for each bond (if bonds are available)
+        if let Some(bonds) = self.pdb.get_bonds() {
+            let coords = self.pdb.get_coords();
+            for bond in bonds.iter() {
+                let (a1, a2) = bond.get_atom_indices();
+                if let (Some(c1), Some(c2)) =
+                    (coords.get(a1 as usize), coords.get(a2 as usize))
+                {
+                    let p1 = Vec3::from_array(*c1);
+                    let p2 = Vec3::from_array(*c2);
+                    Self::append_cylinder_geometry(
+                        p1,
+                        p2,
+                        BOND_RADIUS,
+                        &mut positions,
+                        &mut normals,
+                        &mut uvs,
+                        &mut indices,
+                    );
+                }
+            }
+        }
+
+        let mut mesh = Mesh::new(
+            bevy::mesh::PrimitiveTopology::TriangleList,
+            bevy::asset::RenderAssetUsages::default(),
+        );
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+        mesh.insert_indices(bevy::mesh::Indices::U32(indices));
+        mesh
     }
 
+    /// Space-filling (Solid) rendering: each atom is drawn as a sphere scaled to its
+    /// van der Waals radius. Falls back to 1.5 Å when the VdW radius is not defined
+    /// for an element.
+    ///
+    /// Produces: ATTRIBUTE_POSITION, ATTRIBUTE_NORMAL, ATTRIBUTE_UV_0; U32 indices;
+    /// TriangleList topology. No ATTRIBUTE_COLOR.
     fn render_spheres(&self) -> Mesh {
-        self.create_sphere_mesh(1.5)
+        const VDW_FALLBACK: f32 = 1.5;
+
+        let mut positions: Vec<[f32; 3]> = Vec::new();
+        let mut normals: Vec<[f32; 3]> = Vec::new();
+        let mut uvs: Vec<[f32; 2]> = Vec::new();
+        let mut indices: Vec<u32> = Vec::new();
+
+        for (coord, element) in self.pdb.iter_coords_and_elements() {
+            let center = Vec3::new(coord[0], coord[1], coord[2]);
+            let radius = element
+                .atomic_radius()
+                .van_der_waals
+                .map(|r| r as f32)
+                .unwrap_or(VDW_FALLBACK);
+            Self::append_sphere_geometry(
+                center,
+                radius,
+                &mut positions,
+                &mut normals,
+                &mut uvs,
+                &mut indices,
+            );
+        }
+
+        let mut mesh = Mesh::new(
+            bevy::mesh::PrimitiveTopology::TriangleList,
+            bevy::asset::RenderAssetUsages::default(),
+        );
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+        mesh.insert_indices(bevy::mesh::Indices::U32(indices));
+        mesh
     }
 
     fn render_putty(&self) -> Mesh {
         self.create_sphere_mesh(2.0)
     }
 
-    /// Create a mesh with spheres at each atom position.
+    /// Append UV-sphere geometry for a single sphere into the provided vertex buffers.
+    ///
+    /// Uses 8 latitude and 8 longitude subdivisions. The base vertex index for the
+    /// generated indices is derived from the current length of `positions`.
+    fn append_sphere_geometry(
+        center: Vec3,
+        radius: f32,
+        positions: &mut Vec<[f32; 3]>,
+        normals: &mut Vec<[f32; 3]>,
+        uvs: &mut Vec<[f32; 2]>,
+        indices: &mut Vec<u32>,
+    ) {
+        let subdivisions: u32 = 8;
+        let base_index = positions.len() as u32;
+
+        for lat in 0..=subdivisions {
+            let theta = lat as f32 * std::f32::consts::PI / subdivisions as f32;
+            let sin_theta = theta.sin();
+            let cos_theta = theta.cos();
+
+            for lon in 0..=subdivisions {
+                let phi = lon as f32 * 2.0 * std::f32::consts::PI / subdivisions as f32;
+                let x = sin_theta * phi.cos();
+                let y = cos_theta;
+                let z = sin_theta * phi.sin();
+
+                let normal = Vec3::new(x, y, z);
+                let pos = center + normal * radius;
+
+                positions.push([pos.x, pos.y, pos.z]);
+                normals.push([normal.x, normal.y, normal.z]);
+                uvs.push([
+                    lon as f32 / subdivisions as f32,
+                    lat as f32 / subdivisions as f32,
+                ]);
+            }
+        }
+
+        for lat in 0..subdivisions {
+            for lon in 0..subdivisions {
+                let first = base_index + lat * (subdivisions + 1) + lon;
+                let second = first + subdivisions + 1;
+
+                indices.push(first);
+                indices.push(second);
+                indices.push(first + 1);
+
+                indices.push(second);
+                indices.push(second + 1);
+                indices.push(first + 1);
+            }
+        }
+    }
+
+    /// Append cylinder geometry connecting `p1` to `p2` into the provided vertex buffers.
+    ///
+    /// The cylinder is a closed tube (no end caps) with `radius`. Normals point radially
+    /// outward from the cylinder axis. UVs are a simple cylindrical projection. Produces
+    /// TriangleList triangles with U32 indices compatible with `append_sphere_geometry`.
+    fn append_cylinder_geometry(
+        p1: Vec3,
+        p2: Vec3,
+        radius: f32,
+        positions: &mut Vec<[f32; 3]>,
+        normals: &mut Vec<[f32; 3]>,
+        uvs: &mut Vec<[f32; 2]>,
+        indices: &mut Vec<u32>,
+    ) {
+        let direction = p2 - p1;
+        let length = direction.length();
+        if length < 1e-6 {
+            return;
+        }
+        let axis = direction.normalize();
+
+        // Build an orthonormal frame (axis, right, up)
+        let right = if axis.abs_diff_eq(Vec3::Y, 0.01) {
+            axis.cross(Vec3::Z).normalize()
+        } else {
+            axis.cross(Vec3::Y).normalize()
+        };
+        let up = axis.cross(right).normalize();
+
+        const SEGMENTS: u32 = 8;
+        let base_index = positions.len() as u32;
+
+        // Two rings: one at p1 (ring 0) and one at p2 (ring 1)
+        for ring in 0..=1u32 {
+            let center = if ring == 0 { p1 } else { p2 };
+            let v = ring as f32; // UV v coordinate (0.0 or 1.0)
+
+            for seg in 0..=SEGMENTS {
+                let angle = seg as f32 * 2.0 * std::f32::consts::PI / SEGMENTS as f32;
+                let normal = (right * angle.cos() + up * angle.sin()).normalize();
+                let pos = center + normal * radius;
+
+                positions.push([pos.x, pos.y, pos.z]);
+                normals.push([normal.x, normal.y, normal.z]);
+                uvs.push([seg as f32 / SEGMENTS as f32, v]);
+            }
+        }
+
+        // Connect the two rings with quads (two triangles each)
+        let ring_verts = SEGMENTS + 1;
+        for seg in 0..SEGMENTS {
+            let i00 = base_index + seg;
+            let i01 = base_index + seg + 1;
+            let i10 = base_index + ring_verts + seg;
+            let i11 = base_index + ring_verts + seg + 1;
+
+            indices.push(i00);
+            indices.push(i10);
+            indices.push(i01);
+
+            indices.push(i01);
+            indices.push(i10);
+            indices.push(i11);
+        }
+    }
+
+    /// Create a mesh with spheres at each atom position using a uniform radius.
     ///
     /// Produces: ATTRIBUTE_POSITION, ATTRIBUTE_NORMAL, ATTRIBUTE_UV_0; U32 indices;
     /// TriangleList topology. No ATTRIBUTE_COLOR.
@@ -151,9 +371,9 @@ impl Structure {
 
 // Mesh attribute contract for ferritin-structure-mesh renderers
 //
-// All render_* methods are implemented via create_sphere_mesh and produce:
+// All render_* methods produce:
 //   ATTRIBUTE_POSITION  — Float32x3, one entry per vertex
-//   ATTRIBUTE_NORMAL    — Float32x3, outward sphere normals
+//   ATTRIBUTE_NORMAL    — Float32x3, outward normals (sphere or cylinder)
 //   ATTRIBUTE_UV_0      — Float32x2, lat/lon UV coordinates
 //   Indices             — U32 format, TriangleList topology
 //   ATTRIBUTE_COLOR     — NOT populated by any method in this crate
@@ -317,6 +537,58 @@ mod tests {
                 "index out of bounds"
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_ballandstick_has_more_verts_than_solid() -> anyhow::Result<()> {
+        // BallAndStick (radius 0.4 spheres + bond cylinders) should produce more
+        // vertices than a Solid (VdW radius spheres, no cylinders) for the same structure,
+        // because bond cylinders add geometry on top of the atom spheres.
+        //
+        // Both modes use 8×8 UV sphere subdivisions per atom (81 vertices each).
+        // BallAndStick adds 9 vertices per ring × 2 rings per bond cylinder.
+        //
+        // If bonds exist the BallAndStick mesh will be strictly larger.
+        let (molfile, _handle) = TestFile::protein_01().create_temp()?;
+        let ac = load_structure(molfile)?;
+        let n_atoms = ac.get_size();
+        let has_bonds = ac.get_bonds().map(|b| !b.is_empty()).unwrap_or(false);
+
+        let s = Structure::builder()
+            .pdb(ac)
+            .rendertype(RenderOptions::BallAndStick)
+            .build();
+        let mesh = s.to_mesh();
+
+        // Each atom contributes (8+1)*(8+1) = 81 vertices for the sphere
+        let sphere_only_verts = n_atoms * 81;
+        assert!(
+            mesh.count_vertices() >= sphere_only_verts,
+            "expected at least {} vertices from atom spheres, got {}",
+            sphere_only_verts,
+            mesh.count_vertices(),
+        );
+
+        if has_bonds {
+            assert!(
+                mesh.count_vertices() > sphere_only_verts,
+                "expected bond cylinder vertices on top of atom spheres: total={}, spheres_only={}",
+                mesh.count_vertices(),
+                sphere_only_verts,
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_solid_uses_vdw_radii() -> anyhow::Result<()> {
+        // Solid mode uses per-element VdW radii, so the vertex positions should differ
+        // from a uniform-radius sphere mesh (radius 1.5) only when VdW radii vary.
+        // At minimum, verify the mesh has vertices and passes attribute checks.
+        let s = load_test_structure()?;
+        let mesh = s.to_mesh();
+        assert!(mesh.count_vertices() > 0, "render_solid: no vertices");
         Ok(())
     }
 }

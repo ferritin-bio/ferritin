@@ -4,7 +4,7 @@
 //! and residue information. Additional data like bonds can be added post-instantiation.
 //! The data for residues within this collection can be iterated through. Other useful queries like inter-atomic
 //! distances are supported.
-use super::bonds::Bond;
+use super::bonds::{Bond, BondOrder};
 use super::info::constants::get_bonds_canonical20;
 use super::views::chain::ChainView;
 use super::views::residue::ResidueView;
@@ -28,8 +28,8 @@ pub struct AtomCollection {
     atom_names: Vec<String>,
     chain_ids: Vec<String>,
     bonds: Option<Vec<Bond>>,
-    residue_start_indices: Option<Vec<i32>>,
-    chain_start_indices: Option<Vec<i32>>,
+    residue_start_indices: Option<Vec<usize>>,
+    chain_start_indices: Option<Vec<usize>>,
 }
 
 impl AtomCollection {
@@ -65,13 +65,12 @@ impl AtomCollection {
         if self.chain_start_indices.is_none() {
             if self.residue_start_indices.is_none() {
                 let residue_starts = self.get_residue_starts();
-                self.residue_start_indices =
-                    Some(residue_starts.iter().map(|&idx| idx as i32).collect());
+                self.residue_start_indices = Some(residue_starts);
             }
 
             // Get chain starts as residue indices
             let residue_starts = self.residue_start_indices.as_ref().unwrap();
-            let chain_starts: Vec<i32> = self
+            let chain_starts: Vec<usize> = self
                 .get_chain_starts()
                 .iter()
                 .map(|&atom_idx| {
@@ -79,9 +78,9 @@ impl AtomCollection {
                     let residue_idx = residue_starts
                         .iter()
                         .enumerate()
-                        .filter(|&(_, &res_start)| res_start as usize <= atom_idx)
+                        .filter(|&(_, &res_start)| res_start <= atom_idx)
                         .last()
-                        .map(|(i, _)| i as i32)
+                        .map(|(i, _)| i)
                         .unwrap_or(0);
                     residue_idx
                 })
@@ -90,46 +89,6 @@ impl AtomCollection {
             self.chain_start_indices = Some(chain_starts);
         }
     }
-    pub fn calculate_displacement(&self) {
-        // Measure the displacement vector, i.e. the vector difference, from
-        // one array of atom coordinates to another array of coordinates.
-        unimplemented!()
-    }
-    pub fn calculate_distance(&self, _atoms: AtomCollection) {
-        // def distance(atoms1, atoms2, box=None):
-        // """
-        // Measure the euclidian distance between atoms.
-
-        // Parameters
-        // ----------
-        // atoms1, atoms2 : ndarray or Atom or AtomArray or AtomArrayStack
-        //     The atoms to measure the distances between.
-        //     The dimensions may vary.
-        //     Alternatively, a ndarray containing the coordinates can be
-        //     provided.
-        //     Usual *NumPy* broadcasting rules apply.
-        // box : ndarray, shape=(3,3) or shape=(m,3,3), optional
-        //     If this parameter is set, periodic boundary conditions are
-        //     taken into account (minimum-image convention), based on
-        //     the box vectors given with this parameter.
-        //     The shape *(m,3,3)* is only allowed, when the input coordinates
-        //     comprise multiple models.
-
-        // Returns
-        // -------
-        // dist : float or ndarray
-        //     The atom distances.
-        //     The shape is equal to the shape of the input `atoms` with the
-        //     highest dimensionality minus the last axis.
-
-        // See also
-        // --------
-        // index_distance
-        // """
-        // diff = displacement(atoms1, atoms2, box)
-        // return np.sqrt(vector_dot(diff, diff))
-        unimplemented!()
-    }
     pub fn connect_via_residue_names(&mut self) {
         if self.bonds.is_some() {
             println!("Bonds already in place. Not overwriting.");
@@ -137,10 +96,11 @@ impl AtomCollection {
         }
         let aa_bond_info = get_bonds_canonical20();
         let residue_starts = self.get_residue_starts();
+        let n_atoms = self.size;
         let mut bonds = Vec::new();
         for res_i in 0..residue_starts.len() - 1 {
-            let curr_start_i = residue_starts[res_i] as usize;
-            let next_start_i = residue_starts[res_i + 1] as usize;
+            let curr_start_i = residue_starts[res_i];
+            let next_start_i = residue_starts[res_i + 1];
             if let Some(bond_dict_for_res) =
                 aa_bond_info.get(&self.res_names[curr_start_i].as_str())
             {
@@ -151,7 +111,6 @@ impl AtomCollection {
                     let atom_indices2: Vec<usize> = (curr_start_i..next_start_i)
                         .filter(|&i| self.atom_names[i] == atom_name2)
                         .collect();
-                    // Create all possible bond combinations
                     for &i in &atom_indices1 {
                         for &j in &atom_indices2 {
                             bonds.push(Bond::new(i as i32, j as i32, bond_type));
@@ -160,11 +119,29 @@ impl AtomCollection {
                 }
             }
         }
+        // Backbone C→N peptide bonds between consecutive residues on the same chain
+        for res_i in 0..residue_starts.len() - 1 {
+            let curr_start_i = residue_starts[res_i];
+            let next_start_i = residue_starts[res_i + 1];
+            // Skip if these residues are on different chains
+            if self.chain_ids[curr_start_i] != self.chain_ids[next_start_i] {
+                continue;
+            }
+            // Skip hetero residues (ligands, solvent)
+            if self.is_hetero[curr_start_i] || self.is_hetero[next_start_i] {
+                continue;
+            }
+            let next_end_i = residue_starts
+                .get(res_i + 2)
+                .copied()
+                .unwrap_or(n_atoms);
+            let c_idx = (curr_start_i..next_start_i).find(|&i| self.atom_names[i] == "C");
+            let n_idx = (next_start_i..next_end_i).find(|&i| self.atom_names[i] == "N");
+            if let (Some(c), Some(n)) = (c_idx, n_idx) {
+                bonds.push(Bond::new(c as i32, n as i32, BondOrder::Single));
+            }
+        }
         self.bonds = Some(bonds);
-    }
-    pub fn connect_via_distance(&self) -> Vec<Bond> {
-        // note: was intending to follow Biotite's algo
-        unimplemented!()
     }
     pub fn get_size(&self) -> usize {
         self.size
@@ -207,7 +184,7 @@ impl AtomCollection {
     }
     /// A new residue starts, either when the chain ID, residue ID,
     /// insertion code or residue name changes from one to the next atom.
-    fn get_residue_starts(&self) -> Vec<i64> {
+    fn get_residue_starts(&self) -> Vec<usize> {
         let mut starts = vec![0];
 
         starts.extend(
@@ -217,7 +194,7 @@ impl AtomCollection {
                 .filter_map(
                     |(i, ((res_id1, name1, chain1), (res_id2, name2, chain2)))| {
                         if res_id1 != res_id2 || name1 != name2 || chain1 != chain2 {
-                            Some((i + 1) as i64)
+                            Some(i + 1)
                         } else {
                             None
                         }
@@ -226,7 +203,7 @@ impl AtomCollection {
         );
         starts
     }
-    pub fn get_residue_start_indices(&self) -> Option<&Vec<i32>> {
+    pub fn get_residue_start_indices(&self) -> Option<&Vec<usize>> {
         self.residue_start_indices.as_ref()
     }
     /// A new chain starts when the chain ID changes from one atom to the next.
@@ -258,9 +235,9 @@ impl AtomCollection {
         };
 
         (0..chain_starts.len()).map(move |i| {
-            let start_residue_idx = chain_starts[i] as usize;
+            let start_residue_idx = chain_starts[i];
             let end_residue_idx = if i + 1 < chain_starts.len() {
-                chain_starts[i + 1] as usize
+                chain_starts[i + 1]
             } else {
                 // If it's the last chain, go to the end of the structure
                 match &self.residue_start_indices {
@@ -278,13 +255,12 @@ impl AtomCollection {
     }
     pub fn iter_residues(&self) -> impl Iterator<Item = ResidueView<'_>> {
         let residue_starts = self.get_residue_starts();
-        let atom_starts: Vec<usize> = residue_starts.iter().map(|&idx| idx as usize).collect();
         let atom_size = self.get_size();
         // Create a copy of the last element if it exists
         // Generate pairs for all residues
-        let last_atom_idx = atom_starts.last().copied();
-        (0..atom_starts.len().saturating_sub(1))
-            .map(move |i| ResidueView::new(self, atom_starts[i], atom_starts[i + 1]))
+        let last_atom_idx = residue_starts.last().copied();
+        (0..residue_starts.len().saturating_sub(1))
+            .map(move |i| ResidueView::new(self, residue_starts[i], residue_starts[i + 1]))
             .chain(
                 last_atom_idx
                     .map(|idx| ResidueView::new(self, idx, atom_size))

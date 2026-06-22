@@ -494,7 +494,7 @@ impl ProteinMPNN {
                 Ok((h_v, h_e, e_idx))
             }
             ModelTypes::LigandMPNN => {
-                todo!()
+                candle_core::bail!("LigandMPNN encode not yet implemented; only ProteinMPNN encode is functional")
                 //     let (v, e, e_idx, y_nodes, y_edges, y_m) = self.features.forward(feature_dict)?;
                 //     let mut h_v = Tensor::zeros((e.dim(0)?, e.dim(1)?, e.dim(-1)?), device)?;
                 //     let mut h_e = self.w_e.forward(&e)?;
@@ -852,7 +852,7 @@ impl ProteinMPNN {
                 })
             }
             Some(_symmetry_residues) => {
-                todo!()
+                candle_core::bail!("symmetry residues in sample() not yet implemented")
             }
         }
     }
@@ -883,7 +883,7 @@ impl ProteinMPNN {
 
         let (mask_fw, mask_bw, e_idx, decoding_order) = match symmetry_residues {
             Some(_symmetry_residues) => {
-                todo!();
+                candle_core::bail!("symmetry residues in score() not yet implemented")
             }
             None => {
                 let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;

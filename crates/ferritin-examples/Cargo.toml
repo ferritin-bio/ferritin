@@ -25,11 +25,9 @@ bevy = { workspace = true, default-features = true }
 candle-core.workspace = true
 candle-metal-kernels = { workspace = true, optional = true }
 candle-nn.workspace = true
-candle-onnx.workspace = true
 clap.workspace = true
 ferritin-core = { path = "../ferritin-core" }
 ferritin-plms = { path = "../ferritin-plms" }
-ferritin-onnx-models = { path = "../ferritin-onnx-models" }
 ferritin-structure-mesh = { path = "../ferritin-structure-mesh" }
 rerun = { workspace = true, features = ["native_viewer"], optional = true }
 
