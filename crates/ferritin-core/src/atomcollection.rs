@@ -4,7 +4,7 @@
 //! and residue information. Additional data like bonds can be added post-instantiation.
 //! The data for residues within this collection can be iterated through. Other useful queries like inter-atomic
 //! distances are supported.
-use super::bonds::Bond;
+use super::bonds::{Bond, BondOrder};
 use super::info::constants::get_bonds_canonical20;
 use super::views::chain::ChainView;
 use super::views::residue::ResidueView;
@@ -96,6 +96,7 @@ impl AtomCollection {
         }
         let aa_bond_info = get_bonds_canonical20();
         let residue_starts = self.get_residue_starts();
+        let n_atoms = self.size;
         let mut bonds = Vec::new();
         for res_i in 0..residue_starts.len() - 1 {
             let curr_start_i = residue_starts[res_i];
@@ -110,13 +111,34 @@ impl AtomCollection {
                     let atom_indices2: Vec<usize> = (curr_start_i..next_start_i)
                         .filter(|&i| self.atom_names[i] == atom_name2)
                         .collect();
-                    // Create all possible bond combinations
                     for &i in &atom_indices1 {
                         for &j in &atom_indices2 {
                             bonds.push(Bond::new(i as i32, j as i32, bond_type));
                         }
                     }
                 }
+            }
+        }
+        // Backbone C→N peptide bonds between consecutive residues on the same chain
+        for res_i in 0..residue_starts.len() - 1 {
+            let curr_start_i = residue_starts[res_i];
+            let next_start_i = residue_starts[res_i + 1];
+            // Skip if these residues are on different chains
+            if self.chain_ids[curr_start_i] != self.chain_ids[next_start_i] {
+                continue;
+            }
+            // Skip hetero residues (ligands, solvent)
+            if self.is_hetero[curr_start_i] || self.is_hetero[next_start_i] {
+                continue;
+            }
+            let next_end_i = residue_starts
+                .get(res_i + 2)
+                .copied()
+                .unwrap_or(n_atoms);
+            let c_idx = (curr_start_i..next_start_i).find(|&i| self.atom_names[i] == "C");
+            let n_idx = (next_start_i..next_end_i).find(|&i| self.atom_names[i] == "N");
+            if let (Some(c), Some(n)) = (c_idx, n_idx) {
+                bonds.push(Bond::new(c as i32, n as i32, BondOrder::Single));
             }
         }
         self.bonds = Some(bonds);

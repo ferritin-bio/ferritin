@@ -594,17 +594,64 @@ impl Structure {
     }
 
     fn render_wireframe(&self) -> Mesh {
-        // TODO: implement wireframe rendering
-        todo!()
+        // Collect Cα positions grouped by chain.
+        // Emit LineList pairs: for a chain A→B→C→D emit [A,B, B,C, C,D].
+        let mut positions: Vec<[f32; 3]> = Vec::new();
+
+        // Collect (chain_id, ca_position) for all amino-acid residues
+        let ca_by_chain: Vec<(String, Vec3)> = self
+            .pdb
+            .iter_residues_aminoacid()
+            .filter_map(|residue| {
+                residue.find_atom_by_name("CA").map(|ca| {
+                    (residue.chain_id().to_string(), Vec3::from_array(*ca.coords()))
+                })
+            })
+            .collect();
+
+        // Walk consecutive pairs; emit an edge only when both endpoints share a chain.
+        for window in ca_by_chain.windows(2) {
+            let (chain_a, pos_a) = &window[0];
+            let (chain_b, pos_b) = &window[1];
+            if chain_a == chain_b {
+                positions.push([pos_a.x, pos_a.y, pos_a.z]);
+                positions.push([pos_b.x, pos_b.y, pos_b.z]);
+            }
+        }
+
+        let mut mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::all());
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        mesh
     }
     fn render_cartoon(&self) -> Mesh {
         // Main implementation
         let backbone_atoms = Structure::extract_backbone_atoms(&self.pdb);
+        println!("Backbone atoms found: {}", backbone_atoms.len());
+
         // Extract CA positions for secondary structure detection
         let ca_positions: Vec<Vec3> = backbone_atoms.iter().map(|atom| atom.ca).collect();
+        println!("CA positions extracted: {}", ca_positions.len());
 
         // Detect secondary structures - returns Vec<SecondaryStructure>
         let secondary_structures = Structure::detect_secondary_structure(&ca_positions);
+
+        println!(
+            "Secondary structures detected: {}",
+            secondary_structures.len()
+        );
+        println!(
+            "Secondary structure types: {:?}",
+            secondary_structures
+                .iter()
+                .fold([0, 0, 0], |mut counts, &ss| {
+                    match ss {
+                        SecondaryStructure::Helix => counts[0] += 1,
+                        SecondaryStructure::Sheet => counts[1] += 1,
+                        SecondaryStructure::Loop => counts[2] += 1,
+                    }
+                    counts
+                })
+        );
 
         // Create combined mesh from all segments
         let _combined_mesh =
@@ -625,15 +672,49 @@ impl Structure {
             }
         }
 
+        println!("Segments identified: {}", segments.len());
+
         // Add the last segment
         if !current_segment.is_empty() {
             segments.push((current_type, current_segment));
         }
 
+        // // Now iterate through the segments and generate appropriate meshes
+        // for (structure_type, segment) in segments {
+        //     let segment_mesh = match structure_type {
+        //         SecondaryStructure::Helix => {
+        //             Structure::generate_alpha_helix_mesh(&backbone_atoms, &segment)
+        //         }
+        //         SecondaryStructure::Sheet => {
+        //             Structure::generate_beta_sheet_mesh(&backbone_atoms, &segment)
+        //         }
+        //         SecondaryStructure::Loop => {
+        //             Structure::generate_loop_mesh(&backbone_atoms, &segment)
+        //         }
+        //     };
+
+        //     combined_mesh.merge(&segment_mesh);
+        // }
+
         let mut valid_meshes = Vec::new();
 
         // Now iterate through the segments and generate appropriate meshes
-        for (structure_type, segment) in segments.iter() {
+        for (i, (structure_type, segment)) in segments.iter().enumerate() {
+            println!(
+                "Processing segment {} of type {:?} with {} residues",
+                i,
+                structure_type,
+                segment.len()
+            );
+            println!(
+                "Segment indices: {:?}",
+                &segment[0..std::cmp::min(5, segment.len())]
+            );
+
+            // Check if segment indices are valid
+            // let valid_indices = segment.iter().all(|&idx| idx < backbone_atoms.len());
+            // println!("All segment indices valid: {}", valid_indices);
+
             let segment_mesh = match structure_type {
                 SecondaryStructure::Helix => {
                     Structure::generate_alpha_helix_mesh(&backbone_atoms, segment)
@@ -644,6 +725,11 @@ impl Structure {
                 SecondaryStructure::Loop => Structure::generate_loop_mesh(&backbone_atoms, segment),
             };
 
+            println!(
+                "After generating segment mesh, vertex count: {}",
+                segment_mesh.count_vertices()
+            );
+
             // Only merge if we have vertices
             if segment_mesh.count_vertices() > 0 {
                 valid_meshes.push(segment_mesh);
@@ -652,18 +738,35 @@ impl Structure {
 
         // If we have any valid meshes, combine them
         if valid_meshes.is_empty() {
+            println!("No valid meshes found!");
             // Return an empty mesh since we couldn't generate anything
             return Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
         }
 
         // Start with the first mesh
         let mut combined_mesh = valid_meshes[0].clone();
+        println!(
+            "Starting with mesh of {} vertices",
+            combined_mesh.count_vertices()
+        );
 
         // Merge the rest
-        for mesh in valid_meshes.iter().skip(1) {
-            let _ = combined_mesh.merge(mesh);
+        for (i, mesh) in valid_meshes.iter().enumerate().skip(1) {
+            println!("Merging mesh {} with {} vertices", i, mesh.count_vertices());
+            let before_count = combined_mesh.count_vertices();
+            combined_mesh.merge(mesh);
+            let after_count = combined_mesh.count_vertices();
+            println!(
+                "After merge: {} vertices (added {})",
+                after_count,
+                after_count - before_count
+            );
         }
 
+        println!(
+            "Final combined mesh vertices: {}",
+            combined_mesh.count_vertices()
+        );
         combined_mesh
     }
 
@@ -729,7 +832,7 @@ impl Structure {
                     Some(cylinder_mesh)
                 })
                 .for_each(|cylinder_mesh| {
-                    let _ =  combined_mesh.merge(&cylinder_mesh);
+                    combined_mesh.merge(&cylinder_mesh);
                 });
         } else {
             println!("No-Bonds found!!")
@@ -758,7 +861,7 @@ impl Structure {
             })
             .reduce(|mut acc, mesh| {
                 let _ = acc.merge(&mesh);
-                acc
+                mesh
             })
             .unwrap()
     }
@@ -789,7 +892,7 @@ mod tests {
         let ac = load_structure(molfile).unwrap();
         let structure = Structure::builder().pdb(ac).build();
         assert_eq!(structure.pdb.get_size(), 2154);
-        let _mesh = structure.to_mesh();
+        let mesh = structure.to_mesh();
         // assert_eq!(mesh.count_vertices(), 779748);
         Ok(())
     }
@@ -806,6 +909,38 @@ mod tests {
         assert_eq!(structure.pdb.get_size(), 2154);
         let mesh = structure.to_mesh();
         assert!(mesh.count_vertices() > 0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_render_wireframe() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let ac = load_structure(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(ac)
+            .rendertype(RenderOptions::Wireframe)
+            .build();
+
+        let mesh = structure.to_mesh();
+
+        // (1) There must be vertices
+        let vertex_count = mesh.count_vertices();
+        assert!(vertex_count > 0, "wireframe mesh has no vertices");
+
+        // (2) LineList topology requires pairs — vertex count must be even
+        assert_eq!(
+            vertex_count % 2,
+            0,
+            "wireframe vertex count {vertex_count} is not even (LineList requires pairs)"
+        );
+
+        // (3) Topology must be LineList
+        assert_eq!(
+            mesh.primitive_topology(),
+            PrimitiveTopology::LineList,
+            "expected LineList topology"
+        );
+
         Ok(())
     }
 }
