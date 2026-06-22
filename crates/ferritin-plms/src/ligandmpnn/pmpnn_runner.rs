@@ -24,8 +24,8 @@ impl ProteinMPNNModels {
         // (owner, repo, revision, filename)
         match self {
             Self::V48_020 => (
-                "dauparas",
-                "LigandMPNN",
+                "zcpbx",
+                "ligandmpnn-weights",
                 "main",
                 "model_params/proteinmpnn_v_48_020.pt",
             ),
