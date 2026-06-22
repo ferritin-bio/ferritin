@@ -32,6 +32,7 @@ use super::tables::ResidueGroup;
 /// …).  This invariant is established when the [`AtomicHierarchy`] is
 /// constructed and is relied upon by iterators such as [`Model::protein_residues`]
 /// and [`Model::ligand_residues`].
+#[derive(Clone)]
 pub struct Model {
     /// Shared topology (connectivity, sequence, chain/residue data).
     pub hierarchy: Arc<AtomicHierarchy>,
