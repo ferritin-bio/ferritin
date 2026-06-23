@@ -1,8 +1,8 @@
 //!  Protein->Tensor utilities useful for Machine Learning
-use super::utilities::{AAAtom, aa1to_int, aa3to1, get_nearest_neighbours};
+use super::utilities::{AAAtom, aa1to_int, aa3to1, int_to_aa1, get_nearest_neighbours};
 use crate::ligandmpnn::proteinfeatures::ProteinFeatures;
 use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
-use ferritin_core::AtomCollection;
+use ferritin_core::{AtomCollection, Model};
 use ferritin_core::info::elements::Element;
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
@@ -42,9 +42,25 @@ pub trait StructureFeatures {
 }
 
 impl StructureFeatures for AtomCollection {
-    /// Convert amino acid sequence to numeric representation
-    fn decode_amino_acids(&self, _device: &Device) -> Result<Tensor> {
-        todo!()
+    /// Decode amino acid integer indices back to one-letter codes as ASCII bytes.
+    ///
+    /// This is the inverse of `encode_amino_acids`. It iterates over the amino acid
+    /// residues in the structure, converts each three-letter residue name to a
+    /// one-letter code, then encodes it as an integer via `aa1to_int`, decodes it
+    /// back via `int_to_aa1`, and returns the ASCII byte values in a tensor of
+    /// shape `[1, n]` where `n` is the number of amino acid residues.
+    ///
+    /// Unknown residues map to the sentinel index 20, which decodes to `'X'` (ASCII 88).
+    fn decode_amino_acids(&self, device: &Device) -> Result<Tensor> {
+        let n = self.iter_residues_aminoacid().count();
+        let s: Vec<u8> = self
+            .iter_residues_aminoacid()
+            .map(|res| res.residue_name().to_string())
+            .map(|res| aa3to1(&res))
+            .map(|ch| aa1to_int(ch))
+            .map(|idx| int_to_aa1(idx) as u8)
+            .collect();
+        Ok(Tensor::from_iter(s.into_iter(), device)?.reshape((1, n))?)
     }
 
     /// Convert amino acid sequence to numeric representation
@@ -247,5 +263,164 @@ impl StructureFeatures for AtomCollection {
         let y_t = y_t.to_dtype(DType::I64)?.unsqueeze(0)?;
         let y_m = y_m.unsqueeze(0)?;
         Ok((y, y_t, y_m))
+    }
+}
+
+/// Delegate all `StructureFeatures` methods to an `AtomCollection` adapter.
+///
+/// This lets callers pass a `&Model` directly to ML featurisation routines
+/// without manually calling `AtomCollection::from(&model)` at every call site.
+impl StructureFeatures for Model {
+    fn decode_amino_acids(&self, device: &Device) -> Result<Tensor> {
+        AtomCollection::from(self).decode_amino_acids(device)
+    }
+    fn encode_amino_acids(&self, device: &Device) -> Result<Tensor> {
+        AtomCollection::from(self).encode_amino_acids(device)
+    }
+    fn create_cb(&self, device: &Device) -> Result<Tensor> {
+        AtomCollection::from(self).create_cb(device)
+    }
+    fn featurize_lmpnn(&self, device: &Device) -> Result<ProteinFeatures> {
+        AtomCollection::from(self).featurize_lmpnn(device)
+    }
+    fn get_res_index(&self) -> Vec<u32> {
+        AtomCollection::from(self).get_res_index()
+    }
+    fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
+        AtomCollection::from(self).to_numeric_backbone_atoms(device)
+    }
+    fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
+        AtomCollection::from(self).to_numeric_atom37(device)
+    }
+    fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
+        AtomCollection::from(self).to_numeric_ligand_atoms(device)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ferritin_core::load_structure;
+    use ferritin_test_data::TestFile;
+
+    /// `decode_amino_acids` must round-trip with `encode_amino_acids`.
+    ///
+    /// `encode_amino_acids` produces integer indices (u32); `decode_amino_acids`
+    /// produces ASCII byte values (u8). For every standard amino acid the cycle
+    ///   residue_name -> aa3to1 -> aa1to_int -> int_to_aa1 -> u8
+    /// must yield the same one-letter code that `aa3to1` returned.
+    #[test]
+    fn test_decode_amino_acids_roundtrip() -> candle_core::Result<()> {
+        let device = Device::Cpu;
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().map_err(|e| {
+            candle_core::Error::Msg(format!("test file setup failed: {e}"))
+        })?;
+        let ac = load_structure(pdb_file).map_err(|e| {
+            candle_core::Error::Msg(format!("load_structure failed: {e}"))
+        })?;
+
+        let encoded = ac.encode_amino_acids(&device)?;
+        let decoded = ac.decode_amino_acids(&device)?;
+
+        // Both tensors must have shape [1, n].
+        assert_eq!(encoded.dims(), decoded.dims());
+
+        let n = encoded.dim(1)?;
+        let enc_vals: Vec<u32> = encoded.reshape(n)?.to_vec1()?;
+        let dec_bytes: Vec<u8> = decoded.reshape(n)?.to_vec1()?;
+
+        // For each position: int_to_aa1(encode_val) as u8 == decoded byte.
+        for (idx, (&enc, &dec)) in enc_vals.iter().zip(dec_bytes.iter()).enumerate() {
+            use super::super::utilities::int_to_aa1;
+            let expected = int_to_aa1(enc) as u8;
+            assert_eq!(
+                dec, expected,
+                "Mismatch at position {idx}: encoded={enc}, decoded byte={dec}, expected={expected}"
+            );
+        }
+        Ok(())
+    }
+
+    /// Index 20 is the unknown-residue sentinel; it must decode to `'X'` (ASCII 88).
+    #[test]
+    fn test_decode_amino_acids_unknown_sentinel() {
+        use super::super::utilities::int_to_aa1;
+        let ch = int_to_aa1(20);
+        assert_eq!(ch, 'X', "sentinel index 20 must decode to 'X'");
+        // Any out-of-range index must also fall back to 'X'.
+        let ch_oob = int_to_aa1(99);
+        assert_eq!(ch_oob, 'X', "out-of-range index must decode to 'X'");
+    }
+
+    /// `decode_amino_acids` output shape must be [1, sequence_length].
+    #[test]
+    fn test_decode_amino_acids_shape() -> candle_core::Result<()> {
+        let device = Device::Cpu;
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().map_err(|e| {
+            candle_core::Error::Msg(format!("test file setup failed: {e}"))
+        })?;
+        let ac = load_structure(pdb_file).map_err(|e| {
+            candle_core::Error::Msg(format!("load_structure failed: {e}"))
+        })?;
+
+        let n = ac.iter_residues_aminoacid().count();
+        let decoded = ac.decode_amino_acids(&device)?;
+        assert_eq!(decoded.dims(), &[1, n]);
+        Ok(())
+    }
+
+    /// `encode_amino_acids` produces u32 integer indices in [0, 20].
+    #[test]
+    fn test_encode_amino_acids_shape_and_range() -> candle_core::Result<()> {
+        let device = Device::Cpu;
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().map_err(|e| {
+            candle_core::Error::Msg(format!("test file setup failed: {e}"))
+        })?;
+        let ac = load_structure(pdb_file).map_err(|e| {
+            candle_core::Error::Msg(format!("load_structure failed: {e}"))
+        })?;
+
+        let n = ac.iter_residues_aminoacid().count();
+        let encoded = ac.encode_amino_acids(&device)?;
+        assert_eq!(encoded.dims(), &[1, n]);
+
+        let vals: Vec<u32> = encoded.reshape(n)?.to_vec1()?;
+        for v in vals {
+            assert!(v <= 20, "encoded index {v} out of range [0, 20]");
+        }
+        Ok(())
+    }
+
+    /// `get_res_index` returns one entry per amino acid residue.
+    #[test]
+    fn test_get_res_index_length() -> candle_core::Result<()> {
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().map_err(|e| {
+            candle_core::Error::Msg(format!("test file setup failed: {e}"))
+        })?;
+        let ac = load_structure(pdb_file).map_err(|e| {
+            candle_core::Error::Msg(format!("load_structure failed: {e}"))
+        })?;
+
+        let n = ac.iter_residues_aminoacid().count();
+        let res_index = ac.get_res_index();
+        assert_eq!(res_index.len(), n);
+        Ok(())
+    }
+
+    /// `create_cb` output has the right shape [1, n, 3].
+    #[test]
+    fn test_create_cb_shape() -> candle_core::Result<()> {
+        let device = Device::Cpu;
+        let (pdb_file, _temp) = TestFile::protein_01().create_temp().map_err(|e| {
+            candle_core::Error::Msg(format!("test file setup failed: {e}"))
+        })?;
+        let ac = load_structure(pdb_file).map_err(|e| {
+            candle_core::Error::Msg(format!("load_structure failed: {e}"))
+        })?;
+
+        let n = ac.iter_residues_aminoacid().count();
+        let cb = ac.create_cb(&device)?;
+        assert_eq!(cb.dims(), &[1, n, 3]);
+        Ok(())
     }
 }

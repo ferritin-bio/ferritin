@@ -1,3 +1,4 @@
+use crate::trajectory::ArrayTrajectory;
 use crate::AtomCollection;
 use crate::io::cif;
 use crate::io::pdb;
@@ -24,6 +25,27 @@ pub fn load_structure<P: AsRef<Path>>(file_path: P) -> Result<AtomCollection> {
 
     ac.connect_via_residue_names();
     Ok(ac)
+}
+
+/// Load all models from a structure file as a trajectory.
+///
+/// For single-model files, returns a trajectory with one frame.
+/// For multi-model NMR/MD files, returns all frames sharing one `Arc<AtomicHierarchy>`.
+pub fn load_trajectory<P: AsRef<Path>>(file_path: P) -> Result<ArrayTrajectory> {
+    let path = file_path.as_ref();
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .ok_or_else(|| anyhow::anyhow!("File has no extension"))?
+        .to_lowercase();
+
+    match extension.as_str() {
+        "cif" => cif::CIFFile::read(path)?
+            .parse_to_trajectory()
+            .context("Failed to parse CIF file to trajectory"),
+        "pdb" => Err(anyhow::anyhow!("PDB multi-model trajectory not yet implemented")),
+        _ => Err(anyhow::anyhow!("Unsupported file extension: {}", extension)),
+    }
 }
 
 pub fn load_structure_from_string(content: &str, filetype: &str) -> Result<AtomCollection> {

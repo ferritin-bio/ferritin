@@ -24,6 +24,10 @@ impl Bond {
     pub fn get_atom_indices(&self) -> (i32, i32) {
         (self.atom1, self.atom2)
     }
+
+    pub fn get_order(&self) -> BondOrder {
+        self.order
+    }
 }
 
 /// BondOrder:

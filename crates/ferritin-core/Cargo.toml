@@ -6,6 +6,10 @@ authors.workspace = true
 license.workspace = true
 description.workspace = true
 
+[features]
+default = []
+intern = []
+
 [dependencies]
 anyhow.workspace = true
 itertools.workspace = true
