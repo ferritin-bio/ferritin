@@ -2,7 +2,7 @@
 use super::utilities::{AAAtom, aa1to_int, aa3to1, int_to_aa1, get_nearest_neighbours};
 use crate::ligandmpnn::proteinfeatures::ProteinFeatures;
 use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
-use ferritin_core::AtomCollection;
+use ferritin_core::{AtomCollection, Model};
 use ferritin_core::info::elements::Element;
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
@@ -263,6 +263,37 @@ impl StructureFeatures for AtomCollection {
         let y_t = y_t.to_dtype(DType::I64)?.unsqueeze(0)?;
         let y_m = y_m.unsqueeze(0)?;
         Ok((y, y_t, y_m))
+    }
+}
+
+/// Delegate all `StructureFeatures` methods to an `AtomCollection` adapter.
+///
+/// This lets callers pass a `&Model` directly to ML featurisation routines
+/// without manually calling `AtomCollection::from(&model)` at every call site.
+impl StructureFeatures for Model {
+    fn decode_amino_acids(&self, device: &Device) -> Result<Tensor> {
+        AtomCollection::from(self).decode_amino_acids(device)
+    }
+    fn encode_amino_acids(&self, device: &Device) -> Result<Tensor> {
+        AtomCollection::from(self).encode_amino_acids(device)
+    }
+    fn create_cb(&self, device: &Device) -> Result<Tensor> {
+        AtomCollection::from(self).create_cb(device)
+    }
+    fn featurize_lmpnn(&self, device: &Device) -> Result<ProteinFeatures> {
+        AtomCollection::from(self).featurize_lmpnn(device)
+    }
+    fn get_res_index(&self) -> Vec<u32> {
+        AtomCollection::from(self).get_res_index()
+    }
+    fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
+        AtomCollection::from(self).to_numeric_backbone_atoms(device)
+    }
+    fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
+        AtomCollection::from(self).to_numeric_atom37(device)
+    }
+    fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
+        AtomCollection::from(self).to_numeric_ligand_atoms(device)
     }
 }
 

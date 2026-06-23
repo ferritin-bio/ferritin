@@ -17,6 +17,7 @@ use std::sync::Arc;
 use super::hierarchy::AtomicHierarchy;
 use super::conformation::AtomicConformation;
 use super::tables::ResidueGroup;
+use crate::views::{ModelAtomView, ModelChainView, ModelResidueView};
 
 /// One frame of a (possibly multi-frame) molecular structure.
 ///
@@ -105,6 +106,26 @@ impl Model {
     pub fn ligand_residues(&self) -> impl Iterator<Item = usize> + '_ {
         let groups = &self.hierarchy.residues.group;
         (0..self.n_residues()).filter(move |&i| groups[i] == ResidueGroup::NonPolymer)
+    }
+
+    /// Iterator over all chains as [`ModelChainView`].
+    pub fn chains(&self) -> impl Iterator<Item = ModelChainView<'_>> {
+        (0..self.n_chains()).map(move |i| ModelChainView::new(self, i))
+    }
+
+    /// Iterator over all residues as [`ModelResidueView`].
+    pub fn residues(&self) -> impl Iterator<Item = ModelResidueView<'_>> {
+        (0..self.n_residues()).map(move |i| ModelResidueView::new(self, i))
+    }
+
+    /// Iterator over amino-acid residues only, as [`ModelResidueView`].
+    pub fn residues_aminoacid(&self) -> impl Iterator<Item = ModelResidueView<'_>> {
+        self.residues().filter(|r| r.is_amino_acid())
+    }
+
+    /// Iterator over all atoms as [`ModelAtomView`].
+    pub fn atoms(&self) -> impl Iterator<Item = ModelAtomView<'_>> {
+        (0..self.n_atoms()).map(move |i| ModelAtomView::new(self, i))
     }
 }
 
@@ -347,5 +368,129 @@ mod tests {
             assert_eq!(aos[i][1], y[i], "y mismatch at {}", i);
             assert_eq!(aos[i][2], z[i], "z mismatch at {}", i);
         }
+    }
+
+    #[test]
+    fn test_model_chains_iterator() {
+        let hierarchy = {
+            let n_atoms = 5;
+            let atoms = AtomsTable {
+                atom_name: vec!["CA".into(); n_atoms],
+                element: vec!["C".into(); n_atoms],
+                alt_loc: vec![None; n_atoms],
+                formal_charge: vec![None; n_atoms],
+            };
+            let residues = ResiduesTable {
+                comp_id: vec!["ALA".into(), "GLY".into(), "SER".into(), "HOH".into(), "ATP".into()],
+                label_seq_id: vec![0, 1, 2, 3, 4],
+                auth_seq_id: vec![1, 2, 3, 5, 10],
+                ins_code: vec![None; 5],
+                group: vec![ResidueGroup::Polymer; 5],
+            };
+            let chains = ChainsTable {
+                label_asym_id: vec!["A".into(), "B".into()],
+                auth_asym_id: vec!["A".into(), "B".into()],
+                entity_id: vec!["1".into(), "2".into()],
+            };
+            let atom_to_residue = Segmentation::from_offsets(vec![0, 1, 2, 3, 4, 5]);
+            let residue_to_chain = Segmentation::from_offsets(vec![0, 3, 5]);
+            let bonds = Bonds::from_unsorted(vec![], vec![], vec![], n_atoms);
+            Arc::new(AtomicHierarchy { atoms, residues, chains, atom_to_residue, residue_to_chain, bonds })
+        };
+        let model = Model::new(hierarchy, make_conformation(5));
+
+        let chains: Vec<_> = model.chains().collect();
+        assert_eq!(chains.len(), 2, "should have 2 chains");
+        assert_eq!(chains[0].chain_id(), "A");
+        assert_eq!(chains[1].chain_id(), "B");
+        assert_eq!(chains[0].residue_count(), 3);
+        assert_eq!(chains[1].residue_count(), 2);
+    }
+
+    #[test]
+    fn test_model_residues_iterator() {
+        let hierarchy = make_simple_hierarchy(
+            3,
+            vec![ResidueGroup::Polymer, ResidueGroup::Polymer, ResidueGroup::NonPolymer],
+        );
+        let model = Model::new(hierarchy, make_conformation(3));
+
+        let residues: Vec<_> = model.residues().collect();
+        assert_eq!(residues.len(), 3);
+        assert_eq!(residues[0].residue_id(), 1);
+        assert_eq!(residues[2].residue_id(), 3);
+        assert_eq!(residues[0].chain_id(), "A");
+        assert!(residues[2].atom_count() > 0);
+    }
+
+    #[test]
+    fn test_model_atoms_iterator() {
+        let hierarchy = make_simple_hierarchy(3, vec![ResidueGroup::Polymer; 3]);
+        let conf = AtomicConformation {
+            x: vec![1.0, 4.0, 7.0],
+            y: vec![2.0, 5.0, 8.0],
+            z: vec![3.0, 6.0, 9.0],
+            occupancy: None,
+            b_iso: None,
+            confidence: None,
+        };
+        let model = Model::new(hierarchy, conf);
+
+        let atoms: Vec<_> = model.atoms().collect();
+        assert_eq!(atoms.len(), 3);
+        assert_eq!(atoms[0].coords(), [1.0, 2.0, 3.0]);
+        assert_eq!(atoms[1].coords(), [4.0, 5.0, 6.0]);
+        assert_eq!(atoms[0].atom_name(), "CA");
+        assert_eq!(atoms[0].chain_id(), "A");
+    }
+
+    #[test]
+    fn test_model_chain_residue_atom_traversal() {
+        // Build a 2-chain, 4-residue, 8-atom model (2 atoms per residue)
+        let n_atoms = 8;
+        let n_residues = 4;
+        let atoms = AtomsTable {
+            atom_name: (0..n_atoms).map(|i| if i % 2 == 0 { "N".into() } else { "CA".into() }).collect(),
+            element: (0..n_atoms).map(|_| "C".into()).collect(),
+            alt_loc: vec![None; n_atoms],
+            formal_charge: vec![None; n_atoms],
+        };
+        let residues = ResiduesTable {
+            comp_id: vec!["ALA".into(), "GLY".into(), "HOH".into(), "ATP".into()],
+            label_seq_id: vec![0, 1, 2, 3],
+            auth_seq_id: vec![1, 2, 10, 20],
+            ins_code: vec![None; n_residues],
+            group: vec![
+                ResidueGroup::Polymer, ResidueGroup::Polymer,
+                ResidueGroup::NonPolymer, ResidueGroup::NonPolymer,
+            ],
+        };
+        let chains = ChainsTable {
+            label_asym_id: vec!["A".into(), "B".into()],
+            auth_asym_id: vec!["A".into(), "B".into()],
+            entity_id: vec!["1".into(), "2".into()],
+        };
+        let atom_to_residue = Segmentation::from_offsets(vec![0, 2, 4, 6, 8]);
+        let residue_to_chain = Segmentation::from_offsets(vec![0, 2, 4]);
+        let bonds = Bonds::from_unsorted(vec![], vec![], vec![], n_atoms);
+        let hierarchy = Arc::new(AtomicHierarchy { atoms, residues, chains, atom_to_residue, residue_to_chain, bonds });
+        let model = Model::new(hierarchy, make_conformation(n_atoms));
+
+        // Traverse chain -> residue -> atom
+        let chain_a = model.chains().next().unwrap();
+        assert_eq!(chain_a.chain_id(), "A");
+        let res_in_a: Vec<_> = chain_a.iter_residues().collect();
+        assert_eq!(res_in_a.len(), 2);
+        assert_eq!(res_in_a[0].residue_name(), "ALA");
+        assert!(res_in_a[0].is_amino_acid());
+
+        let atoms_in_r0: Vec<_> = res_in_a[0].iter_atoms().collect();
+        assert_eq!(atoms_in_r0.len(), 2);
+        assert_eq!(atoms_in_r0[0].atom_name(), "N");
+        assert_eq!(atoms_in_r0[1].atom_name(), "CA");
+
+        let ca = res_in_a[0].find_atom_by_name("CA");
+        assert!(ca.is_some());
+        assert_eq!(ca.unwrap().atom_name(), "CA");
     }
 }
