@@ -51,6 +51,31 @@ impl Model {
         self.conformation.coord(i)
     }
 
+    /// Direct access to x coordinates (SoA layout).
+    pub fn x(&self) -> &[f32] {
+        &self.conformation.x
+    }
+
+    /// Direct access to y coordinates (SoA layout).
+    pub fn y(&self) -> &[f32] {
+        &self.conformation.y
+    }
+
+    /// Direct access to z coordinates (SoA layout).
+    pub fn z(&self) -> &[f32] {
+        &self.conformation.z
+    }
+
+    /// Returns coordinates as array-of-structs `[[x,y,z], ...]`.
+    ///
+    /// This is a compatibility shim for callers expecting the old AoS layout.
+    /// Contains the blast radius for the AoS→SoA transition.
+    pub fn coords_as_slice(&self) -> Vec<[f32; 3]> {
+        let n = self.n_atoms();
+        let (x, y, z) = (&self.conformation.x, &self.conformation.y, &self.conformation.z);
+        (0..n).map(|i| [x[i], y[i], z[i]]).collect()
+    }
+
     /// Total number of atoms.
     pub fn n_atoms(&self) -> usize {
         self.hierarchy.n_atoms()
@@ -281,6 +306,46 @@ mod tests {
         assert_eq!(protein.len() + ligands.len(), 5);
         for p in &protein {
             assert!(!ligands.contains(p), "No residue should be in both groups");
+        }
+    }
+
+    #[test]
+    fn test_model_coords_as_slice() {
+        let hierarchy = make_simple_hierarchy(3, vec![ResidueGroup::Polymer; 3]);
+        let conf = AtomicConformation {
+            x: vec![1.0, 4.0, 7.0],
+            y: vec![2.0, 5.0, 8.0],
+            z: vec![3.0, 6.0, 9.0],
+            occupancy: None,
+            b_iso: None,
+            confidence: None,
+        };
+        let model = Model::new(hierarchy, conf);
+
+        let coords = model.coords_as_slice();
+        assert_eq!(coords.len(), 3);
+        assert_eq!(coords[0], [1.0, 2.0, 3.0]);
+        assert_eq!(coords[1], [4.0, 5.0, 6.0]);
+        assert_eq!(coords[2], [7.0, 8.0, 9.0]);
+
+        assert_eq!(model.x(), &[1.0, 4.0, 7.0]);
+        assert_eq!(model.y(), &[2.0, 5.0, 8.0]);
+        assert_eq!(model.z(), &[3.0, 6.0, 9.0]);
+    }
+
+    #[test]
+    fn test_model_soa_aos_consistency() {
+        let hierarchy = make_simple_hierarchy(5, vec![ResidueGroup::Polymer; 5]);
+        let conf = make_conformation(5);
+        let model = Model::new(hierarchy, conf);
+
+        let aos = model.coords_as_slice();
+        let (x, y, z) = (model.x(), model.y(), model.z());
+
+        for i in 0..5 {
+            assert_eq!(aos[i][0], x[i], "x mismatch at {}", i);
+            assert_eq!(aos[i][1], y[i], "y mismatch at {}", i);
+            assert_eq!(aos[i][2], z[i], "z mismatch at {}", i);
         }
     }
 }
