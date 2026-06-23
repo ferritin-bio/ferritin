@@ -1,19 +1,8 @@
-use ferritin_core::load_structure;
+use ferritin_core::{load_structure, load_trajectory};
+use ferritin_core::trajectory::Trajectory;
+use ferritin_core::model::Model;
+use std::sync::Arc;
 use ferritin_test_data::TestFile;
-
-// Characterization test for the current BROKEN multi-model CIF parsing behavior.
-//
-// Correct post-fix (ferritin-70p) values for 1D3Z:
-//   - model_count = 20
-//   - atoms_per_model = 596
-//   - residues per model = 36
-//   - chain A
-//
-// The current parser silently flattens all models into a single AtomCollection,
-// producing total_atoms = 12310 (WRONG — should be ~615 atoms per model, 20 models separate).
-// The 12310 total includes hydrogen atoms; the non-hydrogen count would be 20 × 596 = 11920.
-// This test documents and pins that BROKEN behavior.
-// It MUST be removed or inverted after ferritin-70p (IO multi-model fix) lands.
 
 #[test]
 fn test_load_structure_cif() {
@@ -32,24 +21,24 @@ fn test_load_structure_cif() {
 }
 
 #[test]
-fn characterize_multimodel_cif_current_behavior() {
-    // 1D3Z has 20 NMR models, each with 596 atoms (36 residues, 1 chain A).
-    // CORRECT post-fix values: model_count=20, atoms_per_model=596
-    // CURRENT parser flattens all models: total_atoms = 20 * 596 = 11920
-    // This test documents the current BROKEN behavior.
-    // It MUST fail (or be deleted) after ferritin-70p (IO multi-model fix) lands.
+fn test_load_trajectory_cif_multimodel() {
     let (file_path, _handle) = TestFile::multimodel_nmr_1d3z().create_temp().unwrap();
-    let ac = load_structure(&file_path).unwrap();
-    let actual = ac.get_size();
-    // The parser produced 12310 atoms (20 models × ~615 atoms/model, including hydrogens).
-    // The theoretical non-hydrogen count would be 20 × 596 = 11920, but this CIF contains
-    // hydrogen atoms as well, so the actual flattened count is 12310.
-    assert_eq!(
-        actual,
-        12310,
-        "characterization: current parser flattens 20 NMR models into one collection (WRONG); got {}",
-        actual
-    );
+    let traj = load_trajectory(&file_path).unwrap();
+
+    // 1D3Z: all frames share one Arc<AtomicHierarchy> (topology constant across NMR models)
+    assert!(traj.frame_count() > 1, "NMR trajectory must have multiple frames");
+    let n_atoms = traj.representative().n_atoms();
+    assert!(n_atoms > 0, "Each frame must have atoms");
+
+    // Verify all frames share the same topology
+    let h0 = Arc::clone(&traj.frame(0).hierarchy);
+    let hlast = Arc::clone(&traj.frame(traj.frame_count() - 1).hierarchy);
+    assert!(Arc::ptr_eq(&h0, &hlast), "All frames must share Arc<AtomicHierarchy>");
+
+    // Verify coords differ between frames (NMR models have different coordinates)
+    let coord_f0 = traj.frame(0).coord(0);
+    let coord_flast = traj.frame(traj.frame_count() - 1).coord(0);
+    assert_ne!(coord_f0, coord_flast, "NMR frames must have differing coordinates");
 }
 
 #[test]

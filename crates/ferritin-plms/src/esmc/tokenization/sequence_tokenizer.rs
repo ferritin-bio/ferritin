@@ -133,47 +133,49 @@ impl EsmSequenceTokenizer {
 
 impl EsmTokenizerBase for EsmSequenceTokenizer {
     fn encode(&self) -> Result<()> {
-        // TODO: implement generic encode via the HuggingFace tokenizers Tokenizer
-        todo!()
+        // Trait signature carries no input/output; use tokenize_sequence for real encoding.
+        Ok(())
     }
 
     fn decode(&self) -> Result<()> {
-        // TODO: implement generic decode via the HuggingFace tokenizers Tokenizer
-        todo!()
+        // Trait signature carries no input/output; use decode_sequence for real decoding.
+        Ok(())
     }
 
     fn mask_token(&self) -> &str {
-        "mask"
+        "<mask>"
     }
 
     fn mask_token_id(&self) -> u32 {
-        self.tokenizer.token_to_id("mask").unwrap_or(0)
+        // <mask> is at index 32 in SEQUENCE_VOCAB
+        self.tokenizer.token_to_id("<mask>").unwrap_or(32)
     }
 
     fn bos_token(&self) -> &str {
-        // TODO: BOS is "<cls>" token — alias cls_token() once that method exists
-        unimplemented!()
+        "<cls>"
     }
 
     fn bos_token_id(&self) -> u32 {
-        // TODO: BOS id is the "<cls>" token id — alias cls_token_id() once that method exists
-        unimplemented!()
+        // <cls> is at index 0 in SEQUENCE_VOCAB
+        self.tokenizer.token_to_id("<cls>").unwrap_or(0)
     }
 
     fn eos_token(&self) -> &str {
-        "eos"
+        "<eos>"
     }
 
     fn eos_token_id(&self) -> u32 {
-        self.tokenizer.token_to_id("eos").unwrap_or(0)
+        // <eos> is at index 2 in SEQUENCE_VOCAB
+        self.tokenizer.token_to_id("<eos>").unwrap_or(2)
     }
 
     fn pad_token(&self) -> &str {
-        "pad"
+        "<pad>"
     }
 
     fn pad_token_id(&self) -> u32 {
-        self.tokenizer.token_to_id("pad").unwrap_or(0)
+        // <pad> is at index 1 in SEQUENCE_VOCAB
+        self.tokenizer.token_to_id("<pad>").unwrap_or(1)
     }
 
     fn chain_break_token(&self) -> &str {
@@ -181,16 +183,22 @@ impl EsmTokenizerBase for EsmSequenceTokenizer {
     }
 
     fn chain_break_token_id(&self) -> u32 {
-        self.tokenizer.token_to_id(&self.cb_token).unwrap_or(0)
+        // "|" is at index 31 in SEQUENCE_VOCAB
+        self.tokenizer.token_to_id(&self.cb_token).unwrap_or(31)
     }
 
     fn all_token_ids(&self) -> Vec<u32> {
-        // TODO: return (0..SEQUENCE_VOCAB.len() as u32).collect()
-        unimplemented!()
+        (0..SEQUENCE_VOCAB.len() as u32).collect()
     }
 
     fn special_token_ids(&self) -> Vec<u32> {
-        // TODO: return ids for cls, pad, eos, mask, chain_break special tokens
-        unimplemented!()
+        // cls=0, pad=1, eos=2, chain_break=31, mask=32
+        vec![
+            self.bos_token_id(),
+            self.pad_token_id(),
+            self.eos_token_id(),
+            self.chain_break_token_id(),
+            self.mask_token_id(),
+        ]
     }
 }
