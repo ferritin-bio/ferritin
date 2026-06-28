@@ -13,7 +13,7 @@ use bevy::prelude::{
 use bevy::asset::RenderAssetUsages;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bon::Builder;
-use ferritin_core::AtomCollection;
+use ferritin_core::Model;
 
 /// Enum representing various rendering options.
 ///
@@ -39,17 +39,17 @@ enum SecondaryStructure {
 
 // Structure to hold residue information needed for cartoon rendering
 struct BackboneAtoms {
-    ca: Vec3, // Alpha carbon
-    n: Vec3,  // Nitrogen
-    c: Vec3,  // Carbonyl carbon
-    o: Vec3,  // Carbonyl oxygen (for orientation)
+    ca: Vec3,
+    n: Vec3,
+    c: Vec3,
+    o: Vec3,
     residue_index: usize,
 }
 
 /// Define Everything Needed to render
 #[derive(Builder, Component)]
 pub struct Structure {
-    pdb: AtomCollection,
+    pdb: Model,
     #[builder(default = RenderOptions::Solid)]
     rendertype: RenderOptions,
     #[builder(default = ColorScheme::Solid(Color::WHITE))]
@@ -107,11 +107,10 @@ impl Structure {
             + p1
     }
 
-    // Function to extract backbone atoms for proper orientation
-    fn extract_backbone_atoms(pdb: &AtomCollection) -> Vec<BackboneAtoms> {
+    fn extract_backbone_atoms(pdb: &Model) -> Vec<BackboneAtoms> {
         let mut backbone_data = Vec::new();
 
-        for residue in pdb.iter_residues_aminoacid() {
+        for residue in pdb.residues_aminoacid() {
             if let (Some(ca), Some(n), Some(c), Some(o)) = (
                 residue.find_atom_by_name("CA"),
                 residue.find_atom_by_name("N"),
@@ -119,10 +118,10 @@ impl Structure {
                 residue.find_atom_by_name("O"),
             ) {
                 backbone_data.push(BackboneAtoms {
-                    ca: Vec3::from_array(*ca.coords()),
-                    n: Vec3::from_array(*n.coords()),
-                    c: Vec3::from_array(*c.coords()),
-                    o: Vec3::from_array(*o.coords()),
+                    ca: Vec3::from_array(ca.coords()),
+                    n: Vec3::from_array(n.coords()),
+                    c: Vec3::from_array(c.coords()),
+                    o: Vec3::from_array(o.coords()),
                     residue_index: residue.residue_id() as usize,
                 });
             }
@@ -624,10 +623,10 @@ impl Structure {
         // Collect (chain_id, ca_position) for all amino-acid residues
         let ca_by_chain: Vec<(String, Vec3)> = self
             .pdb
-            .iter_residues_aminoacid()
+            .residues_aminoacid()
             .filter_map(|residue| {
                 residue.find_atom_by_name("CA").map(|ca| {
-                    (residue.chain_id().to_string(), Vec3::from_array(*ca.coords()))
+                    (residue.chain_id().to_string(), Vec3::from_array(ca.coords()))
                 })
             })
             .collect();
@@ -773,7 +772,7 @@ impl Structure {
         for (i, mesh) in valid_meshes.iter().enumerate().skip(1) {
             println!("Merging mesh {} with {} vertices", i, mesh.count_vertices());
             let before_count = combined_mesh.count_vertices();
-            combined_mesh.merge(mesh);
+            let _ = combined_mesh.merge(mesh);
             let after_count = combined_mesh.count_vertices();
             println!(
                 "After merge: {} vertices (added {})",
@@ -793,12 +792,14 @@ impl Structure {
         let radius = 0.5;
         let mut combined_mesh = self
             .pdb
-            .iter_coords_and_elements()
-            .map(|(coord, element_str)| {
+            .atoms()
+            .map(|atom| {
+                let coord = atom.coords();
                 let center = Vec3::new(coord[0], coord[1], coord[2]);
+                let element = atom.element();
                 let mut sphere_mesh = Sphere::new(radius).mesh().build();
                 let vertex_count = sphere_mesh.count_vertices();
-                let color = self.color_scheme.get_color(element_str).to_srgba();
+                let color = self.color_scheme.get_color(&element).to_srgba();
                 let color_array =
                     vec![Vec4::new(color.red, color.green, color.blue, color.alpha); vertex_count];
                 sphere_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color_array);
@@ -812,38 +813,31 @@ impl Structure {
             })
             .unwrap();
 
-        // Add bond cylinders using iterators
-        if let Some(bonds) = self.pdb.get_bonds() {
-            let coords = self.pdb.get_coords();
-            bonds
-                .iter()
-                .filter_map(|bond| {
-                    let (atom1, atom2) = bond.get_atom_indices();
-                    let pos1 = Vec3::from_array(*coords.get(atom1 as usize)?);
-                    let pos2 = Vec3::from_array(*coords.get(atom2 as usize)?);
-
-                    // Calculate cylinder properties
+        // Add bond cylinders
+        let bonds = &self.pdb.hierarchy.bonds;
+        if !bonds.atom_a.is_empty() {
+            (0..bonds.atom_a.len())
+                .filter_map(|i| {
+                    let pos1 = Vec3::from_array(self.pdb.coord(bonds.atom_a[i] as usize));
+                    let pos2 = Vec3::from_array(self.pdb.coord(bonds.atom_b[i] as usize));
                     let center = (pos1 + pos2) / 2.0;
                     let direction = pos2 - pos1;
                     let height = direction.length();
+                    if height < 1e-6 {
+                        return None;
+                    }
                     let rotation = Quat::from_rotation_arc(Vec3::Y, direction.normalize());
-
-                    // Create and transform cylinder mesh
                     let mut cylinder_mesh = Cylinder {
                         radius: 0.5,
-                        half_height: height / 2.0, // Note: we divide height by 2 since it expects half_height
+                        half_height: height / 2.0,
                     }
                     .mesh()
                     .build();
-
-                    // Apply transformation
                     cylinder_mesh = cylinder_mesh.transformed_by(Transform {
                         translation: center,
                         rotation,
                         ..default()
                     });
-
-                    // Add colors
                     let cylinder_vertex_count = cylinder_mesh.count_vertices();
                     let cylinder_colors =
                         vec![Vec4::new(0.5, 0.5, 0.5, 0.5); cylinder_vertex_count];
@@ -851,26 +845,25 @@ impl Structure {
                     Some(cylinder_mesh)
                 })
                 .for_each(|cylinder_mesh| {
-                    combined_mesh.merge(&cylinder_mesh);
+                    let _ = combined_mesh.merge(&cylinder_mesh);
                 });
-        } else {
-            println!("No-Bonds found!!")
         }
         combined_mesh
     }
-    /// Internal fn for rendering spheres.
     fn render_spheres(&self) -> Mesh {
         self.pdb
-            .iter_coords_and_elements()
-            .map(|(coord, element)| {
+            .atoms()
+            .map(|atom| {
+                let coord = atom.coords();
                 let center = Vec3::new(coord[0], coord[1], coord[2]);
+                let element = atom.element();
                 let radius = element
                     .atomic_radius()
                     .van_der_waals
                     .expect("Van der waals not defined") as f32;
                 let mut sphere_mesh = Sphere::new(radius).mesh().build();
                 let vertex_count = sphere_mesh.count_vertices();
-                let color = self.color_scheme.get_color(element).to_srgba();
+                let color = self.color_scheme.get_color(&element).to_srgba();
                 let color_array =
                     vec![Vec4::new(color.red, color.green, color.blue, color.alpha); vertex_count];
                 sphere_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color_array);
@@ -880,7 +873,7 @@ impl Structure {
             })
             .reduce(|mut acc, mesh| {
                 let _ = acc.merge(&mesh);
-                mesh
+                acc
             })
             .unwrap()
     }
@@ -888,10 +881,10 @@ impl Structure {
     fn render_putty(&self) -> Mesh {
         let c_alphas: Vec<Vec3> = self
             .pdb
-            .iter_residues_aminoacid()
+            .residues_aminoacid()
             .map(|residue| {
                 let ca = residue.find_atom_by_name("CA").expect("CA in all residues");
-                Vec3::from_array(*ca.coords())
+                Vec3::from_array(ca.coords())
             })
             .collect();
         let curve = Structure::create_smooth_curve(&c_alphas, 3);
@@ -902,30 +895,30 @@ impl Structure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ferritin_core::load_structure;
+    use ferritin_core::load_model;
     use ferritin_test_data::TestFile;
 
     #[test]
     fn test_pdb_to_mesh() -> anyhow::Result<()> {
         let (molfile, _handle) = TestFile::protein_04().create_temp()?;
-        let ac = load_structure(molfile).unwrap();
-        let structure = Structure::builder().pdb(ac).build();
-        assert_eq!(structure.pdb.get_size(), 2154);
-        let mesh = structure.to_mesh();
-        // assert_eq!(mesh.count_vertices(), 779748);
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder().pdb(model).build();
+        assert_eq!(structure.pdb.n_atoms(), 2154);
+        let _mesh = structure.to_mesh();
+        // assert_eq!(_mesh.count_vertices(), 779748);
         Ok(())
     }
 
     #[test]
     fn test_pdb_to_mesh_cartoon() -> anyhow::Result<()> {
         let (molfile, _handle) = TestFile::protein_04().create_temp()?;
-        let ac = load_structure(molfile).unwrap();
+        let model = load_model(molfile).unwrap();
         let structure = Structure::builder()
-            .pdb(ac)
+            .pdb(model)
             .rendertype(RenderOptions::Cartoon)
             .build();
 
-        assert_eq!(structure.pdb.get_size(), 2154);
+        assert_eq!(structure.pdb.n_atoms(), 2154);
         let mesh = structure.to_mesh();
         assert!(mesh.count_vertices() > 0);
         Ok(())
@@ -934,9 +927,9 @@ mod tests {
     #[test]
     fn test_render_wireframe() -> anyhow::Result<()> {
         let (molfile, _handle) = TestFile::protein_04().create_temp()?;
-        let ac = load_structure(molfile).unwrap();
+        let model = load_model(molfile).unwrap();
         let structure = Structure::builder()
-            .pdb(ac)
+            .pdb(model)
             .rendertype(RenderOptions::Wireframe)
             .build();
 

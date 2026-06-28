@@ -23,7 +23,7 @@ mod views;
 
 pub use atomcollection::AtomCollection;
 pub use bonds::{Bond, BondOrder};
-pub use io::{load_structure, load_structure_from_string, load_trajectory};
+pub use io::{load_model, load_structure, load_structure_from_string, load_trajectory};
 pub use model::{AtomicConformation, AtomicHierarchy, Bonds, Model};
 pub use trajectory::{ArrayTrajectory, Coordinates, Frame, ModelCoordsTrajectory, Trajectory};
 pub use unit::Unit;
