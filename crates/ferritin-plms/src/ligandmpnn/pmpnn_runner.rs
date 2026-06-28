@@ -7,7 +7,7 @@ use super::proteinfeatures::ProteinFeatures;
 use crate::types::PseudoProbability;
 use anyhow::{Result, anyhow};
 use candle_core::pickle::PthTensors;
-use candle_core::{DType, Device};
+use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use hf_hub::HFClientSync;
 use std::path::Path;
@@ -62,6 +62,23 @@ impl ProteinMPNNRunner {
         let model = ProteinMPNN::load(vb, &config)
             .map_err(|e| anyhow!("Failed to load ProteinMPNN weights: {e}"))?;
         Ok(Self { model })
+    }
+
+    /// Run ProteinMPNN and return a (L, 21) log-probability tensor for all positions.
+    ///
+    /// Useful for numerical parity tests against a Python reference.  Values are
+    /// log-softmax of the raw logits from a single structure-conditioned forward pass
+    /// (the same computation as `simple_decode`).
+    pub fn get_log_probs(&self, features: &ProteinFeatures) -> Result<Tensor> {
+        let output = self
+            .model
+            .simple_decode(features)
+            .map_err(|e| anyhow!("ProteinMPNN forward pass failed: {e}"))?;
+        // log_probs shape: (1, L, 21) — squeeze the batch dimension
+        output
+            .get_log_probs()
+            .squeeze(0)
+            .map_err(|e| anyhow!("Failed to squeeze batch dimension: {e}"))
     }
 
     /// Run ProteinMPNN and return per-residue pseudo-probabilities for the 21 amino acids.
