@@ -5310,9 +5310,9 @@ dependencies = [
 name = "ferritin"
 version = "0.3.6-dev"
 dependencies = [
+ "ferritin-bevy",
  "ferritin-core",
  "ferritin-plms",
- "ferritin-structure-mesh",
 ]
 
 [[package]]
@@ -5324,6 +5324,8 @@ dependencies = [
  "bon",
  "ferritin-core",
  "ferritin-test-data",
+ "itertools 0.15.0",
+ "rerun",
 ]
 
 [[package]]
@@ -5346,9 +5348,9 @@ dependencies = [
  "candle-nn",
  "clap",
  "ferritin",
+ "ferritin-bevy",
  "ferritin-core",
  "ferritin-plms",
- "ferritin-structure-mesh",
  "ferritin-test-data",
  "hf-hub",
  "rerun",
@@ -5372,19 +5374,6 @@ dependencies = [
  "serde_json",
  "strum 0.28.0",
  "tokenizers 0.23.1",
-]
-
-[[package]]
-name = "ferritin-structure-mesh"
-version = "0.3.6-dev"
-dependencies = [
- "anyhow",
- "bevy",
- "bon",
- "ferritin-core",
- "ferritin-test-data",
- "itertools 0.15.0",
- "rerun",
 ]
 
 [[package]]

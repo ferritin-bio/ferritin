@@ -5,7 +5,7 @@ use bevy::{
     prelude::*,
     render::view::screenshot::{Capturing, Screenshot, save_to_disk},
 };
-use ferritin_structure_mesh::{ColorScheme, RenderOptions, StructurePlugin, StructureSettings};
+use ferritin_bevy::{ColorScheme, RenderOptions, StructurePlugin, StructureSettings};
 use ferritin_test_data::TestFile;
 
 fn main() -> Result<()> {

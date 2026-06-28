@@ -8,7 +8,6 @@ members = [
     # "crates/ferritin-molviewspec",
     "crates/ferritin-plms",
     # "crates/ferritin-pymol",
-    "crates/ferritin-structure-mesh",
     "crates/ferritin-test-data",
     # "crates/ferritin-wasm-examples/ligandmpnn",
     # "crates/ferritin-wasm-examples/ligandmpnn-wasm",

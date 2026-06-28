@@ -74,11 +74,7 @@ fn load_initial_proteins(
             continue;
         }
 
-        // Todo: revisit this portion about the right default visuals later on
-        // by default lets only keep the amino acids.
         let mut ac: AtomCollection = load_structure(file_path).unwrap();
-
-        // add the bonds back in as they are removed during the collection process above.
         ac.connect_via_residue_names();
 
         let structure = Structure::builder()

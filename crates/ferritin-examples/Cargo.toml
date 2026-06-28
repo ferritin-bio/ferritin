@@ -12,7 +12,7 @@ bevy = []
 metal = ["candle-core/metal", "candle-nn/metal", "candle-metal-kernels"]
 mesh = ["ferritin/mesh"]
 plms = ["ferritin/plms"]
-rerun = ["dep:rerun", "ferritin-structure-mesh/rerun"]
+rerun = ["dep:rerun", "ferritin-bevy/rerun"]
 # all = ["mesh", "plms", "molviewspec"]
 # all = ["mesh", "plms", "molviewspec"]
 # molviewspec = ["ferritin/molviewspec"]
@@ -26,9 +26,9 @@ candle-core.workspace = true
 candle-metal-kernels = { workspace = true, optional = true }
 candle-nn.workspace = true
 clap.workspace = true
+ferritin-bevy = { path = "../ferritin-bevy" }
 ferritin-core = { path = "../ferritin-core" }
 ferritin-plms = { path = "../ferritin-plms" }
-ferritin-structure-mesh = { path = "../ferritin-structure-mesh" }
 rerun = { workspace = true, features = ["native_viewer"], optional = true }
 
 # The metal feature is defined above, and we don't need to redefine it conditionally
