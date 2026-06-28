@@ -5341,6 +5341,7 @@ version = "0.3.6-dev"
 dependencies = [
  "anyhow",
  "bevy",
+ "bevy_feathers",
  "candle-core",
  "candle-metal-kernels",
  "candle-nn",
