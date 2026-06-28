@@ -439,33 +439,56 @@ impl Structure {
         mesh
     }
 
-    // A simplified secondary structure detection based on CA geometry
-    // In a real implementation, this would use established algorithms like DSSP
-    fn detect_secondary_structure(ca_positions: &[Vec3]) -> Vec<SecondaryStructure> {
-        let mut sec_structures = vec![SecondaryStructure::Loop; ca_positions.len()];
+    /// Torsion angle (radians) between the planes defined by four sequential atoms.
+    /// Uses the atan2 formulation so the result is in (-π, π].
+    fn dihedral(p1: Vec3, p2: Vec3, p3: Vec3, p4: Vec3) -> f32 {
+        let b1 = p2 - p1;
+        let b2 = p3 - p2;
+        let b3 = p4 - p3;
+        let n1 = b1.cross(b2);
+        let n2 = b2.cross(b3);
+        let m1 = n1.cross(b2.normalize());
+        f32::atan2(m1.dot(n2), n1.dot(n2))
+    }
 
-        // Simplified approach: check distances between i and i+3/i+4 residues
-        for i in 0..ca_positions.len() {
-            if i + 3 < ca_positions.len() {
-                let dist = (ca_positions[i] - ca_positions[i + 3]).length();
-                if dist < 6.0 && dist > 4.5 {
-                    // Approximate helix criteria
-                    sec_structures[i] = SecondaryStructure::Helix;
-                }
-            }
-        }
+    /// Secondary structure classification via backbone phi/psi dihedral angles.
+    ///
+    /// Phi(i)  = dihedral( C(i-1), N(i),  CA(i), C(i)  )
+    /// Psi(i)  = dihedral( N(i),   CA(i), C(i),  N(i+1) )
+    ///
+    /// Thresholds (degrees, converted to radians internally):
+    ///   Helix: phi ∈ [-90, -30], psi ∈ [-80, 0]
+    ///   Sheet: phi ∈ [-170, -50], psi ∈ [60, 180] or psi ∈ [-180, -150]
+    fn detect_secondary_structure(atoms: &[BackboneAtoms]) -> Vec<SecondaryStructure> {
+        let n = atoms.len();
+        let mut sec = vec![SecondaryStructure::Loop; n];
 
-        // Smooth out single residue assignments
-        let mut smoothed = sec_structures.clone();
-        for i in 1..sec_structures.len() - 1 {
-            if sec_structures[i - 1] == sec_structures[i + 1]
-                && sec_structures[i] != sec_structures[i - 1]
+        let to_deg = |r: f32| r.to_degrees();
+
+        for i in 1..n.saturating_sub(1) {
+            let phi = Self::dihedral(atoms[i - 1].c, atoms[i].n, atoms[i].ca, atoms[i].c);
+            let psi = Self::dihedral(atoms[i].n, atoms[i].ca, atoms[i].c, atoms[i + 1].n);
+            let phi_d = to_deg(phi);
+            let psi_d = to_deg(psi);
+
+            if (-90.0..=-30.0).contains(&phi_d) && (-80.0..=0.0).contains(&psi_d) {
+                sec[i] = SecondaryStructure::Helix;
+            } else if (-170.0..=-50.0).contains(&phi_d)
+                && (psi_d >= 60.0 || psi_d <= -150.0)
             {
-                smoothed[i] = sec_structures[i - 1];
+                sec[i] = SecondaryStructure::Sheet;
             }
         }
 
-        smoothed
+        // Smooth out single-residue islands
+        let orig = sec.clone();
+        for i in 1..n - 1 {
+            if orig[i - 1] == orig[i + 1] && orig[i] != orig[i - 1] {
+                sec[i] = orig[i - 1];
+            }
+        }
+
+        sec
     }
 
     fn generate_cartoon_mesh(curve: &[Vec3], sec_structures: &[SecondaryStructure]) -> Mesh {
@@ -628,12 +651,8 @@ impl Structure {
         let backbone_atoms = Structure::extract_backbone_atoms(&self.pdb);
         println!("Backbone atoms found: {}", backbone_atoms.len());
 
-        // Extract CA positions for secondary structure detection
-        let ca_positions: Vec<Vec3> = backbone_atoms.iter().map(|atom| atom.ca).collect();
-        println!("CA positions extracted: {}", ca_positions.len());
-
-        // Detect secondary structures - returns Vec<SecondaryStructure>
-        let secondary_structures = Structure::detect_secondary_structure(&ca_positions);
+        // Detect secondary structures via backbone phi/psi dihedral angles
+        let secondary_structures = Structure::detect_secondary_structure(&backbone_atoms);
 
         println!(
             "Secondary structures detected: {}",

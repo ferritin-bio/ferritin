@@ -1,3 +1,14 @@
+//! Tensor-backed protein chain featurization for ESMC inference.
+//!
+//! # Ownership
+//!
+//! `ProteinChain` is a **featurized derivative** of `ferritin-core::AtomCollection` —
+//! it is not a source of truth.  When this module is re-enabled, `ProteinChain`
+//! must be constructed via `From<&AtomCollection>` or `featurize_atom37`, never by
+//! loading directly from a PDB file (`from_pdb` is intentionally absent).
+//!
+//! See `ferritin-plms::featurize::StructureFeatures` for the existing bridge.
+
 use brotli::{CompressorReader, CompressorWriter};
 use candle_core::Tensor;
 use serde::{Deserialize, Serialize};
