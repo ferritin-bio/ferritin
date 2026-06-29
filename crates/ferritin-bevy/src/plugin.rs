@@ -4,7 +4,7 @@
 //!
 use super::{ColorScheme, RenderOptions, Structure};
 use bevy::prelude::*;
-use ferritin_core::{AtomCollection, load_structure};
+use ferritin_core::load_model;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -74,15 +74,10 @@ fn load_initial_proteins(
             continue;
         }
 
-        // Todo: revisit this portion about the right default visuals later on
-        // by default lets only keep the amino acids.
-        let mut ac: AtomCollection = load_structure(file_path).unwrap();
-
-        // add the bonds back in as they are removed during the collection process above.
-        ac.connect_via_residue_names();
+        let model = load_model(file_path).unwrap();
 
         let structure = Structure::builder()
-            .pdb(ac)
+            .pdb(model)
             .rendertype(settings.render_type.clone())
             .color_scheme(settings.color_scheme.clone())
             .material(settings.material.clone())

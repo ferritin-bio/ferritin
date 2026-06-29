@@ -6,11 +6,16 @@ authors.workspace = true
 license.workspace = true
 description.workspace = true
 
+[features]
+rerun = ["dep:rerun"]
+
 [dependencies]
 anyhow.workspace = true
 bevy = { workspace = true, default-features = true }
 bon.workspace = true
 ferritin-core = { path = "../ferritin-core" }
+itertools.workspace = true
+rerun = { workspace = true, optional = true }
 
 [dev-dependencies]
 ferritin-test-data = { path = "../ferritin-test-data" }

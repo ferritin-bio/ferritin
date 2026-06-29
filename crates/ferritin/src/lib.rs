@@ -4,7 +4,7 @@
 pub use ferritin_core as core;
 
 #[cfg(feature = "mesh")]
-pub use ferritin_structure_mesh as mesh;
+pub use ferritin_bevy as mesh;
 
 #[cfg(feature = "plms")]
 pub use ferritin_plms as plms;

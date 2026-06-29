@@ -1,3 +1,4 @@
+use crate::model::Model;
 use crate::trajectory::ArrayTrajectory;
 use crate::AtomCollection;
 use crate::io::cif;
@@ -44,6 +45,29 @@ pub fn load_trajectory<P: AsRef<Path>>(file_path: P) -> Result<ArrayTrajectory> 
             .parse_to_trajectory()
             .context("Failed to parse CIF file to trajectory"),
         "pdb" => Err(anyhow::anyhow!("PDB multi-model trajectory not yet implemented")),
+        _ => Err(anyhow::anyhow!("Unsupported file extension: {}", extension)),
+    }
+}
+
+/// Load the representative (first) model from a structure file as a [`Model`].
+///
+/// For multi-model files, only the first model is returned. Use [`load_trajectory`]
+/// to access all frames.
+///
+/// Currently supported: `.cif`. PDB single-model support pending.
+pub fn load_model<P: AsRef<Path>>(file_path: P) -> Result<Model> {
+    let path = file_path.as_ref();
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .ok_or_else(|| anyhow::anyhow!("File has no extension"))?
+        .to_lowercase();
+
+    match extension.as_str() {
+        "cif" => cif::CIFFile::read(path)?
+            .parse_to_model()
+            .context("Failed to parse CIF file to model"),
+        "pdb" => Err(anyhow::anyhow!("load_model for PDB not yet implemented; use load_trajectory for CIF files")),
         _ => Err(anyhow::anyhow!("Unsupported file extension: {}", extension)),
     }
 }

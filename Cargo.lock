@@ -5310,9 +5310,9 @@ dependencies = [
 name = "ferritin"
 version = "0.3.6-dev"
 dependencies = [
+ "ferritin-bevy",
  "ferritin-core",
  "ferritin-plms",
- "ferritin-structure-mesh",
 ]
 
 [[package]]
@@ -5324,6 +5324,8 @@ dependencies = [
  "bon",
  "ferritin-core",
  "ferritin-test-data",
+ "itertools 0.15.0",
+ "rerun",
 ]
 
 [[package]]
@@ -5341,14 +5343,15 @@ version = "0.3.6-dev"
 dependencies = [
  "anyhow",
  "bevy",
+ "bevy_feathers",
  "candle-core",
  "candle-metal-kernels",
  "candle-nn",
  "clap",
  "ferritin",
+ "ferritin-bevy",
  "ferritin-core",
  "ferritin-plms",
- "ferritin-structure-mesh",
  "ferritin-test-data",
  "hf-hub",
  "rerun",
@@ -5372,19 +5375,6 @@ dependencies = [
  "serde_json",
  "strum 0.28.0",
  "tokenizers 0.23.1",
-]
-
-[[package]]
-name = "ferritin-structure-mesh"
-version = "0.3.6-dev"
-dependencies = [
- "anyhow",
- "bevy",
- "bon",
- "ferritin-core",
- "ferritin-test-data",
- "itertools 0.15.0",
- "rerun",
 ]
 
 [[package]]
@@ -8688,13 +8678,12 @@ dependencies = [
 
 [[package]]
 name = "open"
-version = "5.3.5"
+version = "5.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fbaa89d2ddc8473c78a3adf69eea8cffa28c483b8e02a971ef31527cd0fc92c"
+checksum = "cd8d3b65c44123a56e0133d2cd06ce4361bd3ca99d41198b2f25e3c3db9b8b4a"
 dependencies = [
  "is-wsl",
  "libc",
- "pathdiff",
 ]
 
 [[package]]
