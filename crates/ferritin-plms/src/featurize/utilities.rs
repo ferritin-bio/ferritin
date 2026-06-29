@@ -1,87 +1,10 @@
 use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
 use candle_nn::encoding::one_hot;
-use strum::{Display, EnumIter, EnumString};
 
-#[rustfmt::skip]
-// todo: better utility library
-pub fn aa3to1(aa: &str) -> char {
-    match aa {
-        "ALA" => 'A', "CYS" => 'C', "ASP" => 'D',
-        "GLU" => 'E', "PHE" => 'F', "GLY" => 'G',
-        "HIS" => 'H', "ILE" => 'I', "LYS" => 'K',
-        "LEU" => 'L', "MET" => 'M', "ASN" => 'N',
-        "PRO" => 'P', "GLN" => 'Q', "ARG" => 'R',
-        "SER" => 'S', "THR" => 'T', "VAL" => 'V',
-        "TRP" => 'W', "TYR" => 'Y', _     => 'X',
-    }
-}
-
-#[rustfmt::skip]
-// todo: better utility library
-pub fn aa1to_int(aa: char) -> u32 {
-    match aa {
-        'A' => 0, 'C' => 1, 'D' => 2,
-        'E' => 3, 'F' => 4, 'G' => 5,
-        'H' => 6, 'I' => 7, 'K' => 8,
-        'L' => 9, 'M' => 10, 'N' => 11,
-        'P' => 12, 'Q' => 13, 'R' => 14,
-        'S' => 15, 'T' => 16, 'V' => 17,
-        'W' => 18, 'Y' => 19, _   => 20,
-    }
-}
-
-#[rustfmt::skip]
-pub fn int_to_aa1(aa_int: u32) -> char {
-    match aa_int {
-        0 => 'A', 1 => 'C', 2 => 'D',
-        3 => 'E', 4 => 'F', 5 => 'G',
-        6 => 'H', 7 => 'I', 8 => 'K',
-        9 => 'L', 10 => 'M', 11 => 'N',
-        12 => 'P', 13 => 'Q', 14 => 'R',
-        15 => 'S', 16 => 'T', 17 => 'V',
-        18 => 'W', 19 => 'Y', 20 => 'X',
-        _ => 'X'
-
-    }
-}
-
-#[allow(dead_code)]
-const ALPHABET: [char; 21] = [
-    'A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W',
-    'Y', 'X',
-];
-
-#[allow(dead_code)]
-const ELEMENT_LIST: [&str; 118] = [
-    "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl",
-    "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As",
-    "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In",
-    "Sn", "Sb", "Te", "I", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb",
-    "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg", "Tl",
-    "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk",
-    "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn", "Nh",
-    "Fl", "Mc", "Lv", "Ts", "Og",
-];
-
-#[rustfmt::skip]
-#[derive(Debug, Clone, Copy, PartialEq, Display, EnumString, EnumIter)]
-pub enum AAAtom {
-    N = 0,    CA = 1,   C = 2,    CB = 3,   O = 4,
-    CG = 5,   CG1 = 6,  CG2 = 7,  OG = 8,   OG1 = 9,
-    SG = 10,  CD = 11,  CD1 = 12, CD2 = 13, ND1 = 14,
-    ND2 = 15, OD1 = 16, OD2 = 17, SD = 18,  CE = 19,
-    CE1 = 20, CE2 = 21, CE3 = 22, NE = 23,  NE1 = 24,
-    NE2 = 25, OE1 = 26, OE2 = 27, CH2 = 28, NH1 = 29,
-    NH2 = 30, OH = 31,  CZ = 32,  CZ2 = 33, CZ3 = 34,
-    NZ = 35,  OXT = 36,
-    Unknown = -1,
-}
-impl AAAtom {
-    // Get numeric value (might still be useful in some contexts)
-    pub fn to_index(&self) -> usize {
-        *self as usize
-    }
-}
+// Core biochemistry constants live in ferritin-core; re-export so existing
+// callers (`use crate::featurize::utilities::AAAtom`, etc.) still compile.
+pub use ferritin_core::info::amino_acids::{aa1to_int, aa3to1, int_to_aa1, ALPHABET};
+pub use ferritin_core::info::atom37::AAAtom;
 
 macro_rules! define_residues {
     ($($name:ident: $code3:expr_2021, $code1:expr_2021, $idx:expr_2021, $features:expr_2021, $atoms14:expr_2021),* $(,)?) => {

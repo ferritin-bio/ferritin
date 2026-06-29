@@ -21,6 +21,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
 #[rustfmt::skip]
+#[allow(dead_code)]
 pub(crate) fn default_distance_range(a: &str, b: &str) -> (f32, f32) {
     match (a, b) {
         // https://github.com/biotite-dev/biotite/blob/main/src/biotite/structure/bonds.pyx#L1341C1-L1389C1

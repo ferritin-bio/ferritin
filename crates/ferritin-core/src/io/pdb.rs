@@ -6,7 +6,6 @@
 use crate::info::elements::Element;
 use crate::{AtomCollection, Bond, BondOrder};
 use anyhow::Result;
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -18,6 +17,7 @@ use std::str::FromStr;
 pub enum PDBError {
     InvalidFile(String),
     IOError(std::io::Error),
+    #[allow(dead_code)]
     ValueError(String),
     OSError(String),
 }
@@ -90,21 +90,25 @@ impl PDBFile {
     }
 
     /// Get indices to the start positions of all models in the file.
+    #[allow(dead_code)]
     pub fn get_model_start_indices(&self) -> Vec<usize> {
         self.model_start_i.clone()
     }
 
     /// Get indices to all `ATOM` and `HETATM` records in the file.
+    #[allow(dead_code)]
     pub fn get_atom_line_indices(&self) -> Vec<usize> {
         self.atom_line_i.clone()
     }
 
     /// Get the number of models contained in the file.
+    #[allow(dead_code)]
     pub fn get_model_count(&self) -> usize {
         self.model_start_i.len()
     }
 
     /// Parse the given `REMARK` record of the PDB file to obtain its content as strings
+    #[allow(dead_code)]
     pub fn parse_remark(&self, number: i64) -> Result<Option<Vec<String>>, PDBError> {
         const CONTENT_START_COLUMN: usize = 11;
 
@@ -132,6 +136,7 @@ impl PDBFile {
 
     /// Parse the `CRYST1` record of the PDB file to obtain the unit cell lengths
     /// and angles (in degrees).
+    #[allow(dead_code)]
     pub fn parse_box(&self) -> Result<Option<(f32, f32, f32, f32, f32, f32)>, PDBError> {
         for line in self.lines.iter() {
             if line.starts_with("CRYST1") {
@@ -272,6 +277,7 @@ impl PDBFile {
     }
 
     /// Write the `CRYST1` record to this [`PDBFile`] based on the given unit cell parameters.
+    #[allow(dead_code)]
     pub fn write_box(
         &mut self,
         len_a: f32,
@@ -288,6 +294,7 @@ impl PDBFile {
     }
 
     /// Write data from an AtomCollection to this PDBFile
+    #[allow(dead_code)]
     pub fn write_atom_collection(
         &mut self,
         atom_collection: &AtomCollection,
@@ -424,87 +431,11 @@ impl PDBFile {
         }
     }
 
-    /// Get indices to `ATOM` and `HETATM` records within the given model number.
-    fn get_atom_indices(&self, model: isize) -> Result<Vec<usize>, PDBError> {
-        // Find the model index corresponding to the given model number
-        let model_i: isize;
-        match model.cmp(&0) {
-            Ordering::Greater => model_i = model - 1,
-            Ordering::Less => model_i = self.model_start_i.len() as isize + model,
-            Ordering::Equal => {
-                return Err(PDBError::ValueError(
-                    "Model index must not be 0".to_string(),
-                ));
-            }
-        };
-        if model_i >= self.model_start_i.len() as isize || model_i < 0 {
-            return Err(PDBError::ValueError(format!(
-                "The file has {} models, the given model {} does not exist",
-                self.model_start_i.len(),
-                model
-            )));
-        }
-
-        // Get the start and stop line index for this model index
-        let (model_start, model_stop) = match model_i.cmp(&(self.model_start_i.len() as isize - 1))
-        {
-            Ordering::Less => (
-                self.model_start_i[model_i as usize],
-                self.model_start_i[(model_i + 1) as usize],
-            ),
-            // Last model -> Model reaches to end of file
-            Ordering::Equal => (self.model_start_i[model_i as usize], self.lines.len()),
-            // This case was excluded above
-            _ => panic!("This branch should not be reached"),
-        };
-
-        // Get the atom records within these line boundaries
-        Ok(self
-            .atom_line_i
-            .iter()
-            .copied()
-            .filter(|i| *i >= model_start && *i < model_stop)
-            .collect())
-    }
-
-    /// Get the number of atoms in each model of the PDB file.
-    /// An error is returned if the number of atoms per model differ from each other.
-    fn get_model_length(&self) -> Result<usize, PDBError> {
-        let n_models = self.model_start_i.len();
-        let mut length: Option<usize> = None;
-        for model_i in 0..n_models {
-            let model_start: usize = self.model_start_i[model_i];
-            let model_stop: usize = if model_i + 1 < n_models {
-                self.model_start_i[model_i + 1]
-            } else {
-                self.lines.len()
-            };
-            let model_length = self
-                .atom_line_i
-                .iter()
-                .filter(|&line_i| *line_i >= model_start && *line_i < model_stop)
-                .count();
-            match length {
-                None => length = Some(model_length),
-                Some(l) => {
-                    if model_length != l {
-                        return Err(PDBError::InvalidFile(
-                            "Inconsistent number of models".to_string(),
-                        ));
-                    }
-                }
-            };
-        }
-
-        match length {
-            None => panic!("Length cannot be 'None'"),
-            Some(l) => Ok(l),
-        }
-    }
 }
 
 /// Center atom name for proper PDB formatting
 /// If the element is a single character, the atom name needs to be centered differently
+#[allow(dead_code)]
 fn center_atom_name(atom_name: &str, element: &Element) -> String {
     if element.to_string().len() == 1 && atom_name.len() < 4 {
         format!(" {:<3}", atom_name)
@@ -539,17 +470,6 @@ fn parse_float_from_string(line: &str, start: usize, stop: usize) -> Result<f32,
     })
 }
 
-/// If a given `id` exceeds `max_id` the returned ID restarts counting at 1.
-/// Otherwise, `id` is returned.
-/// This function is necessary, because there is a maximum number for atom and residue IDs in
-/// PDB files.
-#[inline(always)]
-fn truncate_id(id: i32, max_id: i32) -> i32 {
-    if id < 0 {
-        return id;
-    }
-    ((id - 1) % max_id) + 1
-}
 
 #[cfg(test)]
 mod tests {
