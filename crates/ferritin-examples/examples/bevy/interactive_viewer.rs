@@ -3,11 +3,17 @@
 //! Uses bevy_feathers for dark-theme panel styling and standard Bevy UI buttons
 //! for switching representation type and color scheme at runtime.
 //!
+//! Controls:
+//!   Left-drag   — orbit (rotate around molecule)
+//!   Right-drag  — pan
+//!   Scroll      — zoom
+//!
 //! Run with:
 //!   cargo run --example bevy_interactive_viewer --features bevy -p ferritin-examples
 
 use anyhow::Result;
 use bevy::ecs::hierarchy::ChildSpawnerCommands;
+use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
 use bevy_feathers::{
     dark_theme::create_dark_theme,
@@ -42,6 +48,29 @@ enum ButtonAction {
     SetColor(ColorScheme),
 }
 
+/// Orbit camera state. The camera always looks at `focus` from a distance of
+/// `radius`, oriented by `yaw` (around Y) and `pitch` (elevation).
+#[derive(Component)]
+struct OrbitCamera {
+    focus: Vec3,
+    radius: f32,
+    yaw: f32,
+    pitch: f32,
+}
+
+impl Default for OrbitCamera {
+    fn default() -> Self {
+        // Initial camera position equivalent to (0, 50, 100) looking at ZERO.
+        let radius = 50.0_f32.hypot(100.0);
+        Self {
+            focus: Vec3::ZERO,
+            radius,
+            yaw: 0.0,
+            pitch: (50.0 / radius).asin(),
+        }
+    }
+}
+
 // ---- Colour constants for manual button styling --------------------------------
 
 const BTN_NORMAL: Color = Color::srgb(0.18, 0.18, 0.20);
@@ -72,6 +101,7 @@ fn main() -> Result<()> {
             (
                 rebuild_protein.run_if(resource_changed::<ViewerState>),
                 handle_button_interactions,
+                orbit_camera,
             ),
         )
         .run();
@@ -82,10 +112,16 @@ fn main() -> Result<()> {
 // ---- 3-D scene -----------------------------------------------------------------
 
 fn setup_scene(mut commands: Commands) {
+    // Compute initial camera transform from OrbitCamera defaults.
+    let orbit = OrbitCamera::default();
+    let cam_pos = orbit_position(&orbit);
+
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 50.0, 100.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_translation(cam_pos).looking_at(orbit.focus, Vec3::Y),
+        orbit,
     ));
+
     commands.spawn((
         DirectionalLight {
             color: Color::srgb(1.0, 0.9, 0.9),
@@ -132,9 +168,13 @@ fn rebuild_protein(
         .color_scheme(state.color_scheme.clone())
         .build();
 
+    // Center the molecule on the origin so the orbit camera always looks at it.
+    let centroid = structure.centroid();
+
     commands.spawn((
         Mesh3d(meshes.add(structure.to_mesh())),
         MeshMaterial3d(materials.add(structure.get_material())),
+        Transform::from_translation(-centroid),
         ProteinMesh,
     ));
 }
@@ -160,6 +200,53 @@ fn handle_button_interactions(
             Interaction::None => *bg = BackgroundColor(BTN_NORMAL),
         }
     }
+}
+
+/// Pan / orbit / zoom the camera via mouse input.
+///
+/// Left-drag  → orbit   Right-drag → pan   Scroll → zoom
+fn orbit_camera(
+    mut query: Query<(&mut Transform, &mut OrbitCamera)>,
+    mouse_input: Res<ButtonInput<MouseButton>>,
+    motion: Res<AccumulatedMouseMotion>,
+    scroll: Res<AccumulatedMouseScroll>,
+) {
+    let delta = motion.delta;
+
+    let scroll_delta = match scroll.unit {
+        MouseScrollUnit::Line => scroll.delta.y * 5.0,
+        MouseScrollUnit::Pixel => scroll.delta.y * 0.1,
+    };
+
+    for (mut transform, mut orbit) in &mut query {
+        if mouse_input.pressed(MouseButton::Left) && delta != Vec2::ZERO {
+            orbit.yaw -= delta.x * 0.005;
+            orbit.pitch = (orbit.pitch - delta.y * 0.005).clamp(-1.5, 1.5);
+        }
+
+        if mouse_input.pressed(MouseButton::Right) && delta != Vec2::ZERO {
+            let right = transform.right();
+            let up = transform.up();
+            let pan_scale = orbit.radius * 0.001;
+            orbit.focus += (right * -delta.x + up * delta.y) * pan_scale;
+        }
+
+        if scroll_delta != 0.0 {
+            orbit.radius = (orbit.radius - scroll_delta).max(1.0);
+        }
+
+        let pos = orbit_position(&orbit);
+        transform.translation = pos;
+        transform.look_at(orbit.focus, Vec3::Y);
+    }
+}
+
+/// Compute world-space camera position from orbit parameters.
+fn orbit_position(orbit: &OrbitCamera) -> Vec3 {
+    let x = orbit.radius * orbit.yaw.sin() * orbit.pitch.cos();
+    let y = orbit.radius * orbit.pitch.sin();
+    let z = orbit.radius * orbit.yaw.cos() * orbit.pitch.cos();
+    orbit.focus + Vec3::new(x, y, z)
 }
 
 // ---- UI panel ------------------------------------------------------------------
