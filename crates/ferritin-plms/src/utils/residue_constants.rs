@@ -8,7 +8,7 @@
 
 // Re-export core constants from ferritin-core so existing callers don't break.
 pub use ferritin_core::info::atom37::{
-    atom37_index, atom_order, vdw_radius, AAAtom, ATOM37_NAMES, NUM_ATOM37, NUM_RESIDUES,
+    atom37_index, atom_order, AAAtom, ATOM37_NAMES, NUM_ATOM37, NUM_RESIDUES,
 };
 
 // ── Chi angle definitions ──────────────────────────────────────────────────
@@ -202,16 +202,4 @@ mod tests {
         assert!(mapping.iter().all(|m| m.is_none()));
     }
 
-    #[test]
-    fn test_vdw_radius_known_elements() {
-        assert!((vdw_radius("C") - 1.70).abs() < 1e-6);
-        assert!((vdw_radius("N") - 1.55).abs() < 1e-6);
-        assert!((vdw_radius("O") - 1.52).abs() < 1e-6);
-        assert!((vdw_radius("S") - 1.80).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_vdw_radius_unknown_defaults_to_carbon() {
-        assert!((vdw_radius("X") - 1.70).abs() < 1e-6);
-    }
 }

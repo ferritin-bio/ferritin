@@ -7,6 +7,7 @@
 
 use std::ops::Range;
 use crate::data::Segmentation;
+use crate::info::elements::Element;
 use super::tables::{AtomsTable, ResiduesTable, ChainsTable};
 use super::bonds::Bonds;
 
@@ -115,7 +116,7 @@ mod tests {
 
         let atoms = AtomsTable {
             atom_name: (0..n_atoms).map(|i| match i % 3 { 0 => "N", 1 => "CA", _ => "C" }.to_string()).collect(),
-            element: (0..n_atoms).map(|i| match i % 3 { 0 => "N", _ => "C" }.to_string()).collect(),
+            element: (0..n_atoms).map(|i| if i % 3 == 0 { Element::N } else { Element::C }).collect(),
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };

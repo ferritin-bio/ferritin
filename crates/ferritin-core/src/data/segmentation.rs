@@ -22,6 +22,14 @@ impl Segmentation {
     /// Panics if `offsets` is empty (needs at least the sentinel `[0]`).
     pub fn from_offsets(offsets: Vec<u32>) -> Self {
         assert!(!offsets.is_empty(), "offsets must have at least one element");
+        for window in offsets.windows(2) {
+            assert!(
+                window[0] <= window[1],
+                "offsets must be monotonically non-decreasing; found {} > {}",
+                window[0],
+                window[1]
+            );
+        }
         Self { offsets }
     }
 
@@ -175,5 +183,11 @@ mod tests {
         let seg = Segmentation::from_offsets(vec![0, 3, 5, 6]);
         let ranges: Vec<Range<usize>> = seg.iter().collect();
         assert_eq!(ranges, vec![0..3, 3..5, 5..6]);
+    }
+
+    #[test]
+    #[should_panic(expected = "monotonically non-decreasing")]
+    fn test_segmentation_from_offsets_non_monotonic_panics() {
+        Segmentation::from_offsets(vec![0, 10, 5, 15]);
     }
 }

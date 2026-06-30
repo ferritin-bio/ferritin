@@ -514,7 +514,7 @@ impl CIFFile {
 
         // Build atom data
         let mut atom_names_vec: Vec<String> = Vec::with_capacity(n_atoms);
-        let mut elements_vec: Vec<String> = Vec::with_capacity(n_atoms);
+        let mut elements_vec: Vec<Element> = Vec::with_capacity(n_atoms);
         let mut alt_loc_vec: Vec<Option<char>> = Vec::with_capacity(n_atoms);
         let mut formal_charge_vec: Vec<Option<i8>> = Vec::with_capacity(n_atoms);
         let mut x_vec: Vec<f32> = Vec::with_capacity(n_atoms);
@@ -559,7 +559,12 @@ impl CIFFile {
             atom_names_vec.push(row[atom_name_col].clone());
 
             // Element
-            elements_vec.push(row[element_col].clone());
+            let element_str = &row[element_col];
+            let element = Element::from_symbol(element_str).unwrap_or_else(|| {
+                let first_char = element_str.chars().next().unwrap_or('C');
+                Element::from_symbol(&first_char.to_string()).unwrap_or(Element::H)
+            });
+            elements_vec.push(element);
 
             // Alt loc (from label_alt_id if available)
             let alt_loc_col = atom_category.get_column_index("label_alt_id");
@@ -849,7 +854,7 @@ impl CIFFile {
 
         // Build hierarchy from first model
         let mut atom_names_vec: Vec<String> = Vec::with_capacity(n_atoms);
-        let mut elements_vec: Vec<String> = Vec::with_capacity(n_atoms);
+        let mut elements_vec: Vec<Element> = Vec::with_capacity(n_atoms);
         let mut alt_loc_vec: Vec<Option<char>> = Vec::with_capacity(n_atoms);
         let mut formal_charge_vec: Vec<Option<i8>> = Vec::with_capacity(n_atoms);
 
@@ -870,7 +875,12 @@ impl CIFFile {
 
         for row in first_model_rows {
             atom_names_vec.push(row[atom_name_col].clone());
-            elements_vec.push(row[element_col].clone());
+            let element_str = &row[element_col];
+            let element = Element::from_symbol(element_str).unwrap_or_else(|| {
+                let first_char = element_str.chars().next().unwrap_or('C');
+                Element::from_symbol(&first_char.to_string()).unwrap_or(Element::H)
+            });
+            elements_vec.push(element);
 
             let alt_loc_col = atom_category.get_column_index("label_alt_id");
             let alt_loc = if let Some(col) = alt_loc_col {

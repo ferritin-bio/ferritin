@@ -10,9 +10,9 @@
 //! - [`atom_order`] — `HashMap` version of the same mapping
 //! - [`atom37_index`] — slot lookup by atom name
 //! - [`AAAtom`] — typed enum mirroring the slot indices
-//! - [`vdw_radius`] — van der Waals radii for common protein elements
 
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use strum::{Display, EnumIter, EnumString};
 
 // ── Dimension constants ───────────────────────────────────────────────────────
@@ -37,13 +37,13 @@ pub const ATOM37_NAMES: [&str; NUM_ATOM37] = [
     "NZ",  "OXT",
 ];
 
+static ATOM_ORDER: OnceLock<HashMap<&'static str, usize>> = OnceLock::new();
+
 /// Map from atom name (e.g. `"CA"`) to its atom37 slot index.
-pub fn atom_order() -> HashMap<String, usize> {
-    ATOM37_NAMES
-        .iter()
-        .enumerate()
-        .map(|(i, &name)| (name.to_string(), i))
-        .collect()
+pub fn atom_order() -> &'static HashMap<&'static str, usize> {
+    ATOM_ORDER.get_or_init(|| {
+        ATOM37_NAMES.iter().enumerate().map(|(i, &n)| (n, i)).collect()
+    })
 }
 
 /// Returns the atom37 slot index for a named atom, or `None` if unknown.
@@ -75,28 +75,6 @@ pub enum AAAtom {
 impl AAAtom {
     pub fn to_index(&self) -> usize {
         *self as usize
-    }
-}
-
-// ── Van der Waals radii ───────────────────────────────────────────────────────
-
-/// Van der Waals radius (Å) for elements commonly found in proteins.
-///
-/// Source: Bondi (1964) / standard crystallographic values.
-pub fn vdw_radius(element: &str) -> f32 {
-    match element {
-        "H"         => 1.20,
-        "C"         => 1.70,
-        "N"         => 1.55,
-        "O"         => 1.52,
-        "S"         => 1.80,
-        "P"         => 1.80,
-        "F"         => 1.47,
-        "CL" | "Cl" => 1.75,
-        "BR" | "Br" => 1.85,
-        "I"         => 1.98,
-        "SE" | "Se" => 1.90,
-        _           => 1.70,
     }
 }
 
@@ -133,16 +111,4 @@ mod tests {
         assert_eq!(AAAtom::Unknown as i32, -1);
     }
 
-    #[test]
-    fn test_vdw_radius_known_elements() {
-        assert!((vdw_radius("C") - 1.70).abs() < 1e-6);
-        assert!((vdw_radius("N") - 1.55).abs() < 1e-6);
-        assert!((vdw_radius("O") - 1.52).abs() < 1e-6);
-        assert!((vdw_radius("S") - 1.80).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_vdw_radius_unknown_defaults_to_carbon() {
-        assert!((vdw_radius("X") - 1.70).abs() < 1e-6);
-    }
 }

@@ -45,6 +45,8 @@ pub enum BondOrder {
     Double = 2,
     Triple = 3,
     Quadruple = 4,
+    AromaticSingle = 5,
+    AromaticDouble = 6,
 }
 
 impl From<i32> for BondOrder {
@@ -54,7 +56,10 @@ impl From<i32> for BondOrder {
             1 => BondOrder::Single,
             2 => BondOrder::Double,
             3 => BondOrder::Triple,
-            _ => BondOrder::Quadruple,
+            4 => BondOrder::Quadruple,
+            5 => BondOrder::AromaticSingle,
+            6 => BondOrder::AromaticDouble,
+            _ => BondOrder::Unset,
         }
     }
 }
