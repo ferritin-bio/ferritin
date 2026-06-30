@@ -5,12 +5,13 @@
 //!
 
 use super::ColorScheme;
+use crate::selection::AtomMask;
+use bevy::asset::RenderAssetUsages;
 use bevy::math::Vec4;
 use bevy::prelude::{
     Color, Component, Cylinder, Mesh, MeshBuilder, Meshable, Quat, Sphere, StandardMaterial,
     Transform, Vec3, default,
 };
-use bevy::asset::RenderAssetUsages;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bon::Builder;
 use ferritin_core::Model;
@@ -69,6 +70,29 @@ impl Structure {
         }
     }
 
+    /// Returns `(Mesh, atom_map)` where `atom_map[vertex_idx]` is the source atom index.
+    /// Applicable to Solid, BallAndStick, and Wireframe render types.
+    /// `mask` filters which atoms contribute to the mesh; `None` includes all atoms.
+    pub fn to_mesh_with_atom_map(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
+        match &self.rendertype {
+            RenderOptions::Solid => self.render_spheres_mapped(mask),
+            RenderOptions::BallAndStick => self.render_ballandstick_mapped(mask),
+            RenderOptions::Wireframe => self.render_wireframe_mapped(mask),
+            _ => (self.to_mesh(), Vec::new()),
+        }
+    }
+
+    /// Returns `(Mesh, residue_map)` where `residue_map[vertex_idx]` is the 0-based residue
+    /// iteration index that produced that vertex. Applicable to Cartoon and Putty.
+    /// `mask` filters which residues contribute; `None` includes all residues.
+    pub fn to_mesh_with_residue_map(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
+        match &self.rendertype {
+            RenderOptions::Cartoon => self.render_cartoon_mapped(mask),
+            RenderOptions::Putty => self.render_putty_mapped(mask),
+            _ => (self.to_mesh(), Vec::new()),
+        }
+    }
+
     /// Returns the material for this structure.
     ///
     /// Bevy 0.19 auto-enables vertex colors when the mesh contains ATTRIBUTE_COLOR,
@@ -85,7 +109,11 @@ impl Structure {
             sum += Vec3::from_array(atom.coords());
             count += 1;
         }
-        if count == 0 { Vec3::ZERO } else { sum / count as f32 }
+        if count == 0 {
+            Vec3::ZERO
+        } else {
+            sum / count as f32
+        }
     }
 
     fn create_smooth_curve(points: &[Vec3], segments: usize) -> Vec<Vec3> {
@@ -238,9 +266,7 @@ impl Structure {
 
             if (-90.0..=-30.0).contains(&phi_d) && (-80.0..=0.0).contains(&psi_d) {
                 sec[i] = SecondaryStructure::Helix;
-            } else if (-170.0..=-50.0).contains(&phi_d)
-                && (psi_d >= 60.0 || psi_d <= -150.0)
-            {
+            } else if (-170.0..=-50.0).contains(&phi_d) && (psi_d >= 60.0 || psi_d <= -150.0) {
                 sec[i] = SecondaryStructure::Sheet;
             }
         }
@@ -297,7 +323,7 @@ impl Structure {
             let color = match sec_type {
                 SecondaryStructure::Helix => Vec4::new(1.0, 0.6, 0.6, 1.0),
                 SecondaryStructure::Sheet => Vec4::new(0.6, 0.6, 1.0, 1.0),
-                SecondaryStructure::Loop  => Vec4::new(0.6, 0.9, 0.6, 1.0),
+                SecondaryStructure::Loop => Vec4::new(0.6, 0.9, 0.6, 1.0),
             };
 
             // Determine tube profile based on secondary structure
@@ -366,7 +392,10 @@ impl Structure {
             .residues_aminoacid()
             .filter_map(|residue| {
                 residue.find_atom_by_name("CA").map(|ca| {
-                    (residue.chain_id().to_string(), Vec3::from_array(ca.coords()))
+                    (
+                        residue.chain_id().to_string(),
+                        Vec3::from_array(ca.coords()),
+                    )
                 })
             })
             .collect();
@@ -515,12 +544,326 @@ impl Structure {
         let curve = Structure::create_smooth_curve(&c_alphas, 3);
         Structure::generate_tube_mesh(&curve, 0.3, 16)
     }
+
+    // -----------------------------------------------------------------------
+    // Masked / mapped variants
+    // -----------------------------------------------------------------------
+
+    fn render_spheres_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
+        let mut atom_map: Vec<usize> = Vec::new();
+        let mut combined: Option<Mesh> = None;
+
+        for atom in self.pdb.atoms() {
+            let idx = atom.index();
+            if let Some(m) = mask {
+                if !m.0[idx] {
+                    continue;
+                }
+            }
+
+            let coord = atom.coords();
+            let center = Vec3::new(coord[0], coord[1], coord[2]);
+            let element = atom.element();
+            let radius = element.atomic_radius().van_der_waals.expect("vdw radius") as f32;
+            let mut sphere_mesh = Sphere::new(radius).mesh().build();
+            let vc = sphere_mesh.count_vertices();
+            let color = self.color_scheme.get_color(&element).to_srgba();
+            sphere_mesh.insert_attribute(
+                Mesh::ATTRIBUTE_COLOR,
+                vec![Vec4::new(color.red, color.green, color.blue, color.alpha); vc],
+            );
+            sphere_mesh = sphere_mesh.translated_by(center);
+            sphere_mesh.compute_smooth_normals();
+            atom_map.extend(std::iter::repeat(idx).take(vc));
+            match &mut combined {
+                None => combined = Some(sphere_mesh),
+                Some(acc) => {
+                    let _ = acc.merge(&sphere_mesh);
+                }
+            }
+        }
+
+        let mesh = combined.unwrap_or_else(|| {
+            Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all())
+        });
+        (mesh, atom_map)
+    }
+
+    fn render_wireframe_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
+        let mut positions: Vec<[f32; 3]> = Vec::new();
+        let mut atom_map: Vec<usize> = Vec::new();
+
+        // Collect all CA atoms (retain ALL so window() neighbours stay correct).
+        let ca_data: Vec<(String, usize, Vec3)> = self
+            .pdb
+            .residues_aminoacid()
+            .filter_map(|residue| {
+                residue.find_atom_by_name("CA").map(|ca| {
+                    let idx = ca.index();
+                    (
+                        residue.chain_id().to_string(),
+                        idx,
+                        Vec3::from_array(ca.coords()),
+                    )
+                })
+            })
+            .collect();
+
+        // Emit an edge only when same chain AND both CA atoms pass the mask.
+        for window in ca_data.windows(2) {
+            let (chain_a, idx_a, pos_a) = &window[0];
+            let (chain_b, idx_b, pos_b) = &window[1];
+            let a_ok = mask.map_or(true, |m| m.0[*idx_a]);
+            let b_ok = mask.map_or(true, |m| m.0[*idx_b]);
+            if chain_a == chain_b && a_ok && b_ok {
+                positions.push([pos_a.x, pos_a.y, pos_a.z]);
+                positions.push([pos_b.x, pos_b.y, pos_b.z]);
+                atom_map.push(*idx_a);
+                atom_map.push(*idx_b);
+            }
+        }
+
+        let mut mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::all());
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        (mesh, atom_map)
+    }
+
+    fn render_ballandstick_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
+        let radius = 0.5;
+        let mut atom_map: Vec<usize> = Vec::new();
+        let mut combined: Option<Mesh> = None;
+
+        // Atom spheres (filtered by mask).
+        for atom in self.pdb.atoms() {
+            let idx = atom.index();
+            if let Some(m) = mask {
+                if !m.0[idx] {
+                    continue;
+                }
+            }
+
+            let coord = atom.coords();
+            let center = Vec3::new(coord[0], coord[1], coord[2]);
+            let element = atom.element();
+            let mut sphere_mesh = Sphere::new(radius).mesh().build();
+            let vc = sphere_mesh.count_vertices();
+            let color = self.color_scheme.get_color(&element).to_srgba();
+            sphere_mesh.insert_attribute(
+                Mesh::ATTRIBUTE_COLOR,
+                vec![Vec4::new(color.red, color.green, color.blue, color.alpha); vc],
+            );
+            sphere_mesh = sphere_mesh.translated_by(center);
+            sphere_mesh.compute_smooth_normals();
+            atom_map.extend(std::iter::repeat(idx).take(vc));
+            match &mut combined {
+                None => combined = Some(sphere_mesh),
+                Some(acc) => {
+                    let _ = acc.merge(&sphere_mesh);
+                }
+            }
+        }
+
+        // Bond cylinders: skip if either endpoint is masked out.
+        let bonds = &self.pdb.hierarchy.bonds;
+        if !bonds.atom_a.is_empty() {
+            for i in 0..bonds.atom_a.len() {
+                let idx_a = bonds.atom_a[i] as usize;
+                let idx_b = bonds.atom_b[i] as usize;
+                if let Some(m) = mask {
+                    if !m.0[idx_a] || !m.0[idx_b] {
+                        continue;
+                    }
+                }
+                let pos1 = Vec3::from_array(self.pdb.coord(idx_a));
+                let pos2 = Vec3::from_array(self.pdb.coord(idx_b));
+                let center = (pos1 + pos2) / 2.0;
+                let direction = pos2 - pos1;
+                let height = direction.length();
+                if height < 1e-6 {
+                    continue;
+                }
+                let rotation = Quat::from_rotation_arc(Vec3::Y, direction.normalize());
+                let mut cyl = Cylinder {
+                    radius: 0.5,
+                    half_height: height / 2.0,
+                }
+                .mesh()
+                .build();
+                cyl = cyl.transformed_by(Transform {
+                    translation: center,
+                    rotation,
+                    ..default()
+                });
+                let cyl_vc = cyl.count_vertices();
+                cyl.insert_attribute(
+                    Mesh::ATTRIBUTE_COLOR,
+                    vec![Vec4::new(0.5, 0.5, 0.5, 0.5); cyl_vc],
+                );
+                // Bond vertices are mapped to the first atom of the bond.
+                atom_map.extend(std::iter::repeat(idx_a).take(cyl_vc));
+                match &mut combined {
+                    None => combined = Some(cyl),
+                    Some(acc) => {
+                        let _ = acc.merge(&cyl);
+                    }
+                }
+            }
+        }
+
+        let mesh = combined.unwrap_or_else(|| {
+            Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all())
+        });
+        (mesh, atom_map)
+    }
+
+    fn render_cartoon_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
+        let segments_per_residue: usize = 4;
+        let cross_segments: usize = 16;
+
+        // Collect (residue_iter_idx, BackboneAtoms) for residues whose CA passes the mask.
+        let indexed_backbone: Vec<(usize, BackboneAtoms)> = self
+            .pdb
+            .residues_aminoacid()
+            .enumerate()
+            .filter_map(|(res_iter_idx, residue)| {
+                let ca = residue.find_atom_by_name("CA")?;
+                if let Some(m) = mask {
+                    if !m.0[ca.index()] {
+                        return None;
+                    }
+                }
+                let n = residue.find_atom_by_name("N")?;
+                let c = residue.find_atom_by_name("C")?;
+                let o = residue.find_atom_by_name("O")?;
+                Some((
+                    res_iter_idx,
+                    BackboneAtoms {
+                        ca: Vec3::from_array(ca.coords()),
+                        n: Vec3::from_array(n.coords()),
+                        c: Vec3::from_array(c.coords()),
+                        o: Vec3::from_array(o.coords()),
+                        residue_index: res_iter_idx,
+                    },
+                ))
+            })
+            .collect();
+
+        if indexed_backbone.is_empty() {
+            return (
+                Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all()),
+                Vec::new(),
+            );
+        }
+
+        // Split into contiguous segments (gaps in res_iter_idx = ribbon break).
+        let mut segments: Vec<Vec<(usize, BackboneAtoms)>> = Vec::new();
+        let mut current: Vec<(usize, BackboneAtoms)> = Vec::new();
+        for item in indexed_backbone {
+            if let Some(last) = current.last() {
+                if item.0 != last.0 + 1 {
+                    if !current.is_empty() {
+                        segments.push(std::mem::take(&mut current));
+                    }
+                }
+            }
+            current.push(item);
+        }
+        if !current.is_empty() {
+            segments.push(current);
+        }
+
+        let mut residue_map: Vec<usize> = Vec::new();
+        let mut combined: Option<Mesh> = None;
+
+        for segment in segments {
+            if segment.len() < 2 {
+                continue;
+            }
+            let (res_indices, backbone_atoms): (Vec<usize>, Vec<BackboneAtoms>) =
+                segment.into_iter().unzip();
+            let secondary_structures = Structure::detect_secondary_structure(&backbone_atoms);
+            let ca_positions: Vec<Vec3> = backbone_atoms.iter().map(|a| a.ca).collect();
+            let curve = Structure::create_smooth_curve(&ca_positions, segments_per_residue);
+            let curve_sec: Vec<SecondaryStructure> = (0..curve.len())
+                .map(|i| {
+                    secondary_structures
+                        .get(i / segments_per_residue)
+                        .copied()
+                        .unwrap_or(SecondaryStructure::Loop)
+                })
+                .collect();
+            let seg_mesh = Structure::generate_cartoon_mesh(&curve, &curve_sec);
+            let seg_verts = seg_mesh.count_vertices();
+            // Map each vertex back to its residue iteration index.
+            for v in 0..seg_verts {
+                let curve_pt = v / cross_segments;
+                let res_in_seg = (curve_pt / segments_per_residue).min(res_indices.len() - 1);
+                residue_map.push(res_indices[res_in_seg]);
+            }
+            match &mut combined {
+                None => combined = Some(seg_mesh),
+                Some(acc) => {
+                    let _ = acc.merge(&seg_mesh);
+                }
+            }
+        }
+
+        let mesh = combined.unwrap_or_else(|| {
+            Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all())
+        });
+        (mesh, residue_map)
+    }
+
+    fn render_putty_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
+        const CROSS_SEGMENTS: usize = 16;
+        const CURVE_SEGMENTS: usize = 3;
+
+        // Collect (res_iter_idx, CA position) for unmasked residues.
+        let ca_data: Vec<(usize, Vec3)> = self
+            .pdb
+            .residues_aminoacid()
+            .enumerate()
+            .filter_map(|(res_iter_idx, residue)| {
+                let ca = residue.find_atom_by_name("CA")?;
+                if let Some(m) = mask {
+                    if !m.0[ca.index()] {
+                        return None;
+                    }
+                }
+                Some((res_iter_idx, Vec3::from_array(ca.coords())))
+            })
+            .collect();
+
+        if ca_data.len() < 2 {
+            return (
+                Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all()),
+                Vec::new(),
+            );
+        }
+
+        let (res_indices, ca_positions): (Vec<usize>, Vec<Vec3>) = ca_data.into_iter().unzip();
+        let curve = Structure::create_smooth_curve(&ca_positions, CURVE_SEGMENTS);
+        let mesh = Structure::generate_tube_mesh(&curve, 0.3, CROSS_SEGMENTS);
+        let vert_count = mesh.count_vertices();
+
+        let residue_map: Vec<usize> = (0..vert_count)
+            .map(|v| {
+                let curve_pt = v / CROSS_SEGMENTS;
+                let res_in_list = (curve_pt / CURVE_SEGMENTS).min(res_indices.len() - 1);
+                res_indices[res_in_list]
+            })
+            .collect();
+
+        (mesh, residue_map)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::selection::{AtomMask, evaluate_selector};
     use ferritin_core::load_model;
+    use ferritin_molviewspec::molviewspec::nodes::{ComponentSelector, ComponentSelectorT};
     use ferritin_test_data::TestFile;
 
     #[test]
@@ -560,24 +903,312 @@ mod tests {
 
         let mesh = structure.to_mesh();
 
-        // (1) There must be vertices
         let vertex_count = mesh.count_vertices();
         assert!(vertex_count > 0, "wireframe mesh has no vertices");
+        assert_eq!(vertex_count % 2, 0, "LineList vertex count must be even");
+        assert_eq!(mesh.primitive_topology(), PrimitiveTopology::LineList);
 
-        // (2) LineList topology requires pairs — vertex count must be even
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // T2-25 to T2-27: Solid masked rendering
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_solid_none_mask_regression() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Solid)
+            .build();
+        let (mesh_none, map_none) = structure.to_mesh_with_atom_map(None);
+        assert!(
+            mesh_none.count_vertices() > 0,
+            "None mask must produce vertices"
+        );
         assert_eq!(
-            vertex_count % 2,
+            mesh_none.count_vertices(),
+            map_none.len(),
+            "atom_map len must equal vertex count"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_solid_protein_mask_fewer_verts() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let ac = ferritin_core::AtomCollection::from(&model);
+        let prot_mask = evaluate_selector(
+            &ComponentSelector::Selector(ComponentSelectorT::Protein),
+            &ac,
+        );
+
+        // Build a Model from the original (not filtered) for rendering.
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Solid)
+            .build();
+        let (mesh_all, _) = structure.to_mesh_with_atom_map(None);
+        let (mesh_prot, map_prot) = structure.to_mesh_with_atom_map(Some(&prot_mask));
+
+        assert!(
+            mesh_prot.count_vertices() > 0,
+            "protein mask must still produce vertices"
+        );
+        assert!(
+            mesh_prot.count_vertices() <= mesh_all.count_vertices(),
+            "masked mesh must have <= vertices than full mesh"
+        );
+        assert_eq!(
+            mesh_prot.count_vertices(),
+            map_prot.len(),
+            "atom_map len must equal vertex count for protein mask"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_solid_all_false_mask_empty() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let n = model.n_atoms();
+        let empty_mask = AtomMask(vec![false; n]);
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Solid)
+            .build();
+        let (mesh, map) = structure.to_mesh_with_atom_map(Some(&empty_mask));
+        assert_eq!(
+            mesh.count_vertices(),
             0,
-            "wireframe vertex count {vertex_count} is not even (LineList requires pairs)"
+            "all-false mask must produce 0 vertices"
         );
+        assert_eq!(map.len(), 0);
+        Ok(())
+    }
 
-        // (3) Topology must be LineList
+    // -----------------------------------------------------------------------
+    // T2-28 to T2-30: Wireframe masked rendering
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_wireframe_none_mask_atom_map_consistency() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Wireframe)
+            .build();
+        let (mesh, map) = structure.to_mesh_with_atom_map(None);
         assert_eq!(
-            mesh.primitive_topology(),
-            PrimitiveTopology::LineList,
-            "expected LineList topology"
+            mesh.count_vertices(),
+            map.len(),
+            "wireframe: atom_map len must equal vertex count"
         );
+        assert_eq!(
+            mesh.count_vertices() % 2,
+            0,
+            "wireframe: vertex count must be even"
+        );
+        Ok(())
+    }
 
+    #[test]
+    fn test_wireframe_protein_mask_fewer_edges() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let ac = ferritin_core::AtomCollection::from(&model);
+        let prot_mask = evaluate_selector(
+            &ComponentSelector::Selector(ComponentSelectorT::Protein),
+            &ac,
+        );
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Wireframe)
+            .build();
+        let (mesh_all, _) = structure.to_mesh_with_atom_map(None);
+        let (mesh_prot, map_prot) = structure.to_mesh_with_atom_map(Some(&prot_mask));
+        assert!(
+            mesh_prot.count_vertices() <= mesh_all.count_vertices(),
+            "masked wireframe must have <= edges"
+        );
+        assert_eq!(mesh_prot.count_vertices(), map_prot.len());
+        Ok(())
+    }
+
+    #[test]
+    fn test_wireframe_all_false_empty() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let empty_mask = AtomMask(vec![false; model.n_atoms()]);
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Wireframe)
+            .build();
+        let (mesh, map) = structure.to_mesh_with_atom_map(Some(&empty_mask));
+        assert_eq!(mesh.count_vertices(), 0);
+        assert_eq!(map.len(), 0);
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // T2-31 to T2-33: Cartoon residue map
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_cartoon_none_mask_residue_map() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Cartoon)
+            .build();
+        let (mesh, residue_map) = structure.to_mesh_with_residue_map(None);
+        assert!(mesh.count_vertices() > 0);
+        assert_eq!(
+            mesh.count_vertices(),
+            residue_map.len(),
+            "cartoon: residue_map len must equal vertex count"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_cartoon_protein_mask_fewer_verts() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let ac = ferritin_core::AtomCollection::from(&model);
+        let prot_mask = evaluate_selector(
+            &ComponentSelector::Selector(ComponentSelectorT::Protein),
+            &ac,
+        );
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Cartoon)
+            .build();
+        let (mesh_all, _) = structure.to_mesh_with_residue_map(None);
+        let (mesh_prot, map_prot) = structure.to_mesh_with_residue_map(Some(&prot_mask));
+        assert!(mesh_prot.count_vertices() <= mesh_all.count_vertices());
+        assert_eq!(mesh_prot.count_vertices(), map_prot.len());
+        Ok(())
+    }
+
+    #[test]
+    fn test_cartoon_all_false_mask_empty() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let empty_mask = AtomMask(vec![false; model.n_atoms()]);
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Cartoon)
+            .build();
+        let (mesh, map) = structure.to_mesh_with_residue_map(Some(&empty_mask));
+        assert_eq!(mesh.count_vertices(), 0);
+        assert_eq!(map.len(), 0);
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // T2-34 to T2-40: atom_map and residue_map invariants
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_atom_map_all_indices_valid() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let n = model.n_atoms();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Solid)
+            .build();
+        let (_, atom_map) = structure.to_mesh_with_atom_map(None);
+        for &idx in &atom_map {
+            assert!(
+                idx < n,
+                "atom_map index {} out of bounds (n_atoms={})",
+                idx,
+                n
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_wireframe_atom_map_all_indices_valid() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let n = model.n_atoms();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Wireframe)
+            .build();
+        let (_, atom_map) = structure.to_mesh_with_atom_map(None);
+        for &idx in &atom_map {
+            assert!(idx < n, "wireframe atom_map index {} out of bounds", idx);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_residue_map_values_non_decreasing() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Cartoon)
+            .build();
+        let (_, residue_map) = structure.to_mesh_with_residue_map(None);
+        for w in residue_map.windows(2) {
+            assert!(
+                w[0] <= w[1],
+                "residue_map must be non-decreasing but got {} then {}",
+                w[0],
+                w[1]
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_putty_residue_map_length() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Putty)
+            .build();
+        let (mesh, residue_map) = structure.to_mesh_with_residue_map(None);
+        assert_eq!(
+            mesh.count_vertices(),
+            residue_map.len(),
+            "putty: residue_map len must equal vertex count"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_masked_solid_atom_map_indices_in_mask() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let ac = ferritin_core::AtomCollection::from(&model);
+        let prot_mask = evaluate_selector(
+            &ComponentSelector::Selector(ComponentSelectorT::Protein),
+            &ac,
+        );
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Solid)
+            .build();
+        let (_, atom_map) = structure.to_mesh_with_atom_map(Some(&prot_mask));
+        for &idx in &atom_map {
+            assert!(
+                prot_mask.0[idx],
+                "atom_map must only contain indices that pass the mask"
+            );
+        }
         Ok(())
     }
 }

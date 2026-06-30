@@ -290,6 +290,25 @@ impl AtomCollection {
         self.is_hetero.clone()
     }
 
+    /// Build a boolean mask selecting solvent atoms (HOH, WAT, H2O).
+    pub fn select_water(&self) -> Vec<bool> {
+        const WATER: [&str; 3] = ["HOH", "WAT", "H2O"];
+        self.res_names.iter().map(|n| WATER.contains(&n.as_str())).collect()
+    }
+
+    /// Build a boolean mask selecting single-atom hetero residues that are not water (ions).
+    pub fn select_ion(&self) -> Vec<bool> {
+        let mut mask = vec![false; self.size];
+        for residue in self.iter_residues() {
+            if residue.is_ion() {
+                for idx in residue.start_atom_idx..residue.end_atom_idx {
+                    mask[idx] = true;
+                }
+            }
+        }
+        mask
+    }
+
     /// Build a boolean mask selecting backbone atoms (N, CA, C, O).
     pub fn select_backbone(&self) -> Vec<bool> {
         const BACKBONE: [&str; 4] = ["N", "CA", "C", "O"];
@@ -720,5 +739,109 @@ mod tests {
     fn test_filter_wrong_mask_length() {
         let ac = make_test_atom_collection();
         ac.filter(&[true, false]);
+    }
+
+    /// 5-atom collection: ALA(2 atoms, polymer), HOH(1 atom, hetero), ZN(1 atom, hetero), WAT(1 atom, hetero)
+    fn make_water_ion_collection() -> AtomCollection {
+        let coords = vec![
+            [1.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+            [4.0, 0.0, 0.0],
+            [5.0, 0.0, 0.0],
+        ];
+        let res_ids = vec![1, 1, 2, 3, 4];
+        let res_names: Vec<String> = vec!["ALA", "ALA", "HOH", "ZN", "WAT"]
+            .into_iter().map(|s| s.to_string()).collect();
+        let is_hetero = vec![false, false, true, true, true];
+        let elements = vec![Element::N, Element::C, Element::O, Element::Zn, Element::O];
+        let atom_names: Vec<String> = vec!["N", "CA", "O", "ZN", "O"]
+            .into_iter().map(|s| s.to_string()).collect();
+        let chain_ids: Vec<String> = vec!["A"; 5].into_iter().map(|s| s.to_string()).collect();
+        AtomCollection::new(5, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None)
+    }
+
+    #[test]
+    fn test_is_water_hoh() {
+        let ac = make_water_ion_collection();
+        let mut residues = ac.iter_residues();
+        let _ala = residues.next().unwrap();
+        let hoh = residues.next().unwrap();
+        assert!(hoh.is_water());
+    }
+
+    #[test]
+    fn test_is_water_wat() {
+        let ac = make_water_ion_collection();
+        let mut residues = ac.iter_residues();
+        residues.next(); // ALA
+        residues.next(); // HOH
+        residues.next(); // ZN
+        let wat = residues.next().unwrap();
+        assert!(wat.is_water());
+    }
+
+    #[test]
+    fn test_is_water_negative() {
+        let ac = make_water_ion_collection();
+        let ala = ac.iter_residues().next().unwrap();
+        assert!(!ala.is_water());
+    }
+
+    #[test]
+    fn test_is_ion_single_hetero_nonwater() {
+        let ac = make_water_ion_collection();
+        let mut residues = ac.iter_residues();
+        residues.next(); // ALA
+        residues.next(); // HOH
+        let zn = residues.next().unwrap();
+        assert!(zn.is_ion());
+    }
+
+    #[test]
+    fn test_is_ion_water_not_ion() {
+        let ac = make_water_ion_collection();
+        let mut residues = ac.iter_residues();
+        residues.next(); // ALA
+        let hoh = residues.next().unwrap();
+        assert!(!hoh.is_ion(), "water should not be classified as ion");
+    }
+
+    #[test]
+    fn test_is_ion_protein_residue() {
+        let ac = make_water_ion_collection();
+        let ala = ac.iter_residues().next().unwrap();
+        assert!(!ala.is_ion());
+    }
+
+    #[test]
+    fn test_is_ion_multi_atom_hetero() {
+        // ALA is multi-atom hetero (2 atoms) — not an ion even if flagged hetero
+        let coords = vec![[0.0; 3], [1.0; 3]];
+        let res_ids = vec![1, 1];
+        let res_names: Vec<String> = vec!["LIG", "LIG"].into_iter().map(|s| s.to_string()).collect();
+        let is_hetero = vec![true, true];
+        let elements = vec![Element::C, Element::O];
+        let atom_names: Vec<String> = vec!["C1", "O1"].into_iter().map(|s| s.to_string()).collect();
+        let chain_ids: Vec<String> = vec!["A", "A"].into_iter().map(|s| s.to_string()).collect();
+        let ac = AtomCollection::new(2, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None);
+        let lig = ac.iter_residues().next().unwrap();
+        assert!(!lig.is_ion(), "multi-atom hetero residue should not be an ion");
+    }
+
+    #[test]
+    fn test_select_water_mask() {
+        let ac = make_water_ion_collection();
+        let mask = ac.select_water();
+        // ALA(2), HOH(1), ZN(1), WAT(1)
+        assert_eq!(mask, vec![false, false, true, false, true]);
+    }
+
+    #[test]
+    fn test_select_ion_mask() {
+        let ac = make_water_ion_collection();
+        let mask = ac.select_ion();
+        // ZN is at atom index 3
+        assert_eq!(mask, vec![false, false, false, true, false]);
     }
 }

@@ -219,9 +219,7 @@ impl ToRerun<rerun::Pinhole> for PerspectiveProjection {
     #[inline]
     fn to_rerun(&self) -> rerun::Pinhole {
         let PerspectiveProjection {
-            fov,
-            aspect_ratio,
-            ..
+            fov, aspect_ratio, ..
         } = *self;
 
         rerun::Pinhole::from_fov_and_aspect_ratio(fov, aspect_ratio)

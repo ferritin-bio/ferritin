@@ -17,8 +17,9 @@
 //!
 //!
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json;
+use std::io::Read;
 use urlencoding;
 use validator::Validate;
 
@@ -89,18 +90,32 @@ pub enum NodeParams {
     LineParams(LineParams),
 }
 
+// The spec treats leaf nodes as having no children key; an empty array from a
+// hand-crafted or third-party Node should not be observable — normalize on deser.
+fn deserialize_children<'de, D>(deserializer: D) -> Result<Option<Vec<Node>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt = Option::<Vec<Node>>::deserialize(deserializer)?;
+    Ok(opt.filter(|v| !v.is_empty()))
+}
+
 /// Node
 ///
 /// This is the core data structure for generating MSVJ files. Each node type can have a type, params, and children.
 ///
 /// Methods derived from the Python API found [here](https://github.com/molstar/mol-view-spec/blob/master/molviewspec/molviewspec/builder.py)
 ///
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Serialize, Debug, Default, Clone)]
 pub struct Node {
     pub kind: KindT,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<NodeParams>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_children",
+        default
+    )]
     pub children: Option<Vec<Node>>,
 }
 impl Node {
@@ -140,8 +155,6 @@ impl Node {
     }
     /// Parse a Download Node
     pub fn parse(&mut self, params: ParseParams) -> Option<&mut Node> {
-        println!("In the parse node!");
-        println!("{:?}", self.kind);
         if self.kind == KindT::Download {
             let parse_node = Node::new(KindT::Parse, Some(NodeParams::ParseParams(params)));
             self.children.get_or_insert_with(Vec::new).push(parse_node);
@@ -153,13 +166,16 @@ impl Node {
 
     // Parse methods ------------------------------------------------------
 
-    /// Create a structure for the deposited coordinates.
-    /// :param model_index: 0-based model index in case multiple NMR frames are present
-    /// :param block_index: 0-based block index in case multiple mmCIF or SDF data blocks are present
-    /// :param block_header: Reference a specific mmCIF or SDF data block by its block header
-    /// :return: a builder that handles operations at structure level
-    pub fn model_structure() {
-        unimplemented!()
+    /// Create a structure for the deposited (asymmetric unit / model) coordinates.
+    pub fn model_structure(&mut self, params: StructureParams) -> Option<&mut Node> {
+        if self.kind == KindT::Parse {
+            let struct_node =
+                Node::new(KindT::Structure, Some(NodeParams::StructureParams(params)));
+            self.children.get_or_insert_with(Vec::new).push(struct_node);
+            self.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
     }
     /// Parse a Download Node
     pub fn assembly_structure(&mut self, params: StructureParams) -> Option<&mut Node> {
@@ -210,6 +226,11 @@ impl Node {
                         selector: ComponentSelector::Selector(sel),
                     })),
                 ),
+                // DECISION (matches Python mol-view-spec behavior): a ComponentExpression
+                // with ALL fields set to None means "match everything" (all-true mask).
+                // It does NOT mean "match nothing". Phase 2 selector evaluation must
+                // return an all-true AtomMask when every field of the Expression is None.
+                // See test_mask_empty_expression_all_fields_none (T2-21).
                 ComponentSelector::Expression(expr) => Node::new(
                     KindT::Component,
                     Some(NodeParams::ComponentInlineParams(ComponentInlineParams {
@@ -231,11 +252,29 @@ impl Node {
             None
         }
     }
-    pub fn component_from_uri() {
-        unimplemented!()
+    pub fn component_from_uri(&mut self, params: ComponentFromUriParams) -> Option<&mut Node> {
+        if self.kind == KindT::Structure {
+            let node = Node::new(
+                KindT::ComponentFromUri,
+                Some(NodeParams::ComponentFromUriParams(params)),
+            );
+            self.children.get_or_insert_with(Vec::new).push(node);
+            self.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
     }
-    pub fn component_from_source() {
-        unimplemented!()
+    pub fn component_from_source(&mut self, params: ComponentFromSourceParams) -> Option<&mut Node> {
+        if self.kind == KindT::Structure {
+            let node = Node::new(
+                KindT::ComponentFromSource,
+                Some(NodeParams::ComponentFromSourceParams(params)),
+            );
+            self.children.get_or_insert_with(Vec::new).push(node);
+            self.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
     }
     pub fn label_from_uri() {
         unimplemented!()
@@ -304,20 +343,60 @@ impl Node {
             None
         }
     }
-    pub fn tooltip() {
-        unimplemented!()
+    pub fn tooltip(&mut self, text: String) -> Option<&mut Node> {
+        if self.kind == KindT::Component {
+            let node = Node::new(
+                KindT::Tooltip,
+                Some(NodeParams::TooltipInlineParams(TooltipInlineParams { text })),
+            );
+            self.children.get_or_insert_with(Vec::new).push(node);
+            self.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
     }
-    pub fn focus() {
-        unimplemented!()
+    pub fn focus(
+        &mut self,
+        direction: Option<(f64, f64, f64)>,
+        up: Option<(f64, f64, f64)>,
+    ) -> Option<&mut Node> {
+        if self.kind == KindT::Component {
+            let node = Node::new(
+                KindT::Focus,
+                Some(NodeParams::FocusInlineParams(FocusInlineParams { direction, up })),
+            );
+            self.children.get_or_insert_with(Vec::new).push(node);
+            self.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
     }
 
     // Representation methods ------------------------------------------------------
 
-    pub fn color_from_source() {
-        unimplemented!()
+    pub fn color_from_source(&mut self, params: ColorFromSourceParams) -> Option<&mut Node> {
+        if self.kind == KindT::Representation {
+            let node = Node::new(
+                KindT::ColorFromSource,
+                Some(NodeParams::ColorFromSourceParams(params)),
+            );
+            self.children.get_or_insert_with(Vec::new).push(node);
+            self.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
     }
-    pub fn color_from_uri() {
-        unimplemented!()
+    pub fn color_from_uri(&mut self, params: ColorFromUriParams) -> Option<&mut Node> {
+        if self.kind == KindT::Representation {
+            let node = Node::new(
+                KindT::ColorFromUri,
+                Some(NodeParams::ColorFromUriParams(params)),
+            );
+            self.children.get_or_insert_with(Vec::new).push(node);
+            self.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
     }
     // parent Kine => kindt:representation
     // node: kindt => kindt:color
@@ -338,11 +417,105 @@ impl Node {
     }
 
     // GenericVisuals methods ------------------------------------------------------
-    pub fn sphere() {
-        unimplemented!()
+    pub fn sphere(&mut self, params: SphereParams) -> Option<&mut Node> {
+        if self.kind == KindT::GenericVisuals {
+            let node = Node::new(KindT::Sphere, Some(NodeParams::SphereParams(params)));
+            self.children.get_or_insert_with(Vec::new).push(node);
+            self.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
     }
-    pub fn line() {
-        unimplemented!()
+    pub fn line(&mut self, params: LineParams) -> Option<&mut Node> {
+        if self.kind == KindT::GenericVisuals {
+            let node = Node::new(KindT::Line, Some(NodeParams::LineParams(params)));
+            self.children.get_or_insert_with(Vec::new).push(node);
+            self.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Node {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct NodeHelper {
+            kind: KindT,
+            #[serde(default)]
+            params: Option<serde_json::Value>,
+            #[serde(default, deserialize_with = "deserialize_children")]
+            children: Option<Vec<Node>>,
+        }
+
+        let helper = NodeHelper::deserialize(deserializer)?;
+
+        let params = match helper.params {
+            // absent or explicit null → no params
+            None | Some(serde_json::Value::Null) => None,
+            Some(v) => {
+                let p: NodeParams = match &helper.kind {
+                    KindT::Download => serde_json::from_value::<DownloadParams>(v)
+                        .map(NodeParams::DownloadParams),
+                    KindT::Parse => serde_json::from_value::<ParseParams>(v)
+                        .map(NodeParams::ParseParams),
+                    KindT::Structure => serde_json::from_value::<StructureParams>(v)
+                        .map(NodeParams::StructureParams),
+                    KindT::Representation => serde_json::from_value::<RepresentationParams>(v)
+                        .map(NodeParams::RepresentationParams),
+                    KindT::Component => serde_json::from_value::<ComponentInlineParams>(v)
+                        .map(NodeParams::ComponentInlineParams),
+                    KindT::ComponentFromUri => serde_json::from_value::<ComponentFromUriParams>(v)
+                        .map(NodeParams::ComponentFromUriParams),
+                    KindT::ComponentFromSource => {
+                        serde_json::from_value::<ComponentFromSourceParams>(v)
+                            .map(NodeParams::ComponentFromSourceParams)
+                    }
+                    KindT::Color => serde_json::from_value::<ColorInlineParams>(v)
+                        .map(NodeParams::ColorInlineParams),
+                    KindT::ColorFromUri => serde_json::from_value::<ColorFromUriParams>(v)
+                        .map(NodeParams::ColorFromUriParams),
+                    KindT::ColorFromSource => serde_json::from_value::<ColorFromSourceParams>(v)
+                        .map(NodeParams::ColorFromSourceParams),
+                    KindT::Label => serde_json::from_value::<LabelInlineParams>(v)
+                        .map(NodeParams::LabelInlineParams),
+                    KindT::LabelFromUri => serde_json::from_value::<LabelFromUriParams>(v)
+                        .map(NodeParams::LabelFromUriParams),
+                    KindT::LabelFromSource => serde_json::from_value::<LabelFromSourceParams>(v)
+                        .map(NodeParams::LabelFromSourceParams),
+                    KindT::Tooltip => serde_json::from_value::<TooltipInlineParams>(v)
+                        .map(NodeParams::TooltipInlineParams),
+                    KindT::TooltipFromUri => serde_json::from_value::<TooltipFromUriParams>(v)
+                        .map(NodeParams::TooltipFromUriParams),
+                    KindT::TooltipFromSource => {
+                        serde_json::from_value::<TooltipFromSourceParams>(v)
+                            .map(NodeParams::TooltipFromSourceParams)
+                    }
+                    KindT::Focus => serde_json::from_value::<FocusInlineParams>(v)
+                        .map(NodeParams::FocusInlineParams),
+                    KindT::Transform => serde_json::from_value::<TransformParams>(v)
+                        .map(NodeParams::TransformParams),
+                    KindT::Camera => serde_json::from_value::<CameraParams>(v)
+                        .map(NodeParams::CameraParams),
+                    KindT::Canvas => serde_json::from_value::<CanvasParams>(v)
+                        .map(NodeParams::CanvasParams),
+                    KindT::Sphere => serde_json::from_value::<SphereParams>(v)
+                        .map(NodeParams::SphereParams),
+                    KindT::Line => serde_json::from_value::<LineParams>(v)
+                        .map(NodeParams::LineParams),
+                    // Root and GenericVisuals carry no params; ignore any value present.
+                    KindT::Root | KindT::GenericVisuals => return Ok(Node {
+                        kind: helper.kind,
+                        params: None,
+                        children: helper.children,
+                    }),
+                }
+                .map_err(|e| serde::de::Error::custom(e.to_string()))?;
+                Some(p)
+            }
+        };
+
+        Ok(Node { kind: helper.kind, params, children: helper.children })
     }
 }
 
@@ -385,12 +558,23 @@ impl State {
         State {
             root: Node::new(KindT::Root, None),
             metadata: Metadata {
-                version: "1".to_string(), // todo: update this
+                version: "1.0".to_string(),
                 timestamp: Utc::now().to_rfc3339().to_string(),
                 ..Default::default()
             },
         }
     }
+
+    /// Parse a MVSJ string into a State.
+    pub fn from_str(s: &str) -> serde_json::Result<State> {
+        serde_json::from_str(s)
+    }
+
+    /// Parse a MVSJ reader into a State.
+    pub fn from_reader<R: Read>(reader: R) -> serde_json::Result<State> {
+        serde_json::from_reader(reader)
+    }
+
     /// Set Camera Location
     pub fn camera(&mut self, params: CameraParams) -> Option<&mut Node> {
         if self.root.kind == KindT::Root {
@@ -404,26 +588,41 @@ impl State {
             None
         }
     }
-    /// Set Canvas Information Location
-    pub fn canvas() {
-        unimplemented!()
+
+    /// Set canvas background color.
+    pub fn canvas(&mut self, params: CanvasParams) -> Option<&mut Node> {
+        if self.root.kind == KindT::Root {
+            let node = Node::new(KindT::Canvas, Some(NodeParams::CanvasParams(params)));
+            self.root.children.get_or_insert_with(Vec::new).push(node);
+            self.root.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
     }
+
     // Download a file
     pub fn download(&mut self, url: &str) -> Option<&mut Node> {
         self.root.download(url)
     }
-    /// General Lines and Spheres
-    pub fn generic_visuals() {
-        unimplemented!()
+
+    /// Add a generic_visuals node for custom spheres and lines.
+    pub fn generic_visuals(&mut self) -> Option<&mut Node> {
+        if self.root.kind == KindT::Root {
+            let node = Node::new(KindT::GenericVisuals, None);
+            self.root.children.get_or_insert_with(Vec::new).push(node);
+            self.root.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
     }
+
     pub fn to_url(&self) -> String {
         let json = serde_json::to_string(&self).expect("Json conversion");
         let encoded = urlencoding::encode(&json);
-        let url = format!(
+        format!(
             "https://molstar.org/viewer/?mvs-format=mvsj&mvs-data={}",
             encoded
-        );
-        url
+        )
     }
 }
 
