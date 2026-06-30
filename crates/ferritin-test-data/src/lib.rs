@@ -65,6 +65,56 @@ impl TestFile {
             suffix: "cif",
         }
     }
+    /// 1CBS.cif — cellular retinoic-acid-binding protein II.
+    /// Single-chain protein with a retinoic-acid ligand; the canonical
+    /// MolViewSpec "basic" example (cartoon, blue).
+    pub fn mvs_1cbs() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/structures/1cbs.cif"),
+            suffix: "cif",
+        }
+    }
+    /// 1C0A.cif — aspartyl-tRNA synthetase complexed with tRNA and ligand.
+    /// Has protein, nucleic acid, and ligand components; the MolViewSpec
+    /// "components" example.
+    pub fn mvs_1c0a() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/structures/1c0a.cif"),
+            suffix: "cif",
+        }
+    }
+    /// 1LAP.cif — leucine aminopeptidase. Used for the MolViewSpec
+    /// "label/focus" example.
+    pub fn mvs_1lap() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/structures/1lap.cif"),
+            suffix: "cif",
+        }
+    }
+    /// 4HHB.cif — deoxyhemoglobin (four chains). Used as one half of the
+    /// MolViewSpec "superposition" example.
+    pub fn mvs_4hhb() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/structures/4hhb.cif"),
+            suffix: "cif",
+        }
+    }
+    /// 1OJ6.cif — Used as the second half of the MolViewSpec
+    /// "superposition" example (rendered with a transform).
+    pub fn mvs_1oj6() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/structures/1oj6.cif"),
+            suffix: "cif",
+        }
+    }
+    /// 1TQN.cif — cytochrome P450 3A4. Used for the MolViewSpec "symmetry"
+    /// example, which degrades gracefully (assembly expansion unsupported).
+    pub fn mvs_1tqn() -> Self {
+        Self {
+            filebinary: include_bytes!("../data/structures/1tqn.cif"),
+            suffix: "cif",
+        }
+    }
     pub fn pymol_01() -> Self {
         Self {
             filebinary: include_bytes!("../data/pymol/example.pse"),

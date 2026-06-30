@@ -5,7 +5,7 @@ members = [
     # "crates/ferritin-cellscape",
     "crates/ferritin-core",
     "crates/ferritin-examples",
-    # "crates/ferritin-molviewspec",
+    "crates/ferritin-molviewspec",
     "crates/ferritin-plms",
     # "crates/ferritin-pymol",
     "crates/ferritin-test-data",
@@ -23,6 +23,9 @@ edition = "2024"
 
 [workspace.dependencies]
 anyhow = "1.0.103"
+chrono = "0.4"
+urlencoding = "2"
+validator = { version = "0.20", features = ["derive"] }
 bevy = { version = "0.19", default-features = false }
 bon = "3.9.3"
 candle-core =  "0.11.0"
