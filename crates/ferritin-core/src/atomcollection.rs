@@ -367,7 +367,7 @@ impl AtomCollection {
 
         let atoms = AtomsTable {
             atom_name: self.atom_names.clone(),
-            element: self.elements.iter().map(|e| e.symbol().to_string()).collect(),
+            element: self.elements.clone(),
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };
@@ -492,12 +492,7 @@ impl From<&Model> for AtomCollection {
             chain_ids.push(hierarchy.chains.auth_asym_id[chain_idx].clone());
         }
 
-        let elements: Vec<Element> = hierarchy
-            .atoms
-            .element
-            .iter()
-            .map(|s| Element::from_symbol(s).unwrap_or(Element::C))
-            .collect();
+        let elements = hierarchy.atoms.element.clone();
 
         let atom_names = hierarchy.atoms.atom_name.clone();
 

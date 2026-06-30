@@ -1,16 +1,15 @@
 use crate::utils::{misc::unbinpack, residue_constants, structure::affine3d::Affine3D};
 use candle_core::{Device, Result, Tensor};
 use candle_nn::ops;
-use std::collections::HashMap;
 
 type ArrayOrTensor = Tensor;
 
 fn index_by_atom_name(atom37: &Tensor, atom_names: &[String], dim: i64) -> Result<Tensor> {
     let squeeze = atom_names.len() == 1;
-    let atom_order: HashMap<String, usize> = residue_constants::atom_order();
+    let atom_order = residue_constants::atom_order();
     let indices: Vec<_> = atom_names
         .iter()
-        .map(|name| atom_order.get(name).unwrap())
+        .map(|name| atom_order.get(name.as_str()).unwrap())
         .collect();
 
     let dim = if dim < 0 {

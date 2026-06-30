@@ -17,6 +17,7 @@ use std::sync::Arc;
 use super::hierarchy::AtomicHierarchy;
 use super::conformation::AtomicConformation;
 use super::tables::ResidueGroup;
+use crate::info::elements::Element;
 use crate::views::{ModelAtomView, ModelChainView, ModelResidueView};
 
 /// One frame of a (possibly multi-frame) molecular structure.
@@ -141,7 +142,7 @@ mod tests {
         let n_atoms = n_residues; // 1 atom per residue for simplicity
         let atoms = AtomsTable {
             atom_name: (0..n_atoms).map(|_| "CA".to_string()).collect(),
-            element: (0..n_atoms).map(|_| "C".to_string()).collect(),
+            element: vec![Element::C; n_atoms],
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };
@@ -222,7 +223,7 @@ mod tests {
         let n_atoms = 5;
         let atoms = AtomsTable {
             atom_name: vec!["CA".into(); n_atoms],
-            element: vec!["C".into(); n_atoms],
+            element: vec![Element::C; n_atoms],
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };
@@ -293,7 +294,7 @@ mod tests {
             let n_atoms = 5;
             let atoms = AtomsTable {
                 atom_name: vec!["CA".into(); n_atoms],
-                element: vec!["C".into(); n_atoms],
+                element: vec![Element::C; n_atoms],
                 alt_loc: vec![None; n_atoms],
                 formal_charge: vec![None; n_atoms],
             };
@@ -376,7 +377,7 @@ mod tests {
             let n_atoms = 5;
             let atoms = AtomsTable {
                 atom_name: vec!["CA".into(); n_atoms],
-                element: vec!["C".into(); n_atoms],
+                element: vec![Element::C; n_atoms],
                 alt_loc: vec![None; n_atoms],
                 formal_charge: vec![None; n_atoms],
             };
@@ -451,7 +452,7 @@ mod tests {
         let n_residues = 4;
         let atoms = AtomsTable {
             atom_name: (0..n_atoms).map(|i| if i % 2 == 0 { "N".into() } else { "CA".into() }).collect(),
-            element: (0..n_atoms).map(|_| "C".into()).collect(),
+            element: vec![Element::C; n_atoms],
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };

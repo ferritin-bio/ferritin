@@ -5335,6 +5335,7 @@ dependencies = [
  "anyhow",
  "ferritin-test-data",
  "itertools 0.15.0",
+ "strum 0.28.0",
 ]
 
 [[package]]

@@ -5,6 +5,22 @@
 
 use std::sync::Arc;
 
+/// Allocation-free iterator over an [`OrderedSet`].
+pub enum OrderedSetIter<'a> {
+    Interval(std::ops::Range<u32>),
+    Sorted(std::iter::Copied<std::slice::Iter<'a, u32>>),
+}
+
+impl<'a> Iterator for OrderedSetIter<'a> {
+    type Item = u32;
+    fn next(&mut self) -> Option<u32> {
+        match self {
+            OrderedSetIter::Interval(r) => r.next(),
+            OrderedSetIter::Sorted(it) => it.next(),
+        }
+    }
+}
+
 /// Ordered set of indices — either a contiguous interval or sorted array.
 ///
 /// The `Interval` variant provides O(1) membership tests for contiguous ranges.
@@ -77,19 +93,10 @@ impl OrderedSet {
     }
 
     /// Iterate over the elements of this set in ascending order.
-    pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
+    pub fn iter(&self) -> OrderedSetIter<'_> {
         match self {
-            OrderedSet::Interval { start, end } => {
-                // Use a box to unify the two iterator types
-                let iter: Box<dyn Iterator<Item = u32> + '_> =
-                    Box::new(*start..*end);
-                iter
-            }
-            OrderedSet::Sorted(v) => {
-                let iter: Box<dyn Iterator<Item = u32> + '_> =
-                    Box::new(v.iter().copied());
-                iter
-            }
+            OrderedSet::Interval { start, end } => OrderedSetIter::Interval(*start..*end),
+            OrderedSet::Sorted(v) => OrderedSetIter::Sorted(v.iter().copied()),
         }
     }
 

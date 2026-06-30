@@ -17,11 +17,8 @@ impl<'a> ModelAtomView<'a> {
         self.model.coord(self.idx)
     }
 
-    /// Element parsed from the symbol stored in the hierarchy.
-    /// Returns `Element::C` for unrecognised symbols.
     pub fn element(&self) -> Element {
-        let sym = &self.model.hierarchy.atoms.element[self.idx];
-        Element::from_symbol(sym).unwrap_or(Element::C)
+        self.model.hierarchy.atoms.element[self.idx]
     }
 
     pub fn atom_name(&self) -> &'a str {

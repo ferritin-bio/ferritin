@@ -203,12 +203,13 @@ mod tests {
     use crate::model::conformation::AtomicConformation;
     use crate::model::hierarchy::AtomicHierarchy;
     use crate::model::tables::{AtomsTable, ChainsTable, ResidueGroup, ResiduesTable};
+    use crate::info::elements::Element;
     use std::sync::Arc;
 
     fn make_test_model(n_atoms: usize) -> Model {
         let atoms = AtomsTable {
             atom_name: (0..n_atoms).map(|i| format!("A{}", i)).collect(),
-            element: vec!["C".into(); n_atoms],
+            element: vec![Element::C; n_atoms],
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };
@@ -260,7 +261,7 @@ mod tests {
         let n_atoms = atom_names.len();
         let atoms = AtomsTable {
             atom_name: atom_names,
-            element: vec!["C".into(); n_atoms],
+            element: vec![Element::C; n_atoms],
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };

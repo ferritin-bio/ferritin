@@ -82,12 +82,13 @@ mod tests {
     use crate::data::Segmentation;
     use crate::model::{AtomicConformation, AtomicHierarchy, Bonds};
     use crate::model::tables::{AtomsTable, ChainsTable, ResidueGroup, ResiduesTable};
+    use crate::info::elements::Element;
 
     fn make_simple_hierarchy(n_residues: usize) -> Arc<AtomicHierarchy> {
         let n_atoms = n_residues;
         let atoms = AtomsTable {
             atom_name: (0..n_atoms).map(|_| "CA".to_string()).collect(),
-            element: (0..n_atoms).map(|_| "C".to_string()).collect(),
+            element: vec![Element::C; n_atoms],
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };

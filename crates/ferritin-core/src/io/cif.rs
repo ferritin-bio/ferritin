@@ -13,7 +13,6 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fs;
-use std::str::FromStr;
 use std::sync::Arc;
 
 /// Custom error types for CIF parsing operations
@@ -21,6 +20,7 @@ use std::sync::Arc;
 pub enum CIFError {
     InvalidFile(String),
     IOError(std::io::Error),
+    #[allow(dead_code)]
     ValueError(String),
     OSError(String),
 }
@@ -47,7 +47,7 @@ impl From<std::io::Error> for CIFError {
 /// Represents a data block in a CIF file
 #[derive(Debug)]
 struct CIFDataBlock {
-    name: String,
+    _name: String,
     categories: HashMap<String, CIFCategory>,
 }
 
@@ -72,20 +72,6 @@ impl CIFCategory {
     /// Get column index by name
     fn get_column_index(&self, column_name: &str) -> Option<usize> {
         self.columns.iter().position(|c| c == column_name)
-    }
-
-    /// Get value for a specific row and column
-    fn get_value(&self, row: usize, column: &str) -> Option<&str> {
-        if row >= self.data.len() {
-            return None;
-        }
-
-        let col_idx = self.get_column_index(column)?;
-        if col_idx >= self.data[row].len() {
-            return None;
-        }
-
-        Some(&self.data[row][col_idx])
     }
 }
 
@@ -150,7 +136,7 @@ impl CIFFile {
                 }
                 // Create new data block
                 current_data_block = Some(CIFDataBlock {
-                    name: line[5..].to_string(),
+                    _name: line[5..].to_string(),
                     categories: HashMap::new(),
                 });
                 in_loop = false;
@@ -301,58 +287,6 @@ impl CIFFile {
         }
 
         Ok(())
-    }
-
-    /// Helper function to parse a numeric value from a category row
-    fn _parse_value<T: FromStr>(
-        &self,
-        category: &CIFCategory,
-        row: usize,
-        column: &str,
-    ) -> Result<T, CIFError> {
-        let value_str = category.get_value(row, column).ok_or_else(|| {
-            CIFError::InvalidFile(format!("Missing value for {}.{}", category.name, column))
-        })?;
-
-        value_str.parse().map_err(|_| {
-            CIFError::InvalidFile(format!(
-                "Failed to parse '{}' as a number for {}.{}",
-                value_str, category.name, column
-            ))
-        })
-    }
-
-    /// Get the number of models in the CIF file by inspecting pdbx_PDB_model_num values.
-    pub fn get_model_count(&self) -> Result<usize, CIFError> {
-        if self.data_blocks.is_empty() {
-            return Ok(0);
-        }
-
-        let block = &self.data_blocks[self.current_block];
-        let atom_category = match block.categories.get("atom_site") {
-            Some(cat) => cat,
-            None => return Ok(0),
-        };
-
-        let model_num_col = atom_category.get_column_index("pdbx_PDB_model_num");
-        if model_num_col.is_none() {
-            return Ok(1);
-        }
-
-        let col_idx = model_num_col.unwrap();
-        let mut max_model: i32 = 1;
-
-        for row in &atom_category.data {
-            if col_idx < row.len() {
-                if let Ok(model_num) = row[col_idx].parse::<i32>() {
-                    if model_num > max_model {
-                        max_model = model_num;
-                    }
-                }
-            }
-        }
-
-        Ok(max_model as usize)
     }
 
     /// Parse CIF file into an AtomCollection (legacy API - returns flattened structure)
@@ -580,7 +514,7 @@ impl CIFFile {
 
         // Build atom data
         let mut atom_names_vec: Vec<String> = Vec::with_capacity(n_atoms);
-        let mut elements_vec: Vec<String> = Vec::with_capacity(n_atoms);
+        let mut elements_vec: Vec<Element> = Vec::with_capacity(n_atoms);
         let mut alt_loc_vec: Vec<Option<char>> = Vec::with_capacity(n_atoms);
         let mut formal_charge_vec: Vec<Option<i8>> = Vec::with_capacity(n_atoms);
         let mut x_vec: Vec<f32> = Vec::with_capacity(n_atoms);
@@ -625,7 +559,12 @@ impl CIFFile {
             atom_names_vec.push(row[atom_name_col].clone());
 
             // Element
-            elements_vec.push(row[element_col].clone());
+            let element_str = &row[element_col];
+            let element = Element::from_symbol(element_str).unwrap_or_else(|| {
+                let first_char = element_str.chars().next().unwrap_or('C');
+                Element::from_symbol(&first_char.to_string()).unwrap_or(Element::H)
+            });
+            elements_vec.push(element);
 
             // Alt loc (from label_alt_id if available)
             let alt_loc_col = atom_category.get_column_index("label_alt_id");
@@ -915,7 +854,7 @@ impl CIFFile {
 
         // Build hierarchy from first model
         let mut atom_names_vec: Vec<String> = Vec::with_capacity(n_atoms);
-        let mut elements_vec: Vec<String> = Vec::with_capacity(n_atoms);
+        let mut elements_vec: Vec<Element> = Vec::with_capacity(n_atoms);
         let mut alt_loc_vec: Vec<Option<char>> = Vec::with_capacity(n_atoms);
         let mut formal_charge_vec: Vec<Option<i8>> = Vec::with_capacity(n_atoms);
 
@@ -936,7 +875,12 @@ impl CIFFile {
 
         for row in first_model_rows {
             atom_names_vec.push(row[atom_name_col].clone());
-            elements_vec.push(row[element_col].clone());
+            let element_str = &row[element_col];
+            let element = Element::from_symbol(element_str).unwrap_or_else(|| {
+                let first_char = element_str.chars().next().unwrap_or('C');
+                Element::from_symbol(&first_char.to_string()).unwrap_or(Element::H)
+            });
+            elements_vec.push(element);
 
             let alt_loc_col = atom_category.get_column_index("label_alt_id");
             let alt_loc = if let Some(col) = alt_loc_col {

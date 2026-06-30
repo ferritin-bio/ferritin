@@ -3,6 +3,8 @@
 //! These tables hold topology data that is constant across trajectory frames.
 //! All tables use struct-of-arrays (SoA) layout for cache-friendly iteration.
 
+use crate::info::elements::Element;
+
 /// Residue classification: polymer (protein/nucleic acid) or non-polymer (ligand/solvent).
 #[derive(Clone, Debug, PartialEq)]
 pub enum ResidueGroup {
@@ -19,8 +21,8 @@ pub enum ResidueGroup {
 pub struct AtomsTable {
     /// Atom name, e.g. "CA", "N", "CB".
     pub atom_name: Vec<String>,
-    /// Element symbol, e.g. "C", "N", "O", "S".
-    pub element: Vec<String>,
+    /// Element type for each atom.
+    pub element: Vec<Element>,
     /// Alternative location indicator (e.g. `Some('A')`), or `None`.
     pub alt_loc: Vec<Option<char>>,
     /// Formal charge, or `None` if unspecified.
@@ -102,7 +104,7 @@ mod tests {
     fn test_atoms_table_len() {
         let table = AtomsTable {
             atom_name: vec!["N".into(), "CA".into(), "C".into()],
-            element: vec!["N".into(), "C".into(), "C".into()],
+            element: vec![Element::N, Element::C, Element::C],
             alt_loc: vec![None, None, None],
             formal_charge: vec![None, None, None],
         };
