@@ -26,13 +26,13 @@ use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
 use ferritin_core::{AtomCollection, Model, load_model};
 use ferritin_molviewspec::molviewspec::nodes::{
-    CameraParams, CanvasParams, ColorT, ComponentInlineParams, ComponentSelector,
+    CameraParams, CanvasParams, ColorT, ColorThemeT, ComponentInlineParams, ComponentSelector,
     FocusInlineParams, KindT, LabelInlineParams, LineParams, Node, NodeParams, ParseFormatT,
     RepresentationParams, RepresentationTypeT, SphereParams, State, StructureParams,
     StructureTypeT, TransformParams,
 };
 
-use crate::colors::{VertexMapKind, apply_mvs_colors, color_t_to_bevy};
+use crate::colors::{VertexMapKind, apply_mvs_colors_with_theme, color_t_to_bevy};
 use crate::selection::{AtomMask, evaluate_selector};
 use crate::structure::{RenderOptions, Structure};
 
@@ -398,10 +398,11 @@ fn render_representation(
     transform: Transform,
     ctx: &mut Ctx,
 ) {
-    let repr_type = match &repr.params {
+    let (repr_type, color_theme) = match &repr.params {
         Some(NodeParams::RepresentationParams(RepresentationParams {
             representation_type,
-        })) => representation_type.clone(),
+            color_theme,
+        })) => (representation_type.clone(), color_theme.clone()),
         _ => return,
     };
 
@@ -445,7 +446,10 @@ fn render_representation(
         }
     };
 
-    apply_mvs_colors(&mut mesh, &color_nodes, ac, &vertex_map, map_kind);
+    // Use the explicit color_theme when present; fall back to ElementSymbol (CPK)
+    // so structures without any Color child nodes get sensible default coloring.
+    let effective_theme = color_theme.unwrap_or(ColorThemeT::ElementSymbol);
+    apply_mvs_colors_with_theme(&mut mesh, &effective_theme, &color_nodes, ac, &vertex_map, map_kind);
 
     ctx.commands.spawn((
         Mesh3d(ctx.meshes.add(mesh)),
@@ -589,8 +593,11 @@ fn is_http_url(url: &str) -> bool {
 /// degraded (Surface → Solid) and a warning should be surfaced.
 fn map_representation(repr: &RepresentationTypeT) -> (RenderOptions, bool) {
     match repr {
-        RepresentationTypeT::Cartoon => (RenderOptions::Cartoon, false),
         RepresentationTypeT::BallAndStick => (RenderOptions::BallAndStick, false),
+        RepresentationTypeT::Cartoon => (RenderOptions::Cartoon, false),
+        RepresentationTypeT::Line => (RenderOptions::Wireframe, false),
+        RepresentationTypeT::Putty => (RenderOptions::Putty, false),
+        RepresentationTypeT::Spacefill => (RenderOptions::Solid, false),
         RepresentationTypeT::Surface => (RenderOptions::Solid, true),
     }
 }
@@ -859,6 +866,27 @@ mod tests {
         let (opt, degraded) = map_representation(&RepresentationTypeT::Surface);
         assert!(matches!(opt, RenderOptions::Solid));
         assert!(degraded, "Surface must signal degradation");
+    }
+
+    #[test]
+    fn test_map_repr_spacefill() {
+        let (opt, degraded) = map_representation(&RepresentationTypeT::Spacefill);
+        assert!(matches!(opt, RenderOptions::Solid));
+        assert!(!degraded, "Spacefill maps to Solid with VDW radii — not degraded");
+    }
+
+    #[test]
+    fn test_map_repr_putty() {
+        let (opt, degraded) = map_representation(&RepresentationTypeT::Putty);
+        assert!(matches!(opt, RenderOptions::Putty));
+        assert!(!degraded);
+    }
+
+    #[test]
+    fn test_map_repr_line() {
+        let (opt, degraded) = map_representation(&RepresentationTypeT::Line);
+        assert!(matches!(opt, RenderOptions::Wireframe));
+        assert!(!degraded);
     }
 
     #[test]

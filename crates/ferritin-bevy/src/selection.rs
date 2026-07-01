@@ -108,7 +108,7 @@ fn evaluate_expression(expr: &ComponentExpression, model: &AtomCollection) -> At
     let n = model.get_size();
     let mut mask = vec![false; n];
 
-    for residue in model.iter_residues() {
+    for (res_iter_idx, residue) in model.iter_residues().enumerate() {
         // Chain filter (label_asym_id matched against auth_asym_id in MVP)
         if let Some(ref chain) = expr.label_asym_id {
             if residue.chain_id() != chain {
@@ -117,6 +117,13 @@ fn evaluate_expression(expr: &ComponentExpression, model: &AtomCollection) -> At
         }
         if let Some(ref chain) = expr.auth_asym_id {
             if residue.chain_id() != chain {
+                continue;
+            }
+        }
+
+        // residue_index: 0-based residue iteration index
+        if let Some(ri) = expr.residue_index {
+            if res_iter_idx as i32 != ri {
                 continue;
             }
         }
@@ -491,5 +498,51 @@ mod tests {
             2,
             "label_seq_id 2 must match res_id 2 (GLY×2)"
         );
+    }
+
+    // T2-25: residue_index (0-based) selects exactly the Nth residue in iteration order
+    #[test]
+    fn test_expression_residue_index() {
+        let ac = make_test_collection();
+        // residue_index=0 → ALA (3 atoms)
+        let expr = ComponentExpression {
+            residue_index: Some(0),
+            ..Default::default()
+        };
+        let sel = ComponentSelector::Expression(expr);
+        let mask = evaluate_selector(&sel, &ac);
+        assert_eq!(mask.count_true(), 3, "residue_index 0 must select ALA (3 atoms)");
+        assert!(mask.0[0] && mask.0[1] && mask.0[2], "atoms 0-2 should be selected");
+
+        // residue_index=1 → GLY (2 atoms)
+        let expr2 = ComponentExpression {
+            residue_index: Some(1),
+            ..Default::default()
+        };
+        let mask2 = evaluate_selector(&ComponentSelector::Expression(expr2), &ac);
+        assert_eq!(mask2.count_true(), 2, "residue_index 1 must select GLY (2 atoms)");
+
+        // residue_index=3 → ZN (1 atom); residues: 0=ALA, 1=GLY, 2=HOH, 3=ZN, 4=LIG
+        let expr3 = ComponentExpression {
+            residue_index: Some(3),
+            ..Default::default()
+        };
+        let mask3 = evaluate_selector(&ComponentSelector::Expression(expr3), &ac);
+        assert_eq!(mask3.count_true(), 1, "residue_index 3 must select ZN (1 atom)");
+    }
+
+    // T2-26: residue_index combined with atom_name → single atom
+    #[test]
+    fn test_expression_residue_index_with_atom_name() {
+        let ac = make_test_collection();
+        // Select only the CA of the second residue (GLY)
+        let expr = ComponentExpression {
+            residue_index: Some(1),
+            auth_atom_id: Some("CA".to_string()),
+            ..Default::default()
+        };
+        let mask = evaluate_selector(&ComponentSelector::Expression(expr), &ac);
+        assert_eq!(mask.count_true(), 1, "residue 1 CA should be exactly 1 atom");
+        assert!(mask.0[4], "atom index 4 is GLY CA");
     }
 }

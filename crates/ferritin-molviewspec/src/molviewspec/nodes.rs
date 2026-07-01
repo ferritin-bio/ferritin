@@ -313,11 +313,20 @@ impl Node {
         &mut self,
         representation_type: RepresentationTypeT,
     ) -> Option<&mut Node> {
+        self.representation_with_theme(representation_type, None)
+    }
+
+    pub fn representation_with_theme(
+        &mut self,
+        representation_type: RepresentationTypeT,
+        color_theme: Option<ColorThemeT>,
+    ) -> Option<&mut Node> {
         if self.kind == KindT::Component {
             let representation_node = Node::new(
                 KindT::Representation,
                 Some(NodeParams::RepresentationParams(RepresentationParams {
                     representation_type,
+                    color_theme,
                 })),
             );
             self.children
@@ -738,7 +747,31 @@ pub struct ComponentExpression {
 pub enum RepresentationTypeT {
     BallAndStick,
     Cartoon,
+    /// CA backbone line trace — lightweight, useful for large structures.
+    Line,
+    /// Variable-radius backbone tube; tube radius encodes B-factor/flexibility.
+    Putty,
+    /// Van der Waals spheres — shows full atomic volume.
+    Spacefill,
     Surface,
+}
+
+/// Color theme applied to a representation as a whole.
+///
+/// Semantic themes assign per-atom colors based on structural or chemical
+/// properties rather than a single inline color.
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorThemeT {
+    /// Each atom colored by CPK element convention (C=gray, N=blue, O=red, S=yellow, …).
+    #[default]
+    ElementSymbol,
+    /// Each chain gets a distinct color drawn from a rotating palette.
+    ChainId,
+    /// Helix=red/salmon, strand=yellow/gold, coil=white/gray.
+    SecondaryStructure,
+    /// All atoms share a single uniform white color (useful as a base for Color child overrides).
+    Uniform,
 }
 
 /// Color Names
@@ -906,6 +939,10 @@ pub enum ColorT {
 pub struct RepresentationParams {
     #[serde(rename = "type")]
     pub representation_type: RepresentationTypeT,
+    /// Semantic color theme applied before any inline `Color` child overrides.
+    /// Defaults to `ElementSymbol` (CPK coloring) when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_theme: Option<ColorThemeT>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

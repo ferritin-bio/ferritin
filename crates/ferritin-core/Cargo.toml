@@ -8,6 +8,7 @@ description.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+compact_str.workspace = true
 itertools.workspace = true
 strum.workspace = true
 

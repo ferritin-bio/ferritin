@@ -13,6 +13,7 @@ use crate::data::Segmentation;
 use crate::info::elements::Element;
 use crate::model::{AtomicConformation, AtomicHierarchy, Bonds, Model};
 use crate::model::tables::{AtomsTable, ChainsTable, ResidueGroup, ResiduesTable};
+use compact_str::CompactString;
 use itertools::{Itertools, izip};
 
 /// Atom Collection
@@ -26,11 +27,14 @@ pub struct AtomCollection {
     size: usize,
     coords: Vec<[f32; 3]>,
     res_ids: Vec<i32>,
-    res_names: Vec<String>,
+    // Residue/atom/chain names are short (≤5 chars) and highly repetitive across
+    // atoms, so they are stored as `CompactString` (24 bytes, inline — no heap
+    // allocation for these lengths) rather than `String` (heap alloc per atom).
+    res_names: Vec<CompactString>,
     is_hetero: Vec<bool>,
     elements: Vec<Element>,
-    atom_names: Vec<String>,
-    chain_ids: Vec<String>,
+    atom_names: Vec<CompactString>,
+    chain_ids: Vec<CompactString>,
     bonds: Option<Vec<Bond>>,
     residue_start_indices: Option<Vec<usize>>,
     chain_start_indices: Option<Vec<usize>>,
@@ -46,6 +50,33 @@ impl AtomCollection {
         elements: Vec<Element>,
         atom_names: Vec<String>,
         chain_ids: Vec<String>,
+        bonds: Option<Vec<Bond>>,
+    ) -> Self {
+        Self::from_compact(
+            size,
+            coords,
+            res_ids,
+            res_names.into_iter().map(CompactString::from).collect(),
+            is_hetero,
+            elements,
+            atom_names.into_iter().map(CompactString::from).collect(),
+            chain_ids.into_iter().map(CompactString::from).collect(),
+            bonds,
+        )
+    }
+    /// Constructor over the internal `CompactString` name representation.
+    ///
+    /// Used by paths that already hold `CompactString` names (e.g. `filter`)
+    /// to avoid a needless round-trip through `String`.
+    fn from_compact(
+        size: usize,
+        coords: Vec<[f32; 3]>,
+        res_ids: Vec<i32>,
+        res_names: Vec<CompactString>,
+        is_hetero: Vec<bool>,
+        elements: Vec<Element>,
+        atom_names: Vec<CompactString>,
+        chain_ids: Vec<CompactString>,
         bonds: Option<Vec<Bond>>,
     ) -> Self {
         let mut ac = AtomCollection {
@@ -150,13 +181,13 @@ impl AtomCollection {
     pub fn get_size(&self) -> usize {
         self.size
     }
-    pub fn get_atom_name(&self, idx: usize) -> &String {
+    pub fn get_atom_name(&self, idx: usize) -> &str {
         &self.atom_names[idx]
     }
     pub fn get_bonds(&self) -> Option<&Vec<Bond>> {
         self.bonds.as_ref()
     }
-    pub fn get_chain_id(&self, idx: usize) -> &String {
+    pub fn get_chain_id(&self, idx: usize) -> &str {
         &self.chain_ids[idx]
     }
     pub fn get_coord(&self, idx: usize) -> &[f32; 3] {
@@ -174,7 +205,7 @@ impl AtomCollection {
     pub fn get_is_hetero(&self, idx: usize) -> bool {
         self.is_hetero[idx]
     }
-    pub fn get_resnames(&self) -> &Vec<String> {
+    pub fn get_resnames(&self) -> &[CompactString] {
         self.res_names.as_ref()
     }
     pub fn get_res_id(&self, idx: usize) -> &i32 {
@@ -183,7 +214,7 @@ impl AtomCollection {
     pub fn get_resids(&self) -> &Vec<i32> {
         self.res_ids.as_ref()
     }
-    pub fn get_res_name(&self, idx: usize) -> &String {
+    pub fn get_res_name(&self, idx: usize) -> &str {
         &self.res_names[idx]
     }
     /// A new residue starts, either when the chain ID, residue ID,
@@ -256,11 +287,11 @@ impl AtomCollection {
 
         let coords: Vec<[f32; 3]> = selected.iter().map(|&i| self.coords[i]).collect();
         let res_ids: Vec<i32> = selected.iter().map(|&i| self.res_ids[i]).collect();
-        let res_names: Vec<String> = selected.iter().map(|&i| self.res_names[i].clone()).collect();
+        let res_names: Vec<CompactString> = selected.iter().map(|&i| self.res_names[i].clone()).collect();
         let is_hetero: Vec<bool> = selected.iter().map(|&i| self.is_hetero[i]).collect();
         let elements: Vec<Element> = selected.iter().map(|&i| self.elements[i].clone()).collect();
-        let atom_names: Vec<String> = selected.iter().map(|&i| self.atom_names[i].clone()).collect();
-        let chain_ids: Vec<String> = selected.iter().map(|&i| self.chain_ids[i].clone()).collect();
+        let atom_names: Vec<CompactString> = selected.iter().map(|&i| self.atom_names[i].clone()).collect();
+        let chain_ids: Vec<CompactString> = selected.iter().map(|&i| self.chain_ids[i].clone()).collect();
 
         let bonds: Option<Vec<Bond>> = self.bonds.as_ref().map(|bonds| {
             bonds
@@ -277,7 +308,7 @@ impl AtomCollection {
                 .collect()
         });
 
-        AtomCollection::new(next, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, bonds)
+        AtomCollection::from_compact(next, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, bonds)
     }
 
     /// Build a boolean mask selecting atoms belonging to `chain_id`.
@@ -385,7 +416,7 @@ impl AtomCollection {
         let n_atoms = self.size;
 
         let atoms = AtomsTable {
-            atom_name: self.atom_names.clone(),
+            atom_name: self.atom_names.iter().map(|s| s.to_string()).collect(),
             element: self.elements.clone(),
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
@@ -400,7 +431,7 @@ impl AtomCollection {
         let mut group = Vec::with_capacity(n_residues);
 
         for &start in &residue_starts {
-            comp_id.push(self.res_names[start].clone());
+            comp_id.push(self.res_names[start].to_string());
             let res_id = self.res_ids[start];
             label_seq_id.push(res_id);
             auth_seq_id.push(res_id);
@@ -427,7 +458,7 @@ impl AtomCollection {
         let mut entity_id = Vec::with_capacity(n_chains);
 
         for &start in &chain_starts {
-            let chain_id = self.chain_ids[start].clone();
+            let chain_id = self.chain_ids[start].to_string();
             label_asym_id.push(chain_id.clone());
             auth_asym_id.push(chain_id.clone());
             entity_id.push(chain_id);
@@ -843,5 +874,39 @@ mod tests {
         let mask = ac.select_ion();
         // ZN is at atom index 3
         assert_eq!(mask, vec![false, false, false, true, false]);
+    }
+
+    #[test]
+    fn test_long_names_preserved() {
+        // mmCIF residue names can be up to 5 chars and label_asym_id can be
+        // multi-character — the CompactString representation must preserve these
+        // in full (a fixed [u8; 4] representation would have truncated them).
+        let coords = vec![[0.0; 3], [1.0; 3]];
+        let res_ids = vec![1, 1];
+        let res_names: Vec<String> = vec!["AABCD", "AABCD"].into_iter().map(String::from).collect();
+        let is_hetero = vec![false, false];
+        let elements = vec![Element::C, Element::O];
+        let atom_names: Vec<String> = vec!["C1", "OXT"].into_iter().map(String::from).collect();
+        let chain_ids: Vec<String> = vec!["AA", "AA"].into_iter().map(String::from).collect();
+        let ac = AtomCollection::new(2, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None);
+
+        assert_eq!(ac.get_res_name(0), "AABCD");
+        assert_eq!(ac.get_chain_id(0), "AA");
+        assert_eq!(ac.get_atom_name(1), "OXT");
+
+        // filter carries the CompactString names through without truncation.
+        let subset = ac.filter(&[false, true]);
+        assert_eq!(subset.get_size(), 1);
+        assert_eq!(subset.get_res_name(0), "AABCD");
+        assert_eq!(subset.get_atom_name(0), "OXT");
+        assert_eq!(subset.get_chain_id(0), "AA");
+    }
+
+    #[test]
+    fn test_compact_string_is_inline() {
+        // Guard the memory-footprint intent: CompactString stores strings of this
+        // length inline (no heap allocation), which is the whole point of ferritin-2pr.
+        assert!(!CompactString::from("CA").is_heap_allocated());
+        assert!(!CompactString::from("AABCD").is_heap_allocated());
     }
 }

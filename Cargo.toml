@@ -24,6 +24,7 @@ edition = "2024"
 [workspace.dependencies]
 anyhow = "1.0.103"
 chrono = "0.4"
+compact_str = "0.9"
 urlencoding = "2"
 validator = { version = "0.20", features = ["derive"] }
 bevy = { version = "0.19", default-features = false }

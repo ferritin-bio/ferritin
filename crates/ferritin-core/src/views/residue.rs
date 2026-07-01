@@ -46,7 +46,7 @@ impl<'a> ResidueView<'a> {
         *self.data.get_res_id(self.start_atom_idx)
     }
     pub fn residue_name(&self) -> &str {
-        &self.data.get_res_name(self.start_atom_idx)
+        self.data.get_res_name(self.start_atom_idx)
     }
 
     pub fn is_hetero(&self) -> bool {

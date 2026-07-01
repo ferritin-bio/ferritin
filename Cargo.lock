@@ -5334,6 +5334,7 @@ name = "ferritin-core"
 version = "0.3.6-dev"
 dependencies = [
  "anyhow",
+ "compact_str",
  "ferritin-test-data",
  "itertools 0.15.0",
  "strum 0.28.0",

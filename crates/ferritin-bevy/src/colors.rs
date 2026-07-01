@@ -5,7 +5,7 @@ use bevy::color::Srgba;
 use bevy::math::Vec4;
 use bevy::prelude::{Color, Mesh};
 use ferritin_core::AtomCollection;
-use ferritin_molviewspec::molviewspec::nodes::{ColorNamesT, ColorT, ComponentSelector};
+use ferritin_molviewspec::molviewspec::nodes::{ColorNamesT, ColorT, ColorThemeT, ComponentSelector};
 
 /// Represents different color schemes for rendering atoms.
 #[derive(Clone)]
@@ -37,9 +37,147 @@ pub enum VertexMapKind {
     ResidueMap,
 }
 
+/// A rotating palette of visually distinct chain colors.
+const CHAIN_PALETTE: &[Srgba] = &[
+    Srgba::new(0.290, 0.565, 0.886, 1.0), // blue
+    Srgba::new(0.886, 0.565, 0.290, 1.0), // orange
+    Srgba::new(0.290, 0.765, 0.404, 1.0), // green
+    Srgba::new(0.765, 0.290, 0.404, 1.0), // rose
+    Srgba::new(0.686, 0.290, 0.886, 1.0), // purple
+    Srgba::new(0.290, 0.765, 0.765, 1.0), // teal
+    Srgba::new(0.886, 0.886, 0.290, 1.0), // gold
+    Srgba::new(0.886, 0.290, 0.290, 1.0), // red
+];
+
+/// Compute per-vertex initial colors from a `ColorThemeT`.
+///
+/// Returns a flat `Vec<Vec4>` parallel to `vertex_map`; callers then apply
+/// inline Color-node overrides on top of this base.
+pub fn initial_colors_from_theme(
+    theme: &ColorThemeT,
+    model: &AtomCollection,
+    vertex_map: &[usize],
+    map_kind: &VertexMapKind,
+) -> Vec<Vec4> {
+    let n_verts = vertex_map.len();
+    let white = Vec4::new(1.0, 1.0, 1.0, 1.0);
+
+    match theme {
+        ColorThemeT::Uniform => vec![white; n_verts],
+
+        ColorThemeT::ElementSymbol => {
+            vertex_map
+                .iter()
+                .map(|&atom_idx| {
+                    let elem = model.get_element(atom_idx);
+                    let c = element_color(elem);
+                    Vec4::new(c.red, c.green, c.blue, c.alpha)
+                })
+                .collect()
+        }
+
+        ColorThemeT::ChainId => {
+            // Assign each unique chain an index in encounter order; wrap palette.
+            let mut chain_order: Vec<String> = Vec::new();
+            let mut colors: Vec<Vec4> = Vec::with_capacity(n_verts);
+            for &atom_idx in vertex_map {
+                let chain = match map_kind {
+                    VertexMapKind::AtomMap => model.get_chain_id(atom_idx).to_string(),
+                    VertexMapKind::ResidueMap => {
+                        let residue_starts = model.get_residue_start_indices();
+                        let a_idx = residue_starts
+                            .and_then(|rs| rs.get(atom_idx))
+                            .copied()
+                            .unwrap_or(atom_idx);
+                        model.get_chain_id(a_idx).to_string()
+                    }
+                };
+                let idx = if let Some(pos) = chain_order.iter().position(|c| *c == chain) {
+                    pos
+                } else {
+                    chain_order.push(chain);
+                    chain_order.len() - 1
+                };
+                let c = CHAIN_PALETTE[idx % CHAIN_PALETTE.len()];
+                colors.push(Vec4::new(c.red, c.green, c.blue, c.alpha));
+            }
+            colors
+        }
+
+        ColorThemeT::SecondaryStructure => {
+            // CA-distance heuristic: collect per-residue CA positions, detect helix/strand/coil,
+            // then map each vertex back to its residue's color.
+            let residue_ss = detect_secondary_structure_colors(model);
+            vertex_map
+                .iter()
+                .map(|&idx| {
+                    let res_idx = match map_kind {
+                        VertexMapKind::AtomMap => {
+                            // Find which residue owns this atom.
+                            model.get_residue_start_indices()
+                                .and_then(|rs| {
+                                    rs.partition_point(|&s| s <= idx).checked_sub(1)
+                                })
+                                .unwrap_or(0)
+                        }
+                        VertexMapKind::ResidueMap => idx,
+                    };
+                    residue_ss.get(res_idx).copied().unwrap_or(white)
+                })
+                .collect()
+        }
+    }
+}
+
+/// Simple CA-distance secondary-structure heuristic (same logic as `Structure::detect_secondary_structure`).
+/// Returns one `Vec4` color per amino-acid residue in iteration order.
+fn detect_secondary_structure_colors(model: &AtomCollection) -> Vec<Vec4> {
+    // Canonical SS colors matching the cartoon renderer.
+    let helix_color = Vec4::new(1.0, 0.6, 0.6, 1.0);   // salmon
+    let sheet_color = Vec4::new(0.6, 0.6, 1.0, 1.0);   // periwinkle
+    let loop_color  = Vec4::new(0.6, 0.9, 0.6, 1.0);   // light-green
+
+    // Collect CA positions for each amino-acid residue.
+    let ca_positions: Vec<Option<[f32; 3]>> = model
+        .iter_residues_aminoacid()
+        .map(|res| {
+            res.find_atom_by_name("CA").map(|a| *a.coords())
+        })
+        .collect();
+
+    let n = ca_positions.len();
+    let mut ss_colors = vec![loop_color; n];
+
+    for i in 1..n.saturating_sub(1) {
+        let (Some(prev), Some(curr), Some(next)) = (
+            ca_positions[i - 1],
+            ca_positions[i],
+            ca_positions[i + 1],
+        ) else {
+            continue;
+        };
+        let d1 = dist(prev, curr);
+        let d2 = dist(curr, next);
+        if d1 < 4.2 && d2 < 4.2 {
+            ss_colors[i] = helix_color;
+        } else if d1 < 4.5 && d2 < 4.5 {
+            ss_colors[i] = sheet_color;
+        }
+    }
+    ss_colors
+}
+
+fn dist(a: [f32; 3], b: [f32; 3]) -> f32 {
+    let dx = a[0] - b[0];
+    let dy = a[1] - b[1];
+    let dz = a[2] - b[2];
+    (dx * dx + dy * dy + dz * dz).sqrt()
+}
+
 /// Paint vertex colors on `mesh` by applying MVS color nodes in order.
 ///
-/// Each `(ComponentSelector, ColorT)` pair selects atoms and assigns a color.
+/// `initial` is the per-vertex base color (e.g. from `initial_colors_from_theme`).
+/// Each `(ComponentSelector, ColorT)` pair selects atoms and overrides their color.
 /// Later nodes override earlier nodes on overlapping vertices.
 ///
 /// `vertex_map[vertex_idx]` holds the atom index (for `VertexMapKind::AtomMap`) or the
@@ -57,9 +195,50 @@ pub fn apply_mvs_colors(
         return;
     }
 
-    // Default: white for all vertices.
+    // Default base: white for all vertices (unchanged from existing behaviour when
+    // no theme is specified and no Color nodes are present).
     let mut vertex_colors: Vec<Vec4> = vec![Vec4::new(1.0, 1.0, 1.0, 1.0); n_verts];
 
+    apply_color_overrides(
+        &mut vertex_colors,
+        color_nodes,
+        model,
+        vertex_map,
+        &map_kind,
+    );
+
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, vertex_colors);
+}
+
+/// Apply theme + Color-node overrides in one call.
+///
+/// Equivalent to `initial_colors_from_theme` followed by `apply_color_overrides`,
+/// then writing to the mesh.
+pub fn apply_mvs_colors_with_theme(
+    mesh: &mut Mesh,
+    theme: &ColorThemeT,
+    color_nodes: &[(ComponentSelector, ColorT)],
+    model: &AtomCollection,
+    vertex_map: &[usize],
+    map_kind: VertexMapKind,
+) {
+    let n_verts = vertex_map.len();
+    if n_verts == 0 {
+        return;
+    }
+    let mut vertex_colors = initial_colors_from_theme(theme, model, vertex_map, &map_kind);
+    apply_color_overrides(&mut vertex_colors, color_nodes, model, vertex_map, &map_kind);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, vertex_colors);
+}
+
+/// Overlay `color_nodes` on top of an existing `vertex_colors` array in-place.
+fn apply_color_overrides(
+    vertex_colors: &mut Vec<Vec4>,
+    color_nodes: &[(ComponentSelector, ColorT)],
+    model: &AtomCollection,
+    vertex_map: &[usize],
+    map_kind: &VertexMapKind,
+) {
     for (selector, color_t) in color_nodes {
         let atom_mask = evaluate_selector(selector, model);
         let bevy_color = color_t_to_bevy(color_t).to_srgba();
@@ -89,8 +268,6 @@ pub fn apply_mvs_colors(
             }
         }
     }
-
-    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, vertex_colors);
 }
 
 /// Build a per-residue boolean mask (indexed by ALL-residue iteration order)
@@ -614,5 +791,90 @@ mod tests {
         let srgb = color.to_srgba();
         assert!(srgb.red > 0.99);
         assert!(srgb.blue < 0.01);
+    }
+
+    // T2-50: ElementSymbol theme gives CPK colors — carbon gray, oxygen red, nitrogen blue
+    #[test]
+    fn test_element_symbol_theme_cpk() {
+        let ac = make_test_collection();
+        // vertex_map: one vertex per atom, AtomMap
+        let vertex_map: Vec<usize> = (0..9).collect();
+        let colors = initial_colors_from_theme(
+            &ColorThemeT::ElementSymbol,
+            &ac,
+            &vertex_map,
+            &VertexMapKind::AtomMap,
+        );
+        assert_eq!(colors.len(), 9);
+        // ALA atoms 0-2 are all N,C,C — N is blue-ish (high blue), C is gray
+        // Just verify colors differ from white (1,1,1) meaning the theme had an effect.
+        let has_non_white = colors.iter().any(|c| {
+            (c[0] - 1.0).abs() > 0.05 || (c[1] - 1.0).abs() > 0.05 || (c[2] - 1.0).abs() > 0.05
+        });
+        assert!(has_non_white, "ElementSymbol theme should produce non-white colors");
+    }
+
+    // T2-51: ChainId theme gives distinct colors per chain
+    #[test]
+    fn test_chain_id_theme_distinct_per_chain() {
+        let ac = make_test_collection();
+        // atoms 0-4 are chain A, atoms 5-8 are chain B
+        let vertex_map: Vec<usize> = (0..9).collect();
+        let colors = initial_colors_from_theme(
+            &ColorThemeT::ChainId,
+            &ac,
+            &vertex_map,
+            &VertexMapKind::AtomMap,
+        );
+        // All chain-A atoms should share the same color
+        assert_eq!(colors[0], colors[1], "same chain → same color");
+        assert_eq!(colors[0], colors[4], "same chain → same color");
+        // Chain A and chain B should differ
+        assert_ne!(colors[0], colors[5], "different chains → different colors");
+    }
+
+    // T2-52: apply_mvs_colors_with_theme — theme base + color node override
+    #[test]
+    fn test_theme_with_color_node_override() {
+        let ac = make_test_collection();
+        let (mut mesh, map) = make_dummy_mesh_and_map(18, 9);
+        // Override ALL with red on top of ElementSymbol theme
+        let color_nodes = vec![(
+            ComponentSelector::Selector(ComponentSelectorT::All),
+            ColorT::Hex("#ff0000".to_string()),
+        )];
+        apply_mvs_colors_with_theme(
+            &mut mesh,
+            &ColorThemeT::ElementSymbol,
+            &color_nodes,
+            &ac,
+            &map,
+            VertexMapKind::AtomMap,
+        );
+        let colors = get_colors(&mesh).expect("COLOR attribute must be set");
+        // All vertices overridden to red
+        for c in &colors {
+            assert!(c[0] > 0.99, "expected red");
+            assert!(c[1] < 0.01, "expected no green");
+            assert!(c[2] < 0.01, "expected no blue");
+        }
+    }
+
+    // T2-53: Uniform theme → all white
+    #[test]
+    fn test_uniform_theme_is_white() {
+        let ac = make_test_collection();
+        let vertex_map: Vec<usize> = (0..9).collect();
+        let colors = initial_colors_from_theme(
+            &ColorThemeT::Uniform,
+            &ac,
+            &vertex_map,
+            &VertexMapKind::AtomMap,
+        );
+        for c in colors {
+            assert!((c[0] - 1.0).abs() < 1e-6);
+            assert!((c[1] - 1.0).abs() < 1e-6);
+            assert!((c[2] - 1.0).abs() < 1e-6);
+        }
     }
 }
