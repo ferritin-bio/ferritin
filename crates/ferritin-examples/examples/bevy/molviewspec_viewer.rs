@@ -1125,6 +1125,45 @@ mod tests {
         assert!(tree_has_camera_or_focus(&state.root));
     }
 
+    /// End-to-end: run the Basic preset (with a real extracted 1cbs.cif) through
+    /// the actual `MvsPlugin` executor and confirm it spawns rendered meshes.
+    #[test]
+    fn test_preset_basic_renders_meshes_through_executor() {
+        use ferritin_bevy::MvsEntity;
+
+        let (path, _handle) = TestFile::mvs_1cbs()
+            .create_temp()
+            .expect("extract 1cbs.cif");
+        let json = preset_basic(&path);
+
+        let mut app = App::new();
+        app.add_plugins(bevy::MinimalPlugins);
+        app.add_plugins(bevy::asset::AssetPlugin::default());
+        app.add_plugins(MvsPlugin);
+
+        app.world_mut()
+            .write_message(LoadMvsEvent::FromString(json));
+        app.update();
+
+        let mesh_count = app
+            .world_mut()
+            .query_filtered::<Entity, (With<Mesh3d>, With<MvsEntity>)>()
+            .iter(app.world())
+            .count();
+        assert!(
+            mesh_count >= 1,
+            "Basic preset must render at least one mesh, got {mesh_count}"
+        );
+
+        // The focus node should have moved the orbit camera off its default.
+        let orbit = app.world().resource::<OrbitCamera>().clone();
+        assert_ne!(
+            orbit,
+            OrbitCamera::default(),
+            "focus node must reposition the orbit camera"
+        );
+    }
+
     #[test]
     fn test_collapsed_node_hides_descendants() {
         let state = assert_preset_parses(&preset_basic("/tmp/1cbs.cif"));
