@@ -456,6 +456,21 @@ mod tests {
         let element: Element = "Cl".try_into().unwrap();
         assert_eq!(Element::Cl.atomic_number(), element.atomic_number());
     }
+
+    // T0-11: gate test for Phase 2 type_symbol matching.
+    // ELEMENT_SYMBOLS is all-uppercase, so symbol() returns "FE" not "Fe".
+    // Phase 2 type_symbol comparison can use direct == (CIF also uses uppercase).
+    #[test]
+    fn test_element_symbol_casing() {
+        assert_eq!(Element::Fe.symbol(), "FE");
+        assert_eq!(Element::He.symbol(), "HE");
+        assert_eq!(Element::Ca.symbol(), "CA");
+        assert_eq!(Element::N.symbol(), "N");
+        assert_eq!(Element::O.symbol(), "O");
+        // to_string() uses Debug formatting (PascalCase enum variant) — NOT the same as symbol()
+        assert_eq!(Element::Fe.to_string(), "Fe");
+        assert_ne!(Element::Fe.symbol(), Element::Fe.to_string());
+    }
 }
 
 /// The symbols of the elements of the periodic table

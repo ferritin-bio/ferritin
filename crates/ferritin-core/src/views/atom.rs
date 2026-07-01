@@ -23,16 +23,16 @@ impl<'a> AtomView<'a> {
     pub fn element(&self) -> &'a Element {
         self.data.get_element(self.idx)
     }
-    pub fn atom_name(&self) -> &'a String {
+    pub fn atom_name(&self) -> &'a str {
         self.data.get_atom_name(self.idx)
     }
     pub fn residue_id(&self) -> i32 {
         *self.data.get_res_id(self.idx)
     }
-    pub fn residue_name(&self) -> &'a String {
+    pub fn residue_name(&self) -> &'a str {
         self.data.get_res_name(self.idx)
     }
-    pub fn chain_id(&self) -> &'a String {
+    pub fn chain_id(&self) -> &'a str {
         self.data.get_chain_id(self.idx)
     }
     pub fn is_hetero(&self) -> bool {

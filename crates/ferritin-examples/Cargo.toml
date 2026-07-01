@@ -29,7 +29,10 @@ clap.workspace = true
 ferritin-bevy = { path = "../ferritin-bevy" }
 bevy_feathers = "0.19.0"
 ferritin-core = { path = "../ferritin-core" }
+ferritin-molviewspec = { path = "../ferritin-molviewspec" }
 ferritin-plms = { path = "../ferritin-plms" }
+serde_json.workspace = true
+tempfile.workspace = true
 rerun = { workspace = true, features = ["native_viewer"], optional = true }
 
 # The metal feature is defined above, and we don't need to redefine it conditionally
@@ -79,6 +82,11 @@ required-features = ["bevy"]
 [[example]]
 name = "bevy_interactive_viewer"
 path = "examples/bevy/interactive_viewer.rs"
+required-features = ["bevy"]
+
+[[example]]
+name = "bevy_molviewspec_viewer"
+path = "examples/bevy/molviewspec_viewer.rs"
 required-features = ["bevy"]
 
 [[example]]
