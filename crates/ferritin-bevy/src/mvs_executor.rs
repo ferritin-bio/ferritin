@@ -618,25 +618,71 @@ fn apply_camera(p: &CameraParams, ctx: &mut Ctx) {
 }
 
 fn apply_focus(params: &FocusInlineParams, ac: &AtomCollection, mask: &AtomMask, ctx: &mut Ctx) {
-    let Some((center, diagonal)) = aabb_of_masked(ac, mask) else {
+    let Some((min, max)) = aabb_of_masked(ac, mask) else {
         return;
     };
-    let radius = (diagonal * 1.5).max(1.0);
-    ctx.orbit.focus = center;
-    ctx.orbit.radius = radius;
+    ctx.orbit.focus = (min + max) * 0.5;
 
-    // An explicit view direction overrides the orbit orientation. `direction` is the
-    // direction the camera looks *along*, so the camera sits opposite to it.
-    if let Some(dir) = params.direction {
-        let view = tuple_to_vec3(dir);
-        if view.length() > 1e-6 {
-            let offset = -view.normalize() * radius;
-            set_yaw_pitch_from_offset(ctx.orbit, offset);
-        }
-    }
     if let Some(up) = params.up {
         ctx.orbit.up = tuple_to_vec3(up);
     }
+    // An explicit view direction overrides the orbit orientation. `direction` is the
+    // direction the camera looks *along*, so the camera sits opposite to it. Resolve
+    // this before fitting the radius, since the fit depends on the final yaw/pitch.
+    if let Some(dir) = params.direction {
+        let view = tuple_to_vec3(dir);
+        if view.length() > 1e-6 {
+            set_yaw_pitch_from_offset(ctx.orbit, -view.normalize());
+        }
+    }
+
+    ctx.orbit.radius = fit_radius_for_view(min, max, ctx.orbit);
+}
+
+/// Camera distance that keeps the AABB `[min, max]` fully in view for the current
+/// orbit yaw/pitch/up.
+///
+/// Using the worst-case any-angle bounding sphere (`aabb_diagonal / 2`) over-estimates
+/// how far back the camera needs to be for any real (non-spherical) structure, since
+/// the 3D corner-to-corner diagonal is longer than the object's extent along any single
+/// screen axis — this left single structures filling only a small fraction of the
+/// viewport (ferritin-ala.5). Projecting the AABB corners onto the camera's actual
+/// right/up axes gives a much tighter fit for the current view direction.
+fn fit_radius_for_view(min: Vec3, max: Vec3, orbit: &OrbitCamera) -> f32 {
+    let center = (min + max) * 0.5;
+    // Points from focus toward the camera (same convention as `orbit_position`'s
+    // offset); only its axis matters for building a look-at basis, not its sign.
+    let view_axis = Vec3::new(
+        orbit.yaw.sin() * orbit.pitch.cos(),
+        orbit.pitch.sin(),
+        orbit.yaw.cos() * orbit.pitch.cos(),
+    );
+    let world_up = if orbit.up.length_squared() > 1e-6 {
+        orbit.up
+    } else {
+        Vec3::Y
+    };
+    let right = view_axis.cross(world_up).normalize_or_zero();
+    let cam_up = right.cross(view_axis).normalize_or_zero();
+
+    let mut half_right = 0.0_f32;
+    let mut half_up = 0.0_f32;
+    for &x in &[min.x, max.x] {
+        for &y in &[min.y, max.y] {
+            for &z in &[min.z, max.z] {
+                let corner = Vec3::new(x, y, z) - center;
+                half_right = half_right.max(corner.dot(right).abs());
+                half_up = half_up.max(corner.dot(cam_up).abs());
+            }
+        }
+    }
+
+    // Half of Bevy's default vertical FOV (45°), used by every Camera3d in this
+    // codebase. Using it for the horizontal axis too is a safe over-estimate on
+    // widescreen aspect ratios, where the true horizontal FOV is wider.
+    const HALF_FOV: f32 = std::f32::consts::FRAC_PI_4 / 2.0;
+    const MARGIN: f32 = 1.15;
+    (half_up.max(half_right) / HALF_FOV.tan() * MARGIN).max(1.0)
 }
 
 fn set_orbit_from_position(orbit: &mut OrbitCamera, target: Vec3, position: Vec3) {
@@ -710,7 +756,8 @@ fn parse_transform(params: &TransformParams) -> Result<Transform, ()> {
 
 /// Axis-aligned bounding box of the masked atoms: returns `(center, diagonal_length)`.
 /// `None` when no atom passes the mask.
-fn aabb_of_masked(ac: &AtomCollection, mask: &AtomMask) -> Option<(Vec3, f32)> {
+/// Axis-aligned bounding box (min, max) of the masked atoms; `None` when no atom passes.
+fn aabb_of_masked(ac: &AtomCollection, mask: &AtomMask) -> Option<(Vec3, Vec3)> {
     let mut min = Vec3::splat(f32::MAX);
     let mut max = Vec3::splat(f32::MIN);
     let mut any = false;
@@ -726,7 +773,7 @@ fn aabb_of_masked(ac: &AtomCollection, mask: &AtomMask) -> Option<(Vec3, f32)> {
     if !any {
         return None;
     }
-    Some(((min + max) * 0.5, (max - min).length()))
+    Some((min, max))
 }
 
 /// Mean position of the masked atoms; `None` when no atom passes the mask.
@@ -887,7 +934,9 @@ mod tests {
     fn test_aabb_from_masked_atoms() {
         let ac = three_atom_collection();
         let mask = AtomMask(vec![true; 3]);
-        let (center, diag) = aabb_of_masked(&ac, &mask).unwrap();
+        let (min, max) = aabb_of_masked(&ac, &mask).unwrap();
+        let center = (min + max) * 0.5;
+        let diag = (max - min).length();
         assert!((center - Vec3::new(1.0, 1.5, 0.0)).length() < 1e-5);
         assert!((diag - 13.0_f32.sqrt()).abs() < 1e-4);
     }
@@ -1265,6 +1314,103 @@ mod tests {
         assert_ne!(
             orbit.radius, default_orbit.radius,
             "T3-14: focus should change orbit radius"
+        );
+    }
+
+    // ferritin-ala.5: focus() should fill most of the viewport, not just a small
+    // fraction of it. Reconstructs the same camera the viewer examples use
+    // (Camera3d::default(), orbit_position formula) and projects the real rendered
+    // mesh's vertices to check on-screen coverage, rather than trusting the
+    // orbit-radius formula's own math (which is exactly what was wrong before).
+    #[test]
+    fn test_focus_fills_most_of_viewport() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::mvs_4hhb().create_temp().unwrap();
+        let json = format!(
+            r#"{{
+              "root": {{
+                "kind": "root",
+                "children": [{{
+                  "kind": "download",
+                  "params": {{"url": "{path}"}},
+                  "children": [{{
+                    "kind": "parse",
+                    "params": {{"format": "mmcif"}},
+                    "children": [{{
+                      "kind": "structure",
+                      "params": {{"type": "model"}},
+                      "children": [{{
+                        "kind": "component",
+                        "params": {{"selector": "all"}},
+                        "children": [
+                          {{"kind": "representation", "params": {{"type": "cartoon"}}}},
+                          {{"kind": "focus", "params": {{}}}}
+                        ]
+                      }}]
+                    }}]
+                  }}]
+                }}]
+              }},
+              "metadata": {{"version": "1.0", "timestamp": "2024-01-01T00:00:00"}}
+            }}"#
+        );
+        let mut app = make_app();
+        send_and_update(&mut app, &json);
+        let orbit = app.world().resource::<OrbitCamera>().clone();
+
+        let camera_transform = Transform::from_translation({
+            let x = orbit.radius * orbit.yaw.sin() * orbit.pitch.cos();
+            let y = orbit.radius * orbit.pitch.sin();
+            let z = orbit.radius * orbit.yaw.cos() * orbit.pitch.cos();
+            orbit.focus + Vec3::new(x, y, z)
+        })
+        .looking_at(orbit.focus, Vec3::Y);
+        let viewport_size = UVec2::new(2560, 1440);
+        let mut projection = Projection::default();
+        projection.update(viewport_size.x as f32, viewport_size.y as f32);
+        let mut camera = Camera {
+            viewport: Some(bevy::camera::Viewport {
+                physical_size: viewport_size,
+                ..default()
+            }),
+            ..default()
+        };
+        camera.computed.clip_from_view = projection.get_clip_from_view();
+        camera.computed.target_info = Some(bevy::camera::RenderTargetInfo {
+            physical_size: viewport_size,
+            scale_factor: 1.0,
+        });
+        let gt = GlobalTransform::from(camera_transform);
+
+        let mut mesh_query = app.world_mut().query::<&Mesh3d>();
+        let mesh_handle = mesh_query
+            .single(app.world())
+            .expect("expected 1 mesh")
+            .clone();
+        let meshes = app.world().resource::<Assets<Mesh>>();
+        let mesh = meshes.get(&mesh_handle.0).expect("mesh must exist");
+        let positions = match mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .expect("mesh must have positions")
+        {
+            bevy::render::mesh::VertexAttributeValues::Float32x3(v) => v,
+            _ => panic!("unexpected position format"),
+        };
+
+        let mut min_px = Vec2::splat(f32::MAX);
+        let mut max_px = Vec2::splat(f32::MIN);
+        for p in positions {
+            if let Ok(px) = camera.world_to_viewport(&gt, Vec3::from_array(*p)) {
+                min_px = min_px.min(px);
+                max_px = max_px.max(px);
+            }
+        }
+
+        let fill_height = (max_px.y - min_px.y) / viewport_size.y as f32;
+        let fill_width = (max_px.x - min_px.x) / viewport_size.x as f32;
+        assert!(
+            fill_height > 0.5 || fill_width > 0.5,
+            "expected focus() to fill most of the viewport, got fill_height={fill_height:.2} fill_width={fill_width:.2}"
         );
     }
 
