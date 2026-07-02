@@ -24,6 +24,7 @@ use std::path::PathBuf;
 
 use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
+use bevy::ui::Node as UiNode;
 use ferritin_core::{AtomCollection, Model, load_model};
 use ferritin_molviewspec::molviewspec::nodes::{
     CameraParams, CanvasParams, ColorT, ColorThemeT, ComponentInlineParams, ComponentSelector,
@@ -45,10 +46,15 @@ use crate::structure::{RenderOptions, Structure};
 #[derive(Component)]
 pub struct MvsEntity;
 
-/// A MVS `label` node, spawned at the centroid of its component's atoms. Headless
-/// builds carry only the text + [`Transform`]; a UI layer turns it into billboard text.
+/// A MVS `label` node, spawned at the centroid of its component's atoms.
+/// [`update_mvs_label_billboards`] projects this world-space anchor to screen
+/// space each frame and keeps a companion UI [`Text`] entity positioned there.
 #[derive(Component)]
 pub struct MvsLabel(pub String);
+
+/// Links a [`MvsLabel`] anchor entity to its billboard UI [`Text`] entity.
+#[derive(Component)]
+struct MvsLabelUiNode(Entity);
 
 /// Holds the most recently loaded [`State`] (for UI tree inspection). Replaced on
 /// each successful load.
@@ -134,7 +140,68 @@ impl Plugin for MvsPlugin {
             .init_resource::<OrbitCamera>()
             .add_message::<LoadMvsEvent>()
             .add_message::<MvsError>()
-            .add_systems(Update, execute_mvs_on_load);
+            .add_systems(
+                Update,
+                (execute_mvs_on_load, update_mvs_label_billboards).chain(),
+            );
+    }
+}
+
+/// Projects each [`MvsLabel`] anchor's world position through the active 3D
+/// camera and keeps a companion screen-space [`Text`] node positioned there,
+/// creating it on first sight. Labels that project behind the camera or
+/// outside the viewport are hidden rather than despawned, since the anchor
+/// entity (and thus this link) is recreated on every scene reload anyway.
+fn update_mvs_label_billboards(
+    mut commands: Commands,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    label_q: Query<(Entity, &Transform, Option<&MvsLabelUiNode>), With<MvsLabel>>,
+    mut node_q: Query<&mut UiNode>,
+    text_q: Query<&MvsLabel>,
+) {
+    let Ok((camera, camera_transform)) = camera_q.single() else {
+        return;
+    };
+
+    for (entity, transform, ui_node) in &label_q {
+        let viewport_pos = camera
+            .world_to_viewport(camera_transform, transform.translation)
+            .ok();
+
+        match (ui_node, viewport_pos) {
+            (Some(MvsLabelUiNode(ui_entity)), Some(pos)) => {
+                if let Ok(mut node) = node_q.get_mut(*ui_entity) {
+                    node.display = Display::Flex;
+                    node.left = Val::Px(pos.x);
+                    node.top = Val::Px(pos.y);
+                }
+            }
+            (Some(MvsLabelUiNode(ui_entity)), None) => {
+                if let Ok(mut node) = node_q.get_mut(*ui_entity) {
+                    node.display = Display::None;
+                }
+            }
+            (None, Some(pos)) => {
+                let Ok(label) = text_q.get(entity) else {
+                    continue;
+                };
+                let ui_entity = commands
+                    .spawn((
+                        Text::new(label.0.clone()),
+                        TextColor(Color::WHITE),
+                        UiNode {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(pos.x),
+                            top: Val::Px(pos.y),
+                            ..default()
+                        },
+                        MvsEntity,
+                    ))
+                    .id();
+                commands.entity(entity).insert(MvsLabelUiNode(ui_entity));
+            }
+            (None, None) => {}
+        }
     }
 }
 
@@ -1021,6 +1088,88 @@ mod tests {
             1,
             "T3-13: expected 1 MvsLabel entity"
         );
+    }
+
+    // ferritin-ala.3: a label's world anchor gets a companion billboard Text/UiNode
+    // once a Camera3d exists, positioned via the camera's viewport projection.
+    #[test]
+    fn test_label_billboard_ui_node_created() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let json = format!(
+            r#"{{
+              "root": {{
+                "kind": "root",
+                "children": [{{
+                  "kind": "download",
+                  "params": {{"url": "{path}"}},
+                  "children": [{{
+                    "kind": "parse",
+                    "params": {{"format": "mmcif"}},
+                    "children": [{{
+                      "kind": "structure",
+                      "params": {{"type": "model"}},
+                      "children": [{{
+                        "kind": "component",
+                        "params": {{"selector": "all"}},
+                        "children": [
+                          {{"kind": "representation", "params": {{"type": "ball_and_stick"}}}},
+                          {{"kind": "label", "params": {{"text": "Hello World"}}}}
+                        ]
+                      }}]
+                    }}]
+                  }}]
+                }}]
+              }},
+              "metadata": {{"version": "1.0", "timestamp": "2024-01-01T00:00:00"}}
+            }}"#
+        );
+        let mut app = make_app();
+        let camera_transform = Transform::from_xyz(0.0, 0.0, 50.0).looking_at(Vec3::ZERO, Vec3::Y);
+        let viewport_size = UVec2::new(800, 600);
+        let mut projection = Projection::default();
+        projection.update(viewport_size.x as f32, viewport_size.y as f32);
+        let mut camera = Camera {
+            viewport: Some(bevy::camera::Viewport {
+                physical_size: viewport_size,
+                ..default()
+            }),
+            ..default()
+        };
+        // MinimalPlugins doesn't run the camera-projection update system that
+        // normally populates `Camera::computed`, so seed it manually (mirrors
+        // bevy_camera's own internal `make_camera` test helper).
+        camera.computed.clip_from_view = projection.get_clip_from_view();
+        camera.computed.target_info = Some(bevy::camera::RenderTargetInfo {
+            physical_size: viewport_size,
+            scale_factor: 1.0,
+        });
+        app.world_mut().spawn((
+            Camera3d::default(),
+            camera,
+            projection,
+            camera_transform,
+            GlobalTransform::from(camera_transform),
+        ));
+        send_and_update(&mut app, &json);
+        // execute_mvs_on_load and update_mvs_label_billboards are `.chain()`d, so a
+        // single update() already runs both; run one more to let GlobalTransform
+        // propagation (if any plugin performs it) settle before re-checking.
+        app.update();
+
+        let mut label_query = app.world_mut().query::<&MvsLabelUiNode>();
+        assert_eq!(
+            label_query.iter(app.world()).count(),
+            1,
+            "expected the label anchor to gain a MvsLabelUiNode link"
+        );
+
+        let mut text_query = app.world_mut().query::<(&Text, &UiNode)>();
+        let (text, node) = text_query
+            .single(app.world())
+            .expect("expected exactly one billboard Text/UiNode entity");
+        assert_eq!(text.0, "Hello World");
+        assert_eq!(node.position_type, PositionType::Absolute);
     }
 
     // T3-14: A focus node repositions OrbitCamera away from its default.
