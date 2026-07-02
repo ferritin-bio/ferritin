@@ -385,6 +385,9 @@ fn preset_superposition(path_a: &str, path_b: &str) -> String {
             ColorT::Named(ColorNamesT::Orange),
             sel(ComponentSelectorT::All),
         );
+        // Focus the translated copy too, so the executor's focus union frames both
+        // structures instead of leaving this one clipped off-frame (ferritin-t0h.6).
+        c.focus(None, None);
     }
     to_json(&state)
 }
@@ -423,9 +426,17 @@ fn to_json(state: &State) -> String {
 // ---- 3-D scene -----------------------------------------------------------------
 
 fn setup_scene(mut commands: Commands, orbit: Res<OrbitCamera>) {
+    // Ambient fill (per-camera in Bevy 0.19) so surfaces facing away from the
+    // directional key lights (much of a cartoon tube) don't read as near-black on
+    // the dark background (ferritin-t0h.4).
     commands.spawn((
         Camera3d::default(),
         Transform::from_translation(orbit_position(&orbit)).looking_at(orbit.focus, orbit.up),
+        AmbientLight {
+            color: Color::WHITE,
+            brightness: 600.0,
+            ..default()
+        },
     ));
 
     commands.spawn((

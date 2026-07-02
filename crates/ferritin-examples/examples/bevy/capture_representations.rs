@@ -351,6 +351,9 @@ fn preset_superposition(path_a: &str, path_b: &str) -> String {
         c.representation(RepresentationTypeT::Cartoon)
             .unwrap()
             .color(ColorT::Named(ColorNamesT::Orange), sel(ComponentSelectorT::All));
+        // Focus the translated copy too, so the executor's focus union frames both
+        // structures instead of leaving this one clipped off-frame (ferritin-t0h.6).
+        c.focus(None, None);
     }
     to_json(&state)
 }
@@ -381,9 +384,19 @@ fn preset_symmetry(path: &str) -> String {
 // ---- Scene / camera --------------------------------------------------------
 
 fn setup_scene(mut commands: Commands, orbit: Res<OrbitCamera>) {
+    // Keep this lighting rig in sync with molviewspec_viewer's setup_scene so the
+    // captured ground-truth reflects what the interactive app actually shows: an
+    // ambient fill (per-camera in Bevy 0.19) plus a three-point directional rig
+    // so surfaces facing away from the key lights don't read near-black
+    // (ferritin-t0h.4).
     commands.spawn((
         Camera3d::default(),
         Transform::from_translation(orbit_position(&orbit)).looking_at(orbit.focus, orbit.up),
+        AmbientLight {
+            color: Color::WHITE,
+            brightness: 600.0,
+            ..default()
+        },
     ));
     commands.spawn((
         DirectionalLight {
@@ -400,6 +413,14 @@ fn setup_scene(mut commands: Commands, orbit: Res<OrbitCamera>) {
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.5, -0.5, 0.0)),
+    ));
+    commands.spawn((
+        DirectionalLight {
+            color: Color::srgb(0.9, 0.9, 1.0),
+            illuminance: 3_000.0,
+            ..default()
+        },
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.0, std::f32::consts::PI, 0.0)),
     ));
 }
 

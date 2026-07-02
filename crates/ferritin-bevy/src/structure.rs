@@ -43,8 +43,6 @@ struct BackboneAtoms {
     ca: Vec3,
     n: Vec3,
     c: Vec3,
-    o: Vec3,
-    residue_index: usize,
 }
 
 /// Define Everything Needed to render
@@ -116,6 +114,27 @@ impl Structure {
         }
     }
 
+    /// Maximum CA-CA distance (Å) treated as a continuous backbone. A trans
+    /// peptide bond gives ~3.8 Å; anything beyond this is a chain break or a
+    /// stretch of missing residues, across which the ribbon must not spline.
+    const CA_BREAK_DIST: f32 = 5.0;
+
+    /// Whether two consecutive backbone residues should start a new ribbon
+    /// segment rather than be splined together. A break is any of: a gap in the
+    /// (masked) residue-iteration index, a chain change, or a CA-CA distance
+    /// beyond a single peptide bond (missing residues / HETATM insertion).
+    /// See ferritin-t0h.1.
+    fn is_backbone_break(
+        prev_idx: usize,
+        prev_chain: &str,
+        prev_ca: Vec3,
+        idx: usize,
+        chain: &str,
+        ca: Vec3,
+    ) -> bool {
+        idx != prev_idx + 1 || chain != prev_chain || ca.distance(prev_ca) > Self::CA_BREAK_DIST
+    }
+
     fn create_smooth_curve(points: &[Vec3], segments: usize) -> Vec<Vec3> {
         let mut curve_points = Vec::new();
 
@@ -139,6 +158,73 @@ impl Structure {
         curve_points
     }
 
+    /// Rotation-minimizing frames along a curve (parallel transport). Returns one
+    /// orthonormal `(right, up)` pair per curve point, both perpendicular to the
+    /// local tangent. The pair rotates *minimally* from one point to the next, so
+    /// the extruded tube cross-section never flips 180° at a kink the way the old
+    /// `tangent × global_Y` frame did — that flip produced the white starburst
+    /// spikes at joints (ferritin-t0h.2).
+    fn sweep_frames(curve: &[Vec3]) -> Vec<(Vec3, Vec3)> {
+        let n = curve.len();
+        let mut frames = Vec::with_capacity(n);
+        if n == 0 {
+            return frames;
+        }
+
+        let tangent = |i: usize| -> Vec3 {
+            let raw = if i + 1 < n {
+                curve[i + 1] - curve[i]
+            } else {
+                curve[i] - curve[i - 1]
+            };
+            raw.normalize_or_zero()
+        };
+
+        let t0 = {
+            let t = tangent(0);
+            if t.length_squared() > 1e-8 {
+                t
+            } else {
+                Vec3::Z
+            }
+        };
+        let seed = if t0.abs_diff_eq(Vec3::Y, 0.01) {
+            Vec3::X
+        } else {
+            Vec3::Y
+        };
+        let mut right = t0.cross(seed).normalize();
+        let mut up = t0.cross(right).normalize();
+        frames.push((right, up));
+
+        for i in 1..n {
+            let t_prev = tangent(i - 1);
+            let t_cur = tangent(i);
+            let axis = t_prev.cross(t_cur);
+            let sin_a = axis.length();
+            if sin_a > 1e-6 {
+                let axis_n = axis / sin_a;
+                let cos_a = t_prev.dot(t_cur).clamp(-1.0, 1.0);
+                let angle = sin_a.atan2(cos_a);
+                right = Quat::from_axis_angle(axis_n, angle) * right;
+            }
+            // Re-orthonormalize against the current tangent to kill drift.
+            right = (right - t_cur * right.dot(t_cur)).normalize_or_zero();
+            if right.length_squared() < 1e-8 {
+                let fallback = if t_cur.abs_diff_eq(Vec3::Y, 0.01) {
+                    Vec3::X
+                } else {
+                    Vec3::Y
+                };
+                right = t_cur.cross(fallback).normalize();
+            }
+            up = t_cur.cross(right).normalize();
+            frames.push((right, up));
+        }
+
+        frames
+    }
+
     /// Catmull-Rom spline interpolation
     fn catmull_rom(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: f32) -> Vec3 {
         let t2 = t * t;
@@ -152,29 +238,6 @@ impl Structure {
             + p1
     }
 
-    fn extract_backbone_atoms(pdb: &Model) -> Vec<BackboneAtoms> {
-        let mut backbone_data = Vec::new();
-
-        for residue in pdb.residues_aminoacid() {
-            if let (Some(ca), Some(n), Some(c), Some(o)) = (
-                residue.find_atom_by_name("CA"),
-                residue.find_atom_by_name("N"),
-                residue.find_atom_by_name("C"),
-                residue.find_atom_by_name("O"),
-            ) {
-                backbone_data.push(BackboneAtoms {
-                    ca: Vec3::from_array(ca.coords()),
-                    n: Vec3::from_array(n.coords()),
-                    c: Vec3::from_array(c.coords()),
-                    o: Vec3::from_array(o.coords()),
-                    residue_index: residue.residue_id() as usize,
-                });
-            }
-        }
-
-        backbone_data
-    }
-
     /// Generate a mesh around a curve path, with one radius per curve point (used
     /// by Putty's synthetic thickness placeholder — see `synthetic_putty_radii`).
     ///
@@ -186,20 +249,12 @@ impl Structure {
         let mut normals = Vec::new();
         let mut uvs = Vec::new();
         let mut indices = Vec::new();
+        // Rotation-minimizing frames avoid cross-section flips at kinks (ferritin-t0h.2).
+        let frames = Structure::sweep_frames(curve);
         // Generate circles around each point
         for (i, &center) in curve.iter().enumerate() {
             let radius = radii[i];
-            let forward = if i < curve.len() - 1 {
-                (curve[i + 1] - center).normalize()
-            } else {
-                (center - curve[i - 1]).normalize()
-            };
-            let right = if forward.abs_diff_eq(Vec3::Y, 0.01) {
-                Vec3::X
-            } else {
-                forward.cross(Vec3::Y).normalize()
-            };
-            let up = forward.cross(right);
+            let (right, up) = frames[i];
             // Create vertices around the circle
             for j in 0..segments {
                 let angle = (j as f32 / segments as f32) * std::f32::consts::TAU;
@@ -303,6 +358,9 @@ impl Structure {
         // Control how many segments around the tube
         let segments = 16;
 
+        // Rotation-minimizing frames avoid cross-section flips at kinks (ferritin-t0h.2).
+        let frames = Structure::sweep_frames(curve);
+
         // Generate cross-section profiles for each point in the curve
         for (i, &center) in curve.iter().enumerate() {
             let sec_type = if i < sec_structures.len() {
@@ -311,20 +369,7 @@ impl Structure {
                 SecondaryStructure::Loop
             };
 
-            // Calculate tangent direction
-            let forward = if i < curve.len() - 1 {
-                (curve[i + 1] - center).normalize()
-            } else {
-                (center - curve[i - 1]).normalize()
-            };
-
-            // Calculate normal and binormal for the tube
-            let right = if forward.abs_diff_eq(Vec3::Y, 0.01) {
-                Vec3::X
-            } else {
-                forward.cross(Vec3::Y).normalize()
-            };
-            let up = forward.cross(right);
+            let (right, up) = frames[i];
 
             let color = match sec_type {
                 SecondaryStructure::Helix => Vec4::new(1.0, 0.6, 0.6, 1.0),
@@ -422,29 +467,10 @@ impl Structure {
     }
 
     fn render_cartoon(&self) -> Mesh {
-        let backbone_atoms = Structure::extract_backbone_atoms(&self.pdb);
-        if backbone_atoms.len() < 2 {
-            return Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
-        }
-
-        let secondary_structures = Structure::detect_secondary_structure(&backbone_atoms);
-        let ca_positions: Vec<Vec3> = backbone_atoms.iter().map(|a| a.ca).collect();
-
-        // Build a smooth Catmull-Rom curve through the CA trace.
-        let segments_per_residue = 4;
-        let curve = Structure::create_smooth_curve(&ca_positions, segments_per_residue);
-
-        // Map per-residue secondary structure onto the finer curve points.
-        let curve_sec: Vec<SecondaryStructure> = (0..curve.len())
-            .map(|i| {
-                secondary_structures
-                    .get(i / segments_per_residue)
-                    .copied()
-                    .unwrap_or(SecondaryStructure::Loop)
-            })
-            .collect();
-
-        Structure::generate_cartoon_mesh(&curve, &curve_sec)
+        // Delegate to the mapped path (mask = None) so the ribbon is split into
+        // contiguous backbone segments at chain breaks / missing-residue gaps
+        // rather than splining straight through them (ferritin-t0h.1).
+        self.render_cartoon_mapped(None).0
     }
 
     fn render_ballandstick(&self) -> Mesh {
@@ -539,17 +565,10 @@ impl Structure {
     }
 
     fn render_putty(&self) -> Mesh {
-        let c_alphas: Vec<Vec3> = self
-            .pdb
-            .residues_aminoacid()
-            .map(|residue| {
-                let ca = residue.find_atom_by_name("CA").expect("CA in all residues");
-                Vec3::from_array(ca.coords())
-            })
-            .collect();
-        let curve = Structure::create_smooth_curve(&c_alphas, 3);
-        let radii = Structure::synthetic_putty_radii(curve.len());
-        Structure::generate_tube_mesh_varying(&curve, &radii, 16)
+        // Delegate to the mapped path (mask = None) so the tube is split at chain
+        // breaks / missing-residue gaps rather than splining through them
+        // (ferritin-t0h.1).
+        self.render_putty_mapped(None).0
     }
 
     /// Placeholder tube-radius profile for Putty, until per-atom b_factor is
@@ -745,8 +764,8 @@ impl Structure {
         let segments_per_residue: usize = 4;
         let cross_segments: usize = 16;
 
-        // Collect (residue_iter_idx, BackboneAtoms) for residues whose CA passes the mask.
-        let indexed_backbone: Vec<(usize, BackboneAtoms)> = self
+        // Collect (residue_iter_idx, chain_id, BackboneAtoms) for residues whose CA passes the mask.
+        let indexed_backbone: Vec<(usize, String, BackboneAtoms)> = self
             .pdb
             .residues_aminoacid()
             .enumerate()
@@ -759,15 +778,17 @@ impl Structure {
                 }
                 let n = residue.find_atom_by_name("N")?;
                 let c = residue.find_atom_by_name("C")?;
-                let o = residue.find_atom_by_name("O")?;
+                // O is required so the residue counts as a complete backbone unit,
+                // matching the previous behaviour, even though only N/CA/C feed the
+                // dihedral-based secondary-structure classifier.
+                let _o = residue.find_atom_by_name("O")?;
                 Some((
                     res_iter_idx,
+                    residue.chain_id().to_string(),
                     BackboneAtoms {
                         ca: Vec3::from_array(ca.coords()),
                         n: Vec3::from_array(n.coords()),
                         c: Vec3::from_array(c.coords()),
-                        o: Vec3::from_array(o.coords()),
-                        residue_index: res_iter_idx,
                     },
                 ))
             })
@@ -780,18 +801,21 @@ impl Structure {
             );
         }
 
-        // Split into contiguous segments (gaps in res_iter_idx = ribbon break).
+        // Split into contiguous backbone segments so the spline never connects
+        // across a ribbon break. A break is any of: a gap in the masked residue
+        // sequence, a chain change, or a CA-CA jump larger than a peptide bond
+        // (missing residues / HETATM insertion). See ferritin-t0h.1.
         let mut segments: Vec<Vec<(usize, BackboneAtoms)>> = Vec::new();
         let mut current: Vec<(usize, BackboneAtoms)> = Vec::new();
-        for item in indexed_backbone {
-            if let Some(last) = current.last() {
-                if item.0 != last.0 + 1 {
-                    if !current.is_empty() {
-                        segments.push(std::mem::take(&mut current));
-                    }
+        let mut last_chain: Option<String> = None;
+        for (idx, chain, bb) in indexed_backbone {
+            if let (Some(last), Some(prev_chain)) = (current.last(), last_chain.as_deref()) {
+                if Structure::is_backbone_break(last.0, prev_chain, last.1.ca, idx, &chain, bb.ca) {
+                    segments.push(std::mem::take(&mut current));
                 }
             }
-            current.push(item);
+            last_chain = Some(chain);
+            current.push((idx, bb));
         }
         if !current.is_empty() {
             segments.push(current);
@@ -843,8 +867,8 @@ impl Structure {
         const CROSS_SEGMENTS: usize = 16;
         const CURVE_SEGMENTS: usize = 3;
 
-        // Collect (res_iter_idx, CA position) for unmasked residues.
-        let ca_data: Vec<(usize, Vec3)> = self
+        // Collect (res_iter_idx, chain_id, CA position) for unmasked residues.
+        let ca_data: Vec<(usize, String, Vec3)> = self
             .pdb
             .residues_aminoacid()
             .enumerate()
@@ -855,7 +879,11 @@ impl Structure {
                         return None;
                     }
                 }
-                Some((res_iter_idx, Vec3::from_array(ca.coords())))
+                Some((
+                    res_iter_idx,
+                    residue.chain_id().to_string(),
+                    Vec3::from_array(ca.coords()),
+                ))
             })
             .collect();
 
@@ -866,20 +894,52 @@ impl Structure {
             );
         }
 
-        let (res_indices, ca_positions): (Vec<usize>, Vec<Vec3>) = ca_data.into_iter().unzip();
-        let curve = Structure::create_smooth_curve(&ca_positions, CURVE_SEGMENTS);
-        let radii = Structure::synthetic_putty_radii(curve.len());
-        let mesh = Structure::generate_tube_mesh_varying(&curve, &radii, CROSS_SEGMENTS);
-        let vert_count = mesh.count_vertices();
+        // Split into contiguous segments at chain breaks / missing-residue gaps
+        // so the tube never splines straight through them (ferritin-t0h.1).
+        let mut segments: Vec<Vec<(usize, Vec3)>> = Vec::new();
+        let mut current: Vec<(usize, Vec3)> = Vec::new();
+        let mut last_chain: Option<String> = None;
+        for (idx, chain, ca) in ca_data {
+            if let (Some(last), Some(prev_chain)) = (current.last(), last_chain.as_deref()) {
+                if Structure::is_backbone_break(last.0, prev_chain, last.1, idx, &chain, ca) {
+                    segments.push(std::mem::take(&mut current));
+                }
+            }
+            last_chain = Some(chain);
+            current.push((idx, ca));
+        }
+        if !current.is_empty() {
+            segments.push(current);
+        }
 
-        let residue_map: Vec<usize> = (0..vert_count)
-            .map(|v| {
+        let mut residue_map: Vec<usize> = Vec::new();
+        let mut combined: Option<Mesh> = None;
+
+        for segment in segments {
+            if segment.len() < 2 {
+                continue;
+            }
+            let (res_indices, ca_positions): (Vec<usize>, Vec<Vec3>) = segment.into_iter().unzip();
+            let curve = Structure::create_smooth_curve(&ca_positions, CURVE_SEGMENTS);
+            let radii = Structure::synthetic_putty_radii(curve.len());
+            let seg_mesh = Structure::generate_tube_mesh_varying(&curve, &radii, CROSS_SEGMENTS);
+            let seg_verts = seg_mesh.count_vertices();
+            for v in 0..seg_verts {
                 let curve_pt = v / CROSS_SEGMENTS;
                 let res_in_list = (curve_pt / CURVE_SEGMENTS).min(res_indices.len() - 1);
-                res_indices[res_in_list]
-            })
-            .collect();
+                residue_map.push(res_indices[res_in_list]);
+            }
+            match &mut combined {
+                None => combined = Some(seg_mesh),
+                Some(acc) => {
+                    let _ = acc.merge(&seg_mesh);
+                }
+            }
+        }
 
+        let mesh = combined.unwrap_or_else(|| {
+            Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all())
+        });
         (mesh, residue_map)
     }
 }
@@ -900,6 +960,84 @@ mod tests {
         assert_eq!(structure.pdb.n_atoms(), 2154);
         let _mesh = structure.to_mesh();
         // assert_eq!(_mesh.count_vertices(), 779748);
+        Ok(())
+    }
+
+    // ferritin-t0h.1: cartoon/putty must not spline across chain breaks.
+
+    #[test]
+    fn test_backbone_break_detection() {
+        let a = Vec3::new(0.0, 0.0, 0.0);
+        let b = Vec3::new(3.8, 0.0, 0.0); // one peptide bond away
+        // Contiguous, same chain, adjacent CAs → no break.
+        assert!(!Structure::is_backbone_break(0, "A", a, 1, "A", b));
+        // Chain change → break, even if spatially close.
+        assert!(Structure::is_backbone_break(0, "A", a, 1, "B", b));
+        // Residue-index gap (e.g. masked-out residue) → break.
+        assert!(Structure::is_backbone_break(0, "A", a, 2, "A", b));
+        // Large CA-CA jump (missing residues) → break.
+        let far = Vec3::new(20.0, 0.0, 0.0);
+        assert!(Structure::is_backbone_break(0, "A", a, 1, "A", far));
+    }
+
+    #[test]
+    fn test_sweep_frames_are_continuous_and_orthonormal() {
+        // A curve that kinks sharply and passes near the global Y axis — exactly
+        // the case where the old tangent×Y frame flipped and produced spikes.
+        let curve = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.2, 0.0),
+            Vec3::new(1.5, 1.5, 0.0), // turns to head up +Y
+            Vec3::new(1.6, 3.0, 0.2),
+            Vec3::new(1.0, 4.0, 1.0),
+            Vec3::new(0.0, 4.2, 2.0),
+        ];
+        let frames = Structure::sweep_frames(&curve);
+        assert_eq!(frames.len(), curve.len());
+        for (i, (right, up)) in frames.iter().enumerate() {
+            assert!((right.length() - 1.0).abs() < 1e-3, "right[{i}] not unit");
+            assert!((up.length() - 1.0).abs() < 1e-3, "up[{i}] not unit");
+            assert!(right.dot(*up).abs() < 1e-3, "right·up[{i}] not orthogonal");
+        }
+        // Consecutive frames must not flip: the minimal-rotation frame keeps the
+        // "right" vector pointing broadly the same way step to step (dot > 0).
+        for i in 1..frames.len() {
+            assert!(
+                frames[i].0.dot(frames[i - 1].0) > 0.0,
+                "frame right vector flipped between {} and {i}",
+                i - 1
+            );
+        }
+    }
+
+    #[test]
+    fn test_cartoon_segments_multi_chain_4hhb() -> anyhow::Result<()> {
+        // 4hhb has 4 protein chains; the cartoon must render as several
+        // disconnected ribbons, not one curve splined through all of them.
+        let (molfile, _handle) = TestFile::mvs_4hhb().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Cartoon)
+            .build();
+
+        let (mesh, residue_map) = structure.render_cartoon_mapped(None);
+        assert!(mesh.count_vertices() > 0, "cartoon mesh must not be empty");
+        assert_eq!(mesh.count_vertices(), residue_map.len());
+
+        // A single unsegmented curve through all N amino-acid residues would
+        // produce (N-1)*segments_per_residue ring centers. Each additional
+        // segment removes one inter-residue span, so a genuinely split ribbon
+        // has strictly fewer ring centers than the unsegmented curve.
+        let n_res = structure.pdb.residues_aminoacid().count();
+        let cross_segments = 16;
+        let segments_per_residue = 4;
+        let unsegmented_rings = (n_res - 1) * segments_per_residue;
+        let actual_rings = mesh.count_vertices() / cross_segments;
+        assert!(
+            actual_rings < unsegmented_rings,
+            "expected segmentation to drop ring centers: {actual_rings} vs {unsegmented_rings}"
+        );
         Ok(())
     }
 
@@ -1254,7 +1392,9 @@ mod tests {
         // compare each ring's average radial distance from its own centroid.
         let ring_size = 16;
         let ring_radius = |ring: &[[f32; 3]]| -> f32 {
-            let centroid = ring.iter().fold(Vec3::ZERO, |acc, p| acc + Vec3::from_array(*p))
+            let centroid = ring
+                .iter()
+                .fold(Vec3::ZERO, |acc, p| acc + Vec3::from_array(*p))
                 / ring.len() as f32;
             ring.iter()
                 .map(|p| (Vec3::from_array(*p) - centroid).length())
