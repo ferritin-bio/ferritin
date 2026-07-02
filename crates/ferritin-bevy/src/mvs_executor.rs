@@ -219,6 +219,10 @@ struct Ctx<'a, 'w, 's> {
     clear: &'a mut ClearColor,
     orbit: &'a mut OrbitCamera,
     errors: Vec<MvsError>,
+    /// Union of every `focus()` node's AABB seen so far this load, so a scene with
+    /// multiple focused components (e.g. a superposition) frames all of them
+    /// instead of just the last one processed — see ferritin-ala.5.
+    focus_union: Option<(Vec3, Vec3)>,
 }
 
 /// Reacts to [`LoadMvsEvent`]: parse, clear the previous scene, execute the new tree.
@@ -256,6 +260,7 @@ fn execute_mvs_on_load(
             clear: &mut clear,
             orbit: &mut orbit,
             errors: Vec::new(),
+            focus_union: None,
         };
 
         execute_root(&state.root, &mut ctx);
@@ -450,7 +455,7 @@ fn execute_component(
                         up: None,
                     },
                 };
-                apply_focus(&params, ac, &mask, ctx);
+                apply_focus(&params, ac, &mask, transform, ctx);
             }
             _ => {}
         }
@@ -617,11 +622,42 @@ fn apply_camera(p: &CameraParams, ctx: &mut Ctx) {
     }
 }
 
-fn apply_focus(params: &FocusInlineParams, ac: &AtomCollection, mask: &AtomMask, ctx: &mut Ctx) {
-    let Some((min, max)) = aabb_of_masked(ac, mask) else {
+fn apply_focus(
+    params: &FocusInlineParams,
+    ac: &AtomCollection,
+    mask: &AtomMask,
+    transform: Transform,
+    ctx: &mut Ctx,
+) {
+    let Some((local_min, local_max)) = aabb_of_masked(ac, mask) else {
         return;
     };
-    ctx.orbit.focus = (min + max) * 0.5;
+    // The component's own transform (e.g. a superposition's translate) isn't baked
+    // into `ac`'s coordinates, so it must be applied here or focus() targets the
+    // pre-transform location. Transform all 8 corners rather than just min/max,
+    // since a rotation can change which corner is extremal on a given axis.
+    let mut world_min = Vec3::splat(f32::MAX);
+    let mut world_max = Vec3::splat(f32::MIN);
+    for &x in &[local_min.x, local_max.x] {
+        for &y in &[local_min.y, local_max.y] {
+            for &z in &[local_min.z, local_max.z] {
+                let corner = transform.transform_point(Vec3::new(x, y, z));
+                world_min = world_min.min(corner);
+                world_max = world_max.max(corner);
+            }
+        }
+    }
+
+    // Union with every other focus() target seen so far this load, so a scene with
+    // multiple focused components (e.g. a superposition) frames all of them instead
+    // of just the last one processed.
+    let (union_min, union_max) = match ctx.focus_union {
+        Some((prev_min, prev_max)) => (prev_min.min(world_min), prev_max.max(world_max)),
+        None => (world_min, world_max),
+    };
+    ctx.focus_union = Some((union_min, union_max));
+
+    ctx.orbit.focus = (union_min + union_max) * 0.5;
 
     if let Some(up) = params.up {
         ctx.orbit.up = tuple_to_vec3(up);
@@ -636,7 +672,7 @@ fn apply_focus(params: &FocusInlineParams, ac: &AtomCollection, mask: &AtomMask,
         }
     }
 
-    ctx.orbit.radius = fit_radius_for_view(min, max, ctx.orbit);
+    ctx.orbit.radius = fit_radius_for_view(union_min, union_max, ctx.orbit);
 }
 
 /// Camera distance that keeps the AABB `[min, max]` fully in view for the current
@@ -1955,6 +1991,85 @@ mod tests {
         let mut app = make_app();
         send_and_update(&mut app, &json);
         assert_eq!(count_meshes(&mut app), 2, "T3-28: two downloads → 2 meshes");
+    }
+
+    // ferritin-ala.5: a superposition-style scene with two focus()ed structures
+    // should frame the union of both, not just the last one processed (which
+    // previously clipped the first/earlier structure out of frame).
+    #[test]
+    fn test_two_focused_structures_frame_union() {
+        use ferritin_test_data::TestFile;
+        let (path1, _tmp1) = TestFile::protein_01().create_temp().unwrap();
+        let (path2, _tmp2) = TestFile::protein_01().create_temp().unwrap();
+        // Second copy translated 300 units along X: if only the last focus() won,
+        // orbit.focus.x would land near 300, not near the midpoint (~150).
+        let json = format!(
+            r#"{{
+              "root": {{
+                "kind": "root",
+                "children": [
+                  {{
+                    "kind": "download",
+                    "params": {{"url": "{path1}"}},
+                    "children": [{{
+                      "kind": "parse",
+                      "params": {{"format": "mmcif"}},
+                      "children": [{{
+                        "kind": "structure",
+                        "params": {{"type": "model"}},
+                        "children": [{{
+                          "kind": "component",
+                          "params": {{"selector": "all"}},
+                          "children": [
+                            {{"kind": "representation", "params": {{"type": "ball_and_stick"}}}},
+                            {{"kind": "focus", "params": {{}}}}
+                          ]
+                        }}]
+                      }}]
+                    }}]
+                  }},
+                  {{
+                    "kind": "download",
+                    "params": {{"url": "{path2}"}},
+                    "children": [{{
+                      "kind": "parse",
+                      "params": {{"format": "mmcif"}},
+                      "children": [{{
+                        "kind": "structure",
+                        "params": {{"type": "model"}},
+                        "children": [
+                          {{
+                            "kind": "transform",
+                            "params": {{
+                              "rotation": [1,0,0, 0,1,0, 0,0,1],
+                              "translation": [300.0, 0.0, 0.0]
+                            }}
+                          }},
+                          {{
+                            "kind": "component",
+                            "params": {{"selector": "all"}},
+                            "children": [
+                              {{"kind": "representation", "params": {{"type": "ball_and_stick"}}}},
+                              {{"kind": "focus", "params": {{}}}}
+                            ]
+                          }}
+                        ]
+                      }}]
+                    }}]
+                  }}
+                ]
+              }},
+              "metadata": {{"version": "1.0", "timestamp": "2024-01-01T00:00:00"}}
+            }}"#
+        );
+        let mut app = make_app();
+        send_and_update(&mut app, &json);
+        let orbit = app.world().resource::<OrbitCamera>().clone();
+        assert!(
+            orbit.focus.x > 50.0 && orbit.focus.x < 250.0,
+            "expected focus to land near the midpoint of both structures (~150), got {}",
+            orbit.focus.x
+        );
     }
 
     // T3-29: MvsStateResource is populated after a successful load.
