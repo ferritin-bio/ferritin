@@ -645,7 +645,6 @@ impl CIFFile {
 
             let residue_key = (auth_chain.clone(), auth_seq_id, ins_code);
             residue_keys.push(residue_key.clone());
-            chain_keys.push(auth_chain.clone());
 
             // Check if this is a new residue
             if last_residue_key.as_ref() != Some(&residue_key) {
@@ -662,6 +661,9 @@ impl CIFFile {
                 label_seq_ids.push(label_seq);
                 auth_seq_ids.push(auth_seq_id);
                 ins_codes.push(ins_code);
+                // chain_keys is per-residue (feeds residue_to_chain segmentation),
+                // unlike residue_keys/chain_col reads above which are per-atom.
+                chain_keys.push(auth_chain.clone());
 
                 // Determine group
                 let is_hetero = if let Some(group_col) = group_pdb_col {
@@ -936,7 +938,6 @@ impl CIFFile {
 
             let residue_key = (auth_chain.clone(), auth_seq_id, ins_code);
             residue_keys.push(residue_key.clone());
-            chain_keys.push(auth_chain.clone());
 
             if last_residue_key.as_ref() != Some(&residue_key) {
                 comp_ids.push(row[res_name_col].clone());
@@ -952,6 +953,9 @@ impl CIFFile {
                 label_seq_ids.push(label_seq);
                 auth_seq_ids.push(auth_seq_id);
                 ins_codes.push(ins_code);
+                // chain_keys is per-residue (feeds residue_to_chain segmentation),
+                // unlike residue_keys/chain_col reads above which are per-atom.
+                chain_keys.push(auth_chain.clone());
 
                 let is_hetero = if let Some(group_col) = group_pdb_col {
                     if group_col < row.len() {
@@ -1214,6 +1218,34 @@ mod tests {
             bonded_fraction > 0.75,
             "expected most polymer atoms to be bonded, got {:.2}",
             bonded_fraction
+        );
+    }
+
+    #[test]
+    fn test_cif_parse_to_model_distinct_chains() {
+        // 4hhb has 4 protein chains (A/B/C/D), each followed later in the file by
+        // its own hetero (heme) and water records under the *same* auth_asym_id
+        // letter — so the hierarchy legitimately builds more than 4 contiguous
+        // chain segments. What must NOT happen (see ferritin-ala.2) is every atom
+        // collapsing onto the same chain letter: chain_keys was previously built
+        // with one entry per atom rather than per residue, which fed
+        // Segmentation::from_change_points atom-indexed offsets and made
+        // residue_to_chain.segment_of(res_idx) return segment 0 for nearly all
+        // valid residue indices, so every atom's derived chain_id string was "A".
+        // AtomCollection::get_chain_id (via chain_of_residue) is exactly what the
+        // ChainId color theme (ferritin-bevy colors.rs) reads per atom.
+        let (cif_file, _temp) = TestFile::mvs_4hhb().create_temp().unwrap();
+        let cif = CIFFile::read(&cif_file).unwrap();
+        let model = cif.parse_to_model().unwrap();
+        let ac = AtomCollection::from(&model);
+
+        let distinct_chain_ids: std::collections::HashSet<&str> =
+            (0..ac.get_size()).map(|i| ac.get_chain_id(i)).collect();
+        assert_eq!(
+            distinct_chain_ids,
+            std::collections::HashSet::from(["A", "B", "C", "D"]),
+            "expected atoms to carry all 4 distinct chain letters, got {:?}",
+            distinct_chain_ids
         );
     }
 
