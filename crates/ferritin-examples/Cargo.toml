@@ -90,6 +90,11 @@ path = "examples/bevy/molviewspec_viewer.rs"
 required-features = ["bevy"]
 
 [[example]]
+name = "bevy_capture_representations"
+path = "examples/bevy/capture_representations.rs"
+required-features = ["bevy"]
+
+[[example]]
 name = "rerun"
 path = "examples/rerun/main.rs"
 required-features = ["rerun"]
