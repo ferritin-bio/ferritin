@@ -22,7 +22,7 @@ use ferritin_core::Model;
 ///
 /// Down the Line: allow passing an arbitrary function that maps PDB to mesh.
 ///
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum RenderOptions {
     Wireframe,
     Cartoon,

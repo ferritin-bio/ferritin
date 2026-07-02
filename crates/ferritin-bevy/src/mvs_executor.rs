@@ -518,9 +518,21 @@ fn render_representation(
     let effective_theme = color_theme.unwrap_or(ColorThemeT::ElementSymbol);
     apply_mvs_colors_with_theme(&mut mesh, &effective_theme, &color_nodes, ac, &vertex_map, map_kind);
 
+    // Wireframe (MVS "line") geometry is a `LineList`: GPU line primitives have no
+    // meaningful normals, so PBR lighting reads them as flat black regardless of
+    // vertex color. Render unlit so the vertex colors themselves are what's seen.
+    let material = if render_opt == RenderOptions::Wireframe {
+        StandardMaterial {
+            unlit: true,
+            ..default()
+        }
+    } else {
+        StandardMaterial::default()
+    };
+
     ctx.commands.spawn((
         Mesh3d(ctx.meshes.add(mesh)),
-        MeshMaterial3d(ctx.materials.add(StandardMaterial::default())),
+        MeshMaterial3d(ctx.materials.add(material)),
         transform,
         MvsEntity,
     ));
@@ -1170,6 +1182,46 @@ mod tests {
             .expect("expected exactly one billboard Text/UiNode entity");
         assert_eq!(text.0, "Hello World");
         assert_eq!(node.position_type, PositionType::Absolute);
+    }
+
+    // ferritin-ala.4: Line/Wireframe geometry is a GPU LineList with no usable
+    // normals, so PBR lighting reads it as flat black; it must render unlit so
+    // vertex colors are visible. Other representations keep normal PBR shading.
+    #[test]
+    fn test_line_representation_material_is_unlit() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let mut app = make_app();
+        send_and_update(&mut app, &mvsj_one_component(&path, "all", "line"));
+
+        let mut query = app.world_mut().query::<&MeshMaterial3d<StandardMaterial>>();
+        let handle = query
+            .single(app.world())
+            .expect("expected exactly one mesh material")
+            .clone();
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        let material = materials.get(&handle.0).expect("material must exist");
+        assert!(material.unlit, "line representation material must be unlit");
+    }
+
+    #[test]
+    fn test_ball_and_stick_material_is_lit() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let mut app = make_app();
+        send_and_update(&mut app, &mvsj_one_component(&path, "all", "ball_and_stick"));
+
+        let mut query = app.world_mut().query::<&MeshMaterial3d<StandardMaterial>>();
+        let handle = query
+            .single(app.world())
+            .expect("expected exactly one mesh material")
+            .clone();
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        let material = materials.get(&handle.0).expect("material must exist");
+        assert!(
+            !material.unlit,
+            "ball_and_stick representation material should keep normal PBR shading"
+        );
     }
 
     // T3-14: A focus node repositions OrbitCamera away from its default.
