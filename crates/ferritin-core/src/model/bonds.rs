@@ -3,6 +3,10 @@
 //! After construction via [`Bonds::from_unsorted`], bonds are sorted by `atom_a`
 //! and `atom_bond_starts` provides O(1) access to all bonds for a given atom.
 
+use crate::data::Segmentation;
+use crate::info::constants::get_bonds_canonical20;
+use super::tables::{AtomsTable, ResiduesTable, ResidueGroup};
+
 /// Bond connectivity stored as SoA (struct-of-arrays).
 ///
 /// `atom_a` and `atom_b` are atom indices; `order` is bond order (1 = single, 2 = double, etc.).
@@ -94,6 +98,71 @@ impl Bonds {
     pub fn is_empty(&self) -> bool {
         self.atom_a.is_empty()
     }
+}
+
+/// Infer bond connectivity from canonical-residue templates plus backbone C-N
+/// peptide bonds between consecutive polymer residues on the same chain.
+///
+/// CIF/mmCIF files rarely carry explicit connectivity records, so without this
+/// a freshly-parsed [`super::model::Model`] has no bonds at all (see
+/// [`AtomicHierarchy`](super::hierarchy::AtomicHierarchy)::bonds). Mirrors
+/// `AtomCollection::connect_via_residue_names`.
+pub(crate) fn infer_bonds_from_residue_templates(
+    atoms: &AtomsTable,
+    residues: &ResiduesTable,
+    atom_to_residue: &Segmentation,
+    residue_to_chain: &Segmentation,
+) -> Bonds {
+    let n_atoms = atoms.len();
+    let n_residues = residues.len();
+    let aa_bond_info = get_bonds_canonical20();
+
+    let mut atom_a = Vec::new();
+    let mut atom_b = Vec::new();
+    let mut order = Vec::new();
+
+    for res_idx in 0..n_residues {
+        let range = atom_to_residue.segment(res_idx);
+        if let Some(bond_dict_for_res) = aa_bond_info.get(residues.comp_id[res_idx].as_str()) {
+            for &(name1, name2, bond_order) in bond_dict_for_res {
+                let indices1: Vec<usize> =
+                    range.clone().filter(|&i| atoms.atom_name[i] == name1).collect();
+                let indices2: Vec<usize> =
+                    range.clone().filter(|&i| atoms.atom_name[i] == name2).collect();
+                for &i in &indices1 {
+                    for &j in &indices2 {
+                        atom_a.push(i as u32);
+                        atom_b.push(j as u32);
+                        order.push(bond_order as u8);
+                    }
+                }
+            }
+        }
+    }
+
+    // Backbone C->N peptide bonds between consecutive polymer residues on the same chain.
+    for res_idx in 0..n_residues.saturating_sub(1) {
+        let next_idx = res_idx + 1;
+        if residues.group[res_idx] != ResidueGroup::Polymer
+            || residues.group[next_idx] != ResidueGroup::Polymer
+        {
+            continue;
+        }
+        if residue_to_chain.segment_of(res_idx) != residue_to_chain.segment_of(next_idx) {
+            continue;
+        }
+        let curr_range = atom_to_residue.segment(res_idx);
+        let next_range = atom_to_residue.segment(next_idx);
+        let c_idx = curr_range.clone().find(|&i| atoms.atom_name[i] == "C");
+        let n_idx = next_range.clone().find(|&i| atoms.atom_name[i] == "N");
+        if let (Some(c), Some(n)) = (c_idx, n_idx) {
+            atom_a.push(c as u32);
+            atom_b.push(n as u32);
+            order.push(1);
+        }
+    }
+
+    Bonds::from_unsorted(atom_a, atom_b, order, n_atoms)
 }
 
 #[cfg(test)]
