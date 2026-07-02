@@ -24,6 +24,7 @@ use std::path::PathBuf;
 
 use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
+use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ui::Node as UiNode;
 use ferritin_core::{AtomCollection, Model, load_model};
 use ferritin_molviewspec::molviewspec::nodes::{
@@ -142,8 +143,29 @@ impl Plugin for MvsPlugin {
             .add_message::<MvsError>()
             .add_systems(
                 Update,
-                (execute_mvs_on_load, update_mvs_label_billboards).chain(),
+                (
+                    execute_mvs_on_load,
+                    update_mvs_label_billboards,
+                    disable_tonemapping_on_new_cameras,
+                )
+                    .chain(),
             );
+    }
+}
+
+/// Bevy's default `Tonemapping::TonyMcMapface` (auto-inserted as a required
+/// component of every `Camera3d`) is designed to compress and selectively
+/// desaturate bright input stimulus for cinematic realism — exactly what made
+/// named colors (blue, orange, seagreen, ...) read as muted/dim against the
+/// viewport background (ferritin-ala.8). A molecular viewer wants legible,
+/// undistorted color, not a film look, so disable it on every camera this
+/// plugin encounters rather than requiring every consumer to remember to.
+fn disable_tonemapping_on_new_cameras(
+    mut commands: Commands,
+    cameras: Query<Entity, Added<Camera3d>>,
+) {
+    for entity in &cameras {
+        commands.entity(entity).insert(Tonemapping::None);
     }
 }
 
@@ -1523,6 +1545,26 @@ mod tests {
         assert!(
             r.red > 0.9 && r.green < 0.1,
             "T3-15: canvas must set red background"
+        );
+    }
+
+    // ferritin-ala.8: Bevy's default TonyMcMapface tonemapping compresses/
+    // desaturates bright colors, which read as muted named colors against the
+    // viewport background. MvsPlugin should disable it on any camera it sees.
+    #[test]
+    fn test_camera3d_gets_tonemapping_disabled() {
+        let mut app = make_app();
+        let camera = app
+            .world_mut()
+            .spawn((Camera3d::default(), Transform::default()))
+            .id();
+        app.update();
+
+        let tonemapping = app.world().get::<Tonemapping>(camera);
+        assert_eq!(
+            tonemapping,
+            Some(&Tonemapping::None),
+            "Camera3d should have tonemapping disabled by MvsPlugin"
         );
     }
 
