@@ -110,6 +110,13 @@ pub enum MvsError {
     InvalidTransform,
     /// A node kind / feature is not supported in this MVP.
     UnsupportedNode { kind: KindT, reason: String },
+    /// A representation type was requested but rendered as a different, degraded
+    /// fallback (e.g. Surface -> VdW spheres). Previously only a `warn!()` log
+    /// call, invisible to anyone using the interactive viewer (ferritin-ala.9).
+    RepresentationDegraded {
+        requested: RepresentationTypeT,
+        rendered_as: &'static str,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -503,6 +510,10 @@ fn render_representation(
     let (render_opt, degraded) = map_representation(&repr_type);
     if degraded {
         warn!("Surface representation is not supported; rendering as VdW spheres");
+        ctx.errors.push(MvsError::RepresentationDegraded {
+            requested: repr_type.clone(),
+            rendered_as: "VdW spheres (Spacefill)",
+        });
     }
 
     // Collect layered color nodes (applied in document order; later wins).
@@ -1359,6 +1370,29 @@ mod tests {
             material.base_color,
             Color::WHITE,
             "degraded Surface fallback should be visibly tinted, not default white"
+        );
+    }
+
+    // ferritin-ala.9: the Surface degradation must reach the MvsError message
+    // channel (which a status bar subscribes to — see molviewspec_viewer.rs's
+    // collect_errors/format_error), not just a log-only warn!() call.
+    #[test]
+    fn test_surface_fallback_emits_mvs_error() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let mut app = make_app();
+        send_and_update(&mut app, &mvsj_one_component(&path, "all", "surface"));
+
+        let errors = get_errors(&app);
+        assert!(
+            errors.iter().any(|e| matches!(
+                e,
+                MvsError::RepresentationDegraded {
+                    requested: RepresentationTypeT::Surface,
+                    ..
+                }
+            )),
+            "expected a RepresentationDegraded error for the Surface fallback, got {errors:?}"
         );
     }
 

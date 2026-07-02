@@ -673,6 +673,12 @@ fn format_error(err: &MvsError) -> String {
         MvsError::UnsupportedNode { kind, reason } => {
             format!("Unsupported {kind:?}: {reason}")
         }
+        MvsError::RepresentationDegraded {
+            requested,
+            rendered_as,
+        } => {
+            format!("{requested:?} representation not supported; rendered as {rendered_as}")
+        }
     }
 }
 
