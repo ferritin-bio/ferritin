@@ -526,7 +526,7 @@ fn render_representation(
     // Wireframe (MVS "line") geometry is a `LineList`: GPU line primitives have no
     // meaningful normals, so PBR lighting reads them as flat black regardless of
     // vertex color. Render unlit so the vertex colors themselves are what's seen.
-    let material = if render_opt == RenderOptions::Wireframe {
+    let mut material = if render_opt == RenderOptions::Wireframe {
         StandardMaterial {
             unlit: true,
             ..default()
@@ -534,6 +534,13 @@ fn render_representation(
     } else {
         StandardMaterial::default()
     };
+    // Surface silently degrades to VdW spheres (Solid); tint it amber so it reads as
+    // a fallback rather than looking pixel-identical to a real Spacefill request —
+    // the `degraded` warning was previously log-only, invisible in the viewer itself.
+    if degraded {
+        material.base_color = Color::srgb(1.0, 0.78, 0.5);
+        material.emissive = LinearRgba::rgb(0.15, 0.08, 0.0);
+    }
 
     ctx.commands.spawn((
         Mesh3d(ctx.meshes.add(mesh)),
@@ -1306,6 +1313,51 @@ mod tests {
         assert!(
             !material.unlit,
             "ball_and_stick representation material should keep normal PBR shading"
+        );
+    }
+
+    // ferritin-ala.7: Surface silently degrades to VdW spheres (Solid) with only a
+    // log warning -- the viewer itself gave no visual signal that it wasn't a real
+    // surface render, pixel-identical to Spacefill. It should now be tinted.
+    #[test]
+    fn test_surface_fallback_is_tinted() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let mut app = make_app();
+        send_and_update(&mut app, &mvsj_one_component(&path, "all", "surface"));
+
+        let mut query = app.world_mut().query::<&MeshMaterial3d<StandardMaterial>>();
+        let handle = query
+            .single(app.world())
+            .expect("expected exactly one mesh material")
+            .clone();
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        let material = materials.get(&handle.0).expect("material must exist");
+        assert_ne!(
+            material.base_color,
+            Color::WHITE,
+            "degraded Surface fallback should be visibly tinted, not default white"
+        );
+    }
+
+    #[test]
+    fn test_spacefill_is_not_tinted() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let mut app = make_app();
+        send_and_update(&mut app, &mvsj_one_component(&path, "all", "spacefill"));
+
+        let mut query = app.world_mut().query::<&MeshMaterial3d<StandardMaterial>>();
+        let handle = query
+            .single(app.world())
+            .expect("expected exactly one mesh material")
+            .clone();
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        let material = materials.get(&handle.0).expect("material must exist");
+        assert_eq!(
+            material.base_color,
+            Color::WHITE,
+            "a real (non-degraded) spacefill request should not carry the fallback tint"
         );
     }
 
