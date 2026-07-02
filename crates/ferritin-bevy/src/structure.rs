@@ -175,14 +175,20 @@ impl Structure {
         backbone_data
     }
 
-    /// Generate a mesh around a curve path (used by Putty).
-    fn generate_tube_mesh(curve: &[Vec3], radius: f32, segments: usize) -> Mesh {
+    /// Generate a mesh around a curve path, with one radius per curve point (used
+    /// by Putty's synthetic thickness placeholder — see `synthetic_putty_radii`).
+    ///
+    /// # Panics
+    /// Panics if `radii.len() != curve.len()`.
+    fn generate_tube_mesh_varying(curve: &[Vec3], radii: &[f32], segments: usize) -> Mesh {
+        assert_eq!(radii.len(), curve.len(), "one radius per curve point");
         let mut positions = Vec::new();
         let mut normals = Vec::new();
         let mut uvs = Vec::new();
         let mut indices = Vec::new();
         // Generate circles around each point
         for (i, &center) in curve.iter().enumerate() {
+            let radius = radii[i];
             let forward = if i < curve.len() - 1 {
                 (curve[i + 1] - center).normalize()
             } else {
@@ -542,7 +548,26 @@ impl Structure {
             })
             .collect();
         let curve = Structure::create_smooth_curve(&c_alphas, 3);
-        Structure::generate_tube_mesh(&curve, 0.3, 16)
+        let radii = Structure::synthetic_putty_radii(curve.len());
+        Structure::generate_tube_mesh_varying(&curve, &radii, 16)
+    }
+
+    /// Placeholder tube-radius profile for Putty, until per-atom b_factor is
+    /// plumbed through from Model into AtomCollection (tracked in ferritin-clv).
+    /// Without it, Putty rendered as a constant-radius tube identical to
+    /// Cartoon's loop tube (ferritin-ala.10). A smooth sinusoidal variation along
+    /// the chain at least signals "this thickness carries data" rather than
+    /// looking like an unstyled Cartoon; it is not meaningful per-residue data.
+    fn synthetic_putty_radii(n: usize) -> Vec<f32> {
+        const BASE_RADIUS: f32 = 0.3;
+        const AMPLITUDE: f32 = 0.22;
+        const CYCLES: f32 = 4.0;
+        (0..n)
+            .map(|i| {
+                let t = i as f32 / n.max(1) as f32;
+                BASE_RADIUS + AMPLITUDE * (t * std::f32::consts::TAU * CYCLES).sin()
+            })
+            .collect()
     }
 
     // -----------------------------------------------------------------------
@@ -843,7 +868,8 @@ impl Structure {
 
         let (res_indices, ca_positions): (Vec<usize>, Vec<Vec3>) = ca_data.into_iter().unzip();
         let curve = Structure::create_smooth_curve(&ca_positions, CURVE_SEGMENTS);
-        let mesh = Structure::generate_tube_mesh(&curve, 0.3, CROSS_SEGMENTS);
+        let radii = Structure::synthetic_putty_radii(curve.len());
+        let mesh = Structure::generate_tube_mesh_varying(&curve, &radii, CROSS_SEGMENTS);
         let vert_count = mesh.count_vertices();
 
         let residue_map: Vec<usize> = (0..vert_count)
@@ -1185,6 +1211,66 @@ mod tests {
             mesh.count_vertices(),
             residue_map.len(),
             "putty: residue_map len must equal vertex count"
+        );
+        Ok(())
+    }
+
+    // ferritin-ala.10: Putty rendered as a constant-radius tube, pixel-identical
+    // to Cartoon's loop tube, since AtomCollection has no per-atom b_factor yet.
+    // Until that lands (ferritin-clv), the tube radius should at least vary
+    // along the chain as a visual placeholder.
+    #[test]
+    fn test_synthetic_putty_radii_vary() {
+        let radii = Structure::synthetic_putty_radii(40);
+        let min = radii.iter().cloned().fold(f32::MAX, f32::min);
+        let max = radii.iter().cloned().fold(f32::MIN, f32::max);
+        assert!(
+            max - min > 0.1,
+            "putty radii should vary noticeably along the chain, got range {min}..{max}"
+        );
+        assert!(
+            radii.iter().all(|&r| r > 0.0),
+            "all synthetic putty radii must stay positive"
+        );
+    }
+
+    #[test]
+    fn test_putty_mesh_radius_varies_along_chain() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Putty)
+            .build();
+        let mesh = structure.to_mesh();
+        let positions = match mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .expect("putty mesh must have positions")
+        {
+            bevy::render::mesh::VertexAttributeValues::Float32x3(v) => v,
+            _ => panic!("unexpected position format"),
+        };
+        // Cross-section rings are 16 vertices each (CROSS_SEGMENTS in render_putty);
+        // compare each ring's average radial distance from its own centroid.
+        let ring_size = 16;
+        let ring_radius = |ring: &[[f32; 3]]| -> f32 {
+            let centroid = ring.iter().fold(Vec3::ZERO, |acc, p| acc + Vec3::from_array(*p))
+                / ring.len() as f32;
+            ring.iter()
+                .map(|p| (Vec3::from_array(*p) - centroid).length())
+                .sum::<f32>()
+                / ring.len() as f32
+        };
+        let ring_radii: Vec<f32> = positions
+            .chunks(ring_size)
+            .filter(|chunk| chunk.len() == ring_size)
+            .map(ring_radius)
+            .collect();
+        let min = ring_radii.iter().cloned().fold(f32::MAX, f32::min);
+        let max = ring_radii.iter().cloned().fold(f32::MIN, f32::max);
+        assert!(
+            max - min > 0.1,
+            "putty mesh cross-section radius should vary along the chain, got range {min}..{max}"
         );
         Ok(())
     }
