@@ -1,8 +1,9 @@
 use ferritin_molviewspec::molviewspec::nodes::{
     CanvasParams, ColorT, ComponentExpression, ComponentSelector, ComponentSelectorT,
-    FocusInlineParams, KindT, LineParams, Node, NodeParams, ParseFormatT, ParseParams,
-    RepresentationTypeT, SphereParams, State, StructureParams, StructureTypeT, TooltipInlineParams,
-    TransformParams,
+    FocusInlineParams, IsoSurfaceParams, KindT, LineParams, MvsjFile, Node, NodeParams,
+    ParseFormatT, ParseParams, RepresentationTypeT, SphereParams, State, StructureParams,
+    StructureTypeT, TooltipInlineParams, TransformParams, VolumeParams, VolumeRepresentationParams,
+    VolumeRepresentationTypeT,
 };
 use serde_json::from_reader;
 use std::fs::File;
@@ -1071,4 +1072,95 @@ fn test_mask_empty_expression_all_fields_none() {
     assert!(expr.auth_seq_id.is_none());
     assert!(expr.atom_index.is_none());
     // ↑ all fields None → Phase 2 evaluation must return all-true mask
+}
+
+// ferritin-2g6: Volume node + isosurface representation build and round-trip.
+#[test]
+fn test_volume_isosurface_roundtrip() {
+    let mut root = Node::new(KindT::Root, None);
+    let download = root.download("https://example.org/density.map").unwrap();
+    let parse = download
+        .parse(ParseParams {
+            format: ParseFormatT::Bcif,
+        })
+        .unwrap();
+    let volume = parse
+        .volume(VolumeParams {
+            channel_id: Some("2fo-fc".to_string()),
+        })
+        .unwrap();
+    volume.volume_representation(VolumeRepresentationParams {
+        representation_type: VolumeRepresentationTypeT::Isosurface,
+        isosurface: Some(IsoSurfaceParams {
+            isovalue: None,
+            relative_isovalue: Some(1.5),
+            wireframe: Some(false),
+            opacity: Some(0.6),
+        }),
+    });
+
+    let json = serde_json::to_string(&root).expect("serialize volume state");
+    let parsed: Node = serde_json::from_str(&json).expect("deserialize volume state");
+
+    let volume_node = find_node(&parsed, &|n| n.kind == KindT::Volume)
+        .expect("Volume node must round-trip");
+    if let Some(NodeParams::VolumeParams(ref p)) = volume_node.params {
+        assert_eq!(p.channel_id.as_deref(), Some("2fo-fc"));
+    } else {
+        panic!("Volume node must carry VolumeParams");
+    }
+
+    let repr_node = find_node(&parsed, &|n| n.kind == KindT::VolumeRepresentation)
+        .expect("VolumeRepresentation node must round-trip");
+    if let Some(NodeParams::VolumeRepresentationParams(ref p)) = repr_node.params {
+        assert!(matches!(
+            p.representation_type,
+            VolumeRepresentationTypeT::Isosurface
+        ));
+        let iso = p.isosurface.as_ref().expect("isosurface params");
+        assert_eq!(iso.relative_isovalue, Some(1.5));
+        assert_eq!(iso.opacity, Some(0.6));
+    } else {
+        panic!("VolumeRepresentation node must carry VolumeRepresentationParams");
+    }
+}
+
+// ferritin-rar: MvsjFile deserializes a mol-view-stories-style snapshot sequence.
+#[test]
+fn test_mvsj_file_two_snapshot_sequence() {
+    let json = r#"{
+        "metadata": { "version": "1.0", "timestamp": "2026-07-01T00:00:00Z" },
+        "snapshots": [
+            {
+                "root": { "kind": "root" },
+                "title": "Intro",
+                "key": "intro",
+                "linger_duration_ms": 3000,
+                "transition_duration_ms": 500
+            },
+            {
+                "root": { "kind": "root", "children": [{ "kind": "camera", "params": { "target": [0,0,0], "position": [10,10,10] } }] },
+                "title": "Overview",
+                "key": "overview",
+                "linger_duration_ms": 4000,
+                "transition_duration_ms": 800
+            }
+        ]
+    }"#;
+
+    let story = MvsjFile::from_str(json).expect("parse two-snapshot mvsj");
+    assert_eq!(story.snapshots.len(), 2);
+    assert_eq!(story.snapshots[0].title.as_deref(), Some("Intro"));
+    assert_eq!(story.snapshots[0].root.kind, KindT::Root);
+    assert_eq!(story.snapshots[1].title.as_deref(), Some("Overview"));
+    assert_eq!(
+        story.snapshots[1]
+            .root
+            .children
+            .as_ref()
+            .map(|c| c.len()),
+        Some(1)
+    );
+    assert_eq!(story.snapshots[0].linger_duration_ms, Some(3000));
+    assert_eq!(story.snapshots[1].transition_duration_ms, Some(800));
 }

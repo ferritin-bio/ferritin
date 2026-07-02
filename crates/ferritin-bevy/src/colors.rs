@@ -126,6 +126,18 @@ pub fn initial_colors_from_theme(
                 })
                 .collect()
         }
+
+        // AtomCollection does not yet carry per-atom b_factor/occupancy (tracked
+        // separately from the Model layer that already has them); fall back to a
+        // uniform color rather than crashing or silently misrendering.
+        ColorThemeT::Uncertainty | ColorThemeT::PlddtConfidence | ColorThemeT::Occupancy => {
+            bevy::log::warn!(
+                "{:?} color theme requested but AtomCollection has no per-atom \
+                 b_factor/occupancy data; falling back to uniform white",
+                theme
+            );
+            vec![white; n_verts]
+        }
     }
 }
 
@@ -875,6 +887,28 @@ mod tests {
             assert!((c[0] - 1.0).abs() < 1e-6);
             assert!((c[1] - 1.0).abs() < 1e-6);
             assert!((c[2] - 1.0).abs() < 1e-6);
+        }
+    }
+
+    // ferritin-ujk: data-driven themes fall back to uniform white while AtomCollection
+    // has no per-atom b_factor/occupancy data (tracked separately from the Model layer).
+    #[test]
+    fn test_data_driven_themes_fall_back_to_uniform() {
+        let ac = make_test_collection();
+        let vertex_map: Vec<usize> = (0..9).collect();
+        for theme in [
+            ColorThemeT::Uncertainty,
+            ColorThemeT::PlddtConfidence,
+            ColorThemeT::Occupancy,
+        ] {
+            let colors =
+                initial_colors_from_theme(&theme, &ac, &vertex_map, &VertexMapKind::AtomMap);
+            assert_eq!(colors.len(), 9);
+            for c in colors {
+                assert!((c[0] - 1.0).abs() < 1e-6, "{:?} should fall back to white", theme);
+                assert!((c[1] - 1.0).abs() < 1e-6, "{:?} should fall back to white", theme);
+                assert!((c[2] - 1.0).abs() < 1e-6, "{:?} should fall back to white", theme);
+            }
         }
     }
 }
