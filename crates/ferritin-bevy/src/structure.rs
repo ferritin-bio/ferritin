@@ -119,6 +119,12 @@ impl Structure {
     /// stretch of missing residues, across which the ribbon must not spline.
     const CA_BREAK_DIST: f32 = 5.0;
 
+    /// BallAndStick geometry (Å). The stick is half the ball radius so the rep
+    /// reads as spheres joined by thin sticks rather than uniform fat tubes
+    /// (ferritin-c1k.1).
+    const BALL_RADIUS: f32 = 0.3;
+    const STICK_RADIUS: f32 = 0.15;
+
     /// Whether two consecutive backbone residues should start a new ribbon
     /// segment rather than be splined together. A break is any of: a gap in the
     /// (masked) residue-iteration index, a chain change, or a CA-CA distance
@@ -474,7 +480,7 @@ impl Structure {
     }
 
     fn render_ballandstick(&self) -> Mesh {
-        let radius = 0.5;
+        let radius = Structure::BALL_RADIUS;
         let mut combined_mesh = self
             .pdb
             .atoms()
@@ -513,7 +519,7 @@ impl Structure {
                     }
                     let rotation = Quat::from_rotation_arc(Vec3::Y, direction.normalize());
                     let mut cylinder_mesh = Cylinder {
-                        radius: 0.5,
+                        radius: Structure::STICK_RADIUS,
                         half_height: height / 2.0,
                     }
                     .mesh()
@@ -673,7 +679,7 @@ impl Structure {
     }
 
     fn render_ballandstick_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
-        let radius = 0.5;
+        let radius = Structure::BALL_RADIUS;
         let mut atom_map: Vec<usize> = Vec::new();
         let mut combined: Option<Mesh> = None;
 
@@ -728,7 +734,7 @@ impl Structure {
                 }
                 let rotation = Quat::from_rotation_arc(Vec3::Y, direction.normalize());
                 let mut cyl = Cylinder {
-                    radius: 0.5,
+                    radius: Structure::STICK_RADIUS,
                     half_height: height / 2.0,
                 }
                 .mesh()
@@ -951,6 +957,18 @@ mod tests {
     use ferritin_core::load_model;
     use ferritin_molviewspec::molviewspec::nodes::{ComponentSelector, ComponentSelectorT};
     use ferritin_test_data::TestFile;
+
+    // ferritin-c1k.1: BallAndStick balls must read as thicker than the sticks
+    // joining them, not as one uniform-radius licorice tube.
+    #[test]
+    fn test_ballandstick_stick_thinner_than_ball() {
+        assert!(
+            Structure::STICK_RADIUS < Structure::BALL_RADIUS,
+            "stick radius {} must be smaller than ball radius {}",
+            Structure::STICK_RADIUS,
+            Structure::BALL_RADIUS
+        );
+    }
 
     #[test]
     fn test_pdb_to_mesh() -> anyhow::Result<()> {
