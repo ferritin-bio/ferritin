@@ -252,6 +252,12 @@ struct Ctx<'a, 'w, 's> {
     /// multiple focused components (e.g. a superposition) frames all of them
     /// instead of just the last one processed — see ferritin-ala.5.
     focus_union: Option<(Vec3, Vec3)>,
+    /// Union of every *rendered* component's world-space AABB seen so far this
+    /// load (regardless of whether it was focused). Used to keep a small
+    /// focus() target (e.g. two ions inside a large protein) from pulling the
+    /// camera in so close that the surrounding, still-rendered geometry
+    /// near-clips — see ferritin-t0h.5.
+    scene_bounds: Option<(Vec3, Vec3)>,
 }
 
 /// Reacts to [`LoadMvsEvent`]: parse, clear the previous scene, execute the new tree.
@@ -290,6 +296,7 @@ fn execute_mvs_on_load(
             orbit: &mut orbit,
             errors: Vec::new(),
             focus_union: None,
+            scene_bounds: None,
         };
 
         execute_root(&state.root, &mut ctx);
@@ -499,6 +506,17 @@ fn render_representation(
     transform: Transform,
     ctx: &mut Ctx,
 ) {
+    // Track this component's world-space AABB in the running scene bounds so a
+    // later, smaller focus() target can be checked against everything actually
+    // rendered, not just itself (ferritin-t0h.5).
+    if let Some((local_min, local_max)) = aabb_of_masked(ac, mask) {
+        let (world_min, world_max) = transform_aabb(local_min, local_max, transform);
+        ctx.scene_bounds = Some(match ctx.scene_bounds {
+            Some((prev_min, prev_max)) => (prev_min.min(world_min), prev_max.max(world_max)),
+            None => (world_min, world_max),
+        });
+    }
+
     let (repr_type, color_theme) = match &repr.params {
         Some(NodeParams::RepresentationParams(RepresentationParams {
             representation_type,
@@ -674,19 +692,8 @@ fn apply_focus(
     };
     // The component's own transform (e.g. a superposition's translate) isn't baked
     // into `ac`'s coordinates, so it must be applied here or focus() targets the
-    // pre-transform location. Transform all 8 corners rather than just min/max,
-    // since a rotation can change which corner is extremal on a given axis.
-    let mut world_min = Vec3::splat(f32::MAX);
-    let mut world_max = Vec3::splat(f32::MIN);
-    for &x in &[local_min.x, local_max.x] {
-        for &y in &[local_min.y, local_max.y] {
-            for &z in &[local_min.z, local_max.z] {
-                let corner = transform.transform_point(Vec3::new(x, y, z));
-                world_min = world_min.min(corner);
-                world_max = world_max.max(corner);
-            }
-        }
-    }
+    // pre-transform location.
+    let (world_min, world_max) = transform_aabb(local_min, local_max, transform);
 
     // Union with every other focus() target seen so far this load, so a scene with
     // multiple focused components (e.g. a superposition) frames all of them instead
@@ -712,11 +719,45 @@ fn apply_focus(
         }
     }
 
-    ctx.orbit.radius = fit_radius_for_view(union_min, union_max, ctx.orbit);
+    let mut radius = fit_radius_for_view(union_min, union_max, ctx.orbit);
+
+    // Clamp against the whole rendered scene, not just the focus target: a tiny
+    // target (e.g. two ions) deep inside a much larger structure would otherwise
+    // pull the camera in close enough that the surrounding, still-rendered
+    // geometry near-clips (ferritin-t0h.5). Re-running the same view-projected
+    // fit around the *focus* center but over the scene's full extent gives the
+    // distance needed to clear all of it; when focus == scene (the common
+    // whole-structure case) the two radii coincide, so this never zooms out
+    // beyond what ferritin-ala.5 already tightened.
+    if let Some((scene_min, scene_max)) = ctx.scene_bounds {
+        let scene_radius =
+            fit_radius_for_view_from_center(ctx.orbit.focus, scene_min, scene_max, ctx.orbit);
+        radius = radius.max(scene_radius);
+    }
+
+    ctx.orbit.radius = radius;
+}
+
+/// Transform an axis-aligned local `[min, max]` box into world space, accounting
+/// for rotation by transforming all 8 corners rather than just the two extremes
+/// (a rotation can change which corner is extremal on a given axis).
+fn transform_aabb(local_min: Vec3, local_max: Vec3, transform: Transform) -> (Vec3, Vec3) {
+    let mut world_min = Vec3::splat(f32::MAX);
+    let mut world_max = Vec3::splat(f32::MIN);
+    for &x in &[local_min.x, local_max.x] {
+        for &y in &[local_min.y, local_max.y] {
+            for &z in &[local_min.z, local_max.z] {
+                let corner = transform.transform_point(Vec3::new(x, y, z));
+                world_min = world_min.min(corner);
+                world_max = world_max.max(corner);
+            }
+        }
+    }
+    (world_min, world_max)
 }
 
 /// Camera distance that keeps the AABB `[min, max]` fully in view for the current
-/// orbit yaw/pitch/up.
+/// orbit yaw/pitch/up, centered on the AABB's own midpoint.
 ///
 /// Using the worst-case any-angle bounding sphere (`aabb_diagonal / 2`) over-estimates
 /// how far back the camera needs to be for any real (non-spherical) structure, since
@@ -726,6 +767,15 @@ fn apply_focus(
 /// right/up axes gives a much tighter fit for the current view direction.
 fn fit_radius_for_view(min: Vec3, max: Vec3, orbit: &OrbitCamera) -> f32 {
     let center = (min + max) * 0.5;
+    fit_radius_for_view_from_center(center, min, max, orbit)
+}
+
+/// As [`fit_radius_for_view`], but projects the AABB corners relative to an
+/// explicit `center` rather than the AABB's own midpoint. Used to ask "how far
+/// back must the camera sit, still looking at `center`, to keep this other AABB
+/// in view" — e.g. clearing the whole scene while focused on a small target
+/// within it (ferritin-t0h.5).
+fn fit_radius_for_view_from_center(center: Vec3, min: Vec3, max: Vec3, orbit: &OrbitCamera) -> f32 {
     // Points from focus toward the camera (same convention as `orbit_position`'s
     // offset); only its axis matters for building a look-at basis, not its sign.
     let view_axis = Vec3::new(
@@ -1458,6 +1508,104 @@ mod tests {
         assert_ne!(
             orbit.radius, default_orbit.radius,
             "T3-14: focus should change orbit radius"
+        );
+    }
+
+    // ferritin-t0h.5: focusing a tiny target (e.g. a single residue, standing in
+    // for "two ions") that sits inside a much larger *already-rendered* structure
+    // must not zoom the camera in tight enough to near-clip through the
+    // surrounding geometry. Compares the same tiny focus target in isolation
+    // (nothing else rendered) against the same target focused alongside a full
+    // cartoon of the whole protein: the latter's radius must be pulled back
+    // well beyond what the tiny AABB alone would ever justify.
+    #[test]
+    fn test_focus_small_target_clamped_to_scene_bounds() {
+        use ferritin_test_data::TestFile;
+
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+
+        // Scene A: only the tiny target (first residue) is rendered and focused.
+        let json_small_only = format!(
+            r#"{{
+              "root": {{
+                "kind": "root",
+                "children": [{{
+                  "kind": "download",
+                  "params": {{"url": "{path}"}},
+                  "children": [{{
+                    "kind": "parse",
+                    "params": {{"format": "mmcif"}},
+                    "children": [{{
+                      "kind": "structure",
+                      "params": {{"type": "model"}},
+                      "children": [{{
+                        "kind": "component",
+                        "params": {{"selector": {{"residue_index": 0}}}},
+                        "children": [
+                          {{"kind": "representation", "params": {{"type": "ball_and_stick"}}}},
+                          {{"kind": "focus", "params": {{}}}}
+                        ]
+                      }}]
+                    }}]
+                  }}]
+                }}]
+              }},
+              "metadata": {{"version": "1.0", "timestamp": "2024-01-01T00:00:00"}}
+            }}"#
+        );
+        let mut app_small = make_app();
+        send_and_update(&mut app_small, &json_small_only);
+        let radius_small_only = app_small.world().resource::<OrbitCamera>().radius;
+
+        // Scene B: the whole protein is rendered (cartoon, unfocused) first, then
+        // the same tiny residue is focused — mirroring preset_label's structure
+        // (full protein cartoon, then a small focused ion/label target).
+        let json_with_scene = format!(
+            r#"{{
+              "root": {{
+                "kind": "root",
+                "children": [{{
+                  "kind": "download",
+                  "params": {{"url": "{path}"}},
+                  "children": [{{
+                    "kind": "parse",
+                    "params": {{"format": "mmcif"}},
+                    "children": [{{
+                      "kind": "structure",
+                      "params": {{"type": "model"}},
+                      "children": [
+                        {{
+                          "kind": "component",
+                          "params": {{"selector": "all"}},
+                          "children": [
+                            {{"kind": "representation", "params": {{"type": "cartoon"}}}}
+                          ]
+                        }},
+                        {{
+                          "kind": "component",
+                          "params": {{"selector": {{"residue_index": 0}}}},
+                          "children": [
+                            {{"kind": "representation", "params": {{"type": "ball_and_stick"}}}},
+                            {{"kind": "focus", "params": {{}}}}
+                          ]
+                        }}
+                      ]
+                    }}]
+                  }}]
+                }}]
+              }},
+              "metadata": {{"version": "1.0", "timestamp": "2024-01-01T00:00:00"}}
+            }}"#
+        );
+        let mut app_scene = make_app();
+        send_and_update(&mut app_scene, &json_with_scene);
+        let radius_with_scene = app_scene.world().resource::<OrbitCamera>().radius;
+
+        assert!(
+            radius_with_scene > radius_small_only * 3.0,
+            "expected the scene-bounds clamp to pull the camera back well beyond \
+             the tiny target's own fit (small-only={radius_small_only}, \
+             with-scene={radius_with_scene})"
         );
     }
 
