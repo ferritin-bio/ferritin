@@ -258,6 +258,12 @@ struct Ctx<'a, 'w, 's> {
     /// camera in so close that the surrounding, still-rendered geometry
     /// near-clips — see ferritin-t0h.5.
     scene_bounds: Option<(Vec3, Vec3)>,
+    /// Live viewport width/height, read from the render camera at load time.
+    /// `fit_radius_for_view` needs this to compute the true horizontal FOV —
+    /// using the (narrower) vertical FOV for both axes on a widescreen viewport
+    /// over-estimated the required distance and left whole-structure framing
+    /// filling under half the frame — see ferritin-t0h.10.
+    aspect_ratio: f32,
 }
 
 /// Reacts to [`LoadMvsEvent`]: parse, clear the previous scene, execute the new tree.
@@ -266,6 +272,7 @@ fn execute_mvs_on_load(
     mut load_events: MessageReader<LoadMvsEvent>,
     mut error_writer: MessageWriter<MvsError>,
     existing: Query<Entity, With<MvsEntity>>,
+    camera_q: Query<&Camera, With<Camera3d>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -273,6 +280,17 @@ fn execute_mvs_on_load(
     mut orbit: ResMut<OrbitCamera>,
     mut state_res: ResMut<MvsStateResource>,
 ) {
+    // Default to 16:9 (every example in this repo opens at that ratio) when no
+    // camera/viewport is available yet; recomputed fresh per load so a resized
+    // window is picked up on the next scene load.
+    let aspect_ratio = camera_q
+        .single()
+        .ok()
+        .and_then(|c| c.logical_viewport_size())
+        .filter(|size| size.y > 0.0)
+        .map(|size| size.x / size.y)
+        .unwrap_or(16.0 / 9.0);
+
     for event in load_events.read() {
         // Parse first; a parse failure aborts only this event.
         let state = match parse_state(event) {
@@ -297,6 +315,7 @@ fn execute_mvs_on_load(
             errors: Vec::new(),
             focus_union: None,
             scene_bounds: None,
+            aspect_ratio,
         };
 
         execute_root(&state.root, &mut ctx);
@@ -719,7 +738,7 @@ fn apply_focus(
         }
     }
 
-    let mut radius = fit_radius_for_view(union_min, union_max, ctx.orbit);
+    let mut radius = fit_radius_for_view(union_min, union_max, ctx.orbit, ctx.aspect_ratio);
 
     // Clamp against the whole rendered scene, not just the focus target: a tiny
     // target (e.g. two ions) deep inside a much larger structure would otherwise
@@ -730,8 +749,13 @@ fn apply_focus(
     // whole-structure case) the two radii coincide, so this never zooms out
     // beyond what ferritin-ala.5 already tightened.
     if let Some((scene_min, scene_max)) = ctx.scene_bounds {
-        let scene_radius =
-            fit_radius_for_view_from_center(ctx.orbit.focus, scene_min, scene_max, ctx.orbit);
+        let scene_radius = fit_radius_for_view_from_center(
+            ctx.orbit.focus,
+            scene_min,
+            scene_max,
+            ctx.orbit,
+            ctx.aspect_ratio,
+        );
         radius = radius.max(scene_radius);
     }
 
@@ -765,9 +789,9 @@ fn transform_aabb(local_min: Vec3, local_max: Vec3, transform: Transform) -> (Ve
 /// screen axis — this left single structures filling only a small fraction of the
 /// viewport (ferritin-ala.5). Projecting the AABB corners onto the camera's actual
 /// right/up axes gives a much tighter fit for the current view direction.
-fn fit_radius_for_view(min: Vec3, max: Vec3, orbit: &OrbitCamera) -> f32 {
+fn fit_radius_for_view(min: Vec3, max: Vec3, orbit: &OrbitCamera, aspect: f32) -> f32 {
     let center = (min + max) * 0.5;
-    fit_radius_for_view_from_center(center, min, max, orbit)
+    fit_radius_for_view_from_center(center, min, max, orbit, aspect)
 }
 
 /// As [`fit_radius_for_view`], but projects the AABB corners relative to an
@@ -775,7 +799,18 @@ fn fit_radius_for_view(min: Vec3, max: Vec3, orbit: &OrbitCamera) -> f32 {
 /// back must the camera sit, still looking at `center`, to keep this other AABB
 /// in view" — e.g. clearing the whole scene while focused on a small target
 /// within it (ferritin-t0h.5).
-fn fit_radius_for_view_from_center(center: Vec3, min: Vec3, max: Vec3, orbit: &OrbitCamera) -> f32 {
+///
+/// `aspect` (viewport width / height) determines the true horizontal FOV; using
+/// the vertical FOV for both axes over-estimated the distance needed to fit the
+/// horizontal extent on a widescreen viewport, leaving whole-structure framing
+/// filling under half the frame (ferritin-t0h.10).
+fn fit_radius_for_view_from_center(
+    center: Vec3,
+    min: Vec3,
+    max: Vec3,
+    orbit: &OrbitCamera,
+    aspect: f32,
+) -> f32 {
     // Points from focus toward the camera (same convention as `orbit_position`'s
     // offset); only its axis matters for building a look-at basis, not its sign.
     let view_axis = Vec3::new(
@@ -803,12 +838,16 @@ fn fit_radius_for_view_from_center(center: Vec3, min: Vec3, max: Vec3, orbit: &O
         }
     }
 
-    // Half of Bevy's default vertical FOV (45°), used by every Camera3d in this
-    // codebase. Using it for the horizontal axis too is a safe over-estimate on
-    // widescreen aspect ratios, where the true horizontal FOV is wider.
-    const HALF_FOV: f32 = std::f32::consts::FRAC_PI_4 / 2.0;
+    // Half of Bevy's default *vertical* FOV (45°), used by every Camera3d in this
+    // codebase. The horizontal half-FOV is derived from it via the viewport
+    // aspect ratio (standard perspective-projection relation), not assumed equal
+    // to the vertical one (ferritin-t0h.10).
+    const V_HALF_FOV: f32 = std::f32::consts::FRAC_PI_4 / 2.0;
+    let h_half_fov = (aspect * V_HALF_FOV.tan()).atan();
     const MARGIN: f32 = 1.15;
-    (half_up.max(half_right) / HALF_FOV.tan() * MARGIN).max(1.0)
+    let radius_for_up = half_up / V_HALF_FOV.tan();
+    let radius_for_right = half_right / h_half_fov.tan();
+    (radius_for_up.max(radius_for_right) * MARGIN).max(1.0)
 }
 
 fn set_orbit_from_position(orbit: &mut OrbitCamera, target: Vec3, position: Vec3) {
@@ -1606,6 +1645,48 @@ mod tests {
             "expected the scene-bounds clamp to pull the camera back well beyond \
              the tiny target's own fit (small-only={radius_small_only}, \
              with-scene={radius_with_scene})"
+        );
+    }
+
+    // ferritin-t0h.10: on a widescreen viewport, a horizontally-dominant AABB
+    // should need a *smaller* radius once the true (wider) horizontal FOV is
+    // used, instead of being fit as if the horizontal FOV equalled the narrower
+    // vertical one. A square aspect ratio (1:1) is the boundary case where
+    // horizontal and vertical FOV coincide, so it acts as the "old behavior"
+    // reference point here.
+    #[test]
+    fn test_fit_radius_tighter_on_widescreen_for_wide_aabb() {
+        let orbit = OrbitCamera::default();
+        // Wide, flat AABB: extent along the camera's right axis dominates.
+        let min = Vec3::new(-100.0, -5.0, -5.0);
+        let max = Vec3::new(100.0, 5.0, 5.0);
+
+        let radius_square = fit_radius_for_view(min, max, &orbit, 1.0);
+        let radius_widescreen = fit_radius_for_view(min, max, &orbit, 16.0 / 9.0);
+
+        assert!(
+            radius_widescreen < radius_square,
+            "widescreen fit ({radius_widescreen}) should pull in tighter than \
+             square fit ({radius_square}) for a horizontally-dominant AABB"
+        );
+    }
+
+    // ferritin-t0h.10 (contrast case): a vertically-dominant AABB is bounded by
+    // the *vertical* FOV regardless of aspect ratio, so widening the viewport
+    // must not change the fitted radius at all.
+    #[test]
+    fn test_fit_radius_unaffected_by_aspect_for_tall_aabb() {
+        let orbit = OrbitCamera::default();
+        let min = Vec3::new(-5.0, -100.0, -5.0);
+        let max = Vec3::new(5.0, 100.0, 5.0);
+
+        let radius_square = fit_radius_for_view(min, max, &orbit, 1.0);
+        let radius_widescreen = fit_radius_for_view(min, max, &orbit, 16.0 / 9.0);
+
+        assert!(
+            (radius_widescreen - radius_square).abs() < 1e-3,
+            "vertical-extent fit should be aspect-independent: square={radius_square}, \
+             widescreen={radius_widescreen}"
         );
     }
 
