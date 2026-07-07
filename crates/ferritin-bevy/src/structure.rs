@@ -125,6 +125,35 @@ impl Structure {
     const BALL_RADIUS: f32 = 0.3;
     const STICK_RADIUS: f32 = 0.15;
 
+    /// Builds the two half-length cylinders for a ball-and-stick bond, split at
+    /// the bond's midpoint so the caller can color/map each half to its own
+    /// endpoint atom — real bonds in molecular viewers are two-toned, half per
+    /// atom, rather than the whole stick taking on a single atom's color
+    /// (ferritin-c1k.2). Returns `None` for a degenerate (zero-length) bond.
+    fn half_bond_cylinders(pos1: Vec3, pos2: Vec3, radius: f32) -> Option<(Mesh, Mesh)> {
+        let direction = pos2 - pos1;
+        let height = direction.length();
+        if height < 1e-6 {
+            return None;
+        }
+        let mid = (pos1 + pos2) * 0.5;
+        let rotation = Quat::from_rotation_arc(Vec3::Y, direction.normalize());
+        let half_height = height / 4.0;
+        let make_half = |center: Vec3| -> Mesh {
+            Cylinder { radius, half_height }
+                .mesh()
+                .build()
+                .transformed_by(Transform {
+                    translation: center,
+                    rotation,
+                    ..default()
+                })
+        };
+        let first = make_half((pos1 + mid) * 0.5);
+        let second = make_half((mid + pos2) * 0.5);
+        Some((first, second))
+    }
+
     /// Whether two consecutive backbone residues should start a new ribbon
     /// segment rather than be splined together. A break is any of: a gap in the
     /// (masked) residue-iteration index, a chain change, or a CA-CA distance
@@ -620,39 +649,41 @@ impl Structure {
             })
             .unwrap();
 
-        // Add bond cylinders
+        // Add bond cylinders, split at the midpoint and colored per endpoint
+        // atom so a bond visibly transitions between its two atoms' element
+        // colors instead of taking on a single flat color (ferritin-c1k.2).
+        let elements: Vec<ferritin_core::info::elements::Element> =
+            self.pdb.atoms().map(|a| a.element()).collect();
         let bonds = &self.pdb.hierarchy.bonds;
         if !bonds.atom_a.is_empty() {
             (0..bonds.atom_a.len())
                 .filter_map(|i| {
-                    let pos1 = Vec3::from_array(self.pdb.coord(bonds.atom_a[i] as usize));
-                    let pos2 = Vec3::from_array(self.pdb.coord(bonds.atom_b[i] as usize));
-                    let center = (pos1 + pos2) / 2.0;
-                    let direction = pos2 - pos1;
-                    let height = direction.length();
-                    if height < 1e-6 {
-                        return None;
-                    }
-                    let rotation = Quat::from_rotation_arc(Vec3::Y, direction.normalize());
-                    let mut cylinder_mesh = Cylinder {
-                        radius: Structure::STICK_RADIUS,
-                        half_height: height / 2.0,
-                    }
-                    .mesh()
-                    .build();
-                    cylinder_mesh = cylinder_mesh.transformed_by(Transform {
-                        translation: center,
-                        rotation,
-                        ..default()
-                    });
-                    let cylinder_vertex_count = cylinder_mesh.count_vertices();
-                    let cylinder_colors =
-                        vec![Vec4::new(0.5, 0.5, 0.5, 0.5); cylinder_vertex_count];
-                    cylinder_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, cylinder_colors);
-                    Some(cylinder_mesh)
+                    let idx_a = bonds.atom_a[i] as usize;
+                    let idx_b = bonds.atom_b[i] as usize;
+                    let pos1 = Vec3::from_array(self.pdb.coord(idx_a));
+                    let pos2 = Vec3::from_array(self.pdb.coord(idx_b));
+                    let (mut first, mut second) =
+                        Structure::half_bond_cylinders(pos1, pos2, Structure::STICK_RADIUS)?;
+
+                    let color_a = self.color_scheme.get_color(&elements[idx_a]).to_srgba();
+                    let vc1 = first.count_vertices();
+                    first.insert_attribute(
+                        Mesh::ATTRIBUTE_COLOR,
+                        vec![Vec4::new(color_a.red, color_a.green, color_a.blue, color_a.alpha); vc1],
+                    );
+
+                    let color_b = self.color_scheme.get_color(&elements[idx_b]).to_srgba();
+                    let vc2 = second.count_vertices();
+                    second.insert_attribute(
+                        Mesh::ATTRIBUTE_COLOR,
+                        vec![Vec4::new(color_b.red, color_b.green, color_b.blue, color_b.alpha); vc2],
+                    );
+
+                    let _ = first.merge(&second);
+                    Some(first)
                 })
-                .for_each(|cylinder_mesh| {
-                    let _ = combined_mesh.merge(&cylinder_mesh);
+                .for_each(|bond_mesh| {
+                    let _ = combined_mesh.merge(&bond_mesh);
                 });
         }
         combined_mesh
@@ -829,7 +860,11 @@ impl Structure {
             }
         }
 
-        // Bond cylinders: skip if either endpoint is masked out.
+        // Bond cylinders: skip if either endpoint is masked out. Split at the
+        // midpoint so each half maps to its own endpoint atom — the MVS color
+        // theme recolors every vertex by its atom_map entry, so without this
+        // split the whole stick took on a single atom's color instead of
+        // visibly transitioning between the two (ferritin-c1k.2).
         let bonds = &self.pdb.hierarchy.bonds;
         if !bonds.atom_a.is_empty() {
             for i in 0..bonds.atom_a.len() {
@@ -842,35 +877,31 @@ impl Structure {
                 }
                 let pos1 = Vec3::from_array(self.pdb.coord(idx_a));
                 let pos2 = Vec3::from_array(self.pdb.coord(idx_b));
-                let center = (pos1 + pos2) / 2.0;
-                let direction = pos2 - pos1;
-                let height = direction.length();
-                if height < 1e-6 {
+                let Some((mut first, mut second)) =
+                    Structure::half_bond_cylinders(pos1, pos2, Structure::STICK_RADIUS)
+                else {
                     continue;
-                }
-                let rotation = Quat::from_rotation_arc(Vec3::Y, direction.normalize());
-                let mut cyl = Cylinder {
-                    radius: Structure::STICK_RADIUS,
-                    half_height: height / 2.0,
-                }
-                .mesh()
-                .build();
-                cyl = cyl.transformed_by(Transform {
-                    translation: center,
-                    rotation,
-                    ..default()
-                });
-                let cyl_vc = cyl.count_vertices();
-                cyl.insert_attribute(
+                };
+
+                let vc1 = first.count_vertices();
+                first.insert_attribute(
                     Mesh::ATTRIBUTE_COLOR,
-                    vec![Vec4::new(0.5, 0.5, 0.5, 0.5); cyl_vc],
+                    vec![Vec4::new(0.5, 0.5, 0.5, 0.5); vc1],
                 );
-                // Bond vertices are mapped to the first atom of the bond.
-                atom_map.extend(std::iter::repeat(idx_a).take(cyl_vc));
+                atom_map.extend(std::iter::repeat(idx_a).take(vc1));
+
+                let vc2 = second.count_vertices();
+                second.insert_attribute(
+                    Mesh::ATTRIBUTE_COLOR,
+                    vec![Vec4::new(0.5, 0.5, 0.5, 0.5); vc2],
+                );
+                atom_map.extend(std::iter::repeat(idx_b).take(vc2));
+
+                let _ = first.merge(&second);
                 match &mut combined {
-                    None => combined = Some(cyl),
+                    None => combined = Some(first),
                     Some(acc) => {
-                        let _ = acc.merge(&cyl);
+                        let _ = acc.merge(&first);
                     }
                 }
             }
@@ -1097,6 +1128,90 @@ mod tests {
             Structure::STICK_RADIUS,
             Structure::BALL_RADIUS
         );
+    }
+
+    // ferritin-c1k.2: a bond must be split at its midpoint so each half can be
+    // colored/mapped to its own endpoint atom, instead of the whole stick
+    // taking on a single atom's color.
+
+    #[test]
+    fn test_half_bond_cylinders_splits_at_midpoint() {
+        let pos1 = Vec3::new(0.0, 0.0, 0.0);
+        let pos2 = Vec3::new(0.0, 4.0, 0.0);
+        let (first, second) = Structure::half_bond_cylinders(pos1, pos2, 0.1)
+            .expect("a valid (non-degenerate) bond must produce two halves");
+
+        let y_range = |mesh: &Mesh| -> (f32, f32) {
+            let positions = match mesh.attribute(Mesh::ATTRIBUTE_POSITION).unwrap() {
+                bevy::render::mesh::VertexAttributeValues::Float32x3(v) => v,
+                _ => panic!("unexpected position format"),
+            };
+            positions.iter().fold((f32::MAX, f32::MIN), |(lo, hi), p| {
+                (lo.min(p[1]), hi.max(p[1]))
+            })
+        };
+
+        let (first_min, first_max) = y_range(&first);
+        let (second_min, second_max) = y_range(&second);
+
+        assert!(
+            first_min >= -1e-3 && first_max <= 2.0 + 1e-3,
+            "first half should span [0, midpoint=2.0], got [{first_min}, {first_max}]"
+        );
+        assert!(
+            second_min >= 2.0 - 1e-3 && second_max <= 4.0 + 1e-3,
+            "second half should span [midpoint=2.0, 4], got [{second_min}, {second_max}]"
+        );
+    }
+
+    #[test]
+    fn test_half_bond_cylinders_degenerate_returns_none() {
+        let p = Vec3::new(1.0, 2.0, 3.0);
+        assert!(Structure::half_bond_cylinders(p, p, 0.1).is_none());
+    }
+
+    #[test]
+    fn test_ballandstick_bond_second_endpoint_gets_own_atom_map_entries() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_01().create_temp()?;
+        let model = load_model(molfile).unwrap();
+
+        // Find an atom that is only ever a bond's *second* endpoint (atom_b),
+        // never its first (atom_a). Under the old bug, every bond's vertices
+        // mapped only to atom_a, so this atom's atom_map count would be exactly
+        // its own sphere's vertex count with zero contribution from bonds.
+        let atom_a: std::collections::HashSet<usize> = model
+            .hierarchy
+            .bonds
+            .atom_a
+            .iter()
+            .map(|&x| x as usize)
+            .collect();
+        let target_idx = model
+            .hierarchy
+            .bonds
+            .atom_b
+            .iter()
+            .map(|&x| x as usize)
+            .find(|idx| !atom_a.contains(idx))
+            .expect("expected an atom that is only ever a bond's second endpoint");
+
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::BallAndStick)
+            .build();
+        let (mesh, atom_map) = structure.to_mesh_with_atom_map(None);
+        assert_eq!(mesh.count_vertices(), atom_map.len());
+
+        let sphere_vc = Sphere::new(Structure::BALL_RADIUS).mesh().build().count_vertices();
+        let count_in_map = atom_map.iter().filter(|&&i| i == target_idx).count();
+        assert!(
+            count_in_map > sphere_vc,
+            "atom {target_idx} is only ever a bond's second endpoint; its atom_map \
+             count ({count_in_map}) must exceed its own sphere's vertex count \
+             ({sphere_vc}), proving a bond's second half maps to it instead of \
+             every bond vertex mapping only to the first endpoint"
+        );
+        Ok(())
     }
 
     #[test]
