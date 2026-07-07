@@ -10,3 +10,6 @@ description.workspace = true
 ferritin-core = { path = "../ferritin-core" }
 svg = "0.18.0"
 geo = "0.33.1"
+
+[dev-dependencies]
+ferritin-test-data = { path = "../ferritin-test-data" }

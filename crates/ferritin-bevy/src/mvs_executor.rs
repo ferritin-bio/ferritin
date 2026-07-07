@@ -24,6 +24,8 @@ use std::path::PathBuf;
 
 use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
+use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::ui::Node as UiNode;
 use ferritin_core::{AtomCollection, Model, load_model};
 use ferritin_molviewspec::molviewspec::nodes::{
     CameraParams, CanvasParams, ColorT, ColorThemeT, ComponentInlineParams, ComponentSelector,
@@ -45,10 +47,15 @@ use crate::structure::{RenderOptions, Structure};
 #[derive(Component)]
 pub struct MvsEntity;
 
-/// A MVS `label` node, spawned at the centroid of its component's atoms. Headless
-/// builds carry only the text + [`Transform`]; a UI layer turns it into billboard text.
+/// A MVS `label` node, spawned at the centroid of its component's atoms.
+/// [`update_mvs_label_billboards`] projects this world-space anchor to screen
+/// space each frame and keeps a companion UI [`Text`] entity positioned there.
 #[derive(Component)]
 pub struct MvsLabel(pub String);
+
+/// Links a [`MvsLabel`] anchor entity to its billboard UI [`Text`] entity.
+#[derive(Component)]
+struct MvsLabelUiNode(Entity);
 
 /// Holds the most recently loaded [`State`] (for UI tree inspection). Replaced on
 /// each successful load.
@@ -103,6 +110,13 @@ pub enum MvsError {
     InvalidTransform,
     /// A node kind / feature is not supported in this MVP.
     UnsupportedNode { kind: KindT, reason: String },
+    /// A representation type was requested but rendered as a different, degraded
+    /// fallback (e.g. Surface -> VdW spheres). Previously only a `warn!()` log
+    /// call, invisible to anyone using the interactive viewer (ferritin-ala.9).
+    RepresentationDegraded {
+        requested: RepresentationTypeT,
+        rendered_as: &'static str,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +148,89 @@ impl Plugin for MvsPlugin {
             .init_resource::<OrbitCamera>()
             .add_message::<LoadMvsEvent>()
             .add_message::<MvsError>()
-            .add_systems(Update, execute_mvs_on_load);
+            .add_systems(
+                Update,
+                (
+                    execute_mvs_on_load,
+                    update_mvs_label_billboards,
+                    disable_tonemapping_on_new_cameras,
+                )
+                    .chain(),
+            );
+    }
+}
+
+/// Bevy's default `Tonemapping::TonyMcMapface` (auto-inserted as a required
+/// component of every `Camera3d`) is designed to compress and selectively
+/// desaturate bright input stimulus for cinematic realism — exactly what made
+/// named colors (blue, orange, seagreen, ...) read as muted/dim against the
+/// viewport background (ferritin-ala.8). A molecular viewer wants legible,
+/// undistorted color, not a film look, so disable it on every camera this
+/// plugin encounters rather than requiring every consumer to remember to.
+fn disable_tonemapping_on_new_cameras(
+    mut commands: Commands,
+    cameras: Query<Entity, Added<Camera3d>>,
+) {
+    for entity in &cameras {
+        commands.entity(entity).insert(Tonemapping::None);
+    }
+}
+
+/// Projects each [`MvsLabel`] anchor's world position through the active 3D
+/// camera and keeps a companion screen-space [`Text`] node positioned there,
+/// creating it on first sight. Labels that project behind the camera or
+/// outside the viewport are hidden rather than despawned, since the anchor
+/// entity (and thus this link) is recreated on every scene reload anyway.
+fn update_mvs_label_billboards(
+    mut commands: Commands,
+    camera_q: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    label_q: Query<(Entity, &Transform, Option<&MvsLabelUiNode>), With<MvsLabel>>,
+    mut node_q: Query<&mut UiNode>,
+    text_q: Query<&MvsLabel>,
+) {
+    let Ok((camera, camera_transform)) = camera_q.single() else {
+        return;
+    };
+
+    for (entity, transform, ui_node) in &label_q {
+        let viewport_pos = camera
+            .world_to_viewport(camera_transform, transform.translation)
+            .ok();
+
+        match (ui_node, viewport_pos) {
+            (Some(MvsLabelUiNode(ui_entity)), Some(pos)) => {
+                if let Ok(mut node) = node_q.get_mut(*ui_entity) {
+                    node.display = Display::Flex;
+                    node.left = Val::Px(pos.x);
+                    node.top = Val::Px(pos.y);
+                }
+            }
+            (Some(MvsLabelUiNode(ui_entity)), None) => {
+                if let Ok(mut node) = node_q.get_mut(*ui_entity) {
+                    node.display = Display::None;
+                }
+            }
+            (None, Some(pos)) => {
+                let Ok(label) = text_q.get(entity) else {
+                    continue;
+                };
+                let ui_entity = commands
+                    .spawn((
+                        Text::new(label.0.clone()),
+                        TextColor(Color::WHITE),
+                        UiNode {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(pos.x),
+                            top: Val::Px(pos.y),
+                            ..default()
+                        },
+                        MvsEntity,
+                    ))
+                    .id();
+                commands.entity(entity).insert(MvsLabelUiNode(ui_entity));
+            }
+            (None, None) => {}
+        }
     }
 }
 
@@ -152,6 +248,22 @@ struct Ctx<'a, 'w, 's> {
     clear: &'a mut ClearColor,
     orbit: &'a mut OrbitCamera,
     errors: Vec<MvsError>,
+    /// Union of every `focus()` node's AABB seen so far this load, so a scene with
+    /// multiple focused components (e.g. a superposition) frames all of them
+    /// instead of just the last one processed — see ferritin-ala.5.
+    focus_union: Option<(Vec3, Vec3)>,
+    /// Union of every *rendered* component's world-space AABB seen so far this
+    /// load (regardless of whether it was focused). Used to keep a small
+    /// focus() target (e.g. two ions inside a large protein) from pulling the
+    /// camera in so close that the surrounding, still-rendered geometry
+    /// near-clips — see ferritin-t0h.5.
+    scene_bounds: Option<(Vec3, Vec3)>,
+    /// Live viewport width/height, read from the render camera at load time.
+    /// `fit_radius_for_view` needs this to compute the true horizontal FOV —
+    /// using the (narrower) vertical FOV for both axes on a widescreen viewport
+    /// over-estimated the required distance and left whole-structure framing
+    /// filling under half the frame — see ferritin-t0h.10.
+    aspect_ratio: f32,
 }
 
 /// Reacts to [`LoadMvsEvent`]: parse, clear the previous scene, execute the new tree.
@@ -160,6 +272,7 @@ fn execute_mvs_on_load(
     mut load_events: MessageReader<LoadMvsEvent>,
     mut error_writer: MessageWriter<MvsError>,
     existing: Query<Entity, With<MvsEntity>>,
+    camera_q: Query<&Camera, With<Camera3d>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -167,6 +280,17 @@ fn execute_mvs_on_load(
     mut orbit: ResMut<OrbitCamera>,
     mut state_res: ResMut<MvsStateResource>,
 ) {
+    // Default to 16:9 (every example in this repo opens at that ratio) when no
+    // camera/viewport is available yet; recomputed fresh per load so a resized
+    // window is picked up on the next scene load.
+    let aspect_ratio = camera_q
+        .single()
+        .ok()
+        .and_then(|c| c.logical_viewport_size())
+        .filter(|size| size.y > 0.0)
+        .map(|size| size.x / size.y)
+        .unwrap_or(16.0 / 9.0);
+
     for event in load_events.read() {
         // Parse first; a parse failure aborts only this event.
         let state = match parse_state(event) {
@@ -189,6 +313,9 @@ fn execute_mvs_on_load(
             clear: &mut clear,
             orbit: &mut orbit,
             errors: Vec::new(),
+            focus_union: None,
+            scene_bounds: None,
+            aspect_ratio,
         };
 
         execute_root(&state.root, &mut ctx);
@@ -383,7 +510,7 @@ fn execute_component(
                         up: None,
                     },
                 };
-                apply_focus(&params, ac, &mask, ctx);
+                apply_focus(&params, ac, &mask, transform, ctx);
             }
             _ => {}
         }
@@ -398,6 +525,17 @@ fn render_representation(
     transform: Transform,
     ctx: &mut Ctx,
 ) {
+    // Track this component's world-space AABB in the running scene bounds so a
+    // later, smaller focus() target can be checked against everything actually
+    // rendered, not just itself (ferritin-t0h.5).
+    if let Some((local_min, local_max)) = aabb_of_masked(ac, mask) {
+        let (world_min, world_max) = transform_aabb(local_min, local_max, transform);
+        ctx.scene_bounds = Some(match ctx.scene_bounds {
+            Some((prev_min, prev_max)) => (prev_min.min(world_min), prev_max.max(world_max)),
+            None => (world_min, world_max),
+        });
+    }
+
     let (repr_type, color_theme) = match &repr.params {
         Some(NodeParams::RepresentationParams(RepresentationParams {
             representation_type,
@@ -409,6 +547,10 @@ fn render_representation(
     let (render_opt, degraded) = map_representation(&repr_type);
     if degraded {
         warn!("Surface representation is not supported; rendering as VdW spheres");
+        ctx.errors.push(MvsError::RepresentationDegraded {
+            requested: repr_type.clone(),
+            rendered_as: "VdW spheres (Spacefill)",
+        });
     }
 
     // Collect layered color nodes (applied in document order; later wins).
@@ -451,9 +593,21 @@ fn render_representation(
     let effective_theme = color_theme.unwrap_or(ColorThemeT::ElementSymbol);
     apply_mvs_colors_with_theme(&mut mesh, &effective_theme, &color_nodes, ac, &vertex_map, map_kind);
 
+    // Wireframe (MVS "line") geometry is now thin triangle cylinders with real
+    // normals (ferritin-t0h.9), so it can take normal PBR shading like every
+    // other representation instead of being forced unlit.
+    let mut material = StandardMaterial::default();
+    // Surface silently degrades to VdW spheres (Solid); tint it amber so it reads as
+    // a fallback rather than looking pixel-identical to a real Spacefill request —
+    // the `degraded` warning was previously log-only, invisible in the viewer itself.
+    if degraded {
+        material.base_color = Color::srgb(1.0, 0.78, 0.5);
+        material.emissive = LinearRgba::rgb(0.15, 0.08, 0.0);
+    }
+
     ctx.commands.spawn((
         Mesh3d(ctx.meshes.add(mesh)),
-        MeshMaterial3d(ctx.materials.add(StandardMaterial::default())),
+        MeshMaterial3d(ctx.materials.add(material)),
         transform,
         MvsEntity,
     ));
@@ -538,26 +692,155 @@ fn apply_camera(p: &CameraParams, ctx: &mut Ctx) {
     }
 }
 
-fn apply_focus(params: &FocusInlineParams, ac: &AtomCollection, mask: &AtomMask, ctx: &mut Ctx) {
-    let Some((center, diagonal)) = aabb_of_masked(ac, mask) else {
+fn apply_focus(
+    params: &FocusInlineParams,
+    ac: &AtomCollection,
+    mask: &AtomMask,
+    transform: Transform,
+    ctx: &mut Ctx,
+) {
+    let Some((local_min, local_max)) = aabb_of_masked(ac, mask) else {
         return;
     };
-    let radius = (diagonal * 1.5).max(1.0);
-    ctx.orbit.focus = center;
-    ctx.orbit.radius = radius;
+    // The component's own transform (e.g. a superposition's translate) isn't baked
+    // into `ac`'s coordinates, so it must be applied here or focus() targets the
+    // pre-transform location.
+    let (world_min, world_max) = transform_aabb(local_min, local_max, transform);
 
-    // An explicit view direction overrides the orbit orientation. `direction` is the
-    // direction the camera looks *along*, so the camera sits opposite to it.
-    if let Some(dir) = params.direction {
-        let view = tuple_to_vec3(dir);
-        if view.length() > 1e-6 {
-            let offset = -view.normalize() * radius;
-            set_yaw_pitch_from_offset(ctx.orbit, offset);
-        }
-    }
+    // Union with every other focus() target seen so far this load, so a scene with
+    // multiple focused components (e.g. a superposition) frames all of them instead
+    // of just the last one processed.
+    let (union_min, union_max) = match ctx.focus_union {
+        Some((prev_min, prev_max)) => (prev_min.min(world_min), prev_max.max(world_max)),
+        None => (world_min, world_max),
+    };
+    ctx.focus_union = Some((union_min, union_max));
+
+    ctx.orbit.focus = (union_min + union_max) * 0.5;
+
     if let Some(up) = params.up {
         ctx.orbit.up = tuple_to_vec3(up);
     }
+    // An explicit view direction overrides the orbit orientation. `direction` is the
+    // direction the camera looks *along*, so the camera sits opposite to it. Resolve
+    // this before fitting the radius, since the fit depends on the final yaw/pitch.
+    if let Some(dir) = params.direction {
+        let view = tuple_to_vec3(dir);
+        if view.length() > 1e-6 {
+            set_yaw_pitch_from_offset(ctx.orbit, -view.normalize());
+        }
+    }
+
+    let mut radius = fit_radius_for_view(union_min, union_max, ctx.orbit, ctx.aspect_ratio);
+
+    // Clamp against the whole rendered scene, not just the focus target: a tiny
+    // target (e.g. two ions) deep inside a much larger structure would otherwise
+    // pull the camera in close enough that the surrounding, still-rendered
+    // geometry near-clips (ferritin-t0h.5). Re-running the same view-projected
+    // fit around the *focus* center but over the scene's full extent gives the
+    // distance needed to clear all of it; when focus == scene (the common
+    // whole-structure case) the two radii coincide, so this never zooms out
+    // beyond what ferritin-ala.5 already tightened.
+    if let Some((scene_min, scene_max)) = ctx.scene_bounds {
+        let scene_radius = fit_radius_for_view_from_center(
+            ctx.orbit.focus,
+            scene_min,
+            scene_max,
+            ctx.orbit,
+            ctx.aspect_ratio,
+        );
+        radius = radius.max(scene_radius);
+    }
+
+    ctx.orbit.radius = radius;
+}
+
+/// Transform an axis-aligned local `[min, max]` box into world space, accounting
+/// for rotation by transforming all 8 corners rather than just the two extremes
+/// (a rotation can change which corner is extremal on a given axis).
+fn transform_aabb(local_min: Vec3, local_max: Vec3, transform: Transform) -> (Vec3, Vec3) {
+    let mut world_min = Vec3::splat(f32::MAX);
+    let mut world_max = Vec3::splat(f32::MIN);
+    for &x in &[local_min.x, local_max.x] {
+        for &y in &[local_min.y, local_max.y] {
+            for &z in &[local_min.z, local_max.z] {
+                let corner = transform.transform_point(Vec3::new(x, y, z));
+                world_min = world_min.min(corner);
+                world_max = world_max.max(corner);
+            }
+        }
+    }
+    (world_min, world_max)
+}
+
+/// Camera distance that keeps the AABB `[min, max]` fully in view for the current
+/// orbit yaw/pitch/up, centered on the AABB's own midpoint.
+///
+/// Using the worst-case any-angle bounding sphere (`aabb_diagonal / 2`) over-estimates
+/// how far back the camera needs to be for any real (non-spherical) structure, since
+/// the 3D corner-to-corner diagonal is longer than the object's extent along any single
+/// screen axis — this left single structures filling only a small fraction of the
+/// viewport (ferritin-ala.5). Projecting the AABB corners onto the camera's actual
+/// right/up axes gives a much tighter fit for the current view direction.
+fn fit_radius_for_view(min: Vec3, max: Vec3, orbit: &OrbitCamera, aspect: f32) -> f32 {
+    let center = (min + max) * 0.5;
+    fit_radius_for_view_from_center(center, min, max, orbit, aspect)
+}
+
+/// As [`fit_radius_for_view`], but projects the AABB corners relative to an
+/// explicit `center` rather than the AABB's own midpoint. Used to ask "how far
+/// back must the camera sit, still looking at `center`, to keep this other AABB
+/// in view" — e.g. clearing the whole scene while focused on a small target
+/// within it (ferritin-t0h.5).
+///
+/// `aspect` (viewport width / height) determines the true horizontal FOV; using
+/// the vertical FOV for both axes over-estimated the distance needed to fit the
+/// horizontal extent on a widescreen viewport, leaving whole-structure framing
+/// filling under half the frame (ferritin-t0h.10).
+fn fit_radius_for_view_from_center(
+    center: Vec3,
+    min: Vec3,
+    max: Vec3,
+    orbit: &OrbitCamera,
+    aspect: f32,
+) -> f32 {
+    // Points from focus toward the camera (same convention as `orbit_position`'s
+    // offset); only its axis matters for building a look-at basis, not its sign.
+    let view_axis = Vec3::new(
+        orbit.yaw.sin() * orbit.pitch.cos(),
+        orbit.pitch.sin(),
+        orbit.yaw.cos() * orbit.pitch.cos(),
+    );
+    let world_up = if orbit.up.length_squared() > 1e-6 {
+        orbit.up
+    } else {
+        Vec3::Y
+    };
+    let right = view_axis.cross(world_up).normalize_or_zero();
+    let cam_up = right.cross(view_axis).normalize_or_zero();
+
+    let mut half_right = 0.0_f32;
+    let mut half_up = 0.0_f32;
+    for &x in &[min.x, max.x] {
+        for &y in &[min.y, max.y] {
+            for &z in &[min.z, max.z] {
+                let corner = Vec3::new(x, y, z) - center;
+                half_right = half_right.max(corner.dot(right).abs());
+                half_up = half_up.max(corner.dot(cam_up).abs());
+            }
+        }
+    }
+
+    // Half of Bevy's default *vertical* FOV (45°), used by every Camera3d in this
+    // codebase. The horizontal half-FOV is derived from it via the viewport
+    // aspect ratio (standard perspective-projection relation), not assumed equal
+    // to the vertical one (ferritin-t0h.10).
+    const V_HALF_FOV: f32 = std::f32::consts::FRAC_PI_4 / 2.0;
+    let h_half_fov = (aspect * V_HALF_FOV.tan()).atan();
+    const MARGIN: f32 = 1.15;
+    let radius_for_up = half_up / V_HALF_FOV.tan();
+    let radius_for_right = half_right / h_half_fov.tan();
+    (radius_for_up.max(radius_for_right) * MARGIN).max(1.0)
 }
 
 fn set_orbit_from_position(orbit: &mut OrbitCamera, target: Vec3, position: Vec3) {
@@ -631,7 +914,8 @@ fn parse_transform(params: &TransformParams) -> Result<Transform, ()> {
 
 /// Axis-aligned bounding box of the masked atoms: returns `(center, diagonal_length)`.
 /// `None` when no atom passes the mask.
-fn aabb_of_masked(ac: &AtomCollection, mask: &AtomMask) -> Option<(Vec3, f32)> {
+/// Axis-aligned bounding box (min, max) of the masked atoms; `None` when no atom passes.
+fn aabb_of_masked(ac: &AtomCollection, mask: &AtomMask) -> Option<(Vec3, Vec3)> {
     let mut min = Vec3::splat(f32::MAX);
     let mut max = Vec3::splat(f32::MIN);
     let mut any = false;
@@ -647,7 +931,7 @@ fn aabb_of_masked(ac: &AtomCollection, mask: &AtomMask) -> Option<(Vec3, f32)> {
     if !any {
         return None;
     }
-    Some(((min + max) * 0.5, (max - min).length()))
+    Some((min, max))
 }
 
 /// Mean position of the masked atoms; `None` when no atom passes the mask.
@@ -808,7 +1092,9 @@ mod tests {
     fn test_aabb_from_masked_atoms() {
         let ac = three_atom_collection();
         let mask = AtomMask(vec![true; 3]);
-        let (center, diag) = aabb_of_masked(&ac, &mask).unwrap();
+        let (min, max) = aabb_of_masked(&ac, &mask).unwrap();
+        let center = (min + max) * 0.5;
+        let diag = (max - min).length();
         assert!((center - Vec3::new(1.0, 1.5, 0.0)).length() < 1e-5);
         assert!((diag - 13.0_f32.sqrt()).abs() < 1e-4);
     }
@@ -1023,6 +1309,199 @@ mod tests {
         );
     }
 
+    // ferritin-ala.3: a label's world anchor gets a companion billboard Text/UiNode
+    // once a Camera3d exists, positioned via the camera's viewport projection.
+    #[test]
+    fn test_label_billboard_ui_node_created() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let json = format!(
+            r#"{{
+              "root": {{
+                "kind": "root",
+                "children": [{{
+                  "kind": "download",
+                  "params": {{"url": "{path}"}},
+                  "children": [{{
+                    "kind": "parse",
+                    "params": {{"format": "mmcif"}},
+                    "children": [{{
+                      "kind": "structure",
+                      "params": {{"type": "model"}},
+                      "children": [{{
+                        "kind": "component",
+                        "params": {{"selector": "all"}},
+                        "children": [
+                          {{"kind": "representation", "params": {{"type": "ball_and_stick"}}}},
+                          {{"kind": "label", "params": {{"text": "Hello World"}}}}
+                        ]
+                      }}]
+                    }}]
+                  }}]
+                }}]
+              }},
+              "metadata": {{"version": "1.0", "timestamp": "2024-01-01T00:00:00"}}
+            }}"#
+        );
+        let mut app = make_app();
+        let camera_transform = Transform::from_xyz(0.0, 0.0, 50.0).looking_at(Vec3::ZERO, Vec3::Y);
+        let viewport_size = UVec2::new(800, 600);
+        let mut projection = Projection::default();
+        projection.update(viewport_size.x as f32, viewport_size.y as f32);
+        let mut camera = Camera {
+            viewport: Some(bevy::camera::Viewport {
+                physical_size: viewport_size,
+                ..default()
+            }),
+            ..default()
+        };
+        // MinimalPlugins doesn't run the camera-projection update system that
+        // normally populates `Camera::computed`, so seed it manually (mirrors
+        // bevy_camera's own internal `make_camera` test helper).
+        camera.computed.clip_from_view = projection.get_clip_from_view();
+        camera.computed.target_info = Some(bevy::camera::RenderTargetInfo {
+            physical_size: viewport_size,
+            scale_factor: 1.0,
+        });
+        app.world_mut().spawn((
+            Camera3d::default(),
+            camera,
+            projection,
+            camera_transform,
+            GlobalTransform::from(camera_transform),
+        ));
+        send_and_update(&mut app, &json);
+        // execute_mvs_on_load and update_mvs_label_billboards are `.chain()`d, so a
+        // single update() already runs both; run one more to let GlobalTransform
+        // propagation (if any plugin performs it) settle before re-checking.
+        app.update();
+
+        let mut label_query = app.world_mut().query::<&MvsLabelUiNode>();
+        assert_eq!(
+            label_query.iter(app.world()).count(),
+            1,
+            "expected the label anchor to gain a MvsLabelUiNode link"
+        );
+
+        let mut text_query = app.world_mut().query::<(&Text, &UiNode)>();
+        let (text, node) = text_query
+            .single(app.world())
+            .expect("expected exactly one billboard Text/UiNode entity");
+        assert_eq!(text.0, "Hello World");
+        assert_eq!(node.position_type, PositionType::Absolute);
+    }
+
+    // ferritin-t0h.9: Line/Wireframe geometry is now thin triangle cylinders with
+    // real normals (no longer a normal-less GPU LineList), so it renders lit like
+    // every other representation instead of being forced unlit.
+    #[test]
+    fn test_line_representation_material_is_lit() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let mut app = make_app();
+        send_and_update(&mut app, &mvsj_one_component(&path, "all", "line"));
+
+        let mut query = app.world_mut().query::<&MeshMaterial3d<StandardMaterial>>();
+        let handle = query
+            .single(app.world())
+            .expect("expected exactly one mesh material")
+            .clone();
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        let material = materials.get(&handle.0).expect("material must exist");
+        assert!(
+            !material.unlit,
+            "line representation material should keep normal PBR shading"
+        );
+    }
+
+    #[test]
+    fn test_ball_and_stick_material_is_lit() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let mut app = make_app();
+        send_and_update(&mut app, &mvsj_one_component(&path, "all", "ball_and_stick"));
+
+        let mut query = app.world_mut().query::<&MeshMaterial3d<StandardMaterial>>();
+        let handle = query
+            .single(app.world())
+            .expect("expected exactly one mesh material")
+            .clone();
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        let material = materials.get(&handle.0).expect("material must exist");
+        assert!(
+            !material.unlit,
+            "ball_and_stick representation material should keep normal PBR shading"
+        );
+    }
+
+    // ferritin-ala.7: Surface silently degrades to VdW spheres (Solid) with only a
+    // log warning -- the viewer itself gave no visual signal that it wasn't a real
+    // surface render, pixel-identical to Spacefill. It should now be tinted.
+    #[test]
+    fn test_surface_fallback_is_tinted() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let mut app = make_app();
+        send_and_update(&mut app, &mvsj_one_component(&path, "all", "surface"));
+
+        let mut query = app.world_mut().query::<&MeshMaterial3d<StandardMaterial>>();
+        let handle = query
+            .single(app.world())
+            .expect("expected exactly one mesh material")
+            .clone();
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        let material = materials.get(&handle.0).expect("material must exist");
+        assert_ne!(
+            material.base_color,
+            Color::WHITE,
+            "degraded Surface fallback should be visibly tinted, not default white"
+        );
+    }
+
+    // ferritin-ala.9: the Surface degradation must reach the MvsError message
+    // channel (which a status bar subscribes to — see molviewspec_viewer.rs's
+    // collect_errors/format_error), not just a log-only warn!() call.
+    #[test]
+    fn test_surface_fallback_emits_mvs_error() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let mut app = make_app();
+        send_and_update(&mut app, &mvsj_one_component(&path, "all", "surface"));
+
+        let errors = get_errors(&app);
+        assert!(
+            errors.iter().any(|e| matches!(
+                e,
+                MvsError::RepresentationDegraded {
+                    requested: RepresentationTypeT::Surface,
+                    ..
+                }
+            )),
+            "expected a RepresentationDegraded error for the Surface fallback, got {errors:?}"
+        );
+    }
+
+    #[test]
+    fn test_spacefill_is_not_tinted() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let mut app = make_app();
+        send_and_update(&mut app, &mvsj_one_component(&path, "all", "spacefill"));
+
+        let mut query = app.world_mut().query::<&MeshMaterial3d<StandardMaterial>>();
+        let handle = query
+            .single(app.world())
+            .expect("expected exactly one mesh material")
+            .clone();
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        let material = materials.get(&handle.0).expect("material must exist");
+        assert_eq!(
+            material.base_color,
+            Color::WHITE,
+            "a real (non-degraded) spacefill request should not carry the fallback tint"
+        );
+    }
+
     // T3-14: A focus node repositions OrbitCamera away from its default.
     #[test]
     fn test_focus_repositions_camera() {
@@ -1067,6 +1546,243 @@ mod tests {
         );
     }
 
+    // ferritin-t0h.5: focusing a tiny target (e.g. a single residue, standing in
+    // for "two ions") that sits inside a much larger *already-rendered* structure
+    // must not zoom the camera in tight enough to near-clip through the
+    // surrounding geometry. Compares the same tiny focus target in isolation
+    // (nothing else rendered) against the same target focused alongside a full
+    // cartoon of the whole protein: the latter's radius must be pulled back
+    // well beyond what the tiny AABB alone would ever justify.
+    #[test]
+    fn test_focus_small_target_clamped_to_scene_bounds() {
+        use ferritin_test_data::TestFile;
+
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+
+        // Scene A: only the tiny target (first residue) is rendered and focused.
+        let json_small_only = format!(
+            r#"{{
+              "root": {{
+                "kind": "root",
+                "children": [{{
+                  "kind": "download",
+                  "params": {{"url": "{path}"}},
+                  "children": [{{
+                    "kind": "parse",
+                    "params": {{"format": "mmcif"}},
+                    "children": [{{
+                      "kind": "structure",
+                      "params": {{"type": "model"}},
+                      "children": [{{
+                        "kind": "component",
+                        "params": {{"selector": {{"residue_index": 0}}}},
+                        "children": [
+                          {{"kind": "representation", "params": {{"type": "ball_and_stick"}}}},
+                          {{"kind": "focus", "params": {{}}}}
+                        ]
+                      }}]
+                    }}]
+                  }}]
+                }}]
+              }},
+              "metadata": {{"version": "1.0", "timestamp": "2024-01-01T00:00:00"}}
+            }}"#
+        );
+        let mut app_small = make_app();
+        send_and_update(&mut app_small, &json_small_only);
+        let radius_small_only = app_small.world().resource::<OrbitCamera>().radius;
+
+        // Scene B: the whole protein is rendered (cartoon, unfocused) first, then
+        // the same tiny residue is focused — mirroring preset_label's structure
+        // (full protein cartoon, then a small focused ion/label target).
+        let json_with_scene = format!(
+            r#"{{
+              "root": {{
+                "kind": "root",
+                "children": [{{
+                  "kind": "download",
+                  "params": {{"url": "{path}"}},
+                  "children": [{{
+                    "kind": "parse",
+                    "params": {{"format": "mmcif"}},
+                    "children": [{{
+                      "kind": "structure",
+                      "params": {{"type": "model"}},
+                      "children": [
+                        {{
+                          "kind": "component",
+                          "params": {{"selector": "all"}},
+                          "children": [
+                            {{"kind": "representation", "params": {{"type": "cartoon"}}}}
+                          ]
+                        }},
+                        {{
+                          "kind": "component",
+                          "params": {{"selector": {{"residue_index": 0}}}},
+                          "children": [
+                            {{"kind": "representation", "params": {{"type": "ball_and_stick"}}}},
+                            {{"kind": "focus", "params": {{}}}}
+                          ]
+                        }}
+                      ]
+                    }}]
+                  }}]
+                }}]
+              }},
+              "metadata": {{"version": "1.0", "timestamp": "2024-01-01T00:00:00"}}
+            }}"#
+        );
+        let mut app_scene = make_app();
+        send_and_update(&mut app_scene, &json_with_scene);
+        let radius_with_scene = app_scene.world().resource::<OrbitCamera>().radius;
+
+        assert!(
+            radius_with_scene > radius_small_only * 3.0,
+            "expected the scene-bounds clamp to pull the camera back well beyond \
+             the tiny target's own fit (small-only={radius_small_only}, \
+             with-scene={radius_with_scene})"
+        );
+    }
+
+    // ferritin-t0h.10: on a widescreen viewport, a horizontally-dominant AABB
+    // should need a *smaller* radius once the true (wider) horizontal FOV is
+    // used, instead of being fit as if the horizontal FOV equalled the narrower
+    // vertical one. A square aspect ratio (1:1) is the boundary case where
+    // horizontal and vertical FOV coincide, so it acts as the "old behavior"
+    // reference point here.
+    #[test]
+    fn test_fit_radius_tighter_on_widescreen_for_wide_aabb() {
+        let orbit = OrbitCamera::default();
+        // Wide, flat AABB: extent along the camera's right axis dominates.
+        let min = Vec3::new(-100.0, -5.0, -5.0);
+        let max = Vec3::new(100.0, 5.0, 5.0);
+
+        let radius_square = fit_radius_for_view(min, max, &orbit, 1.0);
+        let radius_widescreen = fit_radius_for_view(min, max, &orbit, 16.0 / 9.0);
+
+        assert!(
+            radius_widescreen < radius_square,
+            "widescreen fit ({radius_widescreen}) should pull in tighter than \
+             square fit ({radius_square}) for a horizontally-dominant AABB"
+        );
+    }
+
+    // ferritin-t0h.10 (contrast case): a vertically-dominant AABB is bounded by
+    // the *vertical* FOV regardless of aspect ratio, so widening the viewport
+    // must not change the fitted radius at all.
+    #[test]
+    fn test_fit_radius_unaffected_by_aspect_for_tall_aabb() {
+        let orbit = OrbitCamera::default();
+        let min = Vec3::new(-5.0, -100.0, -5.0);
+        let max = Vec3::new(5.0, 100.0, 5.0);
+
+        let radius_square = fit_radius_for_view(min, max, &orbit, 1.0);
+        let radius_widescreen = fit_radius_for_view(min, max, &orbit, 16.0 / 9.0);
+
+        assert!(
+            (radius_widescreen - radius_square).abs() < 1e-3,
+            "vertical-extent fit should be aspect-independent: square={radius_square}, \
+             widescreen={radius_widescreen}"
+        );
+    }
+
+    // ferritin-ala.5: focus() should fill most of the viewport, not just a small
+    // fraction of it. Reconstructs the same camera the viewer examples use
+    // (Camera3d::default(), orbit_position formula) and projects the real rendered
+    // mesh's vertices to check on-screen coverage, rather than trusting the
+    // orbit-radius formula's own math (which is exactly what was wrong before).
+    #[test]
+    fn test_focus_fills_most_of_viewport() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::mvs_4hhb().create_temp().unwrap();
+        let json = format!(
+            r#"{{
+              "root": {{
+                "kind": "root",
+                "children": [{{
+                  "kind": "download",
+                  "params": {{"url": "{path}"}},
+                  "children": [{{
+                    "kind": "parse",
+                    "params": {{"format": "mmcif"}},
+                    "children": [{{
+                      "kind": "structure",
+                      "params": {{"type": "model"}},
+                      "children": [{{
+                        "kind": "component",
+                        "params": {{"selector": "all"}},
+                        "children": [
+                          {{"kind": "representation", "params": {{"type": "cartoon"}}}},
+                          {{"kind": "focus", "params": {{}}}}
+                        ]
+                      }}]
+                    }}]
+                  }}]
+                }}]
+              }},
+              "metadata": {{"version": "1.0", "timestamp": "2024-01-01T00:00:00"}}
+            }}"#
+        );
+        let mut app = make_app();
+        send_and_update(&mut app, &json);
+        let orbit = app.world().resource::<OrbitCamera>().clone();
+
+        let camera_transform = Transform::from_translation({
+            let x = orbit.radius * orbit.yaw.sin() * orbit.pitch.cos();
+            let y = orbit.radius * orbit.pitch.sin();
+            let z = orbit.radius * orbit.yaw.cos() * orbit.pitch.cos();
+            orbit.focus + Vec3::new(x, y, z)
+        })
+        .looking_at(orbit.focus, Vec3::Y);
+        let viewport_size = UVec2::new(2560, 1440);
+        let mut projection = Projection::default();
+        projection.update(viewport_size.x as f32, viewport_size.y as f32);
+        let mut camera = Camera {
+            viewport: Some(bevy::camera::Viewport {
+                physical_size: viewport_size,
+                ..default()
+            }),
+            ..default()
+        };
+        camera.computed.clip_from_view = projection.get_clip_from_view();
+        camera.computed.target_info = Some(bevy::camera::RenderTargetInfo {
+            physical_size: viewport_size,
+            scale_factor: 1.0,
+        });
+        let gt = GlobalTransform::from(camera_transform);
+
+        let mut mesh_query = app.world_mut().query::<&Mesh3d>();
+        let mesh_handle = mesh_query
+            .single(app.world())
+            .expect("expected 1 mesh")
+            .clone();
+        let meshes = app.world().resource::<Assets<Mesh>>();
+        let mesh = meshes.get(&mesh_handle.0).expect("mesh must exist");
+        let positions = match mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .expect("mesh must have positions")
+        {
+            bevy::render::mesh::VertexAttributeValues::Float32x3(v) => v,
+            _ => panic!("unexpected position format"),
+        };
+
+        let mut min_px = Vec2::splat(f32::MAX);
+        let mut max_px = Vec2::splat(f32::MIN);
+        for p in positions {
+            if let Ok(px) = camera.world_to_viewport(&gt, Vec3::from_array(*p)) {
+                min_px = min_px.min(px);
+                max_px = max_px.max(px);
+            }
+        }
+
+        let fill_height = (max_px.y - min_px.y) / viewport_size.y as f32;
+        let fill_width = (max_px.x - min_px.x) / viewport_size.x as f32;
+        assert!(
+            fill_height > 0.5 || fill_width > 0.5,
+            "expected focus() to fill most of the viewport, got fill_height={fill_height:.2} fill_width={fill_width:.2}"
+        );
+    }
+
     // T3-15: A canvas node sets ClearColor.
     #[test]
     fn test_canvas_sets_clear_color() {
@@ -1088,6 +1804,26 @@ mod tests {
         assert!(
             r.red > 0.9 && r.green < 0.1,
             "T3-15: canvas must set red background"
+        );
+    }
+
+    // ferritin-ala.8: Bevy's default TonyMcMapface tonemapping compresses/
+    // desaturates bright colors, which read as muted named colors against the
+    // viewport background. MvsPlugin should disable it on any camera it sees.
+    #[test]
+    fn test_camera3d_gets_tonemapping_disabled() {
+        let mut app = make_app();
+        let camera = app
+            .world_mut()
+            .spawn((Camera3d::default(), Transform::default()))
+            .id();
+        app.update();
+
+        let tonemapping = app.world().get::<Tonemapping>(camera);
+        assert_eq!(
+            tonemapping,
+            Some(&Tonemapping::None),
+            "Camera3d should have tonemapping disabled by MvsPlugin"
         );
     }
 
@@ -1608,6 +2344,85 @@ mod tests {
         let mut app = make_app();
         send_and_update(&mut app, &json);
         assert_eq!(count_meshes(&mut app), 2, "T3-28: two downloads → 2 meshes");
+    }
+
+    // ferritin-ala.5: a superposition-style scene with two focus()ed structures
+    // should frame the union of both, not just the last one processed (which
+    // previously clipped the first/earlier structure out of frame).
+    #[test]
+    fn test_two_focused_structures_frame_union() {
+        use ferritin_test_data::TestFile;
+        let (path1, _tmp1) = TestFile::protein_01().create_temp().unwrap();
+        let (path2, _tmp2) = TestFile::protein_01().create_temp().unwrap();
+        // Second copy translated 300 units along X: if only the last focus() won,
+        // orbit.focus.x would land near 300, not near the midpoint (~150).
+        let json = format!(
+            r#"{{
+              "root": {{
+                "kind": "root",
+                "children": [
+                  {{
+                    "kind": "download",
+                    "params": {{"url": "{path1}"}},
+                    "children": [{{
+                      "kind": "parse",
+                      "params": {{"format": "mmcif"}},
+                      "children": [{{
+                        "kind": "structure",
+                        "params": {{"type": "model"}},
+                        "children": [{{
+                          "kind": "component",
+                          "params": {{"selector": "all"}},
+                          "children": [
+                            {{"kind": "representation", "params": {{"type": "ball_and_stick"}}}},
+                            {{"kind": "focus", "params": {{}}}}
+                          ]
+                        }}]
+                      }}]
+                    }}]
+                  }},
+                  {{
+                    "kind": "download",
+                    "params": {{"url": "{path2}"}},
+                    "children": [{{
+                      "kind": "parse",
+                      "params": {{"format": "mmcif"}},
+                      "children": [{{
+                        "kind": "structure",
+                        "params": {{"type": "model"}},
+                        "children": [
+                          {{
+                            "kind": "transform",
+                            "params": {{
+                              "rotation": [1,0,0, 0,1,0, 0,0,1],
+                              "translation": [300.0, 0.0, 0.0]
+                            }}
+                          }},
+                          {{
+                            "kind": "component",
+                            "params": {{"selector": "all"}},
+                            "children": [
+                              {{"kind": "representation", "params": {{"type": "ball_and_stick"}}}},
+                              {{"kind": "focus", "params": {{}}}}
+                            ]
+                          }}
+                        ]
+                      }}]
+                    }}]
+                  }}
+                ]
+              }},
+              "metadata": {{"version": "1.0", "timestamp": "2024-01-01T00:00:00"}}
+            }}"#
+        );
+        let mut app = make_app();
+        send_and_update(&mut app, &json);
+        let orbit = app.world().resource::<OrbitCamera>().clone();
+        assert!(
+            orbit.focus.x > 50.0 && orbit.focus.x < 250.0,
+            "expected focus to land near the midpoint of both structures (~150), got {}",
+            orbit.focus.x
+        );
     }
 
     // T3-29: MvsStateResource is populated after a successful load.

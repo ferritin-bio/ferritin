@@ -205,7 +205,11 @@ fn build_presets() -> Result<(Vec<Preset>, Vec<NamedTempFile>)> {
             json: preset_superposition(&p_4hhb, &p_1oj6),
         },
         Preset {
-            name: "Symmetry",
+            // Not "Symmetry": real symmetry-mate expansion is unimplemented
+            // (ferritin-229), so this only ever renders the deposited unit. The
+            // plain "Symmetry" label read as if it should show multiple copies
+            // (ferritin-t0h.8) -- name it for what it actually demonstrates.
+            name: "Symmetry (deposited unit)",
             json: preset_symmetry(&p_1tqn),
         },
     ];
@@ -385,6 +389,9 @@ fn preset_superposition(path_a: &str, path_b: &str) -> String {
             ColorT::Named(ColorNamesT::Orange),
             sel(ComponentSelectorT::All),
         );
+        // Focus the translated copy too, so the executor's focus union frames both
+        // structures instead of leaving this one clipped off-frame (ferritin-t0h.6).
+        c.focus(None, None);
     }
     to_json(&state)
 }
@@ -423,9 +430,17 @@ fn to_json(state: &State) -> String {
 // ---- 3-D scene -----------------------------------------------------------------
 
 fn setup_scene(mut commands: Commands, orbit: Res<OrbitCamera>) {
+    // Ambient fill (per-camera in Bevy 0.19) so surfaces facing away from the
+    // directional key lights (much of a cartoon tube) don't read as near-black on
+    // the dark background (ferritin-t0h.4).
     commands.spawn((
         Camera3d::default(),
         Transform::from_translation(orbit_position(&orbit)).looking_at(orbit.focus, orbit.up),
+        AmbientLight {
+            color: Color::WHITE,
+            brightness: 600.0,
+            ..default()
+        },
     ));
 
     commands.spawn((
@@ -672,6 +687,12 @@ fn format_error(err: &MvsError) -> String {
         MvsError::InvalidTransform => "Invalid transform matrix".to_string(),
         MvsError::UnsupportedNode { kind, reason } => {
             format!("Unsupported {kind:?}: {reason}")
+        }
+        MvsError::RepresentationDegraded {
+            requested,
+            rendered_as,
+        } => {
+            format!("{requested:?} representation not supported; rendered as {rendered_as}")
         }
     }
 }

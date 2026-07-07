@@ -55,6 +55,8 @@ pub enum KindT {
     TooltipFromSource,
     TooltipFromUri,
     Transform,
+    Volume,
+    VolumeRepresentation,
 }
 
 // NodeParams
@@ -88,6 +90,8 @@ pub enum NodeParams {
     CanvasParams(CanvasParams),
     SphereParams(SphereParams),
     LineParams(LineParams),
+    VolumeParams(VolumeParams),
+    VolumeRepresentationParams(VolumeRepresentationParams),
 }
 
 // The spec treats leaf nodes as having no children key; an empty array from a
@@ -208,6 +212,36 @@ impl Node {
             let struct_node =
                 Node::new(KindT::Structure, Some(NodeParams::StructureParams(params)));
             self.children.get_or_insert_with(Vec::new).push(struct_node);
+            self.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
+    }
+
+    /// Create a Volume node (parallel to a Structure node — loads volumetric data).
+    pub fn volume(&mut self, params: VolumeParams) -> Option<&mut Node> {
+        if self.kind == KindT::Parse {
+            let volume_node = Node::new(KindT::Volume, Some(NodeParams::VolumeParams(params)));
+            self.children.get_or_insert_with(Vec::new).push(volume_node);
+            self.children.as_mut().unwrap().last_mut()
+        } else {
+            None
+        }
+    }
+
+    // Volume methods ------------------------------------------------------
+
+    /// Add an isosurface or grid-slice representation for this volume.
+    pub fn volume_representation(
+        &mut self,
+        params: VolumeRepresentationParams,
+    ) -> Option<&mut Node> {
+        if self.kind == KindT::Volume {
+            let node = Node::new(
+                KindT::VolumeRepresentation,
+                Some(NodeParams::VolumeRepresentationParams(params)),
+            );
+            self.children.get_or_insert_with(Vec::new).push(node);
             self.children.as_mut().unwrap().last_mut()
         } else {
             None
@@ -512,6 +546,12 @@ impl<'de> Deserialize<'de> for Node {
                         .map(NodeParams::SphereParams),
                     KindT::Line => serde_json::from_value::<LineParams>(v)
                         .map(NodeParams::LineParams),
+                    KindT::Volume => serde_json::from_value::<VolumeParams>(v)
+                        .map(NodeParams::VolumeParams),
+                    KindT::VolumeRepresentation => {
+                        serde_json::from_value::<VolumeRepresentationParams>(v)
+                            .map(NodeParams::VolumeRepresentationParams)
+                    }
                     // Root and GenericVisuals carry no params; ignore any value present.
                     KindT::Root | KindT::GenericVisuals => return Ok(Node {
                         kind: helper.kind,
@@ -528,7 +568,7 @@ impl<'de> Deserialize<'de> for Node {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum DescriptionFormatT {
     Markdown,
@@ -625,6 +665,19 @@ impl State {
         }
     }
 
+    /// Consume this `State` as the sole snapshot of an `MvsjFile`.
+    pub fn into_snapshot(self) -> Snapshot {
+        Snapshot {
+            root: self.root,
+            title: None,
+            description: None,
+            description_format: None,
+            key: None,
+            linger_duration_ms: None,
+            transition_duration_ms: None,
+        }
+    }
+
     pub fn to_url(&self) -> String {
         let json = serde_json::to_string(&self).expect("Json conversion");
         let encoded = urlencoding::encode(&json);
@@ -632,6 +685,51 @@ impl State {
             "https://molstar.org/viewer/?mvs-format=mvsj&mvs-data={}",
             encoded
         )
+    }
+}
+
+/// A single scene state within a `MvsjFile` snapshot sequence.
+///
+/// A sequence of snapshots defines a guided tour: the viewer renders `root`, waits
+/// `linger_duration_ms`, then animates to the next snapshot's `root` over
+/// `transition_duration_ms`. `title`/`description`/`key` are UI metadata (e.g. table
+/// of contents entries), not rendering inputs.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Snapshot {
+    pub root: Node,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description_format: Option<DescriptionFormatT>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub linger_duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition_duration_ms: Option<u64>,
+}
+
+/// A multi-snapshot `.mvsj` document (a "story"): an ordered sequence of scene
+/// states sharing one metadata block, as produced by tools like mol-view-stories.
+///
+/// This is distinct from `State`, which holds a single root node. Use `State` for
+/// single-frame MVSJ files and `MvsjFile` for animated/guided-tour sequences.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct MvsjFile {
+    pub metadata: Metadata,
+    pub snapshots: Vec<Snapshot>,
+}
+impl MvsjFile {
+    /// Parse a multi-snapshot MVSJ string into an `MvsjFile`.
+    pub fn from_str(s: &str) -> serde_json::Result<MvsjFile> {
+        serde_json::from_str(s)
+    }
+
+    /// Parse a multi-snapshot MVSJ reader into an `MvsjFile`.
+    pub fn from_reader<R: Read>(reader: R) -> serde_json::Result<MvsjFile> {
+        serde_json::from_reader(reader)
     }
 }
 
@@ -742,7 +840,7 @@ pub struct ComponentExpression {
 }
 
 /// Representation Type
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum RepresentationTypeT {
     BallAndStick,
@@ -772,6 +870,15 @@ pub enum ColorThemeT {
     SecondaryStructure,
     /// All atoms share a single uniform white color (useful as a base for Color child overrides).
     Uniform,
+    /// Maps a per-atom B-factor (crystallography) or pLDDT (AlphaFold) value to a
+    /// blue (low) → white → red (high) gradient over the observed value range.
+    Uncertainty,
+    /// AlphaFold-style pLDDT confidence banding: very high (>90, blue), confident
+    /// (70-90, teal), low (50-70, yellow), very low (<50, orange).
+    PlddtConfidence,
+    /// Maps per-atom occupancy (0.0-1.0) to a gradient, useful for spotting
+    /// alternate-conformer atoms with partial occupancy.
+    Occupancy,
 }
 
 /// Color Names
@@ -943,6 +1050,47 @@ pub struct RepresentationParams {
     /// Defaults to `ElementSymbol` (CPK coloring) when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color_theme: Option<ColorThemeT>,
+}
+
+/// Params for a `Volume` node — parallel to `StructureParams`, references volumetric
+/// data (e.g. a CCP4/MRC/DSN6 electron-density or EM map) parsed from a `Download`+`Parse` pair.
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct VolumeParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channel_id: Option<String>,
+}
+
+/// Type of volume representation: a 3D isosurface or a 2D cross-sectional slice.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum VolumeRepresentationTypeT {
+    Isosurface,
+    GridSlice,
+}
+
+/// Params for an isosurface volume representation.
+///
+/// `isovalue` is an absolute data-unit threshold; `relative_isovalue` is expressed in
+/// standard deviations above the mean and is the more common way to specify a contour
+/// level since raw absolute values vary widely between maps.
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct IsoSurfaceParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub isovalue: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relative_isovalue: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wireframe: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<f32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct VolumeRepresentationParams {
+    #[serde(rename = "type")]
+    pub representation_type: VolumeRepresentationTypeT,
+    #[serde(flatten)]
+    pub isosurface: Option<IsoSurfaceParams>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

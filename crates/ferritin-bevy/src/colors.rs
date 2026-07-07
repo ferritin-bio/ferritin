@@ -126,7 +126,117 @@ pub fn initial_colors_from_theme(
                 })
                 .collect()
         }
+
+        ColorThemeT::Uncertainty => match model.get_b_factors() {
+            Some(values) => {
+                let (min, max) = min_max(values);
+                vertex_map
+                    .iter()
+                    .map(|&idx| {
+                        let atom_idx = resolve_atom_index(model, idx, map_kind);
+                        let v = values[atom_idx];
+                        let t = if max > min { (v - min) / (max - min) } else { 0.5 };
+                        uncertainty_gradient(t)
+                    })
+                    .collect()
+            }
+            None => {
+                bevy::log::warn!(
+                    "Uncertainty color theme requested but no per-atom b_factor/pLDDT \
+                     data is available; falling back to uniform white"
+                );
+                vec![white; n_verts]
+            }
+        },
+
+        ColorThemeT::PlddtConfidence => match model.get_b_factors() {
+            Some(values) => vertex_map
+                .iter()
+                .map(|&idx| {
+                    let atom_idx = resolve_atom_index(model, idx, map_kind);
+                    plddt_band_color(values[atom_idx])
+                })
+                .collect(),
+            None => {
+                bevy::log::warn!(
+                    "PlddtConfidence color theme requested but no per-atom confidence \
+                     data is available; falling back to uniform white"
+                );
+                vec![white; n_verts]
+            }
+        },
+
+        ColorThemeT::Occupancy => match model.get_occupancies() {
+            Some(values) => vertex_map
+                .iter()
+                .map(|&idx| {
+                    let atom_idx = resolve_atom_index(model, idx, map_kind);
+                    occupancy_color(values[atom_idx])
+                })
+                .collect(),
+            None => {
+                bevy::log::warn!(
+                    "Occupancy color theme requested but no per-atom occupancy data is \
+                     available; falling back to uniform white"
+                );
+                vec![white; n_verts]
+            }
+        },
     }
+}
+
+/// Resolve a `vertex_map` entry to an atom index, per `map_kind`.
+///
+/// For `ResidueMap`, `idx` is an amino-acid iteration index; map it to that
+/// residue's first atom, since per-residue scalar fields (B-factor/pLDDT/occupancy)
+/// are approximated by a single representative atom.
+fn resolve_atom_index(model: &AtomCollection, idx: usize, map_kind: &VertexMapKind) -> usize {
+    match map_kind {
+        VertexMapKind::AtomMap => idx,
+        VertexMapKind::ResidueMap => model
+            .get_residue_start_indices()
+            .and_then(|rs| rs.get(idx))
+            .copied()
+            .unwrap_or(idx),
+    }
+}
+
+fn min_max(values: &[f32]) -> (f32, f32) {
+    let min = values.iter().copied().fold(f32::INFINITY, f32::min);
+    let max = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    (min, max)
+}
+
+/// Blue (low) -> white (mid) -> red (high) gradient over a normalized `t` in `[0, 1]`.
+fn uncertainty_gradient(t: f32) -> Vec4 {
+    let t = t.clamp(0.0, 1.0);
+    if t < 0.5 {
+        let u = t / 0.5;
+        Vec4::new(u, u, 1.0, 1.0)
+    } else {
+        let u = (t - 0.5) / 0.5;
+        Vec4::new(1.0, 1.0 - u, 1.0 - u, 1.0)
+    }
+}
+
+/// AlphaFold-style pLDDT confidence banding (assumes a 0-100 scale).
+fn plddt_band_color(v: f32) -> Vec4 {
+    if v > 90.0 {
+        Vec4::new(0.0, 0.325, 0.851, 1.0) // very high: blue
+    } else if v > 70.0 {
+        Vec4::new(0.325, 0.788, 0.855, 1.0) // confident: teal
+    } else if v > 50.0 {
+        Vec4::new(1.0, 0.859, 0.0, 1.0) // low: yellow
+    } else {
+        Vec4::new(1.0, 0.494, 0.0, 1.0) // very low: orange
+    }
+}
+
+/// Full occupancy (1.0) -> white; partial/absent occupancy -> red, to make
+/// alternate-conformer atoms stand out.
+fn occupancy_color(v: f32) -> Vec4 {
+    let v = v.clamp(0.0, 1.0);
+    Vec4::new(1.0, v, v, 1.0)
 }
 
 /// Simple CA-distance secondary-structure heuristic (same logic as `Structure::detect_secondary_structure`).
@@ -876,5 +986,86 @@ mod tests {
             assert!((c[1] - 1.0).abs() < 1e-6);
             assert!((c[2] - 1.0).abs() < 1e-6);
         }
+    }
+
+    // ferritin-ujk: data-driven themes fall back to uniform white while AtomCollection
+    // has no per-atom b_factor/occupancy data (tracked separately from the Model layer).
+    #[test]
+    fn test_data_driven_themes_fall_back_to_uniform() {
+        let ac = make_test_collection();
+        let vertex_map: Vec<usize> = (0..9).collect();
+        for theme in [
+            ColorThemeT::Uncertainty,
+            ColorThemeT::PlddtConfidence,
+            ColorThemeT::Occupancy,
+        ] {
+            let colors =
+                initial_colors_from_theme(&theme, &ac, &vertex_map, &VertexMapKind::AtomMap);
+            assert_eq!(colors.len(), 9);
+            for c in colors {
+                assert!((c[0] - 1.0).abs() < 1e-6, "{:?} should fall back to white", theme);
+                assert!((c[1] - 1.0).abs() < 1e-6, "{:?} should fall back to white", theme);
+                assert!((c[2] - 1.0).abs() < 1e-6, "{:?} should fall back to white", theme);
+            }
+        }
+    }
+
+    // ferritin-clv: once b_factor is attached, Uncertainty maps the observed
+    // range to a blue-white-red gradient instead of falling back to white.
+    #[test]
+    fn test_uncertainty_theme_uses_real_gradient() {
+        let ac = make_test_collection().with_b_factor(vec![
+            0.0, 12.5, 25.0, 37.5, 50.0, 62.5, 75.0, 87.5, 100.0,
+        ]);
+        let vertex_map: Vec<usize> = (0..9).collect();
+        let colors = initial_colors_from_theme(
+            &ColorThemeT::Uncertainty,
+            &ac,
+            &vertex_map,
+            &VertexMapKind::AtomMap,
+        );
+        // Lowest value -> blue-heavy, highest value -> red-heavy, not uniform white.
+        let low = colors[0];
+        let high = colors[8];
+        assert!(low[2] > low[0], "lowest b_factor should read blue-leaning: {:?}", low);
+        assert!(high[0] > high[2], "highest b_factor should read red-leaning: {:?}", high);
+        assert_ne!(low, high);
+    }
+
+    // ferritin-clv: PlddtConfidence buckets values into AlphaFold-style bands.
+    #[test]
+    fn test_plddt_confidence_theme_bands_values() {
+        let ac = make_test_collection().with_b_factor(vec![
+            95.0, 95.0, 95.0, 80.0, 80.0, 60.0, 60.0, 30.0, 30.0,
+        ]);
+        let vertex_map: Vec<usize> = (0..9).collect();
+        let colors = initial_colors_from_theme(
+            &ColorThemeT::PlddtConfidence,
+            &ac,
+            &vertex_map,
+            &VertexMapKind::AtomMap,
+        );
+        // Very-high (>90) and very-low (<50) bands must render as distinct colors.
+        assert_ne!(colors[0], colors[7]);
+        // Same band -> identical color.
+        assert_eq!(colors[0], colors[1]);
+        assert_eq!(colors[7], colors[8]);
+    }
+
+    // ferritin-clv: Occupancy maps partial occupancy toward red, full occupancy toward white.
+    #[test]
+    fn test_occupancy_theme_uses_real_gradient() {
+        let ac = make_test_collection().with_occupancy(vec![
+            1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.5, 0.2, 0.2,
+        ]);
+        let vertex_map: Vec<usize> = (0..9).collect();
+        let colors = initial_colors_from_theme(
+            &ColorThemeT::Occupancy,
+            &ac,
+            &vertex_map,
+            &VertexMapKind::AtomMap,
+        );
+        assert_eq!(colors[0], Vec4::new(1.0, 1.0, 1.0, 1.0), "full occupancy is white");
+        assert!(colors[7][1] < colors[0][1], "partial occupancy should read less white/more red");
     }
 }

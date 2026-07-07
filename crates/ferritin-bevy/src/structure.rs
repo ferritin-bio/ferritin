@@ -22,7 +22,7 @@ use ferritin_core::Model;
 ///
 /// Down the Line: allow passing an arbitrary function that maps PDB to mesh.
 ///
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum RenderOptions {
     Wireframe,
     Cartoon,
@@ -43,8 +43,6 @@ struct BackboneAtoms {
     ca: Vec3,
     n: Vec3,
     c: Vec3,
-    o: Vec3,
-    residue_index: usize,
 }
 
 /// Define Everything Needed to render
@@ -116,6 +114,92 @@ impl Structure {
         }
     }
 
+    /// Maximum CA-CA distance (Å) treated as a continuous backbone. A trans
+    /// peptide bond gives ~3.8 Å; anything beyond this is a chain break or a
+    /// stretch of missing residues, across which the ribbon must not spline.
+    const CA_BREAK_DIST: f32 = 5.0;
+
+    /// BallAndStick geometry (Å). The stick is half the ball radius so the rep
+    /// reads as spheres joined by thin sticks rather than uniform fat tubes
+    /// (ferritin-c1k.1).
+    const BALL_RADIUS: f32 = 0.3;
+    const STICK_RADIUS: f32 = 0.15;
+
+    /// Wireframe/Line bond radius (Å). A GPU `LineList` rasterizes to a hard 1px
+    /// edge with no normals, which aliases badly on large structures and can't be
+    /// lit or anti-aliased. Rendering the Line representation as thin triangle
+    /// cylinders instead gives it real geometry (smooth-shaded, MSAA-covered)
+    /// while staying visually distinct from BallAndStick's thicker sticks
+    /// (ferritin-t0h.9).
+    const LINE_RADIUS: f32 = 0.13;
+
+    /// Tube tessellation density shared by Cartoon and Putty: vertices around
+    /// the circumference, and interpolated curve points per residue along the
+    /// length. The previous 16/4 (cartoon) and 16/3 (putty) values were coarse
+    /// enough that the tube read as an angular, low-poly prism at close zoom
+    /// (ferritin-c1k.3).
+    const TUBE_CROSS_SEGMENTS: usize = 20;
+    const TUBE_CURVE_SEGMENTS: usize = 6;
+
+    /// Residue names treated as solvent for de-emphasis in BallAndStick/Solid
+    /// (Spacefill) rendering. Isolated water molecules have no bonds, so at
+    /// full atomic radius they show up as a scattered field of disconnected
+    /// dots cluttering the periphery of the real structure. Mol* renders
+    /// solvent distinctly (small/dim) by default; here we shrink the sphere
+    /// radius so waters read as background rather than competing with the
+    /// structure (ferritin-t0h.7).
+    const WATER_RESIDUE_NAMES: [&'static str; 3] = ["HOH", "WAT", "H2O"];
+    const WATER_RADIUS_SCALE: f32 = 0.35;
+
+    fn is_water_residue(name: &str) -> bool {
+        Self::WATER_RESIDUE_NAMES.contains(&name)
+    }
+
+    /// Builds the two half-length cylinders for a ball-and-stick bond, split at
+    /// the bond's midpoint so the caller can color/map each half to its own
+    /// endpoint atom — real bonds in molecular viewers are two-toned, half per
+    /// atom, rather than the whole stick taking on a single atom's color
+    /// (ferritin-c1k.2). Returns `None` for a degenerate (zero-length) bond.
+    fn half_bond_cylinders(pos1: Vec3, pos2: Vec3, radius: f32) -> Option<(Mesh, Mesh)> {
+        let direction = pos2 - pos1;
+        let height = direction.length();
+        if height < 1e-6 {
+            return None;
+        }
+        let mid = (pos1 + pos2) * 0.5;
+        let rotation = Quat::from_rotation_arc(Vec3::Y, direction.normalize());
+        let half_height = height / 4.0;
+        let make_half = |center: Vec3| -> Mesh {
+            Cylinder { radius, half_height }
+                .mesh()
+                .build()
+                .transformed_by(Transform {
+                    translation: center,
+                    rotation,
+                    ..default()
+                })
+        };
+        let first = make_half((pos1 + mid) * 0.5);
+        let second = make_half((mid + pos2) * 0.5);
+        Some((first, second))
+    }
+
+    /// Whether two consecutive backbone residues should start a new ribbon
+    /// segment rather than be splined together. A break is any of: a gap in the
+    /// (masked) residue-iteration index, a chain change, or a CA-CA distance
+    /// beyond a single peptide bond (missing residues / HETATM insertion).
+    /// See ferritin-t0h.1.
+    fn is_backbone_break(
+        prev_idx: usize,
+        prev_chain: &str,
+        prev_ca: Vec3,
+        idx: usize,
+        chain: &str,
+        ca: Vec3,
+    ) -> bool {
+        idx != prev_idx + 1 || chain != prev_chain || ca.distance(prev_ca) > Self::CA_BREAK_DIST
+    }
+
     fn create_smooth_curve(points: &[Vec3], segments: usize) -> Vec<Vec3> {
         let mut curve_points = Vec::new();
 
@@ -139,6 +223,183 @@ impl Structure {
         curve_points
     }
 
+    /// Rotation-minimizing frames along a curve (parallel transport). Returns one
+    /// orthonormal `(right, up)` pair per curve point, both perpendicular to the
+    /// local tangent. The pair rotates *minimally* from one point to the next, so
+    /// the extruded tube cross-section never flips 180° at a kink the way the old
+    /// `tangent × global_Y` frame did — that flip produced the white starburst
+    /// spikes at joints (ferritin-t0h.2).
+    fn sweep_frames(curve: &[Vec3]) -> Vec<(Vec3, Vec3)> {
+        let n = curve.len();
+        let mut frames = Vec::with_capacity(n);
+        if n == 0 {
+            return frames;
+        }
+
+        let tangent = |i: usize| -> Vec3 {
+            let raw = if i + 1 < n {
+                curve[i + 1] - curve[i]
+            } else {
+                curve[i] - curve[i - 1]
+            };
+            raw.normalize_or_zero()
+        };
+
+        let t0 = {
+            let t = tangent(0);
+            if t.length_squared() > 1e-8 {
+                t
+            } else {
+                Vec3::Z
+            }
+        };
+        let seed = if t0.abs_diff_eq(Vec3::Y, 0.01) {
+            Vec3::X
+        } else {
+            Vec3::Y
+        };
+        let mut right = t0.cross(seed).normalize();
+        let mut up = t0.cross(right).normalize();
+        frames.push((right, up));
+
+        for i in 1..n {
+            let t_prev = tangent(i - 1);
+            let t_cur = tangent(i);
+            let axis = t_prev.cross(t_cur);
+            let sin_a = axis.length();
+            if sin_a > 1e-6 {
+                let axis_n = axis / sin_a;
+                let cos_a = t_prev.dot(t_cur).clamp(-1.0, 1.0);
+                let angle = sin_a.atan2(cos_a);
+                right = Quat::from_axis_angle(axis_n, angle) * right;
+            }
+            // Re-orthonormalize against the current tangent to kill drift.
+            right = (right - t_cur * right.dot(t_cur)).normalize_or_zero();
+            if right.length_squared() < 1e-8 {
+                let fallback = if t_cur.abs_diff_eq(Vec3::Y, 0.01) {
+                    Vec3::X
+                } else {
+                    Vec3::Y
+                };
+                right = t_cur.cross(fallback).normalize();
+            }
+            up = t_cur.cross(right).normalize();
+            frames.push((right, up));
+        }
+
+        frames
+    }
+
+    /// Per-residue reference directions for orienting the cartoon ribbon's flat
+    /// cross-section, using the Carson-Bugg "virtual torsion" construction:
+    /// normal(i) = normalize((CA(i) - CA(i-1)) x (CA(i+1) - CA(i))). Unlike a
+    /// pure parallel-transported frame (whose orientation is arbitrary — seeded
+    /// from a global axis with no relation to the actual backbone geometry),
+    /// this direction is derived from the real CA trace, so consecutive
+    /// residues' flat faces consistently track the backbone's own twist instead
+    /// of an arbitrary seed (ferritin-t0h.3).
+    ///
+    /// This construction flips sign roughly every residue in extended (beta)
+    /// conformations because of the backbone's zigzag; consecutive directions
+    /// are sign-corrected (flipped if their dot product is negative) so the
+    /// ribbon doesn't whip 180° every residue. Endpoints reuse their nearest
+    /// interior neighbor. One direction per input CA position.
+    fn peptide_plane_normals(ca_positions: &[Vec3]) -> Vec<Vec3> {
+        let n = ca_positions.len();
+        let mut normals = vec![Vec3::Y; n];
+        if n < 3 {
+            return normals;
+        }
+        for i in 1..n - 1 {
+            let b1 = ca_positions[i] - ca_positions[i - 1];
+            let b2 = ca_positions[i + 1] - ca_positions[i];
+            let normal = b1.cross(b2).normalize_or_zero();
+            normals[i] = if normal.length_squared() > 1e-8 {
+                normal
+            } else {
+                Vec3::Y
+            };
+        }
+        normals[0] = normals[1];
+        normals[n - 1] = normals[n - 2];
+        for i in 1..n {
+            if normals[i].dot(normals[i - 1]) < 0.0 {
+                normals[i] = -normals[i];
+            }
+        }
+        normals
+    }
+
+    /// Normalized linear interpolation between two directions; falls back to `a`
+    /// if the blend degenerates (e.g. `a` and `b` nearly cancel).
+    fn nlerp_direction(a: Vec3, b: Vec3, t: f32) -> Vec3 {
+        let blended = a * (1.0 - t) + b * t;
+        let n = blended.normalize_or_zero();
+        if n.length_squared() > 1e-8 { n } else { a }
+    }
+
+    /// Like [`sweep_frames`], but steers each ring's `up` vector toward an
+    /// explicit per-point hint (projected perpendicular to the local tangent)
+    /// instead of purely parallel-transporting an arbitrary seed. Falls back to
+    /// parallel transport from the previous frame when the hint is degenerate
+    /// (nearly parallel to the tangent), and sign-corrects against the previous
+    /// frame so the ribbon doesn't flip 180° between rings. Used to orient the
+    /// cartoon ribbon with the real backbone geometry (ferritin-t0h.3) rather
+    /// than an arbitrary global-axis seed.
+    fn sweep_frames_oriented(curve: &[Vec3], target_up: &[Vec3]) -> Vec<(Vec3, Vec3)> {
+        let n = curve.len();
+        let mut frames = Vec::with_capacity(n);
+        if n == 0 {
+            return frames;
+        }
+
+        let tangent = |i: usize| -> Vec3 {
+            let raw = if i + 1 < n {
+                curve[i + 1] - curve[i]
+            } else {
+                curve[i] - curve[i - 1]
+            };
+            let t = raw.normalize_or_zero();
+            if t.length_squared() > 1e-8 { t } else { Vec3::Z }
+        };
+
+        let mut prev_up: Option<Vec3> = None;
+        for i in 0..n {
+            let t_cur = tangent(i);
+            let hint = target_up.get(i).copied().unwrap_or(Vec3::Y);
+            let mut up = (hint - t_cur * hint.dot(t_cur)).normalize_or_zero();
+            if up.length_squared() < 1e-8 {
+                // Hint nearly parallel to the tangent (degenerate projection):
+                // fall back to parallel-transporting the previous frame's up.
+                up = match prev_up {
+                    Some(p) => (p - t_cur * p.dot(t_cur)).normalize_or_zero(),
+                    None => {
+                        let seed = if t_cur.abs_diff_eq(Vec3::Y, 0.01) {
+                            Vec3::X
+                        } else {
+                            Vec3::Y
+                        };
+                        t_cur.cross(seed).normalize_or_zero()
+                    }
+                };
+            }
+            if let Some(p) = prev_up {
+                if up.dot(p) < 0.0 {
+                    up = -up;
+                }
+            }
+            let right = up.cross(t_cur).normalize_or_zero();
+            // Re-derive up from (tangent, right) so the pair is exactly
+            // orthonormal (matches the `up = tangent x right` convention used
+            // by the mesh-generation cross-sections).
+            let up = t_cur.cross(right).normalize_or_zero();
+            frames.push((right, up));
+            prev_up = Some(up);
+        }
+
+        frames
+    }
+
     /// Catmull-Rom spline interpolation
     fn catmull_rom(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: f32) -> Vec3 {
         let t2 = t * t;
@@ -152,48 +413,23 @@ impl Structure {
             + p1
     }
 
-    fn extract_backbone_atoms(pdb: &Model) -> Vec<BackboneAtoms> {
-        let mut backbone_data = Vec::new();
-
-        for residue in pdb.residues_aminoacid() {
-            if let (Some(ca), Some(n), Some(c), Some(o)) = (
-                residue.find_atom_by_name("CA"),
-                residue.find_atom_by_name("N"),
-                residue.find_atom_by_name("C"),
-                residue.find_atom_by_name("O"),
-            ) {
-                backbone_data.push(BackboneAtoms {
-                    ca: Vec3::from_array(ca.coords()),
-                    n: Vec3::from_array(n.coords()),
-                    c: Vec3::from_array(c.coords()),
-                    o: Vec3::from_array(o.coords()),
-                    residue_index: residue.residue_id() as usize,
-                });
-            }
-        }
-
-        backbone_data
-    }
-
-    /// Generate a mesh around a curve path (used by Putty).
-    fn generate_tube_mesh(curve: &[Vec3], radius: f32, segments: usize) -> Mesh {
+    /// Generate a mesh around a curve path, with one radius per curve point (used
+    /// by Putty's synthetic thickness placeholder — see `synthetic_putty_radii`).
+    ///
+    /// # Panics
+    /// Panics if `radii.len() != curve.len()`.
+    fn generate_tube_mesh_varying(curve: &[Vec3], radii: &[f32], segments: usize) -> Mesh {
+        assert_eq!(radii.len(), curve.len(), "one radius per curve point");
         let mut positions = Vec::new();
         let mut normals = Vec::new();
         let mut uvs = Vec::new();
         let mut indices = Vec::new();
+        // Rotation-minimizing frames avoid cross-section flips at kinks (ferritin-t0h.2).
+        let frames = Structure::sweep_frames(curve);
         // Generate circles around each point
         for (i, &center) in curve.iter().enumerate() {
-            let forward = if i < curve.len() - 1 {
-                (curve[i + 1] - center).normalize()
-            } else {
-                (center - curve[i - 1]).normalize()
-            };
-            let right = if forward.abs_diff_eq(Vec3::Y, 0.01) {
-                Vec3::X
-            } else {
-                forward.cross(Vec3::Y).normalize()
-            };
-            let up = forward.cross(right);
+            let radius = radii[i];
+            let (right, up) = frames[i];
             // Create vertices around the circle
             for j in 0..segments {
                 let angle = (j as f32 / segments as f32) * std::f32::consts::TAU;
@@ -282,12 +518,16 @@ impl Structure {
         sec
     }
 
-    /// Generate a cartoon ribbon mesh from a smooth CA-trace curve and per-point
-    /// secondary structure assignments.
+    /// Generate a cartoon ribbon mesh from a smooth CA-trace curve, per-point
+    /// secondary structure assignments, and per-point ribbon-orientation hints.
     ///
     /// Cross-sections: helix → circle r=1.2, sheet → ellipse 2.0×0.5, loop → circle r=0.4.
     /// Vertex colors: helix=salmon, sheet=periwinkle, loop=light-green.
-    fn generate_cartoon_mesh(curve: &[Vec3], sec_structures: &[SecondaryStructure]) -> Mesh {
+    fn generate_cartoon_mesh(
+        curve: &[Vec3],
+        sec_structures: &[SecondaryStructure],
+        target_up: &[Vec3],
+    ) -> Mesh {
         let mut positions = Vec::new();
         let mut normals = Vec::new();
         let mut uvs = Vec::new();
@@ -295,7 +535,12 @@ impl Structure {
         let mut indices = Vec::new();
 
         // Control how many segments around the tube
-        let segments = 16;
+        let segments = Self::TUBE_CROSS_SEGMENTS;
+
+        // Orient the ribbon with the real backbone geometry (ferritin-t0h.3)
+        // instead of an arbitrary parallel-transported seed, while still
+        // avoiding cross-section flips at kinks (ferritin-t0h.2).
+        let frames = Structure::sweep_frames_oriented(curve, target_up);
 
         // Generate cross-section profiles for each point in the curve
         for (i, &center) in curve.iter().enumerate() {
@@ -305,20 +550,7 @@ impl Structure {
                 SecondaryStructure::Loop
             };
 
-            // Calculate tangent direction
-            let forward = if i < curve.len() - 1 {
-                (curve[i + 1] - center).normalize()
-            } else {
-                (center - curve[i - 1]).normalize()
-            };
-
-            // Calculate normal and binormal for the tube
-            let right = if forward.abs_diff_eq(Vec3::Y, 0.01) {
-                Vec3::X
-            } else {
-                forward.cross(Vec3::Y).normalize()
-            };
-            let up = forward.cross(right);
+            let (right, up) = frames[i];
 
             let color = match sec_type {
                 SecondaryStructure::Helix => Vec4::new(1.0, 0.6, 0.6, 1.0),
@@ -382,11 +614,9 @@ impl Structure {
     }
 
     fn render_wireframe(&self) -> Mesh {
-        // Collect Cα positions grouped by chain.
-        // Emit LineList pairs: for a chain A→B→C→D emit [A,B, B,C, C,D].
-        let mut positions: Vec<[f32; 3]> = Vec::new();
-
-        // Collect (chain_id, ca_position) for all amino-acid residues
+        // Collect (chain_id, ca_position) for all amino-acid residues, then walk
+        // consecutive pairs emitting a thin cylinder segment for each edge whose
+        // endpoints share a chain (for a chain A→B→C→D: [A,B], [B,C], [C,D]).
         let ca_by_chain: Vec<(String, Vec3)> = self
             .pdb
             .residues_aminoacid()
@@ -400,49 +630,36 @@ impl Structure {
             })
             .collect();
 
-        // Walk consecutive pairs; emit an edge only when both endpoints share a chain.
+        let mut combined: Option<Mesh> = None;
         for window in ca_by_chain.windows(2) {
             let (chain_a, pos_a) = &window[0];
             let (chain_b, pos_b) = &window[1];
             if chain_a == chain_b {
-                positions.push([pos_a.x, pos_a.y, pos_a.z]);
-                positions.push([pos_b.x, pos_b.y, pos_b.z]);
+                if let Some((mut first, second)) =
+                    Structure::half_bond_cylinders(*pos_a, *pos_b, Structure::LINE_RADIUS)
+                {
+                    let _ = first.merge(&second);
+                    match &mut combined {
+                        None => combined = Some(first),
+                        Some(acc) => {
+                            let _ = acc.merge(&first);
+                        }
+                    }
+                }
             }
         }
 
-        let mut mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::all());
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-        mesh
+        combined.unwrap_or_else(|| Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all()))
     }
 
     fn render_cartoon(&self) -> Mesh {
-        let backbone_atoms = Structure::extract_backbone_atoms(&self.pdb);
-        if backbone_atoms.len() < 2 {
-            return Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
-        }
-
-        let secondary_structures = Structure::detect_secondary_structure(&backbone_atoms);
-        let ca_positions: Vec<Vec3> = backbone_atoms.iter().map(|a| a.ca).collect();
-
-        // Build a smooth Catmull-Rom curve through the CA trace.
-        let segments_per_residue = 4;
-        let curve = Structure::create_smooth_curve(&ca_positions, segments_per_residue);
-
-        // Map per-residue secondary structure onto the finer curve points.
-        let curve_sec: Vec<SecondaryStructure> = (0..curve.len())
-            .map(|i| {
-                secondary_structures
-                    .get(i / segments_per_residue)
-                    .copied()
-                    .unwrap_or(SecondaryStructure::Loop)
-            })
-            .collect();
-
-        Structure::generate_cartoon_mesh(&curve, &curve_sec)
+        // Delegate to the mapped path (mask = None) so the ribbon is split into
+        // contiguous backbone segments at chain breaks / missing-residue gaps
+        // rather than splining straight through them (ferritin-t0h.1).
+        self.render_cartoon_mapped(None).0
     }
 
     fn render_ballandstick(&self) -> Mesh {
-        let radius = 0.5;
         let mut combined_mesh = self
             .pdb
             .atoms()
@@ -450,6 +667,11 @@ impl Structure {
                 let coord = atom.coords();
                 let center = Vec3::new(coord[0], coord[1], coord[2]);
                 let element = atom.element();
+                let radius = if Self::is_water_residue(atom.residue_name()) {
+                    Structure::BALL_RADIUS * Structure::WATER_RADIUS_SCALE
+                } else {
+                    Structure::BALL_RADIUS
+                };
                 let mut sphere_mesh = Sphere::new(radius).mesh().build();
                 let vertex_count = sphere_mesh.count_vertices();
                 let color = self.color_scheme.get_color(&element).to_srgba();
@@ -466,39 +688,41 @@ impl Structure {
             })
             .unwrap();
 
-        // Add bond cylinders
+        // Add bond cylinders, split at the midpoint and colored per endpoint
+        // atom so a bond visibly transitions between its two atoms' element
+        // colors instead of taking on a single flat color (ferritin-c1k.2).
+        let elements: Vec<ferritin_core::info::elements::Element> =
+            self.pdb.atoms().map(|a| a.element()).collect();
         let bonds = &self.pdb.hierarchy.bonds;
         if !bonds.atom_a.is_empty() {
             (0..bonds.atom_a.len())
                 .filter_map(|i| {
-                    let pos1 = Vec3::from_array(self.pdb.coord(bonds.atom_a[i] as usize));
-                    let pos2 = Vec3::from_array(self.pdb.coord(bonds.atom_b[i] as usize));
-                    let center = (pos1 + pos2) / 2.0;
-                    let direction = pos2 - pos1;
-                    let height = direction.length();
-                    if height < 1e-6 {
-                        return None;
-                    }
-                    let rotation = Quat::from_rotation_arc(Vec3::Y, direction.normalize());
-                    let mut cylinder_mesh = Cylinder {
-                        radius: 0.5,
-                        half_height: height / 2.0,
-                    }
-                    .mesh()
-                    .build();
-                    cylinder_mesh = cylinder_mesh.transformed_by(Transform {
-                        translation: center,
-                        rotation,
-                        ..default()
-                    });
-                    let cylinder_vertex_count = cylinder_mesh.count_vertices();
-                    let cylinder_colors =
-                        vec![Vec4::new(0.5, 0.5, 0.5, 0.5); cylinder_vertex_count];
-                    cylinder_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, cylinder_colors);
-                    Some(cylinder_mesh)
+                    let idx_a = bonds.atom_a[i] as usize;
+                    let idx_b = bonds.atom_b[i] as usize;
+                    let pos1 = Vec3::from_array(self.pdb.coord(idx_a));
+                    let pos2 = Vec3::from_array(self.pdb.coord(idx_b));
+                    let (mut first, mut second) =
+                        Structure::half_bond_cylinders(pos1, pos2, Structure::STICK_RADIUS)?;
+
+                    let color_a = self.color_scheme.get_color(&elements[idx_a]).to_srgba();
+                    let vc1 = first.count_vertices();
+                    first.insert_attribute(
+                        Mesh::ATTRIBUTE_COLOR,
+                        vec![Vec4::new(color_a.red, color_a.green, color_a.blue, color_a.alpha); vc1],
+                    );
+
+                    let color_b = self.color_scheme.get_color(&elements[idx_b]).to_srgba();
+                    let vc2 = second.count_vertices();
+                    second.insert_attribute(
+                        Mesh::ATTRIBUTE_COLOR,
+                        vec![Vec4::new(color_b.red, color_b.green, color_b.blue, color_b.alpha); vc2],
+                    );
+
+                    let _ = first.merge(&second);
+                    Some(first)
                 })
-                .for_each(|cylinder_mesh| {
-                    let _ = combined_mesh.merge(&cylinder_mesh);
+                .for_each(|bond_mesh| {
+                    let _ = combined_mesh.merge(&bond_mesh);
                 });
         }
         combined_mesh
@@ -511,10 +735,13 @@ impl Structure {
                 let coord = atom.coords();
                 let center = Vec3::new(coord[0], coord[1], coord[2]);
                 let element = atom.element();
-                let radius = element
+                let mut radius = element
                     .atomic_radius()
                     .van_der_waals
                     .expect("Van der waals not defined") as f32;
+                if Self::is_water_residue(atom.residue_name()) {
+                    radius *= Structure::WATER_RADIUS_SCALE;
+                }
                 let mut sphere_mesh = Sphere::new(radius).mesh().build();
                 let vertex_count = sphere_mesh.count_vertices();
                 let color = self.color_scheme.get_color(&element).to_srgba();
@@ -533,16 +760,28 @@ impl Structure {
     }
 
     fn render_putty(&self) -> Mesh {
-        let c_alphas: Vec<Vec3> = self
-            .pdb
-            .residues_aminoacid()
-            .map(|residue| {
-                let ca = residue.find_atom_by_name("CA").expect("CA in all residues");
-                Vec3::from_array(ca.coords())
+        // Delegate to the mapped path (mask = None) so the tube is split at chain
+        // breaks / missing-residue gaps rather than splining through them
+        // (ferritin-t0h.1).
+        self.render_putty_mapped(None).0
+    }
+
+    /// Placeholder tube-radius profile for Putty, until per-atom b_factor is
+    /// plumbed through from Model into AtomCollection (tracked in ferritin-clv).
+    /// Without it, Putty rendered as a constant-radius tube identical to
+    /// Cartoon's loop tube (ferritin-ala.10). A smooth sinusoidal variation along
+    /// the chain at least signals "this thickness carries data" rather than
+    /// looking like an unstyled Cartoon; it is not meaningful per-residue data.
+    fn synthetic_putty_radii(n: usize) -> Vec<f32> {
+        const BASE_RADIUS: f32 = 0.3;
+        const AMPLITUDE: f32 = 0.22;
+        const CYCLES: f32 = 4.0;
+        (0..n)
+            .map(|i| {
+                let t = i as f32 / n.max(1) as f32;
+                BASE_RADIUS + AMPLITUDE * (t * std::f32::consts::TAU * CYCLES).sin()
             })
-            .collect();
-        let curve = Structure::create_smooth_curve(&c_alphas, 3);
-        Structure::generate_tube_mesh(&curve, 0.3, 16)
+            .collect()
     }
 
     // -----------------------------------------------------------------------
@@ -564,7 +803,10 @@ impl Structure {
             let coord = atom.coords();
             let center = Vec3::new(coord[0], coord[1], coord[2]);
             let element = atom.element();
-            let radius = element.atomic_radius().van_der_waals.expect("vdw radius") as f32;
+            let mut radius = element.atomic_radius().van_der_waals.expect("vdw radius") as f32;
+            if Self::is_water_residue(atom.residue_name()) {
+                radius *= Structure::WATER_RADIUS_SCALE;
+            }
             let mut sphere_mesh = Sphere::new(radius).mesh().build();
             let vc = sphere_mesh.count_vertices();
             let color = self.color_scheme.get_color(&element).to_srgba();
@@ -590,8 +832,8 @@ impl Structure {
     }
 
     fn render_wireframe_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
-        let mut positions: Vec<[f32; 3]> = Vec::new();
         let mut atom_map: Vec<usize> = Vec::new();
+        let mut combined: Option<Mesh> = None;
 
         // Collect all CA atoms (retain ALL so window() neighbours stay correct).
         let ca_data: Vec<(String, usize, Vec3)> = self
@@ -609,27 +851,40 @@ impl Structure {
             })
             .collect();
 
-        // Emit an edge only when same chain AND both CA atoms pass the mask.
+        // Emit an edge only when same chain AND both CA atoms pass the mask. Each
+        // edge is a pair of half-length cylinders, one per endpoint atom, so the
+        // atom_map (and downstream per-vertex coloring) stays split at the
+        // midpoint exactly like BallAndStick bonds (ferritin-c1k.2).
         for window in ca_data.windows(2) {
             let (chain_a, idx_a, pos_a) = &window[0];
             let (chain_b, idx_b, pos_b) = &window[1];
             let a_ok = mask.map_or(true, |m| m.0[*idx_a]);
             let b_ok = mask.map_or(true, |m| m.0[*idx_b]);
             if chain_a == chain_b && a_ok && b_ok {
-                positions.push([pos_a.x, pos_a.y, pos_a.z]);
-                positions.push([pos_b.x, pos_b.y, pos_b.z]);
-                atom_map.push(*idx_a);
-                atom_map.push(*idx_b);
+                if let Some((first, second)) =
+                    Structure::half_bond_cylinders(*pos_a, *pos_b, Structure::LINE_RADIUS)
+                {
+                    atom_map.extend(std::iter::repeat(*idx_a).take(first.count_vertices()));
+                    atom_map.extend(std::iter::repeat(*idx_b).take(second.count_vertices()));
+                    let mut seg = first;
+                    let _ = seg.merge(&second);
+                    match &mut combined {
+                        None => combined = Some(seg),
+                        Some(acc) => {
+                            let _ = acc.merge(&seg);
+                        }
+                    }
+                }
             }
         }
 
-        let mut mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::all());
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        let mesh = combined.unwrap_or_else(|| {
+            Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all())
+        });
         (mesh, atom_map)
     }
 
     fn render_ballandstick_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
-        let radius = 0.5;
         let mut atom_map: Vec<usize> = Vec::new();
         let mut combined: Option<Mesh> = None;
 
@@ -645,6 +900,11 @@ impl Structure {
             let coord = atom.coords();
             let center = Vec3::new(coord[0], coord[1], coord[2]);
             let element = atom.element();
+            let radius = if Self::is_water_residue(atom.residue_name()) {
+                Structure::BALL_RADIUS * Structure::WATER_RADIUS_SCALE
+            } else {
+                Structure::BALL_RADIUS
+            };
             let mut sphere_mesh = Sphere::new(radius).mesh().build();
             let vc = sphere_mesh.count_vertices();
             let color = self.color_scheme.get_color(&element).to_srgba();
@@ -663,7 +923,11 @@ impl Structure {
             }
         }
 
-        // Bond cylinders: skip if either endpoint is masked out.
+        // Bond cylinders: skip if either endpoint is masked out. Split at the
+        // midpoint so each half maps to its own endpoint atom — the MVS color
+        // theme recolors every vertex by its atom_map entry, so without this
+        // split the whole stick took on a single atom's color instead of
+        // visibly transitioning between the two (ferritin-c1k.2).
         let bonds = &self.pdb.hierarchy.bonds;
         if !bonds.atom_a.is_empty() {
             for i in 0..bonds.atom_a.len() {
@@ -676,35 +940,31 @@ impl Structure {
                 }
                 let pos1 = Vec3::from_array(self.pdb.coord(idx_a));
                 let pos2 = Vec3::from_array(self.pdb.coord(idx_b));
-                let center = (pos1 + pos2) / 2.0;
-                let direction = pos2 - pos1;
-                let height = direction.length();
-                if height < 1e-6 {
+                let Some((mut first, mut second)) =
+                    Structure::half_bond_cylinders(pos1, pos2, Structure::STICK_RADIUS)
+                else {
                     continue;
-                }
-                let rotation = Quat::from_rotation_arc(Vec3::Y, direction.normalize());
-                let mut cyl = Cylinder {
-                    radius: 0.5,
-                    half_height: height / 2.0,
-                }
-                .mesh()
-                .build();
-                cyl = cyl.transformed_by(Transform {
-                    translation: center,
-                    rotation,
-                    ..default()
-                });
-                let cyl_vc = cyl.count_vertices();
-                cyl.insert_attribute(
+                };
+
+                let vc1 = first.count_vertices();
+                first.insert_attribute(
                     Mesh::ATTRIBUTE_COLOR,
-                    vec![Vec4::new(0.5, 0.5, 0.5, 0.5); cyl_vc],
+                    vec![Vec4::new(0.5, 0.5, 0.5, 0.5); vc1],
                 );
-                // Bond vertices are mapped to the first atom of the bond.
-                atom_map.extend(std::iter::repeat(idx_a).take(cyl_vc));
+                atom_map.extend(std::iter::repeat(idx_a).take(vc1));
+
+                let vc2 = second.count_vertices();
+                second.insert_attribute(
+                    Mesh::ATTRIBUTE_COLOR,
+                    vec![Vec4::new(0.5, 0.5, 0.5, 0.5); vc2],
+                );
+                atom_map.extend(std::iter::repeat(idx_b).take(vc2));
+
+                let _ = first.merge(&second);
                 match &mut combined {
-                    None => combined = Some(cyl),
+                    None => combined = Some(first),
                     Some(acc) => {
-                        let _ = acc.merge(&cyl);
+                        let _ = acc.merge(&first);
                     }
                 }
             }
@@ -717,11 +977,11 @@ impl Structure {
     }
 
     fn render_cartoon_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
-        let segments_per_residue: usize = 4;
-        let cross_segments: usize = 16;
+        let segments_per_residue: usize = Self::TUBE_CURVE_SEGMENTS;
+        let cross_segments: usize = Self::TUBE_CROSS_SEGMENTS;
 
-        // Collect (residue_iter_idx, BackboneAtoms) for residues whose CA passes the mask.
-        let indexed_backbone: Vec<(usize, BackboneAtoms)> = self
+        // Collect (residue_iter_idx, chain_id, BackboneAtoms) for residues whose CA passes the mask.
+        let indexed_backbone: Vec<(usize, String, BackboneAtoms)> = self
             .pdb
             .residues_aminoacid()
             .enumerate()
@@ -734,15 +994,17 @@ impl Structure {
                 }
                 let n = residue.find_atom_by_name("N")?;
                 let c = residue.find_atom_by_name("C")?;
-                let o = residue.find_atom_by_name("O")?;
+                // O is required so the residue counts as a complete backbone unit,
+                // matching the previous behaviour, even though only N/CA/C feed the
+                // dihedral-based secondary-structure classifier.
+                let _o = residue.find_atom_by_name("O")?;
                 Some((
                     res_iter_idx,
+                    residue.chain_id().to_string(),
                     BackboneAtoms {
                         ca: Vec3::from_array(ca.coords()),
                         n: Vec3::from_array(n.coords()),
                         c: Vec3::from_array(c.coords()),
-                        o: Vec3::from_array(o.coords()),
-                        residue_index: res_iter_idx,
                     },
                 ))
             })
@@ -755,18 +1017,21 @@ impl Structure {
             );
         }
 
-        // Split into contiguous segments (gaps in res_iter_idx = ribbon break).
+        // Split into contiguous backbone segments so the spline never connects
+        // across a ribbon break. A break is any of: a gap in the masked residue
+        // sequence, a chain change, or a CA-CA jump larger than a peptide bond
+        // (missing residues / HETATM insertion). See ferritin-t0h.1.
         let mut segments: Vec<Vec<(usize, BackboneAtoms)>> = Vec::new();
         let mut current: Vec<(usize, BackboneAtoms)> = Vec::new();
-        for item in indexed_backbone {
-            if let Some(last) = current.last() {
-                if item.0 != last.0 + 1 {
-                    if !current.is_empty() {
-                        segments.push(std::mem::take(&mut current));
-                    }
+        let mut last_chain: Option<String> = None;
+        for (idx, chain, bb) in indexed_backbone {
+            if let (Some(last), Some(prev_chain)) = (current.last(), last_chain.as_deref()) {
+                if Structure::is_backbone_break(last.0, prev_chain, last.1.ca, idx, &chain, bb.ca) {
+                    segments.push(std::mem::take(&mut current));
                 }
             }
-            current.push(item);
+            last_chain = Some(chain);
+            current.push((idx, bb));
         }
         if !current.is_empty() {
             segments.push(current);
@@ -792,7 +1057,20 @@ impl Structure {
                         .unwrap_or(SecondaryStructure::Loop)
                 })
                 .collect();
-            let seg_mesh = Structure::generate_cartoon_mesh(&curve, &curve_sec);
+            // Per-residue backbone-derived ribbon orientation (ferritin-t0h.3),
+            // interpolated onto the finer curve so the flat cross-section twists
+            // smoothly with the real geometry instead of an arbitrary seed.
+            let residue_normals = Structure::peptide_plane_normals(&ca_positions);
+            let curve_up: Vec<Vec3> = (0..curve.len())
+                .map(|i| {
+                    let res_idx = i / segments_per_residue;
+                    let t = (i % segments_per_residue) as f32 / segments_per_residue as f32;
+                    let n0 = residue_normals[res_idx.min(residue_normals.len() - 1)];
+                    let n1 = residue_normals[(res_idx + 1).min(residue_normals.len() - 1)];
+                    Structure::nlerp_direction(n0, n1, t)
+                })
+                .collect();
+            let seg_mesh = Structure::generate_cartoon_mesh(&curve, &curve_sec, &curve_up);
             let seg_verts = seg_mesh.count_vertices();
             // Map each vertex back to its residue iteration index.
             for v in 0..seg_verts {
@@ -815,11 +1093,11 @@ impl Structure {
     }
 
     fn render_putty_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
-        const CROSS_SEGMENTS: usize = 16;
-        const CURVE_SEGMENTS: usize = 3;
+        const CROSS_SEGMENTS: usize = Structure::TUBE_CROSS_SEGMENTS;
+        const CURVE_SEGMENTS: usize = Structure::TUBE_CURVE_SEGMENTS;
 
-        // Collect (res_iter_idx, CA position) for unmasked residues.
-        let ca_data: Vec<(usize, Vec3)> = self
+        // Collect (res_iter_idx, chain_id, CA position) for unmasked residues.
+        let ca_data: Vec<(usize, String, Vec3)> = self
             .pdb
             .residues_aminoacid()
             .enumerate()
@@ -830,7 +1108,11 @@ impl Structure {
                         return None;
                     }
                 }
-                Some((res_iter_idx, Vec3::from_array(ca.coords())))
+                Some((
+                    res_iter_idx,
+                    residue.chain_id().to_string(),
+                    Vec3::from_array(ca.coords()),
+                ))
             })
             .collect();
 
@@ -841,19 +1123,52 @@ impl Structure {
             );
         }
 
-        let (res_indices, ca_positions): (Vec<usize>, Vec<Vec3>) = ca_data.into_iter().unzip();
-        let curve = Structure::create_smooth_curve(&ca_positions, CURVE_SEGMENTS);
-        let mesh = Structure::generate_tube_mesh(&curve, 0.3, CROSS_SEGMENTS);
-        let vert_count = mesh.count_vertices();
+        // Split into contiguous segments at chain breaks / missing-residue gaps
+        // so the tube never splines straight through them (ferritin-t0h.1).
+        let mut segments: Vec<Vec<(usize, Vec3)>> = Vec::new();
+        let mut current: Vec<(usize, Vec3)> = Vec::new();
+        let mut last_chain: Option<String> = None;
+        for (idx, chain, ca) in ca_data {
+            if let (Some(last), Some(prev_chain)) = (current.last(), last_chain.as_deref()) {
+                if Structure::is_backbone_break(last.0, prev_chain, last.1, idx, &chain, ca) {
+                    segments.push(std::mem::take(&mut current));
+                }
+            }
+            last_chain = Some(chain);
+            current.push((idx, ca));
+        }
+        if !current.is_empty() {
+            segments.push(current);
+        }
 
-        let residue_map: Vec<usize> = (0..vert_count)
-            .map(|v| {
+        let mut residue_map: Vec<usize> = Vec::new();
+        let mut combined: Option<Mesh> = None;
+
+        for segment in segments {
+            if segment.len() < 2 {
+                continue;
+            }
+            let (res_indices, ca_positions): (Vec<usize>, Vec<Vec3>) = segment.into_iter().unzip();
+            let curve = Structure::create_smooth_curve(&ca_positions, CURVE_SEGMENTS);
+            let radii = Structure::synthetic_putty_radii(curve.len());
+            let seg_mesh = Structure::generate_tube_mesh_varying(&curve, &radii, CROSS_SEGMENTS);
+            let seg_verts = seg_mesh.count_vertices();
+            for v in 0..seg_verts {
                 let curve_pt = v / CROSS_SEGMENTS;
                 let res_in_list = (curve_pt / CURVE_SEGMENTS).min(res_indices.len() - 1);
-                res_indices[res_in_list]
-            })
-            .collect();
+                residue_map.push(res_indices[res_in_list]);
+            }
+            match &mut combined {
+                None => combined = Some(seg_mesh),
+                Some(acc) => {
+                    let _ = acc.merge(&seg_mesh);
+                }
+            }
+        }
 
+        let mesh = combined.unwrap_or_else(|| {
+            Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all())
+        });
         (mesh, residue_map)
     }
 }
@@ -866,6 +1181,213 @@ mod tests {
     use ferritin_molviewspec::molviewspec::nodes::{ComponentSelector, ComponentSelectorT};
     use ferritin_test_data::TestFile;
 
+    // ferritin-c1k.1: BallAndStick balls must read as thicker than the sticks
+    // joining them, not as one uniform-radius licorice tube.
+    #[test]
+    fn test_ballandstick_stick_thinner_than_ball() {
+        assert!(
+            Structure::STICK_RADIUS < Structure::BALL_RADIUS,
+            "stick radius {} must be smaller than ball radius {}",
+            Structure::STICK_RADIUS,
+            Structure::BALL_RADIUS
+        );
+    }
+
+    // ferritin-t0h.7: isolated water spheres must render smaller than a normal
+    // atom so they read as background clutter instead of competing with the
+    // real structure in BallAndStick/Spacefill.
+    #[test]
+    fn test_is_water_residue_matches_common_names_only() {
+        assert!(Structure::is_water_residue("HOH"));
+        assert!(Structure::is_water_residue("WAT"));
+        assert!(Structure::is_water_residue("H2O"));
+        assert!(!Structure::is_water_residue("ALA"));
+        assert!(!Structure::is_water_residue("ZN"));
+    }
+
+    #[test]
+    fn test_water_radius_scale_shrinks_but_does_not_vanish() {
+        assert!(
+            Structure::WATER_RADIUS_SCALE > 0.0 && Structure::WATER_RADIUS_SCALE < 1.0,
+            "water radius scale {} must shrink (not disable/invert) the sphere",
+            Structure::WATER_RADIUS_SCALE
+        );
+    }
+
+    /// Radius of the sphere mesh vertices mapped to `atom_idx`: max distance
+    /// from the atom's own center to any vertex the atom_map attributes to it.
+    fn mesh_sphere_radius_for_atom(
+        mesh: &Mesh,
+        atom_map: &[usize],
+        atom_idx: usize,
+        center: Vec3,
+    ) -> f32 {
+        let positions = match mesh.attribute(Mesh::ATTRIBUTE_POSITION).unwrap() {
+            bevy::render::mesh::VertexAttributeValues::Float32x3(v) => v,
+            _ => panic!("unexpected position format"),
+        };
+        atom_map
+            .iter()
+            .zip(positions.iter())
+            .filter(|&(&idx, _)| idx == atom_idx)
+            .map(|(_, p)| (Vec3::from_array(*p) - center).length())
+            .fold(0.0f32, f32::max)
+    }
+
+    #[test]
+    fn test_spacefill_water_oxygen_smaller_than_protein_oxygen() -> anyhow::Result<()> {
+        use ferritin_core::info::elements::Element;
+
+        let (molfile, _handle) = TestFile::mvs_4hhb().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Solid)
+            .build();
+
+        let water_o = structure
+            .pdb
+            .atoms()
+            .find(|a| Structure::is_water_residue(a.residue_name()) && a.element() == Element::O)
+            .map(|a| a.index())
+            .expect("4hhb fixture must contain a water oxygen atom");
+        let protein_o = structure
+            .pdb
+            .atoms()
+            .find(|a| !Structure::is_water_residue(a.residue_name()) && a.element() == Element::O)
+            .map(|a| a.index())
+            .expect("4hhb fixture must contain a non-water oxygen atom");
+
+        let (mesh, atom_map) = structure.to_mesh_with_atom_map(None);
+        let water_center = Vec3::from_array(structure.pdb.coord(water_o));
+        let protein_center = Vec3::from_array(structure.pdb.coord(protein_o));
+        let water_r = mesh_sphere_radius_for_atom(&mesh, &atom_map, water_o, water_center);
+        let protein_r = mesh_sphere_radius_for_atom(&mesh, &atom_map, protein_o, protein_center);
+
+        assert!(water_r > 0.0 && protein_r > 0.0);
+        assert!(
+            water_r < protein_r,
+            "water oxygen sphere ({water_r}) should be smaller than protein oxygen sphere ({protein_r})"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_ballandstick_water_smaller_than_ball_radius() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::mvs_4hhb().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::BallAndStick)
+            .build();
+
+        // Water has no bonds, so its BallAndStick vertices are pure sphere —
+        // safe to compare directly against BALL_RADIUS (unlike a bonded atom,
+        // whose stick geometry can extend past the ball radius).
+        let water_idx = structure
+            .pdb
+            .atoms()
+            .find(|a| Structure::is_water_residue(a.residue_name()))
+            .map(|a| a.index())
+            .expect("4hhb fixture must contain a water atom");
+
+        let (mesh, atom_map) = structure.to_mesh_with_atom_map(None);
+        let center = Vec3::from_array(structure.pdb.coord(water_idx));
+        let water_r = mesh_sphere_radius_for_atom(&mesh, &atom_map, water_idx, center);
+
+        assert!(water_r > 0.0);
+        assert!(
+            water_r < Structure::BALL_RADIUS,
+            "water sphere ({water_r}) should be smaller than full BALL_RADIUS ({})",
+            Structure::BALL_RADIUS
+        );
+        Ok(())
+    }
+
+    // ferritin-c1k.2: a bond must be split at its midpoint so each half can be
+    // colored/mapped to its own endpoint atom, instead of the whole stick
+    // taking on a single atom's color.
+
+    #[test]
+    fn test_half_bond_cylinders_splits_at_midpoint() {
+        let pos1 = Vec3::new(0.0, 0.0, 0.0);
+        let pos2 = Vec3::new(0.0, 4.0, 0.0);
+        let (first, second) = Structure::half_bond_cylinders(pos1, pos2, 0.1)
+            .expect("a valid (non-degenerate) bond must produce two halves");
+
+        let y_range = |mesh: &Mesh| -> (f32, f32) {
+            let positions = match mesh.attribute(Mesh::ATTRIBUTE_POSITION).unwrap() {
+                bevy::render::mesh::VertexAttributeValues::Float32x3(v) => v,
+                _ => panic!("unexpected position format"),
+            };
+            positions.iter().fold((f32::MAX, f32::MIN), |(lo, hi), p| {
+                (lo.min(p[1]), hi.max(p[1]))
+            })
+        };
+
+        let (first_min, first_max) = y_range(&first);
+        let (second_min, second_max) = y_range(&second);
+
+        assert!(
+            first_min >= -1e-3 && first_max <= 2.0 + 1e-3,
+            "first half should span [0, midpoint=2.0], got [{first_min}, {first_max}]"
+        );
+        assert!(
+            second_min >= 2.0 - 1e-3 && second_max <= 4.0 + 1e-3,
+            "second half should span [midpoint=2.0, 4], got [{second_min}, {second_max}]"
+        );
+    }
+
+    #[test]
+    fn test_half_bond_cylinders_degenerate_returns_none() {
+        let p = Vec3::new(1.0, 2.0, 3.0);
+        assert!(Structure::half_bond_cylinders(p, p, 0.1).is_none());
+    }
+
+    #[test]
+    fn test_ballandstick_bond_second_endpoint_gets_own_atom_map_entries() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_01().create_temp()?;
+        let model = load_model(molfile).unwrap();
+
+        // Find an atom that is only ever a bond's *second* endpoint (atom_b),
+        // never its first (atom_a). Under the old bug, every bond's vertices
+        // mapped only to atom_a, so this atom's atom_map count would be exactly
+        // its own sphere's vertex count with zero contribution from bonds.
+        let atom_a: std::collections::HashSet<usize> = model
+            .hierarchy
+            .bonds
+            .atom_a
+            .iter()
+            .map(|&x| x as usize)
+            .collect();
+        let target_idx = model
+            .hierarchy
+            .bonds
+            .atom_b
+            .iter()
+            .map(|&x| x as usize)
+            .find(|idx| !atom_a.contains(idx))
+            .expect("expected an atom that is only ever a bond's second endpoint");
+
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::BallAndStick)
+            .build();
+        let (mesh, atom_map) = structure.to_mesh_with_atom_map(None);
+        assert_eq!(mesh.count_vertices(), atom_map.len());
+
+        let sphere_vc = Sphere::new(Structure::BALL_RADIUS).mesh().build().count_vertices();
+        let count_in_map = atom_map.iter().filter(|&&i| i == target_idx).count();
+        assert!(
+            count_in_map > sphere_vc,
+            "atom {target_idx} is only ever a bond's second endpoint; its atom_map \
+             count ({count_in_map}) must exceed its own sphere's vertex count \
+             ({sphere_vc}), proving a bond's second half maps to it instead of \
+             every bond vertex mapping only to the first endpoint"
+        );
+        Ok(())
+    }
+
     #[test]
     fn test_pdb_to_mesh() -> anyhow::Result<()> {
         let (molfile, _handle) = TestFile::protein_04().create_temp()?;
@@ -874,6 +1396,159 @@ mod tests {
         assert_eq!(structure.pdb.n_atoms(), 2154);
         let _mesh = structure.to_mesh();
         // assert_eq!(_mesh.count_vertices(), 779748);
+        Ok(())
+    }
+
+    // ferritin-t0h.1: cartoon/putty must not spline across chain breaks.
+
+    #[test]
+    fn test_backbone_break_detection() {
+        let a = Vec3::new(0.0, 0.0, 0.0);
+        let b = Vec3::new(3.8, 0.0, 0.0); // one peptide bond away
+        // Contiguous, same chain, adjacent CAs → no break.
+        assert!(!Structure::is_backbone_break(0, "A", a, 1, "A", b));
+        // Chain change → break, even if spatially close.
+        assert!(Structure::is_backbone_break(0, "A", a, 1, "B", b));
+        // Residue-index gap (e.g. masked-out residue) → break.
+        assert!(Structure::is_backbone_break(0, "A", a, 2, "A", b));
+        // Large CA-CA jump (missing residues) → break.
+        let far = Vec3::new(20.0, 0.0, 0.0);
+        assert!(Structure::is_backbone_break(0, "A", a, 1, "A", far));
+    }
+
+    #[test]
+    fn test_sweep_frames_are_continuous_and_orthonormal() {
+        // A curve that kinks sharply and passes near the global Y axis — exactly
+        // the case where the old tangent×Y frame flipped and produced spikes.
+        let curve = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.2, 0.0),
+            Vec3::new(1.5, 1.5, 0.0), // turns to head up +Y
+            Vec3::new(1.6, 3.0, 0.2),
+            Vec3::new(1.0, 4.0, 1.0),
+            Vec3::new(0.0, 4.2, 2.0),
+        ];
+        let frames = Structure::sweep_frames(&curve);
+        assert_eq!(frames.len(), curve.len());
+        for (i, (right, up)) in frames.iter().enumerate() {
+            assert!((right.length() - 1.0).abs() < 1e-3, "right[{i}] not unit");
+            assert!((up.length() - 1.0).abs() < 1e-3, "up[{i}] not unit");
+            assert!(right.dot(*up).abs() < 1e-3, "right·up[{i}] not orthogonal");
+        }
+        // Consecutive frames must not flip: the minimal-rotation frame keeps the
+        // "right" vector pointing broadly the same way step to step (dot > 0).
+        for i in 1..frames.len() {
+            assert!(
+                frames[i].0.dot(frames[i - 1].0) > 0.0,
+                "frame right vector flipped between {} and {i}",
+                i - 1
+            );
+        }
+    }
+
+    // ferritin-t0h.3: ribbon orientation should track real backbone geometry
+    // (peptide-plane normal), not an arbitrary parallel-transported seed.
+
+    #[test]
+    fn test_peptide_plane_normals_sign_corrected_and_unit() {
+        // A zigzag CA trace mimicking an extended (beta-strand) backbone: the
+        // raw Carson-Bugg cross product flips sign roughly every residue here,
+        // which is exactly what the sign-correction pass must undo.
+        let ca_positions = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 0.0),
+            Vec3::new(2.0, 0.0, 0.0),
+            Vec3::new(3.0, 1.0, 0.0),
+            Vec3::new(4.0, 0.0, 0.0),
+            Vec3::new(5.0, 1.0, 0.0),
+        ];
+        let normals = Structure::peptide_plane_normals(&ca_positions);
+        assert_eq!(normals.len(), ca_positions.len());
+        for (i, n) in normals.iter().enumerate() {
+            assert!((n.length() - 1.0).abs() < 1e-3, "normals[{i}] not unit");
+        }
+        for i in 1..normals.len() {
+            assert!(
+                normals[i].dot(normals[i - 1]) >= 0.0,
+                "peptide-plane normal flipped between residue {} and {i}",
+                i - 1
+            );
+        }
+    }
+
+    #[test]
+    fn test_sweep_frames_oriented_tracks_hint_and_stays_continuous() {
+        // Straight curve along +Z; hint consistently points toward +X, so `up`
+        // (perpendicular to the tangent) should end up parallel to +X at every
+        // point, not just whatever a parallel-transported seed happened to pick.
+        let curve = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(0.0, 0.0, 2.0),
+            Vec3::new(0.0, 0.0, 3.0),
+        ];
+        let hints = vec![Vec3::X; curve.len()];
+        let frames = Structure::sweep_frames_oriented(&curve, &hints);
+        assert_eq!(frames.len(), curve.len());
+        for (i, (right, up)) in frames.iter().enumerate() {
+            assert!((right.length() - 1.0).abs() < 1e-3, "right[{i}] not unit");
+            assert!((up.length() - 1.0).abs() < 1e-3, "up[{i}] not unit");
+            assert!(right.dot(*up).abs() < 1e-3, "right·up[{i}] not orthogonal");
+            assert!(
+                up.dot(Vec3::X).abs() > 0.99,
+                "up[{i}]={up:?} should track the +X hint, not an arbitrary seed"
+            );
+        }
+    }
+
+    #[test]
+    fn test_sweep_frames_oriented_falls_back_when_hint_degenerate() {
+        // Hint parallel to the tangent (straight +Z curve, hint also +Z) can't
+        // be projected to a perpendicular direction; must fall back to a valid
+        // orthonormal frame instead of producing NaN/zero vectors.
+        let curve = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(0.0, 0.0, 2.0),
+        ];
+        let hints = vec![Vec3::Z; curve.len()];
+        let frames = Structure::sweep_frames_oriented(&curve, &hints);
+        for (i, (right, up)) in frames.iter().enumerate() {
+            assert!(right.is_finite() && up.is_finite(), "frame[{i}] not finite");
+            assert!((right.length() - 1.0).abs() < 1e-3, "right[{i}] not unit");
+            assert!((up.length() - 1.0).abs() < 1e-3, "up[{i}] not unit");
+            assert!(right.dot(*up).abs() < 1e-3, "right·up[{i}] not orthogonal");
+        }
+    }
+
+    #[test]
+    fn test_cartoon_segments_multi_chain_4hhb() -> anyhow::Result<()> {
+        // 4hhb has 4 protein chains; the cartoon must render as several
+        // disconnected ribbons, not one curve splined through all of them.
+        let (molfile, _handle) = TestFile::mvs_4hhb().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Cartoon)
+            .build();
+
+        let (mesh, residue_map) = structure.render_cartoon_mapped(None);
+        assert!(mesh.count_vertices() > 0, "cartoon mesh must not be empty");
+        assert_eq!(mesh.count_vertices(), residue_map.len());
+
+        // A single unsegmented curve through all N amino-acid residues would
+        // produce (N-1)*segments_per_residue ring centers. Each additional
+        // segment removes one inter-residue span, so a genuinely split ribbon
+        // has strictly fewer ring centers than the unsegmented curve.
+        let n_res = structure.pdb.residues_aminoacid().count();
+        let cross_segments = Structure::TUBE_CROSS_SEGMENTS;
+        let segments_per_residue = Structure::TUBE_CURVE_SEGMENTS;
+        let unsegmented_rings = (n_res - 1) * segments_per_residue;
+        let actual_rings = mesh.count_vertices() / cross_segments;
+        assert!(
+            actual_rings < unsegmented_rings,
+            "expected segmentation to drop ring centers: {actual_rings} vs {unsegmented_rings}"
+        );
         Ok(())
     }
 
@@ -905,8 +1580,13 @@ mod tests {
 
         let vertex_count = mesh.count_vertices();
         assert!(vertex_count > 0, "wireframe mesh has no vertices");
-        assert_eq!(vertex_count % 2, 0, "LineList vertex count must be even");
-        assert_eq!(mesh.primitive_topology(), PrimitiveTopology::LineList);
+        // Line rep is rendered as thin triangle cylinders, not a GPU LineList,
+        // so it gets real normals and doesn't alias to 1px (ferritin-t0h.9).
+        assert_eq!(mesh.primitive_topology(), PrimitiveTopology::TriangleList);
+        assert!(
+            mesh.attribute(Mesh::ATTRIBUTE_NORMAL).is_some(),
+            "wireframe mesh should carry normals for lighting"
+        );
 
         Ok(())
     }
@@ -1185,6 +1865,68 @@ mod tests {
             mesh.count_vertices(),
             residue_map.len(),
             "putty: residue_map len must equal vertex count"
+        );
+        Ok(())
+    }
+
+    // ferritin-ala.10: Putty rendered as a constant-radius tube, pixel-identical
+    // to Cartoon's loop tube, since AtomCollection has no per-atom b_factor yet.
+    // Until that lands (ferritin-clv), the tube radius should at least vary
+    // along the chain as a visual placeholder.
+    #[test]
+    fn test_synthetic_putty_radii_vary() {
+        let radii = Structure::synthetic_putty_radii(40);
+        let min = radii.iter().cloned().fold(f32::MAX, f32::min);
+        let max = radii.iter().cloned().fold(f32::MIN, f32::max);
+        assert!(
+            max - min > 0.1,
+            "putty radii should vary noticeably along the chain, got range {min}..{max}"
+        );
+        assert!(
+            radii.iter().all(|&r| r > 0.0),
+            "all synthetic putty radii must stay positive"
+        );
+    }
+
+    #[test]
+    fn test_putty_mesh_radius_varies_along_chain() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::protein_04().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Putty)
+            .build();
+        let mesh = structure.to_mesh();
+        let positions = match mesh
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .expect("putty mesh must have positions")
+        {
+            bevy::render::mesh::VertexAttributeValues::Float32x3(v) => v,
+            _ => panic!("unexpected position format"),
+        };
+        // Cross-section rings are TUBE_CROSS_SEGMENTS vertices each; compare each
+        // ring's average radial distance from its own centroid.
+        let ring_size = Structure::TUBE_CROSS_SEGMENTS;
+        let ring_radius = |ring: &[[f32; 3]]| -> f32 {
+            let centroid = ring
+                .iter()
+                .fold(Vec3::ZERO, |acc, p| acc + Vec3::from_array(*p))
+                / ring.len() as f32;
+            ring.iter()
+                .map(|p| (Vec3::from_array(*p) - centroid).length())
+                .sum::<f32>()
+                / ring.len() as f32
+        };
+        let ring_radii: Vec<f32> = positions
+            .chunks(ring_size)
+            .filter(|chunk| chunk.len() == ring_size)
+            .map(ring_radius)
+            .collect();
+        let min = ring_radii.iter().cloned().fold(f32::MAX, f32::min);
+        let max = ring_radii.iter().cloned().fold(f32::MIN, f32::max);
+        assert!(
+            max - min > 0.1,
+            "putty mesh cross-section radius should vary along the chain, got range {min}..{max}"
         );
         Ok(())
     }

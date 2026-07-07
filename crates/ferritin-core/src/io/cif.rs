@@ -4,7 +4,7 @@
 
 use crate::data::Segmentation;
 use crate::info::elements::Element;
-use crate::model::bonds::Bonds;
+use crate::model::bonds::infer_bonds_from_residue_templates;
 use crate::model::tables::{AtomsTable, ChainsTable, ResidueGroup, ResiduesTable};
 use crate::model::{AtomicConformation, AtomicHierarchy, Model};
 use crate::trajectory::ArrayTrajectory;
@@ -645,7 +645,6 @@ impl CIFFile {
 
             let residue_key = (auth_chain.clone(), auth_seq_id, ins_code);
             residue_keys.push(residue_key.clone());
-            chain_keys.push(auth_chain.clone());
 
             // Check if this is a new residue
             if last_residue_key.as_ref() != Some(&residue_key) {
@@ -662,6 +661,9 @@ impl CIFFile {
                 label_seq_ids.push(label_seq);
                 auth_seq_ids.push(auth_seq_id);
                 ins_codes.push(ins_code);
+                // chain_keys is per-residue (feeds residue_to_chain segmentation),
+                // unlike residue_keys/chain_col reads above which are per-atom.
+                chain_keys.push(auth_chain.clone());
 
                 // Determine group
                 let is_hetero = if let Some(group_col) = group_pdb_col {
@@ -737,8 +739,10 @@ impl CIFFile {
         let atom_to_residue = Segmentation::from_change_points(residue_keys.iter());
         let residue_to_chain = Segmentation::from_change_points(chain_keys.iter());
 
-        // Build bonds (empty for now)
-        let bonds = Bonds::from_unsorted(vec![], vec![], vec![], n_atoms);
+        // Bonds are inferred from canonical-residue templates since mmCIF rarely
+        // carries explicit connectivity records.
+        let bonds =
+            infer_bonds_from_residue_templates(&atoms, &residues, &atom_to_residue, &residue_to_chain);
 
         let hierarchy = Arc::new(AtomicHierarchy {
             atoms,
@@ -934,7 +938,6 @@ impl CIFFile {
 
             let residue_key = (auth_chain.clone(), auth_seq_id, ins_code);
             residue_keys.push(residue_key.clone());
-            chain_keys.push(auth_chain.clone());
 
             if last_residue_key.as_ref() != Some(&residue_key) {
                 comp_ids.push(row[res_name_col].clone());
@@ -950,6 +953,9 @@ impl CIFFile {
                 label_seq_ids.push(label_seq);
                 auth_seq_ids.push(auth_seq_id);
                 ins_codes.push(ins_code);
+                // chain_keys is per-residue (feeds residue_to_chain segmentation),
+                // unlike residue_keys/chain_col reads above which are per-atom.
+                chain_keys.push(auth_chain.clone());
 
                 let is_hetero = if let Some(group_col) = group_pdb_col {
                     if group_col < row.len() {
@@ -1020,7 +1026,10 @@ impl CIFFile {
 
         let atom_to_residue = Segmentation::from_change_points(residue_keys.iter());
         let residue_to_chain = Segmentation::from_change_points(chain_keys.iter());
-        let bonds = Bonds::from_unsorted(vec![], vec![], vec![], n_atoms);
+        // Bonds are inferred from canonical-residue templates since mmCIF rarely
+        // carries explicit connectivity records.
+        let bonds =
+            infer_bonds_from_residue_templates(&atoms, &residues, &atom_to_residue, &residue_to_chain);
 
         let hierarchy = Arc::new(AtomicHierarchy {
             atoms,
@@ -1184,6 +1193,60 @@ mod tests {
         let cif = CIFFile::read(&cif_file).unwrap();
         let model = cif.parse_to_model().unwrap();
         assert_eq!(model.n_atoms(), 1413);
+    }
+
+    #[test]
+    fn test_cif_parse_to_model_infers_bonds() {
+        let (cif_file, _temp) = TestFile::protein_01().create_temp().unwrap();
+        let cif = CIFFile::read(&cif_file).unwrap();
+        let model = cif.parse_to_model().unwrap();
+        assert!(
+            !model.hierarchy.bonds.is_empty(),
+            "parse_to_model should infer bonds from canonical-residue templates"
+        );
+        // Every atom should have at least one bond as either atom_a or atom_b.
+        let n_atoms = model.n_atoms();
+        let mut has_bond = vec![false; n_atoms];
+        for i in 0..model.hierarchy.bonds.len() {
+            has_bond[model.hierarchy.bonds.atom_a[i] as usize] = true;
+            has_bond[model.hierarchy.bonds.atom_b[i] as usize] = true;
+        }
+        // Non-polymer atoms (waters, ions, ligands without a canonical-20 template)
+        // are expected to stay unbonded, so this is a majority threshold rather than "all".
+        let bonded_fraction = has_bond.iter().filter(|&&b| b).count() as f32 / n_atoms as f32;
+        assert!(
+            bonded_fraction > 0.75,
+            "expected most polymer atoms to be bonded, got {:.2}",
+            bonded_fraction
+        );
+    }
+
+    #[test]
+    fn test_cif_parse_to_model_distinct_chains() {
+        // 4hhb has 4 protein chains (A/B/C/D), each followed later in the file by
+        // its own hetero (heme) and water records under the *same* auth_asym_id
+        // letter — so the hierarchy legitimately builds more than 4 contiguous
+        // chain segments. What must NOT happen (see ferritin-ala.2) is every atom
+        // collapsing onto the same chain letter: chain_keys was previously built
+        // with one entry per atom rather than per residue, which fed
+        // Segmentation::from_change_points atom-indexed offsets and made
+        // residue_to_chain.segment_of(res_idx) return segment 0 for nearly all
+        // valid residue indices, so every atom's derived chain_id string was "A".
+        // AtomCollection::get_chain_id (via chain_of_residue) is exactly what the
+        // ChainId color theme (ferritin-bevy colors.rs) reads per atom.
+        let (cif_file, _temp) = TestFile::mvs_4hhb().create_temp().unwrap();
+        let cif = CIFFile::read(&cif_file).unwrap();
+        let model = cif.parse_to_model().unwrap();
+        let ac = AtomCollection::from(&model);
+
+        let distinct_chain_ids: std::collections::HashSet<&str> =
+            (0..ac.get_size()).map(|i| ac.get_chain_id(i)).collect();
+        assert_eq!(
+            distinct_chain_ids,
+            std::collections::HashSet::from(["A", "B", "C", "D"]),
+            "expected atoms to carry all 4 distinct chain letters, got {:?}",
+            distinct_chain_ids
+        );
     }
 
     #[test]
