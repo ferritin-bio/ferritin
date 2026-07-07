@@ -231,6 +231,116 @@ impl Structure {
         frames
     }
 
+    /// Per-residue reference directions for orienting the cartoon ribbon's flat
+    /// cross-section, using the Carson-Bugg "virtual torsion" construction:
+    /// normal(i) = normalize((CA(i) - CA(i-1)) x (CA(i+1) - CA(i))). Unlike a
+    /// pure parallel-transported frame (whose orientation is arbitrary — seeded
+    /// from a global axis with no relation to the actual backbone geometry),
+    /// this direction is derived from the real CA trace, so consecutive
+    /// residues' flat faces consistently track the backbone's own twist instead
+    /// of an arbitrary seed (ferritin-t0h.3).
+    ///
+    /// This construction flips sign roughly every residue in extended (beta)
+    /// conformations because of the backbone's zigzag; consecutive directions
+    /// are sign-corrected (flipped if their dot product is negative) so the
+    /// ribbon doesn't whip 180° every residue. Endpoints reuse their nearest
+    /// interior neighbor. One direction per input CA position.
+    fn peptide_plane_normals(ca_positions: &[Vec3]) -> Vec<Vec3> {
+        let n = ca_positions.len();
+        let mut normals = vec![Vec3::Y; n];
+        if n < 3 {
+            return normals;
+        }
+        for i in 1..n - 1 {
+            let b1 = ca_positions[i] - ca_positions[i - 1];
+            let b2 = ca_positions[i + 1] - ca_positions[i];
+            let normal = b1.cross(b2).normalize_or_zero();
+            normals[i] = if normal.length_squared() > 1e-8 {
+                normal
+            } else {
+                Vec3::Y
+            };
+        }
+        normals[0] = normals[1];
+        normals[n - 1] = normals[n - 2];
+        for i in 1..n {
+            if normals[i].dot(normals[i - 1]) < 0.0 {
+                normals[i] = -normals[i];
+            }
+        }
+        normals
+    }
+
+    /// Normalized linear interpolation between two directions; falls back to `a`
+    /// if the blend degenerates (e.g. `a` and `b` nearly cancel).
+    fn nlerp_direction(a: Vec3, b: Vec3, t: f32) -> Vec3 {
+        let blended = a * (1.0 - t) + b * t;
+        let n = blended.normalize_or_zero();
+        if n.length_squared() > 1e-8 { n } else { a }
+    }
+
+    /// Like [`sweep_frames`], but steers each ring's `up` vector toward an
+    /// explicit per-point hint (projected perpendicular to the local tangent)
+    /// instead of purely parallel-transporting an arbitrary seed. Falls back to
+    /// parallel transport from the previous frame when the hint is degenerate
+    /// (nearly parallel to the tangent), and sign-corrects against the previous
+    /// frame so the ribbon doesn't flip 180° between rings. Used to orient the
+    /// cartoon ribbon with the real backbone geometry (ferritin-t0h.3) rather
+    /// than an arbitrary global-axis seed.
+    fn sweep_frames_oriented(curve: &[Vec3], target_up: &[Vec3]) -> Vec<(Vec3, Vec3)> {
+        let n = curve.len();
+        let mut frames = Vec::with_capacity(n);
+        if n == 0 {
+            return frames;
+        }
+
+        let tangent = |i: usize| -> Vec3 {
+            let raw = if i + 1 < n {
+                curve[i + 1] - curve[i]
+            } else {
+                curve[i] - curve[i - 1]
+            };
+            let t = raw.normalize_or_zero();
+            if t.length_squared() > 1e-8 { t } else { Vec3::Z }
+        };
+
+        let mut prev_up: Option<Vec3> = None;
+        for i in 0..n {
+            let t_cur = tangent(i);
+            let hint = target_up.get(i).copied().unwrap_or(Vec3::Y);
+            let mut up = (hint - t_cur * hint.dot(t_cur)).normalize_or_zero();
+            if up.length_squared() < 1e-8 {
+                // Hint nearly parallel to the tangent (degenerate projection):
+                // fall back to parallel-transporting the previous frame's up.
+                up = match prev_up {
+                    Some(p) => (p - t_cur * p.dot(t_cur)).normalize_or_zero(),
+                    None => {
+                        let seed = if t_cur.abs_diff_eq(Vec3::Y, 0.01) {
+                            Vec3::X
+                        } else {
+                            Vec3::Y
+                        };
+                        t_cur.cross(seed).normalize_or_zero()
+                    }
+                };
+            }
+            if let Some(p) = prev_up {
+                if up.dot(p) < 0.0 {
+                    up = -up;
+                }
+            }
+            let right = up.cross(t_cur).normalize_or_zero();
+            // Re-derive up from (tangent, right) so the pair is exactly
+            // orthonormal (matches the `up = tangent x right` convention used
+            // by the mesh-generation cross-sections).
+            let up = t_cur.cross(right).normalize_or_zero();
+            frames.push((right, up));
+            prev_up = Some(up);
+        }
+
+        frames
+    }
+
     /// Catmull-Rom spline interpolation
     fn catmull_rom(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: f32) -> Vec3 {
         let t2 = t * t;
@@ -349,12 +459,16 @@ impl Structure {
         sec
     }
 
-    /// Generate a cartoon ribbon mesh from a smooth CA-trace curve and per-point
-    /// secondary structure assignments.
+    /// Generate a cartoon ribbon mesh from a smooth CA-trace curve, per-point
+    /// secondary structure assignments, and per-point ribbon-orientation hints.
     ///
     /// Cross-sections: helix → circle r=1.2, sheet → ellipse 2.0×0.5, loop → circle r=0.4.
     /// Vertex colors: helix=salmon, sheet=periwinkle, loop=light-green.
-    fn generate_cartoon_mesh(curve: &[Vec3], sec_structures: &[SecondaryStructure]) -> Mesh {
+    fn generate_cartoon_mesh(
+        curve: &[Vec3],
+        sec_structures: &[SecondaryStructure],
+        target_up: &[Vec3],
+    ) -> Mesh {
         let mut positions = Vec::new();
         let mut normals = Vec::new();
         let mut uvs = Vec::new();
@@ -364,8 +478,10 @@ impl Structure {
         // Control how many segments around the tube
         let segments = 16;
 
-        // Rotation-minimizing frames avoid cross-section flips at kinks (ferritin-t0h.2).
-        let frames = Structure::sweep_frames(curve);
+        // Orient the ribbon with the real backbone geometry (ferritin-t0h.3)
+        // instead of an arbitrary parallel-transported seed, while still
+        // avoiding cross-section flips at kinks (ferritin-t0h.2).
+        let frames = Structure::sweep_frames_oriented(curve, target_up);
 
         // Generate cross-section profiles for each point in the curve
         for (i, &center) in curve.iter().enumerate() {
@@ -847,7 +963,20 @@ impl Structure {
                         .unwrap_or(SecondaryStructure::Loop)
                 })
                 .collect();
-            let seg_mesh = Structure::generate_cartoon_mesh(&curve, &curve_sec);
+            // Per-residue backbone-derived ribbon orientation (ferritin-t0h.3),
+            // interpolated onto the finer curve so the flat cross-section twists
+            // smoothly with the real geometry instead of an arbitrary seed.
+            let residue_normals = Structure::peptide_plane_normals(&ca_positions);
+            let curve_up: Vec<Vec3> = (0..curve.len())
+                .map(|i| {
+                    let res_idx = i / segments_per_residue;
+                    let t = (i % segments_per_residue) as f32 / segments_per_residue as f32;
+                    let n0 = residue_normals[res_idx.min(residue_normals.len() - 1)];
+                    let n1 = residue_normals[(res_idx + 1).min(residue_normals.len() - 1)];
+                    Structure::nlerp_direction(n0, n1, t)
+                })
+                .collect();
+            let seg_mesh = Structure::generate_cartoon_mesh(&curve, &curve_sec, &curve_up);
             let seg_verts = seg_mesh.count_vertices();
             // Map each vertex back to its residue iteration index.
             for v in 0..seg_verts {
@@ -1025,6 +1154,81 @@ mod tests {
                 "frame right vector flipped between {} and {i}",
                 i - 1
             );
+        }
+    }
+
+    // ferritin-t0h.3: ribbon orientation should track real backbone geometry
+    // (peptide-plane normal), not an arbitrary parallel-transported seed.
+
+    #[test]
+    fn test_peptide_plane_normals_sign_corrected_and_unit() {
+        // A zigzag CA trace mimicking an extended (beta-strand) backbone: the
+        // raw Carson-Bugg cross product flips sign roughly every residue here,
+        // which is exactly what the sign-correction pass must undo.
+        let ca_positions = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 0.0),
+            Vec3::new(2.0, 0.0, 0.0),
+            Vec3::new(3.0, 1.0, 0.0),
+            Vec3::new(4.0, 0.0, 0.0),
+            Vec3::new(5.0, 1.0, 0.0),
+        ];
+        let normals = Structure::peptide_plane_normals(&ca_positions);
+        assert_eq!(normals.len(), ca_positions.len());
+        for (i, n) in normals.iter().enumerate() {
+            assert!((n.length() - 1.0).abs() < 1e-3, "normals[{i}] not unit");
+        }
+        for i in 1..normals.len() {
+            assert!(
+                normals[i].dot(normals[i - 1]) >= 0.0,
+                "peptide-plane normal flipped between residue {} and {i}",
+                i - 1
+            );
+        }
+    }
+
+    #[test]
+    fn test_sweep_frames_oriented_tracks_hint_and_stays_continuous() {
+        // Straight curve along +Z; hint consistently points toward +X, so `up`
+        // (perpendicular to the tangent) should end up parallel to +X at every
+        // point, not just whatever a parallel-transported seed happened to pick.
+        let curve = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(0.0, 0.0, 2.0),
+            Vec3::new(0.0, 0.0, 3.0),
+        ];
+        let hints = vec![Vec3::X; curve.len()];
+        let frames = Structure::sweep_frames_oriented(&curve, &hints);
+        assert_eq!(frames.len(), curve.len());
+        for (i, (right, up)) in frames.iter().enumerate() {
+            assert!((right.length() - 1.0).abs() < 1e-3, "right[{i}] not unit");
+            assert!((up.length() - 1.0).abs() < 1e-3, "up[{i}] not unit");
+            assert!(right.dot(*up).abs() < 1e-3, "right·up[{i}] not orthogonal");
+            assert!(
+                up.dot(Vec3::X).abs() > 0.99,
+                "up[{i}]={up:?} should track the +X hint, not an arbitrary seed"
+            );
+        }
+    }
+
+    #[test]
+    fn test_sweep_frames_oriented_falls_back_when_hint_degenerate() {
+        // Hint parallel to the tangent (straight +Z curve, hint also +Z) can't
+        // be projected to a perpendicular direction; must fall back to a valid
+        // orthonormal frame instead of producing NaN/zero vectors.
+        let curve = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(0.0, 0.0, 2.0),
+        ];
+        let hints = vec![Vec3::Z; curve.len()];
+        let frames = Structure::sweep_frames_oriented(&curve, &hints);
+        for (i, (right, up)) in frames.iter().enumerate() {
+            assert!(right.is_finite() && up.is_finite(), "frame[{i}] not finite");
+            assert!((right.length() - 1.0).abs() < 1e-3, "right[{i}] not unit");
+            assert!((up.length() - 1.0).abs() < 1e-3, "up[{i}] not unit");
+            assert!(right.dot(*up).abs() < 1e-3, "right·up[{i}] not orthogonal");
         }
     }
 
