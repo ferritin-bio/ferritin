@@ -205,7 +205,11 @@ fn build_presets() -> Result<(Vec<Preset>, Vec<NamedTempFile>)> {
             json: preset_superposition(&p_4hhb, &p_1oj6),
         },
         Preset {
-            name: "Symmetry",
+            // Not "Symmetry": real symmetry-mate expansion is unimplemented
+            // (ferritin-229), so this only ever renders the deposited unit. The
+            // plain "Symmetry" label read as if it should show multiple copies
+            // (ferritin-t0h.8) -- name it for what it actually demonstrates.
+            name: "Symmetry (deposited unit)",
             json: preset_symmetry(&p_1tqn),
         },
     ];

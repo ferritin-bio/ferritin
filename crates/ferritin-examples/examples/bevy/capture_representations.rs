@@ -358,6 +358,13 @@ fn preset_superposition(path_a: &str, path_b: &str) -> String {
     to_json(&state)
 }
 
+/// NOTE: real symmetry-mate expansion is unimplemented (deferred, ferritin-229),
+/// so this always renders just the single deposited unit -- the resulting
+/// preset_symmetry.png is expected to look like an ordinary single-copy
+/// cartoon, not multiple symmetry-related copies (ferritin-t0h.8). The
+/// interactive viewer's "Symmetry (deposited unit)" preset button is named to
+/// make this explicit; this headless capture has no equivalent status-bar
+/// warning surface.
 fn preset_symmetry(path: &str) -> String {
     let mut state = State::new();
     {
