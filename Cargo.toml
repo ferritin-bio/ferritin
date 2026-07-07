@@ -2,7 +2,7 @@
 members = [
     "crates/ferritin",
     "crates/ferritin-bevy",
-    # "crates/ferritin-cellscape",
+    "crates/ferritin-cellscape",
     "crates/ferritin-core",
     "crates/ferritin-examples",
     "crates/ferritin-molviewspec",
