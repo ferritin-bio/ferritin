@@ -593,17 +593,10 @@ fn render_representation(
     let effective_theme = color_theme.unwrap_or(ColorThemeT::ElementSymbol);
     apply_mvs_colors_with_theme(&mut mesh, &effective_theme, &color_nodes, ac, &vertex_map, map_kind);
 
-    // Wireframe (MVS "line") geometry is a `LineList`: GPU line primitives have no
-    // meaningful normals, so PBR lighting reads them as flat black regardless of
-    // vertex color. Render unlit so the vertex colors themselves are what's seen.
-    let mut material = if render_opt == RenderOptions::Wireframe {
-        StandardMaterial {
-            unlit: true,
-            ..default()
-        }
-    } else {
-        StandardMaterial::default()
-    };
+    // Wireframe (MVS "line") geometry is now thin triangle cylinders with real
+    // normals (ferritin-t0h.9), so it can take normal PBR shading like every
+    // other representation instead of being forced unlit.
+    let mut material = StandardMaterial::default();
     // Surface silently degrades to VdW spheres (Solid); tint it amber so it reads as
     // a fallback rather than looking pixel-identical to a real Spacefill request —
     // the `degraded` warning was previously log-only, invisible in the viewer itself.
@@ -1398,11 +1391,11 @@ mod tests {
         assert_eq!(node.position_type, PositionType::Absolute);
     }
 
-    // ferritin-ala.4: Line/Wireframe geometry is a GPU LineList with no usable
-    // normals, so PBR lighting reads it as flat black; it must render unlit so
-    // vertex colors are visible. Other representations keep normal PBR shading.
+    // ferritin-t0h.9: Line/Wireframe geometry is now thin triangle cylinders with
+    // real normals (no longer a normal-less GPU LineList), so it renders lit like
+    // every other representation instead of being forced unlit.
     #[test]
-    fn test_line_representation_material_is_unlit() {
+    fn test_line_representation_material_is_lit() {
         use ferritin_test_data::TestFile;
         let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
         let mut app = make_app();
@@ -1415,7 +1408,10 @@ mod tests {
             .clone();
         let materials = app.world().resource::<Assets<StandardMaterial>>();
         let material = materials.get(&handle.0).expect("material must exist");
-        assert!(material.unlit, "line representation material must be unlit");
+        assert!(
+            !material.unlit,
+            "line representation material should keep normal PBR shading"
+        );
     }
 
     #[test]

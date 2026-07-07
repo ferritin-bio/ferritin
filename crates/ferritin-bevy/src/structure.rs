@@ -125,6 +125,14 @@ impl Structure {
     const BALL_RADIUS: f32 = 0.3;
     const STICK_RADIUS: f32 = 0.15;
 
+    /// Wireframe/Line bond radius (Å). A GPU `LineList` rasterizes to a hard 1px
+    /// edge with no normals, which aliases badly on large structures and can't be
+    /// lit or anti-aliased. Rendering the Line representation as thin triangle
+    /// cylinders instead gives it real geometry (smooth-shaded, MSAA-covered)
+    /// while staying visually distinct from BallAndStick's thicker sticks
+    /// (ferritin-t0h.9).
+    const LINE_RADIUS: f32 = 0.13;
+
     /// Builds the two half-length cylinders for a ball-and-stick bond, split at
     /// the bond's midpoint so the caller can color/map each half to its own
     /// endpoint atom — real bonds in molecular viewers are two-toned, half per
@@ -584,11 +592,9 @@ impl Structure {
     }
 
     fn render_wireframe(&self) -> Mesh {
-        // Collect Cα positions grouped by chain.
-        // Emit LineList pairs: for a chain A→B→C→D emit [A,B, B,C, C,D].
-        let mut positions: Vec<[f32; 3]> = Vec::new();
-
-        // Collect (chain_id, ca_position) for all amino-acid residues
+        // Collect (chain_id, ca_position) for all amino-acid residues, then walk
+        // consecutive pairs emitting a thin cylinder segment for each edge whose
+        // endpoints share a chain (for a chain A→B→C→D: [A,B], [B,C], [C,D]).
         let ca_by_chain: Vec<(String, Vec3)> = self
             .pdb
             .residues_aminoacid()
@@ -602,19 +608,26 @@ impl Structure {
             })
             .collect();
 
-        // Walk consecutive pairs; emit an edge only when both endpoints share a chain.
+        let mut combined: Option<Mesh> = None;
         for window in ca_by_chain.windows(2) {
             let (chain_a, pos_a) = &window[0];
             let (chain_b, pos_b) = &window[1];
             if chain_a == chain_b {
-                positions.push([pos_a.x, pos_a.y, pos_a.z]);
-                positions.push([pos_b.x, pos_b.y, pos_b.z]);
+                if let Some((mut first, second)) =
+                    Structure::half_bond_cylinders(*pos_a, *pos_b, Structure::LINE_RADIUS)
+                {
+                    let _ = first.merge(&second);
+                    match &mut combined {
+                        None => combined = Some(first),
+                        Some(acc) => {
+                            let _ = acc.merge(&first);
+                        }
+                    }
+                }
             }
         }
 
-        let mut mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::all());
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-        mesh
+        combined.unwrap_or_else(|| Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all()))
     }
 
     fn render_cartoon(&self) -> Mesh {
@@ -787,8 +800,8 @@ impl Structure {
     }
 
     fn render_wireframe_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
-        let mut positions: Vec<[f32; 3]> = Vec::new();
         let mut atom_map: Vec<usize> = Vec::new();
+        let mut combined: Option<Mesh> = None;
 
         // Collect all CA atoms (retain ALL so window() neighbours stay correct).
         let ca_data: Vec<(String, usize, Vec3)> = self
@@ -806,22 +819,36 @@ impl Structure {
             })
             .collect();
 
-        // Emit an edge only when same chain AND both CA atoms pass the mask.
+        // Emit an edge only when same chain AND both CA atoms pass the mask. Each
+        // edge is a pair of half-length cylinders, one per endpoint atom, so the
+        // atom_map (and downstream per-vertex coloring) stays split at the
+        // midpoint exactly like BallAndStick bonds (ferritin-c1k.2).
         for window in ca_data.windows(2) {
             let (chain_a, idx_a, pos_a) = &window[0];
             let (chain_b, idx_b, pos_b) = &window[1];
             let a_ok = mask.map_or(true, |m| m.0[*idx_a]);
             let b_ok = mask.map_or(true, |m| m.0[*idx_b]);
             if chain_a == chain_b && a_ok && b_ok {
-                positions.push([pos_a.x, pos_a.y, pos_a.z]);
-                positions.push([pos_b.x, pos_b.y, pos_b.z]);
-                atom_map.push(*idx_a);
-                atom_map.push(*idx_b);
+                if let Some((first, second)) =
+                    Structure::half_bond_cylinders(*pos_a, *pos_b, Structure::LINE_RADIUS)
+                {
+                    atom_map.extend(std::iter::repeat(*idx_a).take(first.count_vertices()));
+                    atom_map.extend(std::iter::repeat(*idx_b).take(second.count_vertices()));
+                    let mut seg = first;
+                    let _ = seg.merge(&second);
+                    match &mut combined {
+                        None => combined = Some(seg),
+                        Some(acc) => {
+                            let _ = acc.merge(&seg);
+                        }
+                    }
+                }
             }
         }
 
-        let mut mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::all());
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        let mesh = combined.unwrap_or_else(|| {
+            Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all())
+        });
         (mesh, atom_map)
     }
 
@@ -1406,8 +1433,13 @@ mod tests {
 
         let vertex_count = mesh.count_vertices();
         assert!(vertex_count > 0, "wireframe mesh has no vertices");
-        assert_eq!(vertex_count % 2, 0, "LineList vertex count must be even");
-        assert_eq!(mesh.primitive_topology(), PrimitiveTopology::LineList);
+        // Line rep is rendered as thin triangle cylinders, not a GPU LineList,
+        // so it gets real normals and doesn't alias to 1px (ferritin-t0h.9).
+        assert_eq!(mesh.primitive_topology(), PrimitiveTopology::TriangleList);
+        assert!(
+            mesh.attribute(Mesh::ATTRIBUTE_NORMAL).is_some(),
+            "wireframe mesh should carry normals for lighting"
+        );
 
         Ok(())
     }
