@@ -141,6 +141,20 @@ impl Structure {
     const TUBE_CROSS_SEGMENTS: usize = 20;
     const TUBE_CURVE_SEGMENTS: usize = 6;
 
+    /// Residue names treated as solvent for de-emphasis in BallAndStick/Solid
+    /// (Spacefill) rendering. Isolated water molecules have no bonds, so at
+    /// full atomic radius they show up as a scattered field of disconnected
+    /// dots cluttering the periphery of the real structure. Mol* renders
+    /// solvent distinctly (small/dim) by default; here we shrink the sphere
+    /// radius so waters read as background rather than competing with the
+    /// structure (ferritin-t0h.7).
+    const WATER_RESIDUE_NAMES: [&'static str; 3] = ["HOH", "WAT", "H2O"];
+    const WATER_RADIUS_SCALE: f32 = 0.35;
+
+    fn is_water_residue(name: &str) -> bool {
+        Self::WATER_RESIDUE_NAMES.contains(&name)
+    }
+
     /// Builds the two half-length cylinders for a ball-and-stick bond, split at
     /// the bond's midpoint so the caller can color/map each half to its own
     /// endpoint atom — real bonds in molecular viewers are two-toned, half per
@@ -646,7 +660,6 @@ impl Structure {
     }
 
     fn render_ballandstick(&self) -> Mesh {
-        let radius = Structure::BALL_RADIUS;
         let mut combined_mesh = self
             .pdb
             .atoms()
@@ -654,6 +667,11 @@ impl Structure {
                 let coord = atom.coords();
                 let center = Vec3::new(coord[0], coord[1], coord[2]);
                 let element = atom.element();
+                let radius = if Self::is_water_residue(atom.residue_name()) {
+                    Structure::BALL_RADIUS * Structure::WATER_RADIUS_SCALE
+                } else {
+                    Structure::BALL_RADIUS
+                };
                 let mut sphere_mesh = Sphere::new(radius).mesh().build();
                 let vertex_count = sphere_mesh.count_vertices();
                 let color = self.color_scheme.get_color(&element).to_srgba();
@@ -717,10 +735,13 @@ impl Structure {
                 let coord = atom.coords();
                 let center = Vec3::new(coord[0], coord[1], coord[2]);
                 let element = atom.element();
-                let radius = element
+                let mut radius = element
                     .atomic_radius()
                     .van_der_waals
                     .expect("Van der waals not defined") as f32;
+                if Self::is_water_residue(atom.residue_name()) {
+                    radius *= Structure::WATER_RADIUS_SCALE;
+                }
                 let mut sphere_mesh = Sphere::new(radius).mesh().build();
                 let vertex_count = sphere_mesh.count_vertices();
                 let color = self.color_scheme.get_color(&element).to_srgba();
@@ -782,7 +803,10 @@ impl Structure {
             let coord = atom.coords();
             let center = Vec3::new(coord[0], coord[1], coord[2]);
             let element = atom.element();
-            let radius = element.atomic_radius().van_der_waals.expect("vdw radius") as f32;
+            let mut radius = element.atomic_radius().van_der_waals.expect("vdw radius") as f32;
+            if Self::is_water_residue(atom.residue_name()) {
+                radius *= Structure::WATER_RADIUS_SCALE;
+            }
             let mut sphere_mesh = Sphere::new(radius).mesh().build();
             let vc = sphere_mesh.count_vertices();
             let color = self.color_scheme.get_color(&element).to_srgba();
@@ -861,7 +885,6 @@ impl Structure {
     }
 
     fn render_ballandstick_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
-        let radius = Structure::BALL_RADIUS;
         let mut atom_map: Vec<usize> = Vec::new();
         let mut combined: Option<Mesh> = None;
 
@@ -877,6 +900,11 @@ impl Structure {
             let coord = atom.coords();
             let center = Vec3::new(coord[0], coord[1], coord[2]);
             let element = atom.element();
+            let radius = if Self::is_water_residue(atom.residue_name()) {
+                Structure::BALL_RADIUS * Structure::WATER_RADIUS_SCALE
+            } else {
+                Structure::BALL_RADIUS
+            };
             let mut sphere_mesh = Sphere::new(radius).mesh().build();
             let vc = sphere_mesh.count_vertices();
             let color = self.color_scheme.get_color(&element).to_srgba();
@@ -1163,6 +1191,117 @@ mod tests {
             Structure::STICK_RADIUS,
             Structure::BALL_RADIUS
         );
+    }
+
+    // ferritin-t0h.7: isolated water spheres must render smaller than a normal
+    // atom so they read as background clutter instead of competing with the
+    // real structure in BallAndStick/Spacefill.
+    #[test]
+    fn test_is_water_residue_matches_common_names_only() {
+        assert!(Structure::is_water_residue("HOH"));
+        assert!(Structure::is_water_residue("WAT"));
+        assert!(Structure::is_water_residue("H2O"));
+        assert!(!Structure::is_water_residue("ALA"));
+        assert!(!Structure::is_water_residue("ZN"));
+    }
+
+    #[test]
+    fn test_water_radius_scale_shrinks_but_does_not_vanish() {
+        assert!(
+            Structure::WATER_RADIUS_SCALE > 0.0 && Structure::WATER_RADIUS_SCALE < 1.0,
+            "water radius scale {} must shrink (not disable/invert) the sphere",
+            Structure::WATER_RADIUS_SCALE
+        );
+    }
+
+    /// Radius of the sphere mesh vertices mapped to `atom_idx`: max distance
+    /// from the atom's own center to any vertex the atom_map attributes to it.
+    fn mesh_sphere_radius_for_atom(
+        mesh: &Mesh,
+        atom_map: &[usize],
+        atom_idx: usize,
+        center: Vec3,
+    ) -> f32 {
+        let positions = match mesh.attribute(Mesh::ATTRIBUTE_POSITION).unwrap() {
+            bevy::render::mesh::VertexAttributeValues::Float32x3(v) => v,
+            _ => panic!("unexpected position format"),
+        };
+        atom_map
+            .iter()
+            .zip(positions.iter())
+            .filter(|&(&idx, _)| idx == atom_idx)
+            .map(|(_, p)| (Vec3::from_array(*p) - center).length())
+            .fold(0.0f32, f32::max)
+    }
+
+    #[test]
+    fn test_spacefill_water_oxygen_smaller_than_protein_oxygen() -> anyhow::Result<()> {
+        use ferritin_core::info::elements::Element;
+
+        let (molfile, _handle) = TestFile::mvs_4hhb().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Solid)
+            .build();
+
+        let water_o = structure
+            .pdb
+            .atoms()
+            .find(|a| Structure::is_water_residue(a.residue_name()) && a.element() == Element::O)
+            .map(|a| a.index())
+            .expect("4hhb fixture must contain a water oxygen atom");
+        let protein_o = structure
+            .pdb
+            .atoms()
+            .find(|a| !Structure::is_water_residue(a.residue_name()) && a.element() == Element::O)
+            .map(|a| a.index())
+            .expect("4hhb fixture must contain a non-water oxygen atom");
+
+        let (mesh, atom_map) = structure.to_mesh_with_atom_map(None);
+        let water_center = Vec3::from_array(structure.pdb.coord(water_o));
+        let protein_center = Vec3::from_array(structure.pdb.coord(protein_o));
+        let water_r = mesh_sphere_radius_for_atom(&mesh, &atom_map, water_o, water_center);
+        let protein_r = mesh_sphere_radius_for_atom(&mesh, &atom_map, protein_o, protein_center);
+
+        assert!(water_r > 0.0 && protein_r > 0.0);
+        assert!(
+            water_r < protein_r,
+            "water oxygen sphere ({water_r}) should be smaller than protein oxygen sphere ({protein_r})"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_ballandstick_water_smaller_than_ball_radius() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::mvs_4hhb().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let structure = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::BallAndStick)
+            .build();
+
+        // Water has no bonds, so its BallAndStick vertices are pure sphere —
+        // safe to compare directly against BALL_RADIUS (unlike a bonded atom,
+        // whose stick geometry can extend past the ball radius).
+        let water_idx = structure
+            .pdb
+            .atoms()
+            .find(|a| Structure::is_water_residue(a.residue_name()))
+            .map(|a| a.index())
+            .expect("4hhb fixture must contain a water atom");
+
+        let (mesh, atom_map) = structure.to_mesh_with_atom_map(None);
+        let center = Vec3::from_array(structure.pdb.coord(water_idx));
+        let water_r = mesh_sphere_radius_for_atom(&mesh, &atom_map, water_idx, center);
+
+        assert!(water_r > 0.0);
+        assert!(
+            water_r < Structure::BALL_RADIUS,
+            "water sphere ({water_r}) should be smaller than full BALL_RADIUS ({})",
+            Structure::BALL_RADIUS
+        );
+        Ok(())
     }
 
     // ferritin-c1k.2: a bond must be split at its midpoint so each half can be
