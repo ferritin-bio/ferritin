@@ -38,6 +38,10 @@ pub struct AtomCollection {
     bonds: Option<Vec<Bond>>,
     residue_start_indices: Option<Vec<usize>>,
     chain_start_indices: Option<Vec<usize>>,
+    // Per-atom B-factor/pLDDT and occupancy, when available from the source Model.
+    // Optional because not every structure (e.g. hand-built test fixtures) carries them.
+    b_factor: Option<Vec<f32>>,
+    occupancy: Option<Vec<f32>>,
 }
 
 impl AtomCollection {
@@ -91,9 +95,49 @@ impl AtomCollection {
             bonds,
             residue_start_indices: None,
             chain_start_indices: None,
+            b_factor: None,
+            occupancy: None,
         };
         ac.calculate_chain_indices();
         ac
+    }
+
+    /// Attach per-atom B-factor (crystallographic) or pLDDT confidence values.
+    ///
+    /// Used by the `Uncertainty` and `PlddtConfidence` color themes.
+    ///
+    /// # Panics
+    /// Panics if `values.len() != self.get_size()`.
+    pub fn with_b_factor(mut self, values: Vec<f32>) -> Self {
+        assert_eq!(values.len(), self.size, "b_factor length must equal atom count");
+        self.b_factor = Some(values);
+        self
+    }
+
+    /// Attach per-atom occupancy values (0.0-1.0). Used by the `Occupancy` color theme.
+    ///
+    /// # Panics
+    /// Panics if `values.len() != self.get_size()`.
+    pub fn with_occupancy(mut self, values: Vec<f32>) -> Self {
+        assert_eq!(values.len(), self.size, "occupancy length must equal atom count");
+        self.occupancy = Some(values);
+        self
+    }
+
+    pub fn get_b_factor(&self, idx: usize) -> Option<f32> {
+        self.b_factor.as_ref().map(|v| v[idx])
+    }
+
+    pub fn get_b_factors(&self) -> Option<&[f32]> {
+        self.b_factor.as_deref()
+    }
+
+    pub fn get_occupancy(&self, idx: usize) -> Option<f32> {
+        self.occupancy.as_ref().map(|v| v[idx])
+    }
+
+    pub fn get_occupancies(&self) -> Option<&[f32]> {
+        self.occupancy.as_deref()
     }
     // Calculate and cache chain start indices
     pub fn calculate_chain_indices(&mut self) {
@@ -308,7 +352,14 @@ impl AtomCollection {
                 .collect()
         });
 
-        AtomCollection::from_compact(next, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, bonds)
+        let mut filtered = AtomCollection::from_compact(next, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, bonds);
+        if let Some(values) = &self.b_factor {
+            filtered.b_factor = Some(selected.iter().map(|&i| values[i]).collect());
+        }
+        if let Some(values) = &self.occupancy {
+            filtered.occupancy = Some(selected.iter().map(|&i| values[i]).collect());
+        }
+        filtered
     }
 
     /// Build a boolean mask selecting atoms belonging to `chain_id`.
@@ -505,8 +556,8 @@ impl AtomCollection {
             x,
             y,
             z,
-            occupancy: None,
-            b_iso: None,
+            occupancy: self.occupancy.clone(),
+            b_iso: self.b_factor.clone(),
             confidence: None,
         };
 
@@ -546,7 +597,7 @@ impl From<&Model> for AtomCollection {
 
         let atom_names = hierarchy.atoms.atom_name.clone();
 
-        AtomCollection::new(
+        let mut ac = AtomCollection::new(
             n_atoms,
             coords,
             res_ids,
@@ -556,7 +607,19 @@ impl From<&Model> for AtomCollection {
             atom_names,
             chain_ids,
             None,
-        )
+        );
+
+        // Predicted structures (AlphaFold/ESM3) carry per-atom confidence rather than a
+        // crystallographic B-factor; viz themes read both from the same slot, so prefer
+        // confidence when both are present.
+        if let Some(values) = conformation.confidence.clone().or_else(|| conformation.b_iso.clone()) {
+            ac = ac.with_b_factor(values);
+        }
+        if let Some(values) = conformation.occupancy.clone() {
+            ac = ac.with_occupancy(values);
+        }
+
+        ac
     }
 }
 
@@ -599,6 +662,42 @@ mod tests {
             chain_ids,
             None,
         )
+    }
+
+    #[test]
+    fn test_b_factor_and_occupancy_roundtrip_through_model() {
+        let original = make_test_atom_collection()
+            .with_b_factor(vec![10.0, 20.0, 30.0, 40.0, 50.0])
+            .with_occupancy(vec![1.0, 1.0, 0.5, 1.0, 0.3]);
+
+        let model = original.to_model();
+        assert_eq!(model.conformation.b_iso.as_deref(), Some(&[10.0, 20.0, 30.0, 40.0, 50.0][..]));
+        assert_eq!(model.conformation.occupancy.as_deref(), Some(&[1.0, 1.0, 0.5, 1.0, 0.3][..]));
+
+        let restored = AtomCollection::from(&model);
+        assert_eq!(restored.get_b_factors(), Some(&[10.0, 20.0, 30.0, 40.0, 50.0][..]));
+        assert_eq!(restored.get_occupancies(), Some(&[1.0, 1.0, 0.5, 1.0, 0.3][..]));
+    }
+
+    #[test]
+    fn test_confidence_preferred_over_b_iso_when_converting_from_model() {
+        let mut model = make_test_atom_collection().to_model();
+        model.conformation.b_iso = Some(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        model.conformation.confidence = Some(vec![90.0, 91.0, 92.0, 93.0, 94.0]);
+
+        let ac = AtomCollection::from(&model);
+        assert_eq!(ac.get_b_factors(), Some(&[90.0, 91.0, 92.0, 93.0, 94.0][..]));
+    }
+
+    #[test]
+    fn test_filter_remaps_b_factor_and_occupancy() {
+        let ac = make_two_chain_collection()
+            .with_b_factor(vec![1.0, 2.0, 3.0, 4.0, 5.0])
+            .with_occupancy(vec![0.1, 0.2, 0.3, 0.4, 0.5]);
+        let mask = vec![true, false, true, false, true];
+        let filtered = ac.filter(&mask);
+        assert_eq!(filtered.get_b_factors(), Some(&[1.0, 3.0, 5.0][..]));
+        assert_eq!(filtered.get_occupancies(), Some(&[0.1, 0.3, 0.5][..]));
     }
 
     #[test]
