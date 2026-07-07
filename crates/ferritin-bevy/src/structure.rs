@@ -133,6 +133,14 @@ impl Structure {
     /// (ferritin-t0h.9).
     const LINE_RADIUS: f32 = 0.13;
 
+    /// Tube tessellation density shared by Cartoon and Putty: vertices around
+    /// the circumference, and interpolated curve points per residue along the
+    /// length. The previous 16/4 (cartoon) and 16/3 (putty) values were coarse
+    /// enough that the tube read as an angular, low-poly prism at close zoom
+    /// (ferritin-c1k.3).
+    const TUBE_CROSS_SEGMENTS: usize = 20;
+    const TUBE_CURVE_SEGMENTS: usize = 6;
+
     /// Builds the two half-length cylinders for a ball-and-stick bond, split at
     /// the bond's midpoint so the caller can color/map each half to its own
     /// endpoint atom — real bonds in molecular viewers are two-toned, half per
@@ -513,7 +521,7 @@ impl Structure {
         let mut indices = Vec::new();
 
         // Control how many segments around the tube
-        let segments = 16;
+        let segments = Self::TUBE_CROSS_SEGMENTS;
 
         // Orient the ribbon with the real backbone geometry (ferritin-t0h.3)
         // instead of an arbitrary parallel-transported seed, while still
@@ -941,8 +949,8 @@ impl Structure {
     }
 
     fn render_cartoon_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
-        let segments_per_residue: usize = 4;
-        let cross_segments: usize = 16;
+        let segments_per_residue: usize = Self::TUBE_CURVE_SEGMENTS;
+        let cross_segments: usize = Self::TUBE_CROSS_SEGMENTS;
 
         // Collect (residue_iter_idx, chain_id, BackboneAtoms) for residues whose CA passes the mask.
         let indexed_backbone: Vec<(usize, String, BackboneAtoms)> = self
@@ -1057,8 +1065,8 @@ impl Structure {
     }
 
     fn render_putty_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
-        const CROSS_SEGMENTS: usize = 16;
-        const CURVE_SEGMENTS: usize = 3;
+        const CROSS_SEGMENTS: usize = Structure::TUBE_CROSS_SEGMENTS;
+        const CURVE_SEGMENTS: usize = Structure::TUBE_CURVE_SEGMENTS;
 
         // Collect (res_iter_idx, chain_id, CA position) for unmasked residues.
         let ca_data: Vec<(usize, String, Vec3)> = self
@@ -1394,8 +1402,8 @@ mod tests {
         // segment removes one inter-residue span, so a genuinely split ribbon
         // has strictly fewer ring centers than the unsegmented curve.
         let n_res = structure.pdb.residues_aminoacid().count();
-        let cross_segments = 16;
-        let segments_per_residue = 4;
+        let cross_segments = Structure::TUBE_CROSS_SEGMENTS;
+        let segments_per_residue = Structure::TUBE_CURVE_SEGMENTS;
         let unsegmented_rings = (n_res - 1) * segments_per_residue;
         let actual_rings = mesh.count_vertices() / cross_segments;
         assert!(
@@ -1757,9 +1765,9 @@ mod tests {
             bevy::render::mesh::VertexAttributeValues::Float32x3(v) => v,
             _ => panic!("unexpected position format"),
         };
-        // Cross-section rings are 16 vertices each (CROSS_SEGMENTS in render_putty);
-        // compare each ring's average radial distance from its own centroid.
-        let ring_size = 16;
+        // Cross-section rings are TUBE_CROSS_SEGMENTS vertices each; compare each
+        // ring's average radial distance from its own centroid.
+        let ring_size = Structure::TUBE_CROSS_SEGMENTS;
         let ring_radius = |ring: &[[f32; 3]]| -> f32 {
             let centroid = ring
                 .iter()
