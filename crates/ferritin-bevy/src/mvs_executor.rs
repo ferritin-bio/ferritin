@@ -23,10 +23,11 @@
 use std::path::PathBuf;
 
 use bevy::asset::AssetPlugin;
-use bevy::prelude::*;
 use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
+use bevy::prelude::*;
 use bevy::ui::Node as UiNode;
-use ferritin_core::{AtomCollection, Model, load_model};
+use ferritin_core::{load_model, AtomCollection, Model};
 use ferritin_molviewspec::molviewspec::nodes::{
     CameraParams, CanvasParams, ColorT, ColorThemeT, ComponentInlineParams, ComponentSelector,
     FocusInlineParams, KindT, LabelInlineParams, LineParams, Node, NodeParams, ParseFormatT,
@@ -34,18 +35,27 @@ use ferritin_molviewspec::molviewspec::nodes::{
     StructureTypeT, TransformParams,
 };
 
-use crate::colors::{VertexMapKind, apply_mvs_colors_with_theme, color_t_to_bevy};
-use crate::selection::{AtomMask, evaluate_selector};
+use crate::colors::{apply_mvs_colors_with_theme, color_t_to_bevy, VertexMapKind};
+use crate::selection::{evaluate_selector, AtomMask};
 use crate::structure::{RenderOptions, Structure};
 
 // ---------------------------------------------------------------------------
 // Public ECS types
 // ---------------------------------------------------------------------------
 
-/// Marker attached to *every* entity spawned by the executor. On each reload all
-/// `MvsEntity` entities are despawned before the new state is built.
+/// Marker attached to every entity spawned by the executor. On each reload old
+/// `MvsEntity` entities are hidden, marked retired, then despawned shortly after
+/// the replacement scene is built.
 #[derive(Component)]
 pub struct MvsEntity;
+
+/// Old scene entities are hidden first and despawned a frame later. This keeps
+/// mesh/material handles alive long enough for Bevy's render allocator to observe
+/// the scene transition without a same-frame free/reallocate churn.
+#[derive(Component)]
+struct MvsRetiredEntity {
+    remaining_frames: u8,
+}
 
 /// A MVS `label` node, spawned at the centroid of its component's atoms.
 /// [`update_mvs_label_billboards`] projects this world-space anchor to screen
@@ -153,26 +163,42 @@ impl Plugin for MvsPlugin {
                 (
                     execute_mvs_on_load,
                     update_mvs_label_billboards,
-                    disable_tonemapping_on_new_cameras,
+                    apply_molecular_camera_defaults,
+                    despawn_retired_mvs_entities,
                 )
                     .chain(),
             );
     }
 }
 
-/// Bevy's default `Tonemapping::TonyMcMapface` (auto-inserted as a required
-/// component of every `Camera3d`) is designed to compress and selectively
-/// desaturate bright input stimulus for cinematic realism — exactly what made
-/// named colors (blue, orange, seagreen, ...) read as muted/dim against the
-/// viewport background (ferritin-ala.8). A molecular viewer wants legible,
-/// undistorted color, not a film look, so disable it on every camera this
-/// plugin encounters rather than requiring every consumer to remember to.
-fn disable_tonemapping_on_new_cameras(
+/// Applies MVS viewer camera defaults. Tonemapping is disabled so explicit
+/// molecular colors remain legible (ferritin-ala.8), and SSAO is enabled to add
+/// contact shadows/depth cues for dense all-atom scenes (ferritin-c1k.4).
+fn apply_molecular_camera_defaults(
     mut commands: Commands,
     cameras: Query<Entity, Added<Camera3d>>,
 ) {
     for entity in &cameras {
-        commands.entity(entity).insert(Tonemapping::None);
+        commands.entity(entity).insert((
+            Tonemapping::None,
+            ScreenSpaceAmbientOcclusion {
+                quality_level: ScreenSpaceAmbientOcclusionQualityLevel::High,
+                constant_object_thickness: 0.25,
+            },
+        ));
+    }
+}
+
+fn despawn_retired_mvs_entities(
+    mut commands: Commands,
+    mut retired: Query<(Entity, &mut MvsRetiredEntity)>,
+) {
+    for (entity, mut retired) in &mut retired {
+        if retired.remaining_frames == 0 {
+            commands.entity(entity).despawn();
+        } else {
+            retired.remaining_frames -= 1;
+        }
     }
 }
 
@@ -301,9 +327,17 @@ fn execute_mvs_on_load(
             }
         };
 
-        // Clear the previous scene.
+        // Retire the previous scene. Immediate same-frame despawn+spawn can trip
+        // Bevy's mesh slab allocator during heavy MVS scene switches; hiding and
+        // removing a frame later keeps the old asset handles alive through the
+        // transition while the new scene is already visible.
         for entity in existing.iter() {
-            commands.entity(entity).despawn();
+            commands.entity(entity).insert((
+                Visibility::Hidden,
+                MvsRetiredEntity {
+                    remaining_frames: 1,
+                },
+            ));
         }
 
         let mut ctx = Ctx {
@@ -591,7 +625,14 @@ fn render_representation(
     // Use the explicit color_theme when present; fall back to ElementSymbol (CPK)
     // so structures without any Color child nodes get sensible default coloring.
     let effective_theme = color_theme.unwrap_or(ColorThemeT::ElementSymbol);
-    apply_mvs_colors_with_theme(&mut mesh, &effective_theme, &color_nodes, ac, &vertex_map, map_kind);
+    apply_mvs_colors_with_theme(
+        &mut mesh,
+        &effective_theme,
+        &color_nodes,
+        ac,
+        &vertex_map,
+        map_kind,
+    );
 
     // Wireframe (MVS "line") geometry is now thin triangle cylinders with real
     // normals (ferritin-t0h.9), so it can take normal PBR shading like every
@@ -1001,14 +1042,21 @@ mod tests {
 
     fn count_meshes(app: &mut App) -> usize {
         app.world_mut()
-            .query_filtered::<Entity, (With<Mesh3d>, With<MvsEntity>)>()
+            .query_filtered::<Entity, (With<Mesh3d>, With<MvsEntity>, Without<MvsRetiredEntity>)>()
+            .iter(app.world())
+            .count()
+    }
+
+    fn count_retired_meshes(app: &mut App) -> usize {
+        app.world_mut()
+            .query_filtered::<Entity, (With<Mesh3d>, With<MvsRetiredEntity>)>()
             .iter(app.world())
             .count()
     }
 
     fn count_labels(app: &mut App) -> usize {
         app.world_mut()
-            .query_filtered::<Entity, With<MvsLabel>>()
+            .query_filtered::<Entity, (With<MvsLabel>, Without<MvsRetiredEntity>)>()
             .iter(app.world())
             .count()
     }
@@ -1158,7 +1206,10 @@ mod tests {
     fn test_map_repr_spacefill() {
         let (opt, degraded) = map_representation(&RepresentationTypeT::Spacefill);
         assert!(matches!(opt, RenderOptions::Solid));
-        assert!(!degraded, "Spacefill maps to Solid with VDW radii — not degraded");
+        assert!(
+            !degraded,
+            "Spacefill maps to Solid with VDW radii — not degraded"
+        );
     }
 
     #[test]
@@ -1419,7 +1470,10 @@ mod tests {
         use ferritin_test_data::TestFile;
         let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
         let mut app = make_app();
-        send_and_update(&mut app, &mvsj_one_component(&path, "all", "ball_and_stick"));
+        send_and_update(
+            &mut app,
+            &mvsj_one_component(&path, "all", "ball_and_stick"),
+        );
 
         let mut query = app.world_mut().query::<&MeshMaterial3d<StandardMaterial>>();
         let handle = query
@@ -1807,11 +1861,10 @@ mod tests {
         );
     }
 
-    // ferritin-ala.8: Bevy's default TonyMcMapface tonemapping compresses/
-    // desaturates bright colors, which read as muted named colors against the
-    // viewport background. MvsPlugin should disable it on any camera it sees.
+    // ferritin-ala.8/ferritin-c1k.4: MvsPlugin should install molecular-viewer
+    // camera defaults for color fidelity and depth cues.
     #[test]
-    fn test_camera3d_gets_tonemapping_disabled() {
+    fn test_camera3d_gets_molecular_viewer_defaults() {
         let mut app = make_app();
         let camera = app
             .world_mut()
@@ -1824,6 +1877,12 @@ mod tests {
             tonemapping,
             Some(&Tonemapping::None),
             "Camera3d should have tonemapping disabled by MvsPlugin"
+        );
+        let ssao = app.world().get::<ScreenSpaceAmbientOcclusion>(camera);
+        assert_eq!(
+            ssao.map(|s| s.quality_level),
+            Some(ScreenSpaceAmbientOcclusionQualityLevel::High),
+            "Camera3d should have SSAO enabled by MvsPlugin"
         );
     }
 
@@ -2140,11 +2199,24 @@ mod tests {
         // Second load with a different (water) selector.
         let json2 = mvsj_one_component(&path, "water", "ball_and_stick");
         send_and_update(&mut app, &json2);
-        // Should still be 1 (old entity despawned, new one spawned).
+        // Active scene count stays at 1; the old mesh remains hidden briefly to
+        // avoid same-frame render-allocator free/reallocate churn.
         assert_eq!(
             count_meshes(&mut app),
             1,
             "T3-23: second load replaces first, still 1 mesh"
+        );
+        assert_eq!(
+            count_retired_meshes(&mut app),
+            1,
+            "T3-23: old scene is retired for one frame"
+        );
+
+        app.update();
+        assert_eq!(
+            count_retired_meshes(&mut app),
+            0,
+            "T3-23: retired scene is cleaned up on the following update"
         );
     }
 
