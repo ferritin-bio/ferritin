@@ -63,10 +63,14 @@ impl Trajectory for ModelCoordsTrajectory {
             b_iso: None,
             confidence: None,
         };
-        Cow::Owned(Model::new(
-            Arc::clone(&self.topology.hierarchy),
-            conformation,
-        ))
+        Cow::Owned(
+            Model::try_new_with_symmetry(
+                Arc::clone(&self.topology.hierarchy),
+                conformation,
+                Arc::clone(&self.topology.symmetry),
+            )
+            .expect("validated trajectory frame"),
+        )
     }
 }
 

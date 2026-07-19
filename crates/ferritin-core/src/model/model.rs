@@ -16,7 +16,10 @@
 use super::ModelError;
 use super::conformation::AtomicConformation;
 use super::hierarchy::AtomicHierarchy;
+use super::symmetry::SymmetryData;
 use super::tables::ResidueGroup;
+use crate::Unit;
+use crate::data::OrderedSet;
 use crate::views::{ModelAtomView, ModelChainView, ModelResidueView};
 use std::sync::Arc;
 
@@ -40,6 +43,8 @@ pub struct Model {
     pub hierarchy: Arc<AtomicHierarchy>,
     /// Frame-specific coordinate data.
     pub conformation: AtomicConformation,
+    /// Parsed biological assembly and crystallographic symmetry metadata.
+    pub symmetry: Arc<SymmetryData>,
 }
 
 impl Model {
@@ -48,11 +53,21 @@ impl Model {
         hierarchy: Arc<AtomicHierarchy>,
         conformation: AtomicConformation,
     ) -> Result<Self, ModelError> {
+        Self::try_new_with_symmetry(hierarchy, conformation, Arc::new(SymmetryData::default()))
+    }
+
+    /// Construct a validated model with parsed symmetry metadata.
+    pub fn try_new_with_symmetry(
+        hierarchy: Arc<AtomicHierarchy>,
+        conformation: AtomicConformation,
+        symmetry: Arc<SymmetryData>,
+    ) -> Result<Self, ModelError> {
         hierarchy.validate()?;
         conformation.validate(hierarchy.n_atoms())?;
         Ok(Self {
             hierarchy,
             conformation,
+            symmetry,
         })
     }
 
@@ -148,6 +163,56 @@ impl Model {
     /// Iterator over all atoms as [`ModelAtomView`].
     pub fn atoms(&self) -> impl Iterator<Item = ModelAtomView<'_>> {
         (0..self.n_atoms()).map(move |i| ModelAtomView::new(self, i))
+    }
+
+    /// Expand a biological assembly as transformed, zero-copy [`Unit`] views.
+    pub fn assembly_units(&self, assembly_id: &str) -> Result<Vec<Unit<'_>>, ModelError> {
+        let assembly = self
+            .symmetry
+            .assemblies
+            .iter()
+            .find(|assembly| assembly.id == assembly_id)
+            .ok_or_else(|| ModelError::new(format!("assembly {assembly_id} does not exist")))?;
+
+        assembly
+            .units
+            .iter()
+            .map(|definition| {
+                let mut indices = Vec::new();
+                for (chain_index, asym_id) in self.hierarchy.chains.label_asym_id.iter().enumerate()
+                {
+                    if definition.asym_ids.contains(asym_id) {
+                        let residues = self.hierarchy.residues_in_chain(chain_index);
+                        if !residues.is_empty() {
+                            let start = self.hierarchy.atoms_in_residue(residues.start).start;
+                            let end = self.hierarchy.atoms_in_residue(residues.end - 1).end;
+                            indices.extend((start as u32)..(end as u32));
+                        }
+                    }
+                }
+                Unit::try_from_indices_with_operator(
+                    self,
+                    OrderedSet::from_sorted(indices),
+                    definition.operator.clone(),
+                )
+            })
+            .collect()
+    }
+
+    /// Expand parsed crystallographic operators over the complete model.
+    pub fn crystal_units(&self) -> Result<Vec<Unit<'_>>, ModelError> {
+        self.symmetry
+            .crystal
+            .operators
+            .iter()
+            .map(|operator| {
+                Unit::try_from_indices_with_operator(
+                    self,
+                    OrderedSet::interval(0, self.n_atoms() as u32),
+                    operator.clone(),
+                )
+            })
+            .collect()
     }
 }
 

@@ -24,7 +24,10 @@ mod views;
 pub use atomcollection::AtomCollection;
 pub use bonds::{Bond, BondOrder};
 pub use io::{load_model, load_structure, load_structure_from_string, load_trajectory};
-pub use model::{AtomicConformation, AtomicHierarchy, Bonds, Model, ModelError};
+pub use model::{
+    Assembly, AssemblyUnit, AtomicConformation, AtomicHierarchy, Bonds, CrystalSymmetry,
+    IDENTITY_MAT4, Mat4, Model, ModelError, SymmetryData, SymmetryOperator,
+};
 pub use trajectory::{ArrayTrajectory, Coordinates, Frame, ModelCoordsTrajectory, Trajectory};
 pub use unit::Unit;
 pub use views::{

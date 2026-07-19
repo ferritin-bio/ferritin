@@ -17,6 +17,7 @@ pub mod conformation;
 mod error;
 pub mod hierarchy;
 pub mod model;
+pub mod symmetry;
 pub mod tables;
 
 pub use bonds::Bonds;
@@ -24,4 +25,7 @@ pub use conformation::AtomicConformation;
 pub use error::ModelError;
 pub use hierarchy::AtomicHierarchy;
 pub use model::Model;
+pub use symmetry::{
+    Assembly, AssemblyUnit, CrystalSymmetry, IDENTITY_MAT4, Mat4, SymmetryData, SymmetryOperator,
+};
 pub use tables::{AtomsTable, ChainsTable, MISSING_SEQ_ID, ResidueGroup, ResiduesTable};

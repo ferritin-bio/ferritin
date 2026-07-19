@@ -1,7 +1,7 @@
 //! Zero-copy view into a subset of a [`Model`].
 
 use crate::data::OrderedSet;
-use crate::model::{Model, ModelError};
+use crate::model::{Model, ModelError, SymmetryOperator};
 
 /// Zero-copy view into a subset of a Model.
 ///
@@ -12,6 +12,7 @@ use crate::model::{Model, ModelError};
 pub struct Unit<'a> {
     model: &'a Model,
     atoms: OrderedSet,
+    operator: SymmetryOperator,
 }
 
 impl<'a> Unit<'a> {
@@ -40,7 +41,11 @@ impl<'a> Unit<'a> {
             OrderedSet::from_sorted(indices)
         };
 
-        Self { model, atoms }
+        Self {
+            model,
+            atoms,
+            operator: SymmetryOperator::identity(),
+        }
     }
 
     /// Create a `Unit` containing all atoms in the model.
@@ -49,6 +54,7 @@ impl<'a> Unit<'a> {
         Self {
             model,
             atoms: OrderedSet::interval(0, n),
+            operator: SymmetryOperator::identity(),
         }
     }
 
@@ -71,7 +77,19 @@ impl<'a> Unit<'a> {
         Ok(Self {
             model,
             atoms: indices,
+            operator: SymmetryOperator::identity(),
         })
+    }
+
+    /// Create a validated unit carrying an affine symmetry operator.
+    pub fn try_from_indices_with_operator(
+        model: &'a Model,
+        indices: OrderedSet,
+        operator: SymmetryOperator,
+    ) -> Result<Self, ModelError> {
+        let mut unit = Self::try_from_indices(model, indices)?;
+        unit.operator = operator;
+        Ok(unit)
     }
 
     /// Number of selected atoms.
@@ -89,6 +107,10 @@ impl<'a> Unit<'a> {
         self.model
     }
 
+    pub fn operator(&self) -> &SymmetryOperator {
+        &self.operator
+    }
+
     /// Lazy iterator over selected atom indices.
     pub fn atom_indices(&self) -> impl Iterator<Item = u32> + '_ {
         self.atoms.iter()
@@ -96,7 +118,9 @@ impl<'a> Unit<'a> {
 
     /// Lazy iterator over coordinates of selected atoms.
     pub fn coords(&self) -> impl Iterator<Item = [f32; 3]> + '_ {
-        self.atoms.iter().map(|i| self.model.coord(i as usize))
+        self.atoms
+            .iter()
+            .map(|i| self.operator.apply(self.model.coord(i as usize)))
     }
 
     /// Union of two units (must reference the same model).
@@ -108,9 +132,14 @@ impl<'a> Unit<'a> {
             std::ptr::eq(self.model, other.model),
             "cannot union Units from different Models"
         );
+        assert_eq!(
+            self.operator, other.operator,
+            "cannot union Units with different operators"
+        );
         Self {
             model: self.model,
             atoms: self.atoms.union(&other.atoms),
+            operator: self.operator.clone(),
         }
     }
 
@@ -123,9 +152,14 @@ impl<'a> Unit<'a> {
             std::ptr::eq(self.model, other.model),
             "cannot intersect Units from different Models"
         );
+        assert_eq!(
+            self.operator, other.operator,
+            "cannot intersect Units with different operators"
+        );
         Self {
             model: self.model,
             atoms: self.atoms.intersection(&other.atoms),
+            operator: self.operator.clone(),
         }
     }
 
@@ -138,9 +172,14 @@ impl<'a> Unit<'a> {
             std::ptr::eq(self.model, other.model),
             "cannot difference Units from different Models"
         );
+        assert_eq!(
+            self.operator, other.operator,
+            "cannot difference Units with different operators"
+        );
         Self {
             model: self.model,
             atoms: self.atoms.difference(&other.atoms),
+            operator: self.operator.clone(),
         }
     }
 
@@ -160,6 +199,7 @@ impl<'a> Unit<'a> {
             return Some(Self {
                 model,
                 atoms: OrderedSet::interval(0, 0),
+                operator: SymmetryOperator::identity(),
             });
         }
         let atom_start = model
@@ -176,6 +216,7 @@ impl<'a> Unit<'a> {
         Some(Self {
             model,
             atoms: OrderedSet::interval(atom_start as u32, atom_end as u32),
+            operator: SymmetryOperator::identity(),
         })
     }
 
@@ -203,7 +244,11 @@ impl<'a> Unit<'a> {
             OrderedSet::from_sorted(indices)
         };
 
-        Self { model, atoms }
+        Self {
+            model,
+            atoms,
+            operator: SymmetryOperator::identity(),
+        }
     }
 }
 

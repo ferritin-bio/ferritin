@@ -61,7 +61,7 @@ impl ArrayTrajectory {
         }
         let first = Arc::as_ptr(&models[0].hierarchy);
         for m in &models[1..] {
-            if Arc::as_ptr(&m.hierarchy) != first {
+            if Arc::as_ptr(&m.hierarchy) != first || m.symmetry != models[0].symmetry {
                 return Err(TrajectoryError::MixedTopologies);
             }
         }

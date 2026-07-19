@@ -6,7 +6,10 @@ use crate::data::Segmentation;
 use crate::info::elements::Element;
 use crate::model::bonds::infer_bonds_from_residue_templates;
 use crate::model::tables::{AtomsTable, ChainsTable, MISSING_SEQ_ID, ResidueGroup, ResiduesTable};
-use crate::model::{AtomicConformation, AtomicHierarchy, Model};
+use crate::model::{
+    Assembly, AssemblyUnit, AtomicConformation, AtomicHierarchy, CrystalSymmetry, IDENTITY_MAT4,
+    Mat4, Model, SymmetryData, SymmetryOperator,
+};
 use crate::trajectory::ArrayTrajectory;
 use crate::{AtomCollection, Bond};
 use std::collections::{HashMap, HashSet};
@@ -122,6 +125,25 @@ impl CIFFile {
         while i < lines.len() {
             let line = lines[i].trim();
 
+            // A CIF `#` terminates the current loop/category.
+            if line == "#" {
+                if let Some(mut category) = current_category.take() {
+                    if in_loop && !loop_data.is_empty() {
+                        category.columns = loop_columns.clone();
+                        category.data = loop_data.clone();
+                    }
+                    if let Some(block) = &mut current_data_block {
+                        block.categories.insert(category.name.clone(), category);
+                    }
+                }
+                in_loop = false;
+                loop_columns.clear();
+                loop_data.clear();
+                current_loop_row.clear();
+                i += 1;
+                continue;
+            }
+
             // Skip comments and empty lines
             if line.starts_with('#') || line.is_empty() {
                 i += 1;
@@ -151,9 +173,9 @@ impl CIFFile {
                     if in_loop && !loop_data.is_empty() {
                         category.columns = loop_columns.clone();
                         category.data = loop_data.clone();
-                        if let Some(block) = &mut current_data_block {
-                            block.categories.insert(category.name.clone(), category);
-                        }
+                    }
+                    if let Some(block) = &mut current_data_block {
+                        block.categories.insert(category.name.clone(), category);
                     }
                 }
                 in_loop = true;
@@ -166,7 +188,13 @@ impl CIFFile {
 
             // Handle loop column definitions (starting with underscore)
             if line.starts_with('_') {
-                let parts: Vec<&str> = line.splitn(2, '.').collect();
+                let mut tag_and_value = line.splitn(2, char::is_whitespace);
+                let tag = tag_and_value.next().unwrap_or(line);
+                let inline_value = tag_and_value
+                    .next()
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty());
+                let parts: Vec<&str> = tag.splitn(2, '.').collect();
                 if parts.len() < 2 {
                     return Err(CIFError::InvalidFile(format!(
                         "Invalid column definition: {}",
@@ -183,7 +211,9 @@ impl CIFFile {
                     loop_columns.push(column_name);
                 } else {
                     // Not in loop context, it's a single value
-                    let value = if i + 1 < lines.len() {
+                    let value = if let Some(value) = inline_value {
+                        clean_cif_value(value)
+                    } else if i + 1 < lines.len() {
                         let next_line = lines[i + 1].trim();
                         if !next_line.starts_with('_')
                             && !next_line.starts_with("loop_")
@@ -805,6 +835,7 @@ impl CIFFile {
             &residue_to_chain,
         );
 
+        let symmetry = Arc::new(parse_symmetry_data(block)?);
         let hierarchy = Arc::new(AtomicHierarchy {
             atoms,
             residues,
@@ -823,7 +854,7 @@ impl CIFFile {
             confidence: None,
         };
 
-        Model::try_new(hierarchy, conformation)
+        Model::try_new_with_symmetry(hierarchy, conformation, symmetry)
             .map_err(|error| CIFError::InvalidFile(error.to_string()))
     }
 
@@ -1155,6 +1186,7 @@ impl CIFFile {
             &residue_to_chain,
         );
 
+        let symmetry = Arc::new(parse_symmetry_data(block)?);
         let hierarchy = Arc::new(AtomicHierarchy {
             atoms,
             residues,
@@ -1225,8 +1257,12 @@ impl CIFFile {
             };
 
             models.push(
-                Model::try_new(Arc::clone(&hierarchy), conformation)
-                    .map_err(|error| CIFError::InvalidFile(error.to_string()))?,
+                Model::try_new_with_symmetry(
+                    Arc::clone(&hierarchy),
+                    conformation,
+                    Arc::clone(&symmetry),
+                )
+                .map_err(|error| CIFError::InvalidFile(error.to_string()))?,
             );
         }
 
@@ -1309,6 +1345,448 @@ fn validate_canonical_residue_order(
         }
     }
     Ok(())
+}
+
+fn required_column(category: &CIFCategory, name: &str) -> Result<usize, CIFError> {
+    category
+        .get_column_index(name)
+        .ok_or_else(|| CIFError::InvalidFile(format!("Missing {}.{name} column", category.name)))
+}
+
+fn is_scalar_category(category: &CIFCategory) -> bool {
+    category.data.len() == category.columns.len()
+        && category.data.iter().all(|values| values.len() == 1)
+}
+
+fn category_row_count(category: &CIFCategory) -> usize {
+    if is_scalar_category(category) {
+        usize::from(!category.data.is_empty())
+    } else {
+        category.data.len()
+    }
+}
+
+fn category_value(category: &CIFCategory, row: usize, column: usize) -> Option<&str> {
+    if is_scalar_category(category) {
+        if row == 0 {
+            category.data.get(column)?.first().map(String::as_str)
+        } else {
+            None
+        }
+    } else {
+        category.data.get(row)?.get(column).map(String::as_str)
+    }
+}
+
+fn optional_scalar(block: &CIFDataBlock, category_name: &str, column: &str) -> Option<String> {
+    let category = block.categories.get(category_name)?;
+    let index = category.get_column_index(column)?;
+    category_value(category, 0, index).map(str::to_string)
+}
+
+fn parse_operator_matrix(category: &CIFCategory, row: usize) -> Result<Mat4, CIFError> {
+    let mut matrix = IDENTITY_MAT4;
+    for row_index in 0..3 {
+        for column_index in 0..3 {
+            let name = format!("matrix[{}][{}]", row_index + 1, column_index + 1);
+            let index = required_column(category, &name)?;
+            let value = category_value(category, row, index)
+                .ok_or_else(|| CIFError::InvalidFile(format!("Missing {name} value")))?;
+            matrix[row_index][column_index] = value
+                .parse::<f32>()
+                .map_err(|_| CIFError::InvalidFile(format!("Invalid {name}: {value}")))?;
+        }
+        let name = format!("vector[{}]", row_index + 1);
+        let index = required_column(category, &name)?;
+        let value = category_value(category, row, index)
+            .ok_or_else(|| CIFError::InvalidFile(format!("Missing {name} value")))?;
+        matrix[row_index][3] = value
+            .parse::<f32>()
+            .map_err(|_| CIFError::InvalidFile(format!("Invalid {name}: {value}")))?;
+    }
+    Ok(matrix)
+}
+
+fn parse_fraction(value: &str) -> Result<f32, CIFError> {
+    if let Some((numerator, denominator)) = value.split_once('/') {
+        let numerator = numerator
+            .parse::<f32>()
+            .map_err(|_| CIFError::InvalidFile(format!("Invalid symmetry fraction: {value}")))?;
+        let denominator = denominator
+            .parse::<f32>()
+            .map_err(|_| CIFError::InvalidFile(format!("Invalid symmetry fraction: {value}")))?;
+        if denominator == 0.0 {
+            return Err(CIFError::InvalidFile(format!(
+                "Zero symmetry denominator: {value}"
+            )));
+        }
+        Ok(numerator / denominator)
+    } else {
+        value
+            .parse::<f32>()
+            .map_err(|_| CIFError::InvalidFile(format!("Invalid symmetry value: {value}")))
+    }
+}
+
+fn parse_symmetry_axis(expression: &str) -> Result<[f32; 4], CIFError> {
+    let expression = expression.replace(' ', "").to_ascii_lowercase();
+    let mut terms = Vec::new();
+    let mut start = 0;
+    for (index, character) in expression.char_indices().skip(1) {
+        if character == '+' || character == '-' {
+            terms.push(&expression[start..index]);
+            start = index;
+        }
+    }
+    terms.push(&expression[start..]);
+
+    let mut result = [0.0; 4];
+    for term in terms {
+        if term.is_empty() {
+            continue;
+        }
+        let (sign, unsigned) = match term.as_bytes()[0] {
+            b'-' => (-1.0, &term[1..]),
+            b'+' => (1.0, &term[1..]),
+            _ => (1.0, term),
+        };
+        if let Some(axis) = unsigned.chars().last().filter(|axis| "xyz".contains(*axis)) {
+            let coefficient = &unsigned[..unsigned.len() - 1];
+            let coefficient = if coefficient.is_empty() {
+                1.0
+            } else {
+                parse_fraction(coefficient)?
+            };
+            let index = match axis {
+                'x' => 0,
+                'y' => 1,
+                'z' => 2,
+                _ => unreachable!(),
+            };
+            result[index] += sign * coefficient;
+        } else {
+            result[3] += sign * parse_fraction(unsigned)?;
+        }
+    }
+    Ok(result)
+}
+
+fn parse_xyz_operator(
+    label: impl Into<String>,
+    expression: &str,
+) -> Result<SymmetryOperator, CIFError> {
+    let axes = expression.split(',').collect::<Vec<_>>();
+    if axes.len() != 3 {
+        return Err(CIFError::InvalidFile(format!(
+            "Symmetry operation must contain three axes: {expression}"
+        )));
+    }
+    let mut matrix = IDENTITY_MAT4;
+    for (index, axis) in axes.into_iter().enumerate() {
+        matrix[index] = parse_symmetry_axis(axis)?;
+    }
+    Ok(SymmetryOperator::new(label, matrix))
+}
+
+fn fractional_to_cartesian_matrix(cell: [f32; 6]) -> Result<Mat4, CIFError> {
+    let [a, b, c, alpha, beta, gamma] = cell;
+    let (alpha, beta, gamma) = (alpha.to_radians(), beta.to_radians(), gamma.to_radians());
+    let sin_gamma = gamma.sin();
+    if a <= 0.0 || b <= 0.0 || c <= 0.0 || sin_gamma.abs() < 1e-7 {
+        return Err(CIFError::InvalidFile(
+            "Degenerate crystallographic unit cell".to_string(),
+        ));
+    }
+    let c_x = c * beta.cos();
+    let c_y = c * (alpha.cos() - beta.cos() * gamma.cos()) / sin_gamma;
+    let c_z_squared = c * c - c_x * c_x - c_y * c_y;
+    if c_z_squared <= 0.0 {
+        return Err(CIFError::InvalidFile(
+            "Degenerate crystallographic unit cell".to_string(),
+        ));
+    }
+    Ok([
+        [a, b * gamma.cos(), c_x, 0.0],
+        [0.0, b * sin_gamma, c_y, 0.0],
+        [0.0, 0.0, c_z_squared.sqrt(), 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ])
+}
+
+fn invert_affine_basis(matrix: Mat4) -> Result<Mat4, CIFError> {
+    let (a, b, c) = (matrix[0][0], matrix[0][1], matrix[0][2]);
+    let (d, e, f) = (matrix[1][0], matrix[1][1], matrix[1][2]);
+    let (g, h, i) = (matrix[2][0], matrix[2][1], matrix[2][2]);
+    let determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+    if determinant.abs() < 1e-10 {
+        return Err(CIFError::InvalidFile(
+            "Non-invertible crystallographic cell".to_string(),
+        ));
+    }
+    let inverse = 1.0 / determinant;
+    Ok([
+        [
+            (e * i - f * h) * inverse,
+            (c * h - b * i) * inverse,
+            (b * f - c * e) * inverse,
+            0.0,
+        ],
+        [
+            (f * g - d * i) * inverse,
+            (a * i - c * g) * inverse,
+            (c * d - a * f) * inverse,
+            0.0,
+        ],
+        [
+            (d * h - e * g) * inverse,
+            (b * g - a * h) * inverse,
+            (a * e - b * d) * inverse,
+            0.0,
+        ],
+        [0.0, 0.0, 0.0, 1.0],
+    ])
+}
+
+fn fractional_operator_to_cartesian(
+    operator: SymmetryOperator,
+    cell: [f32; 6],
+) -> Result<SymmetryOperator, CIFError> {
+    let fractional_to_cartesian = SymmetryOperator::new(
+        "fractional_to_cartesian",
+        fractional_to_cartesian_matrix(cell)?,
+    );
+    let cartesian_to_fractional = SymmetryOperator::new(
+        "cartesian_to_fractional",
+        invert_affine_basis(fractional_to_cartesian.matrix)?,
+    );
+    let label = operator.label.clone();
+    Ok(fractional_to_cartesian
+        .compose(&operator, "cell*symop")
+        .compose(&cartesian_to_fractional, label))
+}
+
+fn expand_operator_group(group: &str) -> Result<Vec<String>, CIFError> {
+    let mut result = Vec::new();
+    for token in group
+        .split(',')
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+    {
+        if let Some((start, end)) = token.split_once('-') {
+            let start = start
+                .trim()
+                .parse::<i32>()
+                .map_err(|_| CIFError::InvalidFile(format!("Invalid operator range: {token}")))?;
+            let end = end
+                .trim()
+                .parse::<i32>()
+                .map_err(|_| CIFError::InvalidFile(format!("Invalid operator range: {token}")))?;
+            if start > end {
+                return Err(CIFError::InvalidFile(format!(
+                    "Descending operator range: {token}"
+                )));
+            }
+            result.extend((start..=end).map(|value| value.to_string()));
+        } else {
+            result.push(token.to_string());
+        }
+    }
+    Ok(result)
+}
+
+fn operator_expression_groups(expression: &str) -> Result<Vec<Vec<String>>, CIFError> {
+    let expression = expression.trim();
+    if !expression.contains('(') {
+        return Ok(vec![expand_operator_group(expression)?]);
+    }
+    let mut groups = Vec::new();
+    let mut remainder = expression;
+    while let Some(start) = remainder.find('(') {
+        let after_start = &remainder[start + 1..];
+        let end = after_start.find(')').ok_or_else(|| {
+            CIFError::InvalidFile(format!("Unclosed operator expression: {expression}"))
+        })?;
+        groups.push(expand_operator_group(&after_start[..end])?);
+        remainder = &after_start[end + 1..];
+    }
+    if groups.is_empty() || groups.iter().any(Vec::is_empty) {
+        return Err(CIFError::InvalidFile(format!(
+            "Empty operator expression: {expression}"
+        )));
+    }
+    Ok(groups)
+}
+
+fn expand_operator_expression(
+    expression: &str,
+    operators: &HashMap<String, SymmetryOperator>,
+) -> Result<Vec<SymmetryOperator>, CIFError> {
+    let groups = operator_expression_groups(expression)?;
+    let mut expanded = vec![SymmetryOperator::identity()];
+    for group in groups {
+        let mut next = Vec::new();
+        for accumulated in &expanded {
+            for id in &group {
+                let operator = operators.get(id).ok_or_else(|| {
+                    CIFError::InvalidFile(format!("Unknown symmetry operator {id}"))
+                })?;
+                let label = if accumulated.label == "identity" {
+                    id.clone()
+                } else {
+                    format!("{}*{id}", accumulated.label)
+                };
+                next.push(accumulated.compose(operator, label));
+            }
+        }
+        expanded = next;
+    }
+    Ok(expanded)
+}
+
+fn parse_symmetry_data(block: &CIFDataBlock) -> Result<SymmetryData, CIFError> {
+    let mut operators = HashMap::new();
+    if let Some(category) = block.categories.get("pdbx_struct_oper_list") {
+        let id_column = required_column(category, "id")?;
+        for row in 0..category_row_count(category) {
+            let id = category_value(category, row, id_column)
+                .ok_or_else(|| CIFError::InvalidFile("Missing operator id".to_string()))?
+                .to_string();
+            operators.insert(
+                id.clone(),
+                SymmetryOperator::new(id, parse_operator_matrix(category, row)?),
+            );
+        }
+    }
+
+    let details_by_id: HashMap<String, String> = block
+        .categories
+        .get("pdbx_struct_assembly")
+        .map(|category| {
+            let id = category.get_column_index("id")?;
+            let details = category.get_column_index("details")?;
+            Some(
+                (0..category_row_count(category))
+                    .filter_map(|row| {
+                        Some((
+                            category_value(category, row, id)?.to_string(),
+                            category_value(category, row, details)?.to_string(),
+                        ))
+                    })
+                    .collect(),
+            )
+        })
+        .flatten()
+        .unwrap_or_default();
+
+    let mut assemblies_by_id: HashMap<String, Vec<AssemblyUnit>> = HashMap::new();
+    if let Some(category) = block.categories.get("pdbx_struct_assembly_gen") {
+        let assembly_column = required_column(category, "assembly_id")?;
+        let expression_column = required_column(category, "oper_expression")?;
+        let asym_column = required_column(category, "asym_id_list")?;
+        for row in 0..category_row_count(category) {
+            let asym_value = category_value(category, row, asym_column).ok_or_else(|| {
+                CIFError::InvalidFile("Missing assembly asym_id_list".to_string())
+            })?;
+            let asym_ids = asym_value
+                .split(',')
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>();
+            let expression = category_value(category, row, expression_column).ok_or_else(|| {
+                CIFError::InvalidFile("Missing assembly oper_expression".to_string())
+            })?;
+            let assembly_id = category_value(category, row, assembly_column)
+                .ok_or_else(|| CIFError::InvalidFile("Missing assembly_id".to_string()))?;
+            for operator in expand_operator_expression(expression, &operators)? {
+                assemblies_by_id
+                    .entry(assembly_id.to_string())
+                    .or_default()
+                    .push(AssemblyUnit {
+                        asym_ids: asym_ids.clone(),
+                        operator,
+                    });
+            }
+        }
+    }
+    let mut assemblies = assemblies_by_id
+        .into_iter()
+        .map(|(id, units)| Assembly {
+            details: details_by_id.get(&id).cloned(),
+            id,
+            units,
+        })
+        .collect::<Vec<_>>();
+    assemblies.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let cell_names = [
+        "length_a",
+        "length_b",
+        "length_c",
+        "angle_alpha",
+        "angle_beta",
+        "angle_gamma",
+    ];
+    let cell_values = cell_names
+        .iter()
+        .map(|name| optional_scalar(block, "cell", name))
+        .collect::<Vec<_>>();
+    let cell = if cell_values.iter().all(Option::is_some) {
+        let mut values = [0.0; 6];
+        for (index, value) in cell_values.into_iter().enumerate() {
+            let value = value.unwrap();
+            values[index] = value.parse::<f32>().map_err(|_| {
+                CIFError::InvalidFile(format!("Invalid cell.{}: {value}", cell_names[index]))
+            })?;
+        }
+        Some(values)
+    } else {
+        None
+    };
+
+    let space_group_name = optional_scalar(block, "symmetry", "space_group_name_H-M")
+        .or_else(|| optional_scalar(block, "space_group", "name_H-M_alt"));
+
+    let mut crystal_operators = Vec::new();
+    for (category_name, operation_column) in [
+        ("space_group_symop", "operation_xyz"),
+        ("symmetry_equiv", "pos_as_xyz"),
+    ] {
+        if let Some(category) = block.categories.get(category_name) {
+            let operation_index = required_column(category, operation_column)?;
+            let id_index = category.get_column_index("id");
+            for row_index in 0..category_row_count(category) {
+                let label = id_index
+                    .and_then(|index| category_value(category, row_index, index))
+                    .map(str::to_string)
+                    .unwrap_or_else(|| (row_index + 1).to_string());
+                let expression =
+                    category_value(category, row_index, operation_index).ok_or_else(|| {
+                        CIFError::InvalidFile(
+                            "Missing crystallographic symmetry operation".to_string(),
+                        )
+                    })?;
+                let operator = parse_xyz_operator(label, expression)?;
+                let cell = cell.ok_or_else(|| {
+                    CIFError::InvalidFile(
+                        "Crystallographic symmetry operators require complete cell parameters"
+                            .to_string(),
+                    )
+                })?;
+                crystal_operators.push(fractional_operator_to_cartesian(operator, cell)?);
+            }
+            break;
+        }
+    }
+
+    Ok(SymmetryData {
+        assemblies,
+        crystal: CrystalSymmetry {
+            space_group_name,
+            cell,
+            operators: crystal_operators,
+        },
+    })
 }
 
 /// Clean a CIF value (remove quotes, handle special values)
@@ -1405,6 +1883,19 @@ mod tests {
         let model = cif.parse_to_model().unwrap();
         let ac = AtomCollection::from(&model);
 
+        let assembly_id = model
+            .symmetry
+            .assemblies
+            .first()
+            .expect("4hhb should contain biological assembly metadata")
+            .id
+            .clone();
+        let assembly_units = model.assembly_units(&assembly_id).unwrap();
+        assert!(!assembly_units.is_empty());
+        assert!(assembly_units
+            .iter()
+            .all(|unit| std::ptr::eq(unit.model(), &model)));
+
         let distinct_chain_ids: std::collections::HashSet<&str> =
             (0..ac.get_size()).map(|i| ac.get_chain_id(i)).collect();
         assert_eq!(
@@ -1482,5 +1973,52 @@ mod tests {
             .err()
             .unwrap();
         assert!(error.to_string().contains("Invalid residue ID"));
+    }
+
+    #[test]
+    fn test_cif_parses_and_expands_zero_copy_assembly() {
+        let mut content =
+            atom_site_cif("ATOM 1 C CA CA ALA ALA A A 1 1 1 . 1.0 2.0 3.0 1.0 10.0 1");
+        content.push_str(
+            "loop_\n_pdbx_struct_assembly.id\n_pdbx_struct_assembly.details\n1 'biological dimer'\n#\n\
+             loop_\n_pdbx_struct_oper_list.id\n_pdbx_struct_oper_list.matrix[1][1]\n_pdbx_struct_oper_list.matrix[1][2]\n_pdbx_struct_oper_list.matrix[1][3]\n_pdbx_struct_oper_list.vector[1]\n_pdbx_struct_oper_list.matrix[2][1]\n_pdbx_struct_oper_list.matrix[2][2]\n_pdbx_struct_oper_list.matrix[2][3]\n_pdbx_struct_oper_list.vector[2]\n_pdbx_struct_oper_list.matrix[3][1]\n_pdbx_struct_oper_list.matrix[3][2]\n_pdbx_struct_oper_list.matrix[3][3]\n_pdbx_struct_oper_list.vector[3]\n\
+             1 1 0 0 0 0 1 0 0 0 0 1 0\n\
+             2 1 0 0 10 0 1 0 0 0 0 1 0\n#\n\
+             loop_\n_pdbx_struct_assembly_gen.assembly_id\n_pdbx_struct_assembly_gen.oper_expression\n_pdbx_struct_assembly_gen.asym_id_list\n1 '(1,2)' A\n#\n",
+        );
+        let model = CIFFile::new(content).unwrap().parse_to_model().unwrap();
+        let units = model.assembly_units("1").unwrap();
+        assert_eq!(units.len(), 2);
+        assert_eq!(units[0].atom_indices().collect::<Vec<_>>(), [0]);
+        assert_eq!(units[0].coords().next().unwrap(), [1.0, 2.0, 3.0]);
+        assert_eq!(units[1].coords().next().unwrap(), [11.0, 2.0, 3.0]);
+        assert!(std::ptr::eq(units[0].model(), units[1].model()));
+    }
+
+    #[test]
+    fn test_cif_parses_crystal_metadata_and_xyz_operators() {
+        let mut content =
+            atom_site_cif("ATOM 1 C CA CA ALA ALA A A 1 1 1 . 1.0 2.0 3.0 1.0 10.0 1");
+        content.push_str(
+            "_cell.length_a 10\n_cell.length_b 20\n_cell.length_c 30\n\
+             _cell.angle_alpha 90\n_cell.angle_beta 90\n_cell.angle_gamma 90\n\
+             _symmetry.space_group_name_H-M 'P 1'\n\
+             loop_\n_space_group_symop.id\n_space_group_symop.operation_xyz\n1 x,y,z\n2 -x+1/2,y+1/2,-z\n#\n",
+        );
+        let model = CIFFile::new(content).unwrap().parse_to_model().unwrap();
+        assert_eq!(
+            model.symmetry.crystal.space_group_name.as_deref(),
+            Some("P 1")
+        );
+        assert_eq!(
+            model.symmetry.crystal.cell,
+            Some([10.0, 20.0, 30.0, 90.0, 90.0, 90.0])
+        );
+        let units = model.crystal_units().unwrap();
+        assert_eq!(units.len(), 2);
+        let transformed = units[1].coords().next().unwrap();
+        assert!((transformed[0] - 4.0).abs() < 1e-5);
+        assert!((transformed[1] - 12.0).abs() < 1e-5);
+        assert!((transformed[2] + 3.0).abs() < 1e-5);
     }
 }
