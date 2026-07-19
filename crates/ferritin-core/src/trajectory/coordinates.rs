@@ -3,6 +3,8 @@
 //! [`Frame`] holds a single snapshot of coordinates (topology-free), and
 //! [`Coordinates`] is an ordered collection of frames for trajectory storage.
 
+use crate::model::ModelError;
+
 /// Unit cell parameters for periodic boundary condition systems.
 #[derive(Clone, Debug, PartialEq)]
 pub struct UnitCell {
@@ -48,9 +50,32 @@ pub struct Coordinates {
 }
 
 impl Coordinates {
+    /// Construct a validated coordinate collection.
+    pub fn try_new(frames: Vec<Frame>) -> Result<Self, ModelError> {
+        let expected = frames.first().map_or(0, |frame| frame.x.len());
+        for (frame_index, frame) in frames.iter().enumerate() {
+            for (axis, len) in [
+                ("x", frame.x.len()),
+                ("y", frame.y.len()),
+                ("z", frame.z.len()),
+            ] {
+                if len != expected {
+                    return Err(ModelError::new(format!(
+                        "coordinates frame {frame_index}.{axis} has length {len}, expected {expected}"
+                    )));
+                }
+            }
+        }
+        Ok(Self { frames })
+    }
+
     /// Construct from a `Vec<Frame>`.
+    ///
+    /// # Panics
+    /// Panics if coordinate column lengths differ. Use [`Coordinates::try_new`]
+    /// to report invalid input without panicking.
     pub fn new(frames: Vec<Frame>) -> Self {
-        Self { frames }
+        Self::try_new(frames).expect("invalid coordinate frames")
     }
 
     /// Number of frames.
@@ -95,8 +120,12 @@ mod tests {
     #[test]
     fn test_frame_fields() {
         let cell = UnitCell {
-            a: 10.0, b: 20.0, c: 30.0,
-            alpha: 90.0, beta: 90.0, gamma: 120.0,
+            a: 10.0,
+            b: 20.0,
+            c: 30.0,
+            alpha: 90.0,
+            beta: 90.0,
+            gamma: 120.0,
         };
         let frame = Frame {
             x: vec![1.0, 2.0],
@@ -117,5 +146,26 @@ mod tests {
         assert_eq!(c.alpha, 90.0);
         assert_eq!(c.beta, 90.0);
         assert_eq!(c.gamma, 120.0);
+    }
+
+    #[test]
+    fn test_coordinates_validation_rejects_frame_size_mismatch() {
+        let frames = vec![
+            Frame {
+                x: vec![0.0],
+                y: vec![0.0],
+                z: vec![0.0],
+                cell: None,
+                time: None,
+            },
+            Frame {
+                x: vec![0.0, 1.0],
+                y: vec![0.0, 1.0],
+                z: vec![0.0, 1.0],
+                cell: None,
+                time: None,
+            },
+        ];
+        assert!(Coordinates::try_new(frames).is_err());
     }
 }

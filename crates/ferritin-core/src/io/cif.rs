@@ -5,11 +5,11 @@
 use crate::data::Segmentation;
 use crate::info::elements::Element;
 use crate::model::bonds::infer_bonds_from_residue_templates;
-use crate::model::tables::{AtomsTable, ChainsTable, ResidueGroup, ResiduesTable};
+use crate::model::tables::{AtomsTable, ChainsTable, MISSING_SEQ_ID, ResidueGroup, ResiduesTable};
 use crate::model::{AtomicConformation, AtomicHierarchy, Model};
 use crate::trajectory::ArrayTrajectory;
 use crate::{AtomCollection, Bond};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::fs;
@@ -334,14 +334,20 @@ impl CIFFile {
             .get_column_index("auth_seq_id")
             .or_else(|| atom_category.get_column_index("label_seq_id"))
             .ok_or_else(|| CIFError::InvalidFile("Missing residue ID column".to_string()))?;
-        let res_name_col = atom_category
-            .get_column_index("auth_comp_id")
-            .or_else(|| atom_category.get_column_index("label_comp_id"))
+        let label_comp_col = atom_category
+            .get_column_index("label_comp_id")
             .ok_or_else(|| CIFError::InvalidFile("Missing residue name column".to_string()))?;
-        let atom_name_col = atom_category
-            .get_column_index("auth_atom_id")
-            .or_else(|| atom_category.get_column_index("label_atom_id"))
+        let auth_comp_col = atom_category
+            .get_column_index("auth_comp_id")
+            .unwrap_or(label_comp_col);
+        let label_atom_col = atom_category
+            .get_column_index("label_atom_id")
             .ok_or_else(|| CIFError::InvalidFile("Missing atom name column".to_string()))?;
+        let auth_atom_col = atom_category
+            .get_column_index("auth_atom_id")
+            .unwrap_or(label_atom_col);
+        let res_name_col = auth_comp_col;
+        let atom_name_col = auth_atom_col;
         let element_col = atom_category
             .get_column_index("type_symbol")
             .ok_or_else(|| CIFError::InvalidFile("Missing element column".to_string()))?;
@@ -470,14 +476,18 @@ impl CIFFile {
             .get_column_index("auth_seq_id")
             .or_else(|| atom_category.get_column_index("label_seq_id"))
             .ok_or_else(|| CIFError::InvalidFile("Missing residue ID column".to_string()))?;
-        let res_name_col = atom_category
-            .get_column_index("auth_comp_id")
-            .or_else(|| atom_category.get_column_index("label_comp_id"))
+        let label_comp_col = atom_category
+            .get_column_index("label_comp_id")
             .ok_or_else(|| CIFError::InvalidFile("Missing residue name column".to_string()))?;
-        let atom_name_col = atom_category
-            .get_column_index("auth_atom_id")
-            .or_else(|| atom_category.get_column_index("label_atom_id"))
+        let auth_comp_col = atom_category
+            .get_column_index("auth_comp_id")
+            .unwrap_or(label_comp_col);
+        let label_atom_col = atom_category
+            .get_column_index("label_atom_id")
             .ok_or_else(|| CIFError::InvalidFile("Missing atom name column".to_string()))?;
+        let auth_atom_col = atom_category
+            .get_column_index("auth_atom_id")
+            .unwrap_or(label_atom_col);
         let element_col = atom_category
             .get_column_index("type_symbol")
             .ok_or_else(|| CIFError::InvalidFile("Missing element column".to_string()))?;
@@ -490,14 +500,35 @@ impl CIFFile {
         let b_iso_col = atom_category.get_column_index("B_iso_or_equiv");
         let formal_charge_col = atom_category.get_column_index("pdbx_formal_charge");
 
-        // Filter to first model only
+        // Select the lowest model number actually present; model numbering is
+        // not required to begin at one.
+        let mut first_model_num = 1;
+        if let Some(col) = model_num_col {
+            first_model_num = atom_category
+                .data
+                .iter()
+                .map(|row| {
+                    row.get(col)
+                        .ok_or_else(|| CIFError::InvalidFile("Missing model number".to_string()))?
+                        .parse::<i32>()
+                        .map_err(|_| {
+                            CIFError::InvalidFile(format!("Invalid model number: {}", row[col]))
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .min()
+                .ok_or_else(|| CIFError::InvalidFile("No atoms found".to_string()))?;
+        }
+
+        // Filter to first model only.
         let first_model_rows: Vec<&Vec<String>> = atom_category
             .data
             .iter()
             .filter(|row| {
                 if let Some(col) = model_num_col {
                     if col < row.len() {
-                        row[col].parse::<i32>().unwrap_or(1) == 1
+                        row[col].parse::<i32>().expect("model numbers validated") == first_model_num
                     } else {
                         true
                     }
@@ -509,11 +540,14 @@ impl CIFFile {
 
         let n_atoms = first_model_rows.len();
         if n_atoms == 0 {
-            return Err(CIFError::InvalidFile("No atoms found in first model".to_string()));
+            return Err(CIFError::InvalidFile(
+                "No atoms found in first model".to_string(),
+            ));
         }
 
         // Build atom data
         let mut atom_names_vec: Vec<String> = Vec::with_capacity(n_atoms);
+        let mut auth_atom_names_vec: Vec<String> = Vec::with_capacity(n_atoms);
         let mut elements_vec: Vec<Element> = Vec::with_capacity(n_atoms);
         let mut alt_loc_vec: Vec<Option<char>> = Vec::with_capacity(n_atoms);
         let mut formal_charge_vec: Vec<Option<i8>> = Vec::with_capacity(n_atoms);
@@ -529,6 +563,7 @@ impl CIFFile {
 
         // For residue/chain tables
         let mut comp_ids: Vec<String> = Vec::new();
+        let mut auth_comp_ids: Vec<String> = Vec::new();
         let mut label_seq_ids: Vec<i32> = Vec::new();
         let mut auth_seq_ids: Vec<i32> = Vec::new();
         let mut ins_codes: Vec<Option<char>> = Vec::new();
@@ -556,7 +591,8 @@ impl CIFFile {
             z_vec.push(z);
 
             // Atom name
-            atom_names_vec.push(row[atom_name_col].clone());
+            atom_names_vec.push(row[label_atom_col].clone());
+            auth_atom_names_vec.push(row[auth_atom_col].clone());
 
             // Element
             let element_str = &row[element_col];
@@ -604,7 +640,9 @@ impl CIFFile {
             // Occupancy
             let occupancy = if let Some(col) = occupancy_col {
                 if col < row.len() {
-                    row[col].parse::<f32>().unwrap_or(1.0)
+                    row[col].parse::<f32>().map_err(|_| {
+                        CIFError::InvalidFile(format!("Invalid occupancy: {}", row[col]))
+                    })?
                 } else {
                     1.0
                 }
@@ -616,7 +654,9 @@ impl CIFFile {
             // B factor
             let b_iso = if let Some(col) = b_iso_col {
                 if col < row.len() {
-                    row[col].parse::<f32>().unwrap_or(0.0)
+                    row[col].parse::<f32>().map_err(|_| {
+                        CIFError::InvalidFile(format!("Invalid B_iso_or_equiv: {}", row[col]))
+                    })?
                 } else {
                     0.0
                 }
@@ -627,7 +667,13 @@ impl CIFFile {
 
             // Chain and residue keys for grouping
             let auth_chain = row[chain_col].clone();
-            let auth_seq_id = row[res_id_col].parse::<i32>().unwrap_or(0);
+            let hierarchy_chain = label_asym_col
+                .and_then(|col| row.get(col))
+                .cloned()
+                .unwrap_or_else(|| auth_chain.clone());
+            let auth_seq_id = row[res_id_col].parse::<i32>().map_err(|_| {
+                CIFError::InvalidFile(format!("Invalid residue ID: {}", row[res_id_col]))
+            })?;
             let ins_code = if let Some(col) = ins_code_col {
                 if col < row.len() {
                     let val = &row[col];
@@ -643,15 +689,22 @@ impl CIFFile {
                 None
             };
 
-            let residue_key = (auth_chain.clone(), auth_seq_id, ins_code);
+            let residue_key = (hierarchy_chain.clone(), auth_seq_id, ins_code);
             residue_keys.push(residue_key.clone());
 
             // Check if this is a new residue
             if last_residue_key.as_ref() != Some(&residue_key) {
-                comp_ids.push(row[res_name_col].clone());
+                comp_ids.push(row[label_comp_col].clone());
+                auth_comp_ids.push(row[auth_comp_col].clone());
                 let label_seq = if let Some(col) = label_seq_id_col {
                     if col < row.len() {
-                        row[col].parse::<i32>().unwrap_or(0)
+                        if row[col].is_empty() {
+                            MISSING_SEQ_ID
+                        } else {
+                            row[col].parse::<i32>().map_err(|_| {
+                                CIFError::InvalidFile(format!("Invalid label_seq_id: {}", row[col]))
+                            })?
+                        }
                     } else {
                         0
                     }
@@ -663,7 +716,7 @@ impl CIFFile {
                 ins_codes.push(ins_code);
                 // chain_keys is per-residue (feeds residue_to_chain segmentation),
                 // unlike residue_keys/chain_col reads above which are per-atom.
-                chain_keys.push(auth_chain.clone());
+                chain_keys.push(hierarchy_chain.clone());
 
                 // Determine group
                 let is_hetero = if let Some(group_col) = group_pdb_col {
@@ -685,7 +738,7 @@ impl CIFFile {
             }
 
             // Check if this is a new chain
-            if last_chain_key.as_ref() != Some(&auth_chain) {
+            if last_chain_key.as_ref() != Some(&hierarchy_chain) {
                 let label_asym = if let Some(col) = label_asym_col {
                     if col < row.len() {
                         row[col].clone()
@@ -709,13 +762,16 @@ impl CIFFile {
                 };
                 entity_ids.push(entity);
 
-                last_chain_key = Some(auth_chain);
+                last_chain_key = Some(hierarchy_chain);
             }
         }
+
+        validate_canonical_residue_order(&chain_keys, &auth_seq_ids, &ins_codes)?;
 
         // Build tables
         let atoms = AtomsTable {
             atom_name: atom_names_vec,
+            auth_atom_name: auth_atom_names_vec,
             element: elements_vec,
             alt_loc: alt_loc_vec,
             formal_charge: formal_charge_vec,
@@ -723,6 +779,7 @@ impl CIFFile {
 
         let residues = ResiduesTable {
             comp_id: comp_ids,
+            auth_comp_id: auth_comp_ids,
             label_seq_id: label_seq_ids,
             auth_seq_id: auth_seq_ids,
             ins_code: ins_codes,
@@ -741,8 +798,12 @@ impl CIFFile {
 
         // Bonds are inferred from canonical-residue templates since mmCIF rarely
         // carries explicit connectivity records.
-        let bonds =
-            infer_bonds_from_residue_templates(&atoms, &residues, &atom_to_residue, &residue_to_chain);
+        let bonds = infer_bonds_from_residue_templates(
+            &atoms,
+            &residues,
+            &atom_to_residue,
+            &residue_to_chain,
+        );
 
         let hierarchy = Arc::new(AtomicHierarchy {
             atoms,
@@ -757,12 +818,13 @@ impl CIFFile {
             x: x_vec,
             y: y_vec,
             z: z_vec,
-            occupancy: Some(occupancy_vec),
-            b_iso: Some(b_iso_vec),
+            occupancy: occupancy_col.map(|_| occupancy_vec),
+            b_iso: b_iso_col.map(|_| b_iso_vec),
             confidence: None,
         };
 
-        Ok(Model::new(hierarchy, conformation))
+        Model::try_new(hierarchy, conformation)
+            .map_err(|error| CIFError::InvalidFile(error.to_string()))
     }
 
     /// Parse CIF file into an ArrayTrajectory (handles multi-model files).
@@ -797,14 +859,18 @@ impl CIFFile {
             .get_column_index("auth_seq_id")
             .or_else(|| atom_category.get_column_index("label_seq_id"))
             .ok_or_else(|| CIFError::InvalidFile("Missing residue ID column".to_string()))?;
-        let res_name_col = atom_category
-            .get_column_index("auth_comp_id")
-            .or_else(|| atom_category.get_column_index("label_comp_id"))
+        let label_comp_col = atom_category
+            .get_column_index("label_comp_id")
             .ok_or_else(|| CIFError::InvalidFile("Missing residue name column".to_string()))?;
-        let atom_name_col = atom_category
-            .get_column_index("auth_atom_id")
-            .or_else(|| atom_category.get_column_index("label_atom_id"))
+        let auth_comp_col = atom_category
+            .get_column_index("auth_comp_id")
+            .unwrap_or(label_comp_col);
+        let label_atom_col = atom_category
+            .get_column_index("label_atom_id")
             .ok_or_else(|| CIFError::InvalidFile("Missing atom name column".to_string()))?;
+        let auth_atom_col = atom_category
+            .get_column_index("auth_atom_id")
+            .unwrap_or(label_atom_col);
         let element_col = atom_category
             .get_column_index("type_symbol")
             .ok_or_else(|| CIFError::InvalidFile("Missing element column".to_string()))?;
@@ -821,11 +887,12 @@ impl CIFFile {
         let mut model_rows: HashMap<i32, Vec<&Vec<String>>> = HashMap::new();
         for row in &atom_category.data {
             let model_num = if let Some(col) = model_num_col {
-                if col < row.len() {
-                    row[col].parse::<i32>().unwrap_or(1)
-                } else {
-                    1
-                }
+                let value = row
+                    .get(col)
+                    .ok_or_else(|| CIFError::InvalidFile("Missing model number".to_string()))?;
+                value
+                    .parse::<i32>()
+                    .map_err(|_| CIFError::InvalidFile(format!("Invalid model number: {value}")))?
             } else {
                 1
             };
@@ -856,8 +923,42 @@ impl CIFFile {
             }
         }
 
+        // Equal frame lengths are insufficient: coordinates may otherwise be
+        // attached to the wrong atoms. Verify the complete identifier tuple in
+        // the same order as the representative model.
+        let identity_columns = [
+            Some(label_atom_col),
+            Some(auth_atom_col),
+            Some(label_comp_col),
+            Some(auth_comp_col),
+            Some(chain_col),
+            label_asym_col,
+            Some(res_id_col),
+            label_seq_id_col,
+            ins_code_col,
+            atom_category.get_column_index("label_alt_id"),
+        ];
+        for &model_num in &model_nums[1..] {
+            for (atom_index, (expected, actual)) in first_model_rows
+                .iter()
+                .zip(&model_rows[&model_num])
+                .enumerate()
+            {
+                let matches = identity_columns
+                    .iter()
+                    .flatten()
+                    .all(|&column| expected.get(column) == actual.get(column));
+                if !matches {
+                    return Err(CIFError::InvalidFile(format!(
+                        "Model {model_num} atom {atom_index} does not match model {first_model_num} identity/order"
+                    )));
+                }
+            }
+        }
+
         // Build hierarchy from first model
         let mut atom_names_vec: Vec<String> = Vec::with_capacity(n_atoms);
+        let mut auth_atom_names_vec: Vec<String> = Vec::with_capacity(n_atoms);
         let mut elements_vec: Vec<Element> = Vec::with_capacity(n_atoms);
         let mut alt_loc_vec: Vec<Option<char>> = Vec::with_capacity(n_atoms);
         let mut formal_charge_vec: Vec<Option<i8>> = Vec::with_capacity(n_atoms);
@@ -866,6 +967,7 @@ impl CIFFile {
         let mut chain_keys: Vec<String> = Vec::with_capacity(n_atoms);
 
         let mut comp_ids: Vec<String> = Vec::new();
+        let mut auth_comp_ids: Vec<String> = Vec::new();
         let mut label_seq_ids: Vec<i32> = Vec::new();
         let mut auth_seq_ids: Vec<i32> = Vec::new();
         let mut ins_codes: Vec<Option<char>> = Vec::new();
@@ -878,7 +980,8 @@ impl CIFFile {
         let mut last_chain_key: Option<String> = None;
 
         for row in first_model_rows {
-            atom_names_vec.push(row[atom_name_col].clone());
+            atom_names_vec.push(row[label_atom_col].clone());
+            auth_atom_names_vec.push(row[auth_atom_col].clone());
             let element_str = &row[element_col];
             let element = Element::from_symbol(element_str).unwrap_or_else(|| {
                 let first_char = element_str.chars().next().unwrap_or('C');
@@ -920,7 +1023,13 @@ impl CIFFile {
             formal_charge_vec.push(formal_charge);
 
             let auth_chain = row[chain_col].clone();
-            let auth_seq_id = row[res_id_col].parse::<i32>().unwrap_or(0);
+            let hierarchy_chain = label_asym_col
+                .and_then(|col| row.get(col))
+                .cloned()
+                .unwrap_or_else(|| auth_chain.clone());
+            let auth_seq_id = row[res_id_col].parse::<i32>().map_err(|_| {
+                CIFError::InvalidFile(format!("Invalid residue ID: {}", row[res_id_col]))
+            })?;
             let ins_code = if let Some(col) = ins_code_col {
                 if col < row.len() {
                     let val = &row[col];
@@ -936,14 +1045,21 @@ impl CIFFile {
                 None
             };
 
-            let residue_key = (auth_chain.clone(), auth_seq_id, ins_code);
+            let residue_key = (hierarchy_chain.clone(), auth_seq_id, ins_code);
             residue_keys.push(residue_key.clone());
 
             if last_residue_key.as_ref() != Some(&residue_key) {
-                comp_ids.push(row[res_name_col].clone());
+                comp_ids.push(row[label_comp_col].clone());
+                auth_comp_ids.push(row[auth_comp_col].clone());
                 let label_seq = if let Some(col) = label_seq_id_col {
                     if col < row.len() {
-                        row[col].parse::<i32>().unwrap_or(0)
+                        if row[col].is_empty() {
+                            MISSING_SEQ_ID
+                        } else {
+                            row[col].parse::<i32>().map_err(|_| {
+                                CIFError::InvalidFile(format!("Invalid label_seq_id: {}", row[col]))
+                            })?
+                        }
                     } else {
                         0
                     }
@@ -955,7 +1071,7 @@ impl CIFFile {
                 ins_codes.push(ins_code);
                 // chain_keys is per-residue (feeds residue_to_chain segmentation),
                 // unlike residue_keys/chain_col reads above which are per-atom.
-                chain_keys.push(auth_chain.clone());
+                chain_keys.push(hierarchy_chain.clone());
 
                 let is_hetero = if let Some(group_col) = group_pdb_col {
                     if group_col < row.len() {
@@ -975,7 +1091,7 @@ impl CIFFile {
                 last_residue_key = Some(residue_key);
             }
 
-            if last_chain_key.as_ref() != Some(&auth_chain) {
+            if last_chain_key.as_ref() != Some(&hierarchy_chain) {
                 let label_asym = if let Some(col) = label_asym_col {
                     if col < row.len() {
                         row[col].clone()
@@ -999,12 +1115,15 @@ impl CIFFile {
                 };
                 entity_ids.push(entity);
 
-                last_chain_key = Some(auth_chain);
+                last_chain_key = Some(hierarchy_chain);
             }
         }
 
+        validate_canonical_residue_order(&chain_keys, &auth_seq_ids, &ins_codes)?;
+
         let atoms = AtomsTable {
             atom_name: atom_names_vec,
+            auth_atom_name: auth_atom_names_vec,
             element: elements_vec,
             alt_loc: alt_loc_vec,
             formal_charge: formal_charge_vec,
@@ -1012,6 +1131,7 @@ impl CIFFile {
 
         let residues = ResiduesTable {
             comp_id: comp_ids,
+            auth_comp_id: auth_comp_ids,
             label_seq_id: label_seq_ids,
             auth_seq_id: auth_seq_ids,
             ins_code: ins_codes,
@@ -1028,8 +1148,12 @@ impl CIFFile {
         let residue_to_chain = Segmentation::from_change_points(chain_keys.iter());
         // Bonds are inferred from canonical-residue templates since mmCIF rarely
         // carries explicit connectivity records.
-        let bonds =
-            infer_bonds_from_residue_templates(&atoms, &residues, &atom_to_residue, &residue_to_chain);
+        let bonds = infer_bonds_from_residue_templates(
+            &atoms,
+            &residues,
+            &atom_to_residue,
+            &residue_to_chain,
+        );
 
         let hierarchy = Arc::new(AtomicHierarchy {
             atoms,
@@ -1066,7 +1190,9 @@ impl CIFFile {
 
                 let occupancy = if let Some(col) = occupancy_col {
                     if col < row.len() {
-                        row[col].parse::<f32>().unwrap_or(1.0)
+                        row[col].parse::<f32>().map_err(|_| {
+                            CIFError::InvalidFile(format!("Invalid occupancy: {}", row[col]))
+                        })?
                     } else {
                         1.0
                     }
@@ -1077,7 +1203,9 @@ impl CIFFile {
 
                 let b_iso = if let Some(col) = b_iso_col {
                     if col < row.len() {
-                        row[col].parse::<f32>().unwrap_or(0.0)
+                        row[col].parse::<f32>().map_err(|_| {
+                            CIFError::InvalidFile(format!("Invalid B_iso_or_equiv: {}", row[col]))
+                        })?
                     } else {
                         0.0
                     }
@@ -1091,12 +1219,15 @@ impl CIFFile {
                 x: x_vec,
                 y: y_vec,
                 z: z_vec,
-                occupancy: Some(occupancy_vec),
-                b_iso: Some(b_iso_vec),
+                occupancy: occupancy_col.map(|_| occupancy_vec),
+                b_iso: b_iso_col.map(|_| b_iso_vec),
                 confidence: None,
             };
 
-            models.push(Model::new(Arc::clone(&hierarchy), conformation));
+            models.push(
+                Model::try_new(Arc::clone(&hierarchy), conformation)
+                    .map_err(|error| CIFError::InvalidFile(error.to_string()))?,
+            );
         }
 
         ArrayTrajectory::new(models).map_err(|e| CIFError::InvalidFile(e.to_string()))
@@ -1151,6 +1282,35 @@ impl CIFFile {
     }
 }
 
+fn validate_canonical_residue_order(
+    chain_ids: &[String],
+    auth_seq_ids: &[i32],
+    ins_codes: &[Option<char>],
+) -> Result<(), CIFError> {
+    let mut completed_chains = HashSet::new();
+    for index in 1..chain_ids.len() {
+        if chain_ids[index] == chain_ids[index - 1] {
+            let previous = (auth_seq_ids[index - 1], ins_codes[index - 1]);
+            let current = (auth_seq_ids[index], ins_codes[index]);
+            if current < previous {
+                return Err(CIFError::InvalidFile(format!(
+                    "Residues in chain {} are not in canonical auth_seq_id/insertion-code order",
+                    chain_ids[index]
+                )));
+            }
+        } else {
+            completed_chains.insert(chain_ids[index - 1].as_str());
+            if completed_chains.contains(chain_ids[index].as_str()) {
+                return Err(CIFError::InvalidFile(format!(
+                    "Chain {} occurs in multiple non-contiguous blocks",
+                    chain_ids[index]
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Clean a CIF value (remove quotes, handle special values)
 fn clean_cif_value(value: &str) -> String {
     let value = value.trim();
@@ -1175,6 +1335,12 @@ mod tests {
     use super::*;
     use crate::trajectory::Trajectory;
     use ferritin_test_data::TestFile;
+
+    fn atom_site_cif(rows: &str) -> String {
+        format!(
+            "data_test\nloop_\n_atom_site.group_PDB\n_atom_site.id\n_atom_site.type_symbol\n_atom_site.label_atom_id\n_atom_site.auth_atom_id\n_atom_site.label_comp_id\n_atom_site.auth_comp_id\n_atom_site.label_asym_id\n_atom_site.auth_asym_id\n_atom_site.label_entity_id\n_atom_site.label_seq_id\n_atom_site.auth_seq_id\n_atom_site.pdbx_PDB_ins_code\n_atom_site.Cartn_x\n_atom_site.Cartn_y\n_atom_site.Cartn_z\n_atom_site.occupancy\n_atom_site.B_iso_or_equiv\n_atom_site.pdbx_PDB_model_num\n{rows}\n#\n"
+        )
+    }
 
     #[test]
     fn test_cif_file_read() {
@@ -1262,7 +1428,10 @@ mod tests {
         // All frames share the same hierarchy
         let h0 = &traj.frame(0).hierarchy;
         let h9 = &traj.frame(9).hierarchy;
-        assert!(Arc::ptr_eq(h0, h9), "All frames must share the same Arc<AtomicHierarchy>");
+        assert!(
+            Arc::ptr_eq(h0, h9),
+            "All frames must share the same Arc<AtomicHierarchy>"
+        );
     }
 
     #[test]
@@ -1273,5 +1442,45 @@ mod tests {
 
         // parse_to_model should return only the first model
         assert_eq!(model.n_atoms(), 1231);
+    }
+
+    #[test]
+    fn test_cif_preserves_label_and_author_names_and_lowest_model() {
+        let content = atom_site_cif(
+            "ATOM 1 C CA CAA ALA ALX A AUTH 1 1 7 . 1.0 2.0 3.0 1.0 10.0 2\n\
+             ATOM 2 C CA CAA ALA ALX A AUTH 1 1 7 . 4.0 5.0 6.0 1.0 10.0 3",
+        );
+        let cif = CIFFile::new(content).unwrap();
+        let model = cif.parse_to_model().unwrap();
+        assert_eq!(model.coord(0), [1.0, 2.0, 3.0]);
+        assert_eq!(model.hierarchy.atoms.atom_name, ["CA"]);
+        assert_eq!(model.hierarchy.atoms.auth_atom_name, ["CAA"]);
+        assert_eq!(model.hierarchy.residues.comp_id, ["ALA"]);
+        assert_eq!(model.hierarchy.residues.auth_comp_id, ["ALX"]);
+    }
+
+    #[test]
+    fn test_cif_trajectory_rejects_mismatched_atom_identity() {
+        let content = atom_site_cif(
+            "ATOM 1 C CA CA ALA ALA A A 1 1 1 . 1.0 2.0 3.0 1.0 10.0 1\n\
+             ATOM 2 C CB CB ALA ALA A A 1 1 1 . 4.0 5.0 6.0 1.0 10.0 2",
+        );
+        let error = CIFFile::new(content)
+            .unwrap()
+            .parse_to_trajectory()
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("does not match"));
+    }
+
+    #[test]
+    fn test_cif_rejects_malformed_required_residue_id() {
+        let content = atom_site_cif("ATOM 1 C CA CA ALA ALA A A 1 1 nope . 1.0 2.0 3.0 1.0 10.0 1");
+        let error = CIFFile::new(content)
+            .unwrap()
+            .parse_to_model()
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("Invalid residue ID"));
     }
 }

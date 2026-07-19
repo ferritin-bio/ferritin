@@ -25,6 +25,11 @@ impl<'a> ModelAtomView<'a> {
         &self.model.hierarchy.atoms.atom_name[self.idx]
     }
 
+    /// Author-assigned atom identifier (`auth_atom_id`).
+    pub fn auth_atom_name(&self) -> &'a str {
+        &self.model.hierarchy.atoms.auth_atom_name[self.idx]
+    }
+
     pub fn residue_id(&self) -> i32 {
         let res_idx = self.model.hierarchy.residue_of_atom(self.idx);
         self.model.hierarchy.residues.auth_seq_id[res_idx]
@@ -33,6 +38,19 @@ impl<'a> ModelAtomView<'a> {
     pub fn residue_name(&self) -> &'a str {
         let res_idx = self.model.hierarchy.residue_of_atom(self.idx);
         &self.model.hierarchy.residues.comp_id[res_idx]
+    }
+
+    /// Author-assigned component identifier (`auth_comp_id`).
+    pub fn auth_residue_name(&self) -> &'a str {
+        let res_idx = self.model.hierarchy.residue_of_atom(self.idx);
+        &self.model.hierarchy.residues.auth_comp_id[res_idx]
+    }
+
+    /// Canonical chain identifier (`label_asym_id`).
+    pub fn label_chain_id(&self) -> &'a str {
+        let res_idx = self.model.hierarchy.residue_of_atom(self.idx);
+        let chain_idx = self.model.hierarchy.chain_of_residue(res_idx);
+        &self.model.hierarchy.chains.label_asym_id[chain_idx]
     }
 
     pub fn chain_id(&self) -> &'a str {

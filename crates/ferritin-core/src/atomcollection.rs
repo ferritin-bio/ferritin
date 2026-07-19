@@ -468,6 +468,7 @@ impl AtomCollection {
 
         let atoms = AtomsTable {
             atom_name: self.atom_names.iter().map(|s| s.to_string()).collect(),
+            auth_atom_name: self.atom_names.iter().map(|s| s.to_string()).collect(),
             element: self.elements.clone(),
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
@@ -496,6 +497,11 @@ impl AtomCollection {
 
         let residues = ResiduesTable {
             comp_id,
+            auth_comp_id: self
+                .get_residue_starts()
+                .iter()
+                .map(|&start| self.res_names[start].to_string())
+                .collect(),
             label_seq_id,
             auth_seq_id,
             ins_code,

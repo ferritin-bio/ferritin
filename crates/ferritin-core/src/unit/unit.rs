@@ -1,7 +1,7 @@
 //! Zero-copy view into a subset of a [`Model`].
 
 use crate::data::OrderedSet;
-use crate::model::Model;
+use crate::model::{Model, ModelError};
 
 /// Zero-copy view into a subset of a Model.
 ///
@@ -54,10 +54,24 @@ impl<'a> Unit<'a> {
 
     /// Create a `Unit` from pre-computed indices.
     pub fn from_indices(model: &'a Model, indices: OrderedSet) -> Self {
-        Self {
+        Self::try_from_indices(model, indices).expect("unit atom index is out of range")
+    }
+
+    /// Create a `Unit` from validated pre-computed indices.
+    pub fn try_from_indices(model: &'a Model, indices: OrderedSet) -> Result<Self, ModelError> {
+        if let Some(index) = indices
+            .iter()
+            .find(|&index| index as usize >= model.n_atoms())
+        {
+            return Err(ModelError::new(format!(
+                "unit atom index {index} is out of range for {} atoms",
+                model.n_atoms()
+            )));
+        }
+        Ok(Self {
             model,
             atoms: indices,
-        }
+        })
     }
 
     /// Number of selected atoms.
@@ -148,8 +162,16 @@ impl<'a> Unit<'a> {
                 atoms: OrderedSet::interval(0, 0),
             });
         }
-        let atom_start = model.hierarchy.atom_to_residue.segment(res_range.start).start;
-        let atom_end = model.hierarchy.atom_to_residue.segment(res_range.end - 1).end;
+        let atom_start = model
+            .hierarchy
+            .atom_to_residue
+            .segment(res_range.start)
+            .start;
+        let atom_end = model
+            .hierarchy
+            .atom_to_residue
+            .segment(res_range.end - 1)
+            .end;
 
         Some(Self {
             model,
@@ -199,22 +221,24 @@ impl Model {
 mod tests {
     use super::*;
     use crate::data::Segmentation;
+    use crate::info::elements::Element;
     use crate::model::bonds::Bonds;
     use crate::model::conformation::AtomicConformation;
     use crate::model::hierarchy::AtomicHierarchy;
     use crate::model::tables::{AtomsTable, ChainsTable, ResidueGroup, ResiduesTable};
-    use crate::info::elements::Element;
     use std::sync::Arc;
 
     fn make_test_model(n_atoms: usize) -> Model {
         let atoms = AtomsTable {
             atom_name: (0..n_atoms).map(|i| format!("A{}", i)).collect(),
+            auth_atom_name: (0..n_atoms).map(|i| format!("A{}", i)).collect(),
             element: vec![Element::C; n_atoms],
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };
         let residues = ResiduesTable {
             comp_id: vec!["ALA".into()],
+            auth_comp_id: vec!["ALA".into()],
             label_seq_id: vec![0],
             auth_seq_id: vec![1],
             ins_code: vec![None],
@@ -251,15 +275,10 @@ mod tests {
     }
 
     fn make_backbone_model() -> Model {
-        let atom_names = vec![
-            "N".into(),
-            "CA".into(),
-            "C".into(),
-            "O".into(),
-            "CB".into(),
-        ];
+        let atom_names = vec!["N".into(), "CA".into(), "C".into(), "O".into(), "CB".into()];
         let n_atoms = atom_names.len();
         let atoms = AtomsTable {
+            auth_atom_name: atom_names.clone(),
             atom_name: atom_names,
             element: vec![Element::C; n_atoms],
             alt_loc: vec![None; n_atoms],
@@ -267,6 +286,7 @@ mod tests {
         };
         let residues = ResiduesTable {
             comp_id: vec!["ALA".into()],
+            auth_comp_id: vec!["ALA".into()],
             label_seq_id: vec![0],
             auth_seq_id: vec![1],
             ins_code: vec![None],
@@ -324,6 +344,16 @@ mod tests {
         assert_eq!(unit.len(), 5);
         let indices: Vec<u32> = unit.atom_indices().collect();
         assert_eq!(indices, vec![0, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn test_unit_from_indices_rejects_out_of_range_index() {
+        let model = make_test_model(5);
+        let result = Unit::try_from_indices(&model, OrderedSet::from_sorted(vec![1, 5]));
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "unit atom index 5 is out of range for 5 atoms"
+        );
     }
 
     #[test]
