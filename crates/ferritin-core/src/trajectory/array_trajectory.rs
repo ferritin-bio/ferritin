@@ -1,9 +1,9 @@
 //! Eager trajectory: all frames held in memory as `Vec<Model>`.
 
+use super::Trajectory;
+use crate::model::Model;
 use std::borrow::Cow;
 use std::sync::Arc;
-use crate::model::Model;
-use super::Trajectory;
 
 /// Error type for [`ArrayTrajectory`] construction.
 #[derive(Debug, Clone)]
@@ -12,6 +12,8 @@ pub enum TrajectoryError {
     Empty,
     /// All frames must share the same `Arc<AtomicHierarchy>`.
     MixedTopologies,
+    /// A frame violates model topology or conformation invariants.
+    InvalidModel,
 }
 
 impl std::fmt::Display for TrajectoryError {
@@ -21,6 +23,7 @@ impl std::fmt::Display for TrajectoryError {
             TrajectoryError::MixedTopologies => {
                 write!(f, "all frames must share the same Arc<AtomicHierarchy>")
             }
+            TrajectoryError::InvalidModel => write!(f, "trajectory contains an invalid model"),
         }
     }
 }
@@ -46,9 +49,19 @@ impl ArrayTrajectory {
         if models.is_empty() {
             return Err(TrajectoryError::Empty);
         }
+        for model in &models {
+            model
+                .hierarchy
+                .validate()
+                .map_err(|_| TrajectoryError::InvalidModel)?;
+            model
+                .conformation
+                .validate(model.n_atoms())
+                .map_err(|_| TrajectoryError::InvalidModel)?;
+        }
         let first = Arc::as_ptr(&models[0].hierarchy);
         for m in &models[1..] {
-            if Arc::as_ptr(&m.hierarchy) != first {
+            if Arc::as_ptr(&m.hierarchy) != first || m.symmetry != models[0].symmetry {
                 return Err(TrajectoryError::MixedTopologies);
             }
         }
@@ -78,22 +91,24 @@ impl Trajectory for ArrayTrajectory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::borrow::Cow;
     use crate::data::Segmentation;
-    use crate::model::{AtomicConformation, AtomicHierarchy, Bonds};
-    use crate::model::tables::{AtomsTable, ChainsTable, ResidueGroup, ResiduesTable};
     use crate::info::elements::Element;
+    use crate::model::tables::{AtomsTable, ChainsTable, ResidueGroup, ResiduesTable};
+    use crate::model::{AtomicConformation, AtomicHierarchy, Bonds};
+    use std::borrow::Cow;
 
     fn make_simple_hierarchy(n_residues: usize) -> Arc<AtomicHierarchy> {
         let n_atoms = n_residues;
         let atoms = AtomsTable {
             atom_name: (0..n_atoms).map(|_| "CA".to_string()).collect(),
+            auth_atom_name: (0..n_atoms).map(|_| "CA".to_string()).collect(),
             element: vec![Element::C; n_atoms],
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };
         let residues = ResiduesTable {
             comp_id: (0..n_residues).map(|i| format!("R{}", i)).collect(),
+            auth_comp_id: (0..n_residues).map(|i| format!("R{}", i)).collect(),
             label_seq_id: (0..n_residues as i32).collect(),
             auth_seq_id: (1..=n_residues as i32).collect(),
             ins_code: vec![None; n_residues],
@@ -108,7 +123,14 @@ mod tests {
         let atom_to_residue = Segmentation::from_offsets(atom_offsets);
         let residue_to_chain = Segmentation::from_offsets(vec![0, n_residues as u32]);
         let bonds = Bonds::from_unsorted(vec![], vec![], vec![], n_atoms);
-        Arc::new(AtomicHierarchy { atoms, residues, chains, atom_to_residue, residue_to_chain, bonds })
+        Arc::new(AtomicHierarchy {
+            atoms,
+            residues,
+            chains,
+            atom_to_residue,
+            residue_to_chain,
+            bonds,
+        })
     }
 
     fn make_conformation(n: usize, offset: f32) -> AtomicConformation {
@@ -126,7 +148,12 @@ mod tests {
     fn test_array_trajectory_frame_count() {
         let hierarchy = make_simple_hierarchy(3);
         let models: Vec<Model> = (0..3)
-            .map(|i| Model::new(Arc::clone(&hierarchy), make_conformation(3, i as f32 * 100.0)))
+            .map(|i| {
+                Model::new(
+                    Arc::clone(&hierarchy),
+                    make_conformation(3, i as f32 * 100.0),
+                )
+            })
             .collect();
         let traj = ArrayTrajectory::new(models).unwrap();
         assert_eq!(traj.frame_count(), 3);
@@ -136,12 +163,21 @@ mod tests {
     fn test_array_trajectory_borrowed() {
         let hierarchy = make_simple_hierarchy(2);
         let models: Vec<Model> = (0..3)
-            .map(|i| Model::new(Arc::clone(&hierarchy), make_conformation(2, i as f32 * 10.0)))
+            .map(|i| {
+                Model::new(
+                    Arc::clone(&hierarchy),
+                    make_conformation(2, i as f32 * 10.0),
+                )
+            })
             .collect();
         let traj = ArrayTrajectory::new(models).unwrap();
         for i in 0..3 {
             let f = traj.frame(i);
-            assert!(matches!(f, Cow::Borrowed(_)), "frame({}) should be Cow::Borrowed", i);
+            assert!(
+                matches!(f, Cow::Borrowed(_)),
+                "frame({}) should be Cow::Borrowed",
+                i
+            );
         }
     }
 
@@ -154,7 +190,10 @@ mod tests {
         let traj = ArrayTrajectory::new(models).unwrap();
         let h0 = &traj.frame(0).hierarchy;
         let h2 = &traj.frame(2).hierarchy;
-        assert!(Arc::ptr_eq(h0, h2), "frame(0) and frame(2) must share the same Arc<AtomicHierarchy>");
+        assert!(
+            Arc::ptr_eq(h0, h2),
+            "frame(0) and frame(2) must share the same Arc<AtomicHierarchy>"
+        );
     }
 
     #[test]

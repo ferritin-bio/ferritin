@@ -13,12 +13,15 @@
 //! the input data is sorted before constructing `AtomicHierarchy`; no runtime
 //! re-sorting is performed here.
 
-use std::sync::Arc;
-use super::hierarchy::AtomicHierarchy;
+use super::ModelError;
 use super::conformation::AtomicConformation;
+use super::hierarchy::AtomicHierarchy;
+use super::symmetry::SymmetryData;
 use super::tables::ResidueGroup;
-use crate::info::elements::Element;
+use crate::Unit;
+use crate::data::OrderedSet;
 use crate::views::{ModelAtomView, ModelChainView, ModelResidueView};
+use std::sync::Arc;
 
 /// One frame of a (possibly multi-frame) molecular structure.
 ///
@@ -40,12 +43,41 @@ pub struct Model {
     pub hierarchy: Arc<AtomicHierarchy>,
     /// Frame-specific coordinate data.
     pub conformation: AtomicConformation,
+    /// Parsed biological assembly and crystallographic symmetry metadata.
+    pub symmetry: Arc<SymmetryData>,
 }
 
 impl Model {
+    /// Construct a validated model.
+    pub fn try_new(
+        hierarchy: Arc<AtomicHierarchy>,
+        conformation: AtomicConformation,
+    ) -> Result<Self, ModelError> {
+        Self::try_new_with_symmetry(hierarchy, conformation, Arc::new(SymmetryData::default()))
+    }
+
+    /// Construct a validated model with parsed symmetry metadata.
+    pub fn try_new_with_symmetry(
+        hierarchy: Arc<AtomicHierarchy>,
+        conformation: AtomicConformation,
+        symmetry: Arc<SymmetryData>,
+    ) -> Result<Self, ModelError> {
+        hierarchy.validate()?;
+        conformation.validate(hierarchy.n_atoms())?;
+        Ok(Self {
+            hierarchy,
+            conformation,
+            symmetry,
+        })
+    }
+
     /// Construct a new `Model` from a shared topology and per-frame coordinates.
+    ///
+    /// # Panics
+    /// Panics when the hierarchy or conformation violates a model invariant. Use
+    /// [`Model::try_new`] when invalid input should be reported to the caller.
     pub fn new(hierarchy: Arc<AtomicHierarchy>, conformation: AtomicConformation) -> Self {
-        Self { hierarchy, conformation }
+        Self::try_new(hierarchy, conformation).expect("invalid molecular model")
     }
 
     /// Get `[x, y, z]` for atom `i`.
@@ -74,7 +106,11 @@ impl Model {
     /// Contains the blast radius for the AoS→SoA transition.
     pub fn coords_as_slice(&self) -> Vec<[f32; 3]> {
         let n = self.n_atoms();
-        let (x, y, z) = (&self.conformation.x, &self.conformation.y, &self.conformation.z);
+        let (x, y, z) = (
+            &self.conformation.x,
+            &self.conformation.y,
+            &self.conformation.z,
+        );
         (0..n).map(|i| [x[i], y[i], z[i]]).collect()
     }
 
@@ -128,12 +164,63 @@ impl Model {
     pub fn atoms(&self) -> impl Iterator<Item = ModelAtomView<'_>> {
         (0..self.n_atoms()).map(move |i| ModelAtomView::new(self, i))
     }
+
+    /// Expand a biological assembly as transformed, zero-copy [`Unit`] views.
+    pub fn assembly_units(&self, assembly_id: &str) -> Result<Vec<Unit<'_>>, ModelError> {
+        let assembly = self
+            .symmetry
+            .assemblies
+            .iter()
+            .find(|assembly| assembly.id == assembly_id)
+            .ok_or_else(|| ModelError::new(format!("assembly {assembly_id} does not exist")))?;
+
+        assembly
+            .units
+            .iter()
+            .map(|definition| {
+                let mut indices = Vec::new();
+                for (chain_index, asym_id) in self.hierarchy.chains.label_asym_id.iter().enumerate()
+                {
+                    if definition.asym_ids.contains(asym_id) {
+                        let residues = self.hierarchy.residues_in_chain(chain_index);
+                        if !residues.is_empty() {
+                            let start = self.hierarchy.atoms_in_residue(residues.start).start;
+                            let end = self.hierarchy.atoms_in_residue(residues.end - 1).end;
+                            indices.extend((start as u32)..(end as u32));
+                        }
+                    }
+                }
+                Unit::try_from_indices_with_operator(
+                    self,
+                    OrderedSet::from_sorted(indices),
+                    definition.operator.clone(),
+                )
+            })
+            .collect()
+    }
+
+    /// Expand parsed crystallographic operators over the complete model.
+    pub fn crystal_units(&self) -> Result<Vec<Unit<'_>>, ModelError> {
+        self.symmetry
+            .crystal
+            .operators
+            .iter()
+            .map(|operator| {
+                Unit::try_from_indices_with_operator(
+                    self,
+                    OrderedSet::interval(0, self.n_atoms() as u32),
+                    operator.clone(),
+                )
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::data::Segmentation;
+    use crate::info::elements::Element;
     use crate::model::bonds::Bonds;
     use crate::model::tables::{AtomsTable, ChainsTable, ResidueGroup, ResiduesTable};
 
@@ -142,12 +229,14 @@ mod tests {
         let n_atoms = n_residues; // 1 atom per residue for simplicity
         let atoms = AtomsTable {
             atom_name: (0..n_atoms).map(|_| "CA".to_string()).collect(),
+            auth_atom_name: (0..n_atoms).map(|_| "CA".to_string()).collect(),
             element: vec![Element::C; n_atoms],
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };
         let residues = ResiduesTable {
             comp_id: (0..n_residues).map(|i| format!("R{}", i)).collect(),
+            auth_comp_id: (0..n_residues).map(|i| format!("R{}", i)).collect(),
             label_seq_id: (0..n_residues as i32).collect(),
             auth_seq_id: (1..=n_residues as i32).collect(),
             ins_code: vec![None; n_residues],
@@ -165,7 +254,14 @@ mod tests {
         let residue_to_chain = Segmentation::from_offsets(vec![0, n_residues as u32]);
         let bonds = Bonds::from_unsorted(vec![], vec![], vec![], n_atoms);
 
-        Arc::new(AtomicHierarchy { atoms, residues, chains, atom_to_residue, residue_to_chain, bonds })
+        Arc::new(AtomicHierarchy {
+            atoms,
+            residues,
+            chains,
+            atom_to_residue,
+            residue_to_chain,
+            bonds,
+        })
     }
 
     fn make_conformation(n: usize) -> AtomicConformation {
@@ -198,8 +294,10 @@ mod tests {
         let model2 = Model::new(Arc::clone(&hierarchy), conf2);
 
         // Both models point to the exact same AtomicHierarchy allocation
-        assert!(Arc::ptr_eq(&model1.hierarchy, &model2.hierarchy),
-            "Both models must share the same Arc<AtomicHierarchy>");
+        assert!(
+            Arc::ptr_eq(&model1.hierarchy, &model2.hierarchy),
+            "Both models must share the same Arc<AtomicHierarchy>"
+        );
 
         // But coordinates are independent
         assert_eq!(model1.coord(0), [0.0, 0.0, 0.0]);
@@ -208,6 +306,15 @@ mod tests {
         // Topology counts are identical (same Arc)
         assert_eq!(model1.n_atoms(), model2.n_atoms());
         assert_eq!(model1.n_residues(), model2.n_residues());
+    }
+
+    #[test]
+    fn test_model_try_new_rejects_topology_conformation_mismatch() {
+        let hierarchy = make_simple_hierarchy(2, vec![ResidueGroup::Polymer; 2]);
+        let error = Model::try_new(hierarchy, make_conformation(1))
+            .err()
+            .unwrap();
+        assert_eq!(error.to_string(), "conformation.x has length 1, expected 2");
     }
 
     #[test]
@@ -223,13 +330,27 @@ mod tests {
         let n_atoms = 5;
         let atoms = AtomsTable {
             atom_name: vec!["CA".into(); n_atoms],
+            auth_atom_name: vec!["CA".into(); n_atoms],
             element: vec![Element::C; n_atoms],
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };
         // Residues stored in canonical order: chain 0 (auth_seq_id 1,2,3) then chain 1 (auth_seq_id 5,10)
         let residues = ResiduesTable {
-            comp_id: vec!["ALA".into(), "GLY".into(), "SER".into(), "HOH".into(), "ATP".into()],
+            comp_id: vec![
+                "ALA".into(),
+                "GLY".into(),
+                "SER".into(),
+                "HOH".into(),
+                "ATP".into(),
+            ],
+            auth_comp_id: vec![
+                "ALA".into(),
+                "GLY".into(),
+                "SER".into(),
+                "HOH".into(),
+                "ATP".into(),
+            ],
             label_seq_id: vec![0, 1, 2, 3, 4],
             auth_seq_id: vec![1, 2, 3, 5, 10], // canonical ascending order per chain
             ins_code: vec![None; 5],
@@ -243,39 +364,53 @@ mod tests {
         };
         let chains = ChainsTable {
             label_asym_id: vec!["A".into(), "B".into()],
-            auth_asym_id:  vec!["A".into(), "B".into()],
-            entity_id:     vec!["1".into(), "2".into()],
+            auth_asym_id: vec!["A".into(), "B".into()],
+            entity_id: vec!["1".into(), "2".into()],
         };
         let atom_to_residue = Segmentation::from_offsets(vec![0, 1, 2, 3, 4, 5]);
         let residue_to_chain = Segmentation::from_offsets(vec![0, 3, 5]);
         let bonds = Bonds::from_unsorted(vec![], vec![], vec![], n_atoms);
 
         let hierarchy = Arc::new(AtomicHierarchy {
-            atoms, residues, chains, atom_to_residue, residue_to_chain, bonds,
+            atoms,
+            residues,
+            chains,
+            atom_to_residue,
+            residue_to_chain,
+            bonds,
         });
         let model = Model::new(hierarchy, make_conformation(n_atoms));
 
         // Verify iteration is in canonical order: residue index 0,1,2 (chain 0) then 3,4 (chain 1)
         let res_indices: Vec<usize> = model.protein_residues().collect();
-        assert_eq!(res_indices, vec![0, 1, 2, 3, 4],
+        assert_eq!(
+            res_indices,
+            vec![0, 1, 2, 3, 4],
             "Residues must iterate in canonical order: chain 0 first, then chain 1, \
-             each in ascending auth_seq_id order");
+             each in ascending auth_seq_id order"
+        );
 
         // Verify the auth_seq_ids are in expected canonical order
         let auth_seq_ids: Vec<i32> = res_indices
             .iter()
             .map(|&r| model.hierarchy.residues.auth_seq_id[r])
             .collect();
-        assert_eq!(auth_seq_ids, vec![1, 2, 3, 5, 10],
-            "auth_seq_ids must be in ascending order within each chain");
+        assert_eq!(
+            auth_seq_ids,
+            vec![1, 2, 3, 5, 10],
+            "auth_seq_ids must be in ascending order within each chain"
+        );
 
         // Verify chain assignment is correct
         let chain_indices: Vec<usize> = res_indices
             .iter()
             .map(|&r| model.hierarchy.chain_of_residue(r))
             .collect();
-        assert_eq!(chain_indices, vec![0, 0, 0, 1, 1],
-            "Residues 0-2 in chain 0, residues 3-4 in chain 1");
+        assert_eq!(
+            chain_indices,
+            vec![0, 0, 0, 1, 1],
+            "Residues 0-2 in chain 0, residues 3-4 in chain 1"
+        );
     }
 
     #[test]
@@ -294,12 +429,26 @@ mod tests {
             let n_atoms = 5;
             let atoms = AtomsTable {
                 atom_name: vec!["CA".into(); n_atoms],
+                auth_atom_name: vec!["CA".into(); n_atoms],
                 element: vec![Element::C; n_atoms],
                 alt_loc: vec![None; n_atoms],
                 formal_charge: vec![None; n_atoms],
             };
             let residues = ResiduesTable {
-                comp_id: vec!["ALA".into(), "GLY".into(), "SER".into(), "HOH".into(), "ATP".into()],
+                comp_id: vec![
+                    "ALA".into(),
+                    "GLY".into(),
+                    "SER".into(),
+                    "HOH".into(),
+                    "ATP".into(),
+                ],
+                auth_comp_id: vec![
+                    "ALA".into(),
+                    "GLY".into(),
+                    "SER".into(),
+                    "HOH".into(),
+                    "ATP".into(),
+                ],
                 label_seq_id: vec![0, 1, 2, 3, 4],
                 auth_seq_id: vec![1, 2, 3, 401, 402],
                 ins_code: vec![None; n_residues],
@@ -313,7 +462,14 @@ mod tests {
             let atom_to_residue = Segmentation::from_offsets(vec![0, 1, 2, 3, 4, 5]);
             let residue_to_chain = Segmentation::from_offsets(vec![0, 5]);
             let bonds = Bonds::from_unsorted(vec![], vec![], vec![], n_atoms);
-            Arc::new(AtomicHierarchy { atoms, residues, chains, atom_to_residue, residue_to_chain, bonds })
+            Arc::new(AtomicHierarchy {
+                atoms,
+                residues,
+                chains,
+                atom_to_residue,
+                residue_to_chain,
+                bonds,
+            })
         };
 
         let model = Model::new(hierarchy, make_conformation(5));
@@ -377,12 +533,26 @@ mod tests {
             let n_atoms = 5;
             let atoms = AtomsTable {
                 atom_name: vec!["CA".into(); n_atoms],
+                auth_atom_name: vec!["CA".into(); n_atoms],
                 element: vec![Element::C; n_atoms],
                 alt_loc: vec![None; n_atoms],
                 formal_charge: vec![None; n_atoms],
             };
             let residues = ResiduesTable {
-                comp_id: vec!["ALA".into(), "GLY".into(), "SER".into(), "HOH".into(), "ATP".into()],
+                comp_id: vec![
+                    "ALA".into(),
+                    "GLY".into(),
+                    "SER".into(),
+                    "HOH".into(),
+                    "ATP".into(),
+                ],
+                auth_comp_id: vec![
+                    "ALA".into(),
+                    "GLY".into(),
+                    "SER".into(),
+                    "HOH".into(),
+                    "ATP".into(),
+                ],
                 label_seq_id: vec![0, 1, 2, 3, 4],
                 auth_seq_id: vec![1, 2, 3, 5, 10],
                 ins_code: vec![None; 5],
@@ -396,7 +566,14 @@ mod tests {
             let atom_to_residue = Segmentation::from_offsets(vec![0, 1, 2, 3, 4, 5]);
             let residue_to_chain = Segmentation::from_offsets(vec![0, 3, 5]);
             let bonds = Bonds::from_unsorted(vec![], vec![], vec![], n_atoms);
-            Arc::new(AtomicHierarchy { atoms, residues, chains, atom_to_residue, residue_to_chain, bonds })
+            Arc::new(AtomicHierarchy {
+                atoms,
+                residues,
+                chains,
+                atom_to_residue,
+                residue_to_chain,
+                bonds,
+            })
         };
         let model = Model::new(hierarchy, make_conformation(5));
 
@@ -412,7 +589,11 @@ mod tests {
     fn test_model_residues_iterator() {
         let hierarchy = make_simple_hierarchy(
             3,
-            vec![ResidueGroup::Polymer, ResidueGroup::Polymer, ResidueGroup::NonPolymer],
+            vec![
+                ResidueGroup::Polymer,
+                ResidueGroup::Polymer,
+                ResidueGroup::NonPolymer,
+            ],
         );
         let model = Model::new(hierarchy, make_conformation(3));
 
@@ -451,19 +632,27 @@ mod tests {
         let n_atoms = 8;
         let n_residues = 4;
         let atoms = AtomsTable {
-            atom_name: (0..n_atoms).map(|i| if i % 2 == 0 { "N".into() } else { "CA".into() }).collect(),
+            atom_name: (0..n_atoms)
+                .map(|i| if i % 2 == 0 { "N".into() } else { "CA".into() })
+                .collect(),
+            auth_atom_name: (0..n_atoms)
+                .map(|i| if i % 2 == 0 { "N".into() } else { "CA".into() })
+                .collect(),
             element: vec![Element::C; n_atoms],
             alt_loc: vec![None; n_atoms],
             formal_charge: vec![None; n_atoms],
         };
         let residues = ResiduesTable {
             comp_id: vec!["ALA".into(), "GLY".into(), "HOH".into(), "ATP".into()],
+            auth_comp_id: vec!["ALA".into(), "GLY".into(), "HOH".into(), "ATP".into()],
             label_seq_id: vec![0, 1, 2, 3],
             auth_seq_id: vec![1, 2, 10, 20],
             ins_code: vec![None; n_residues],
             group: vec![
-                ResidueGroup::Polymer, ResidueGroup::Polymer,
-                ResidueGroup::NonPolymer, ResidueGroup::NonPolymer,
+                ResidueGroup::Polymer,
+                ResidueGroup::Polymer,
+                ResidueGroup::NonPolymer,
+                ResidueGroup::NonPolymer,
             ],
         };
         let chains = ChainsTable {
@@ -474,7 +663,14 @@ mod tests {
         let atom_to_residue = Segmentation::from_offsets(vec![0, 2, 4, 6, 8]);
         let residue_to_chain = Segmentation::from_offsets(vec![0, 2, 4]);
         let bonds = Bonds::from_unsorted(vec![], vec![], vec![], n_atoms);
-        let hierarchy = Arc::new(AtomicHierarchy { atoms, residues, chains, atom_to_residue, residue_to_chain, bonds });
+        let hierarchy = Arc::new(AtomicHierarchy {
+            atoms,
+            residues,
+            chains,
+            atom_to_residue,
+            residue_to_chain,
+            bonds,
+        });
         let model = Model::new(hierarchy, make_conformation(n_atoms));
 
         // Traverse chain -> residue -> atom

@@ -1,6 +1,5 @@
 use ferritin_core::{load_structure, load_trajectory};
 use ferritin_core::trajectory::Trajectory;
-use ferritin_core::model::Model;
 use std::sync::Arc;
 use ferritin_test_data::TestFile;
 

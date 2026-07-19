@@ -3,7 +3,20 @@
 //! These tables hold topology data that is constant across trajectory frames.
 //! All tables use struct-of-arrays (SoA) layout for cache-friendly iteration.
 
+use super::ModelError;
 use crate::info::elements::Element;
+
+/// Sentinel used when an mmCIF sequence identifier is explicitly missing (`.` or `?`).
+pub const MISSING_SEQ_ID: i32 = i32::MIN;
+
+fn require_len(table: &str, field: &str, actual: usize, expected: usize) -> Result<(), ModelError> {
+    if actual != expected {
+        return Err(ModelError::new(format!(
+            "{table}.{field} has length {actual}, expected {expected}"
+        )));
+    }
+    Ok(())
+}
 
 /// Residue classification: polymer (protein/nucleic acid) or non-polymer (ligand/solvent).
 #[derive(Clone, Debug, PartialEq)]
@@ -19,8 +32,10 @@ pub enum ResidueGroup {
 /// Each field is a parallel array indexed by atom index.
 #[derive(Clone, Debug)]
 pub struct AtomsTable {
-    /// Atom name, e.g. "CA", "N", "CB".
+    /// Canonical atom name (`label_atom_id` in mmCIF), e.g. "CA", "N", "CB".
     pub atom_name: Vec<String>,
+    /// Author-assigned atom name (`auth_atom_id` in mmCIF).
+    pub auth_atom_name: Vec<String>,
     /// Element type for each atom.
     pub element: Vec<Element>,
     /// Alternative location indicator (e.g. `Some('A')`), or `None`.
@@ -30,6 +45,14 @@ pub struct AtomsTable {
 }
 
 impl AtomsTable {
+    /// Validate that every atom column has the same length.
+    pub fn validate(&self) -> Result<(), ModelError> {
+        let n = self.atom_name.len();
+        require_len("atoms", "auth_atom_name", self.auth_atom_name.len(), n)?;
+        require_len("atoms", "element", self.element.len(), n)?;
+        require_len("atoms", "alt_loc", self.alt_loc.len(), n)?;
+        require_len("atoms", "formal_charge", self.formal_charge.len(), n)
+    }
     /// Number of atoms.
     pub fn len(&self) -> usize {
         self.atom_name.len()
@@ -46,9 +69,12 @@ impl AtomsTable {
 /// Each field is a parallel array indexed by residue index.
 #[derive(Clone, Debug)]
 pub struct ResiduesTable {
-    /// Residue name (CCD component ID), e.g. "ALA", "HOH", "ATP".
+    /// Canonical residue name (`label_comp_id`), e.g. "ALA", "HOH", "ATP".
     pub comp_id: Vec<String>,
+    /// Author-assigned residue name (`auth_comp_id`).
+    pub auth_comp_id: Vec<String>,
     /// Internal sequential residue index (label_seq_id in mmCIF).
+    /// [`MISSING_SEQ_ID`] represents an explicitly absent value.
     pub label_seq_id: Vec<i32>,
     /// Author-assigned sequence number (auth_seq_id in mmCIF).
     /// Used as the primary sort key for canonical iteration order within a chain.
@@ -60,6 +86,15 @@ pub struct ResiduesTable {
 }
 
 impl ResiduesTable {
+    /// Validate that every residue column has the same length.
+    pub fn validate(&self) -> Result<(), ModelError> {
+        let n = self.comp_id.len();
+        require_len("residues", "auth_comp_id", self.auth_comp_id.len(), n)?;
+        require_len("residues", "label_seq_id", self.label_seq_id.len(), n)?;
+        require_len("residues", "auth_seq_id", self.auth_seq_id.len(), n)?;
+        require_len("residues", "ins_code", self.ins_code.len(), n)?;
+        require_len("residues", "group", self.group.len(), n)
+    }
     /// Number of residues.
     pub fn len(&self) -> usize {
         self.comp_id.len()
@@ -85,6 +120,12 @@ pub struct ChainsTable {
 }
 
 impl ChainsTable {
+    /// Validate that every chain column has the same length.
+    pub fn validate(&self) -> Result<(), ModelError> {
+        let n = self.label_asym_id.len();
+        require_len("chains", "auth_asym_id", self.auth_asym_id.len(), n)?;
+        require_len("chains", "entity_id", self.entity_id.len(), n)
+    }
     /// Number of chains.
     pub fn len(&self) -> usize {
         self.label_asym_id.len()
@@ -104,6 +145,7 @@ mod tests {
     fn test_atoms_table_len() {
         let table = AtomsTable {
             atom_name: vec!["N".into(), "CA".into(), "C".into()],
+            auth_atom_name: vec!["N".into(), "CA".into(), "C".into()],
             element: vec![Element::N, Element::C, Element::C],
             alt_loc: vec![None, None, None],
             formal_charge: vec![None, None, None],
@@ -113,6 +155,7 @@ mod tests {
 
         let empty = AtomsTable {
             atom_name: vec![],
+            auth_atom_name: vec![],
             element: vec![],
             alt_loc: vec![],
             formal_charge: vec![],
@@ -134,5 +177,20 @@ mod tests {
         let cloned = polymer.clone();
         assert_eq!(cloned, ResidueGroup::Polymer);
         assert!(!format!("{:?}", non_polymer).is_empty());
+    }
+
+    #[test]
+    fn test_atoms_table_validation_rejects_mismatched_columns() {
+        let table = AtomsTable {
+            atom_name: vec!["CA".into()],
+            auth_atom_name: vec![],
+            element: vec![Element::C],
+            alt_loc: vec![None],
+            formal_charge: vec![None],
+        };
+        assert_eq!(
+            table.validate().unwrap_err().to_string(),
+            "atoms.auth_atom_name has length 0, expected 1"
+        );
     }
 }

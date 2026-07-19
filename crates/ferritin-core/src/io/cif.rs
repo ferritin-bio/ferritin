@@ -5,11 +5,14 @@
 use crate::data::Segmentation;
 use crate::info::elements::Element;
 use crate::model::bonds::infer_bonds_from_residue_templates;
-use crate::model::tables::{AtomsTable, ChainsTable, ResidueGroup, ResiduesTable};
-use crate::model::{AtomicConformation, AtomicHierarchy, Model};
+use crate::model::tables::{AtomsTable, ChainsTable, MISSING_SEQ_ID, ResidueGroup, ResiduesTable};
+use crate::model::{
+    Assembly, AssemblyUnit, AtomicConformation, AtomicHierarchy, CrystalSymmetry, IDENTITY_MAT4,
+    Mat4, Model, SymmetryData, SymmetryOperator,
+};
 use crate::trajectory::ArrayTrajectory;
 use crate::{AtomCollection, Bond};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::fs;
@@ -122,6 +125,25 @@ impl CIFFile {
         while i < lines.len() {
             let line = lines[i].trim();
 
+            // A CIF `#` terminates the current loop/category.
+            if line == "#" {
+                if let Some(mut category) = current_category.take() {
+                    if in_loop && !loop_data.is_empty() {
+                        category.columns = loop_columns.clone();
+                        category.data = loop_data.clone();
+                    }
+                    if let Some(block) = &mut current_data_block {
+                        block.categories.insert(category.name.clone(), category);
+                    }
+                }
+                in_loop = false;
+                loop_columns.clear();
+                loop_data.clear();
+                current_loop_row.clear();
+                i += 1;
+                continue;
+            }
+
             // Skip comments and empty lines
             if line.starts_with('#') || line.is_empty() {
                 i += 1;
@@ -151,9 +173,9 @@ impl CIFFile {
                     if in_loop && !loop_data.is_empty() {
                         category.columns = loop_columns.clone();
                         category.data = loop_data.clone();
-                        if let Some(block) = &mut current_data_block {
-                            block.categories.insert(category.name.clone(), category);
-                        }
+                    }
+                    if let Some(block) = &mut current_data_block {
+                        block.categories.insert(category.name.clone(), category);
                     }
                 }
                 in_loop = true;
@@ -166,7 +188,13 @@ impl CIFFile {
 
             // Handle loop column definitions (starting with underscore)
             if line.starts_with('_') {
-                let parts: Vec<&str> = line.splitn(2, '.').collect();
+                let mut tag_and_value = line.splitn(2, char::is_whitespace);
+                let tag = tag_and_value.next().unwrap_or(line);
+                let inline_value = tag_and_value
+                    .next()
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty());
+                let parts: Vec<&str> = tag.splitn(2, '.').collect();
                 if parts.len() < 2 {
                     return Err(CIFError::InvalidFile(format!(
                         "Invalid column definition: {}",
@@ -183,7 +211,9 @@ impl CIFFile {
                     loop_columns.push(column_name);
                 } else {
                     // Not in loop context, it's a single value
-                    let value = if i + 1 < lines.len() {
+                    let value = if let Some(value) = inline_value {
+                        clean_cif_value(value)
+                    } else if i + 1 < lines.len() {
                         let next_line = lines[i + 1].trim();
                         if !next_line.starts_with('_')
                             && !next_line.starts_with("loop_")
@@ -334,14 +364,20 @@ impl CIFFile {
             .get_column_index("auth_seq_id")
             .or_else(|| atom_category.get_column_index("label_seq_id"))
             .ok_or_else(|| CIFError::InvalidFile("Missing residue ID column".to_string()))?;
-        let res_name_col = atom_category
-            .get_column_index("auth_comp_id")
-            .or_else(|| atom_category.get_column_index("label_comp_id"))
+        let label_comp_col = atom_category
+            .get_column_index("label_comp_id")
             .ok_or_else(|| CIFError::InvalidFile("Missing residue name column".to_string()))?;
-        let atom_name_col = atom_category
-            .get_column_index("auth_atom_id")
-            .or_else(|| atom_category.get_column_index("label_atom_id"))
+        let auth_comp_col = atom_category
+            .get_column_index("auth_comp_id")
+            .unwrap_or(label_comp_col);
+        let label_atom_col = atom_category
+            .get_column_index("label_atom_id")
             .ok_or_else(|| CIFError::InvalidFile("Missing atom name column".to_string()))?;
+        let auth_atom_col = atom_category
+            .get_column_index("auth_atom_id")
+            .unwrap_or(label_atom_col);
+        let res_name_col = auth_comp_col;
+        let atom_name_col = auth_atom_col;
         let element_col = atom_category
             .get_column_index("type_symbol")
             .ok_or_else(|| CIFError::InvalidFile("Missing element column".to_string()))?;
@@ -470,14 +506,18 @@ impl CIFFile {
             .get_column_index("auth_seq_id")
             .or_else(|| atom_category.get_column_index("label_seq_id"))
             .ok_or_else(|| CIFError::InvalidFile("Missing residue ID column".to_string()))?;
-        let res_name_col = atom_category
-            .get_column_index("auth_comp_id")
-            .or_else(|| atom_category.get_column_index("label_comp_id"))
+        let label_comp_col = atom_category
+            .get_column_index("label_comp_id")
             .ok_or_else(|| CIFError::InvalidFile("Missing residue name column".to_string()))?;
-        let atom_name_col = atom_category
-            .get_column_index("auth_atom_id")
-            .or_else(|| atom_category.get_column_index("label_atom_id"))
+        let auth_comp_col = atom_category
+            .get_column_index("auth_comp_id")
+            .unwrap_or(label_comp_col);
+        let label_atom_col = atom_category
+            .get_column_index("label_atom_id")
             .ok_or_else(|| CIFError::InvalidFile("Missing atom name column".to_string()))?;
+        let auth_atom_col = atom_category
+            .get_column_index("auth_atom_id")
+            .unwrap_or(label_atom_col);
         let element_col = atom_category
             .get_column_index("type_symbol")
             .ok_or_else(|| CIFError::InvalidFile("Missing element column".to_string()))?;
@@ -490,14 +530,35 @@ impl CIFFile {
         let b_iso_col = atom_category.get_column_index("B_iso_or_equiv");
         let formal_charge_col = atom_category.get_column_index("pdbx_formal_charge");
 
-        // Filter to first model only
+        // Select the lowest model number actually present; model numbering is
+        // not required to begin at one.
+        let mut first_model_num = 1;
+        if let Some(col) = model_num_col {
+            first_model_num = atom_category
+                .data
+                .iter()
+                .map(|row| {
+                    row.get(col)
+                        .ok_or_else(|| CIFError::InvalidFile("Missing model number".to_string()))?
+                        .parse::<i32>()
+                        .map_err(|_| {
+                            CIFError::InvalidFile(format!("Invalid model number: {}", row[col]))
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .min()
+                .ok_or_else(|| CIFError::InvalidFile("No atoms found".to_string()))?;
+        }
+
+        // Filter to first model only.
         let first_model_rows: Vec<&Vec<String>> = atom_category
             .data
             .iter()
             .filter(|row| {
                 if let Some(col) = model_num_col {
                     if col < row.len() {
-                        row[col].parse::<i32>().unwrap_or(1) == 1
+                        row[col].parse::<i32>().expect("model numbers validated") == first_model_num
                     } else {
                         true
                     }
@@ -509,11 +570,14 @@ impl CIFFile {
 
         let n_atoms = first_model_rows.len();
         if n_atoms == 0 {
-            return Err(CIFError::InvalidFile("No atoms found in first model".to_string()));
+            return Err(CIFError::InvalidFile(
+                "No atoms found in first model".to_string(),
+            ));
         }
 
         // Build atom data
         let mut atom_names_vec: Vec<String> = Vec::with_capacity(n_atoms);
+        let mut auth_atom_names_vec: Vec<String> = Vec::with_capacity(n_atoms);
         let mut elements_vec: Vec<Element> = Vec::with_capacity(n_atoms);
         let mut alt_loc_vec: Vec<Option<char>> = Vec::with_capacity(n_atoms);
         let mut formal_charge_vec: Vec<Option<i8>> = Vec::with_capacity(n_atoms);
@@ -529,6 +593,7 @@ impl CIFFile {
 
         // For residue/chain tables
         let mut comp_ids: Vec<String> = Vec::new();
+        let mut auth_comp_ids: Vec<String> = Vec::new();
         let mut label_seq_ids: Vec<i32> = Vec::new();
         let mut auth_seq_ids: Vec<i32> = Vec::new();
         let mut ins_codes: Vec<Option<char>> = Vec::new();
@@ -556,7 +621,8 @@ impl CIFFile {
             z_vec.push(z);
 
             // Atom name
-            atom_names_vec.push(row[atom_name_col].clone());
+            atom_names_vec.push(row[label_atom_col].clone());
+            auth_atom_names_vec.push(row[auth_atom_col].clone());
 
             // Element
             let element_str = &row[element_col];
@@ -604,7 +670,9 @@ impl CIFFile {
             // Occupancy
             let occupancy = if let Some(col) = occupancy_col {
                 if col < row.len() {
-                    row[col].parse::<f32>().unwrap_or(1.0)
+                    row[col].parse::<f32>().map_err(|_| {
+                        CIFError::InvalidFile(format!("Invalid occupancy: {}", row[col]))
+                    })?
                 } else {
                     1.0
                 }
@@ -616,7 +684,9 @@ impl CIFFile {
             // B factor
             let b_iso = if let Some(col) = b_iso_col {
                 if col < row.len() {
-                    row[col].parse::<f32>().unwrap_or(0.0)
+                    row[col].parse::<f32>().map_err(|_| {
+                        CIFError::InvalidFile(format!("Invalid B_iso_or_equiv: {}", row[col]))
+                    })?
                 } else {
                     0.0
                 }
@@ -627,7 +697,13 @@ impl CIFFile {
 
             // Chain and residue keys for grouping
             let auth_chain = row[chain_col].clone();
-            let auth_seq_id = row[res_id_col].parse::<i32>().unwrap_or(0);
+            let hierarchy_chain = label_asym_col
+                .and_then(|col| row.get(col))
+                .cloned()
+                .unwrap_or_else(|| auth_chain.clone());
+            let auth_seq_id = row[res_id_col].parse::<i32>().map_err(|_| {
+                CIFError::InvalidFile(format!("Invalid residue ID: {}", row[res_id_col]))
+            })?;
             let ins_code = if let Some(col) = ins_code_col {
                 if col < row.len() {
                     let val = &row[col];
@@ -643,15 +719,22 @@ impl CIFFile {
                 None
             };
 
-            let residue_key = (auth_chain.clone(), auth_seq_id, ins_code);
+            let residue_key = (hierarchy_chain.clone(), auth_seq_id, ins_code);
             residue_keys.push(residue_key.clone());
 
             // Check if this is a new residue
             if last_residue_key.as_ref() != Some(&residue_key) {
-                comp_ids.push(row[res_name_col].clone());
+                comp_ids.push(row[label_comp_col].clone());
+                auth_comp_ids.push(row[auth_comp_col].clone());
                 let label_seq = if let Some(col) = label_seq_id_col {
                     if col < row.len() {
-                        row[col].parse::<i32>().unwrap_or(0)
+                        if row[col].is_empty() {
+                            MISSING_SEQ_ID
+                        } else {
+                            row[col].parse::<i32>().map_err(|_| {
+                                CIFError::InvalidFile(format!("Invalid label_seq_id: {}", row[col]))
+                            })?
+                        }
                     } else {
                         0
                     }
@@ -663,7 +746,7 @@ impl CIFFile {
                 ins_codes.push(ins_code);
                 // chain_keys is per-residue (feeds residue_to_chain segmentation),
                 // unlike residue_keys/chain_col reads above which are per-atom.
-                chain_keys.push(auth_chain.clone());
+                chain_keys.push(hierarchy_chain.clone());
 
                 // Determine group
                 let is_hetero = if let Some(group_col) = group_pdb_col {
@@ -685,7 +768,7 @@ impl CIFFile {
             }
 
             // Check if this is a new chain
-            if last_chain_key.as_ref() != Some(&auth_chain) {
+            if last_chain_key.as_ref() != Some(&hierarchy_chain) {
                 let label_asym = if let Some(col) = label_asym_col {
                     if col < row.len() {
                         row[col].clone()
@@ -709,13 +792,16 @@ impl CIFFile {
                 };
                 entity_ids.push(entity);
 
-                last_chain_key = Some(auth_chain);
+                last_chain_key = Some(hierarchy_chain);
             }
         }
+
+        validate_canonical_residue_order(&chain_keys, &auth_seq_ids, &ins_codes)?;
 
         // Build tables
         let atoms = AtomsTable {
             atom_name: atom_names_vec,
+            auth_atom_name: auth_atom_names_vec,
             element: elements_vec,
             alt_loc: alt_loc_vec,
             formal_charge: formal_charge_vec,
@@ -723,6 +809,7 @@ impl CIFFile {
 
         let residues = ResiduesTable {
             comp_id: comp_ids,
+            auth_comp_id: auth_comp_ids,
             label_seq_id: label_seq_ids,
             auth_seq_id: auth_seq_ids,
             ins_code: ins_codes,
@@ -741,9 +828,14 @@ impl CIFFile {
 
         // Bonds are inferred from canonical-residue templates since mmCIF rarely
         // carries explicit connectivity records.
-        let bonds =
-            infer_bonds_from_residue_templates(&atoms, &residues, &atom_to_residue, &residue_to_chain);
+        let bonds = infer_bonds_from_residue_templates(
+            &atoms,
+            &residues,
+            &atom_to_residue,
+            &residue_to_chain,
+        );
 
+        let symmetry = Arc::new(parse_symmetry_data(block)?);
         let hierarchy = Arc::new(AtomicHierarchy {
             atoms,
             residues,
@@ -757,12 +849,13 @@ impl CIFFile {
             x: x_vec,
             y: y_vec,
             z: z_vec,
-            occupancy: Some(occupancy_vec),
-            b_iso: Some(b_iso_vec),
+            occupancy: occupancy_col.map(|_| occupancy_vec),
+            b_iso: b_iso_col.map(|_| b_iso_vec),
             confidence: None,
         };
 
-        Ok(Model::new(hierarchy, conformation))
+        Model::try_new_with_symmetry(hierarchy, conformation, symmetry)
+            .map_err(|error| CIFError::InvalidFile(error.to_string()))
     }
 
     /// Parse CIF file into an ArrayTrajectory (handles multi-model files).
@@ -797,14 +890,18 @@ impl CIFFile {
             .get_column_index("auth_seq_id")
             .or_else(|| atom_category.get_column_index("label_seq_id"))
             .ok_or_else(|| CIFError::InvalidFile("Missing residue ID column".to_string()))?;
-        let res_name_col = atom_category
-            .get_column_index("auth_comp_id")
-            .or_else(|| atom_category.get_column_index("label_comp_id"))
+        let label_comp_col = atom_category
+            .get_column_index("label_comp_id")
             .ok_or_else(|| CIFError::InvalidFile("Missing residue name column".to_string()))?;
-        let atom_name_col = atom_category
-            .get_column_index("auth_atom_id")
-            .or_else(|| atom_category.get_column_index("label_atom_id"))
+        let auth_comp_col = atom_category
+            .get_column_index("auth_comp_id")
+            .unwrap_or(label_comp_col);
+        let label_atom_col = atom_category
+            .get_column_index("label_atom_id")
             .ok_or_else(|| CIFError::InvalidFile("Missing atom name column".to_string()))?;
+        let auth_atom_col = atom_category
+            .get_column_index("auth_atom_id")
+            .unwrap_or(label_atom_col);
         let element_col = atom_category
             .get_column_index("type_symbol")
             .ok_or_else(|| CIFError::InvalidFile("Missing element column".to_string()))?;
@@ -821,11 +918,12 @@ impl CIFFile {
         let mut model_rows: HashMap<i32, Vec<&Vec<String>>> = HashMap::new();
         for row in &atom_category.data {
             let model_num = if let Some(col) = model_num_col {
-                if col < row.len() {
-                    row[col].parse::<i32>().unwrap_or(1)
-                } else {
-                    1
-                }
+                let value = row
+                    .get(col)
+                    .ok_or_else(|| CIFError::InvalidFile("Missing model number".to_string()))?;
+                value
+                    .parse::<i32>()
+                    .map_err(|_| CIFError::InvalidFile(format!("Invalid model number: {value}")))?
             } else {
                 1
             };
@@ -856,8 +954,42 @@ impl CIFFile {
             }
         }
 
+        // Equal frame lengths are insufficient: coordinates may otherwise be
+        // attached to the wrong atoms. Verify the complete identifier tuple in
+        // the same order as the representative model.
+        let identity_columns = [
+            Some(label_atom_col),
+            Some(auth_atom_col),
+            Some(label_comp_col),
+            Some(auth_comp_col),
+            Some(chain_col),
+            label_asym_col,
+            Some(res_id_col),
+            label_seq_id_col,
+            ins_code_col,
+            atom_category.get_column_index("label_alt_id"),
+        ];
+        for &model_num in &model_nums[1..] {
+            for (atom_index, (expected, actual)) in first_model_rows
+                .iter()
+                .zip(&model_rows[&model_num])
+                .enumerate()
+            {
+                let matches = identity_columns
+                    .iter()
+                    .flatten()
+                    .all(|&column| expected.get(column) == actual.get(column));
+                if !matches {
+                    return Err(CIFError::InvalidFile(format!(
+                        "Model {model_num} atom {atom_index} does not match model {first_model_num} identity/order"
+                    )));
+                }
+            }
+        }
+
         // Build hierarchy from first model
         let mut atom_names_vec: Vec<String> = Vec::with_capacity(n_atoms);
+        let mut auth_atom_names_vec: Vec<String> = Vec::with_capacity(n_atoms);
         let mut elements_vec: Vec<Element> = Vec::with_capacity(n_atoms);
         let mut alt_loc_vec: Vec<Option<char>> = Vec::with_capacity(n_atoms);
         let mut formal_charge_vec: Vec<Option<i8>> = Vec::with_capacity(n_atoms);
@@ -866,6 +998,7 @@ impl CIFFile {
         let mut chain_keys: Vec<String> = Vec::with_capacity(n_atoms);
 
         let mut comp_ids: Vec<String> = Vec::new();
+        let mut auth_comp_ids: Vec<String> = Vec::new();
         let mut label_seq_ids: Vec<i32> = Vec::new();
         let mut auth_seq_ids: Vec<i32> = Vec::new();
         let mut ins_codes: Vec<Option<char>> = Vec::new();
@@ -878,7 +1011,8 @@ impl CIFFile {
         let mut last_chain_key: Option<String> = None;
 
         for row in first_model_rows {
-            atom_names_vec.push(row[atom_name_col].clone());
+            atom_names_vec.push(row[label_atom_col].clone());
+            auth_atom_names_vec.push(row[auth_atom_col].clone());
             let element_str = &row[element_col];
             let element = Element::from_symbol(element_str).unwrap_or_else(|| {
                 let first_char = element_str.chars().next().unwrap_or('C');
@@ -920,7 +1054,13 @@ impl CIFFile {
             formal_charge_vec.push(formal_charge);
 
             let auth_chain = row[chain_col].clone();
-            let auth_seq_id = row[res_id_col].parse::<i32>().unwrap_or(0);
+            let hierarchy_chain = label_asym_col
+                .and_then(|col| row.get(col))
+                .cloned()
+                .unwrap_or_else(|| auth_chain.clone());
+            let auth_seq_id = row[res_id_col].parse::<i32>().map_err(|_| {
+                CIFError::InvalidFile(format!("Invalid residue ID: {}", row[res_id_col]))
+            })?;
             let ins_code = if let Some(col) = ins_code_col {
                 if col < row.len() {
                     let val = &row[col];
@@ -936,14 +1076,21 @@ impl CIFFile {
                 None
             };
 
-            let residue_key = (auth_chain.clone(), auth_seq_id, ins_code);
+            let residue_key = (hierarchy_chain.clone(), auth_seq_id, ins_code);
             residue_keys.push(residue_key.clone());
 
             if last_residue_key.as_ref() != Some(&residue_key) {
-                comp_ids.push(row[res_name_col].clone());
+                comp_ids.push(row[label_comp_col].clone());
+                auth_comp_ids.push(row[auth_comp_col].clone());
                 let label_seq = if let Some(col) = label_seq_id_col {
                     if col < row.len() {
-                        row[col].parse::<i32>().unwrap_or(0)
+                        if row[col].is_empty() {
+                            MISSING_SEQ_ID
+                        } else {
+                            row[col].parse::<i32>().map_err(|_| {
+                                CIFError::InvalidFile(format!("Invalid label_seq_id: {}", row[col]))
+                            })?
+                        }
                     } else {
                         0
                     }
@@ -955,7 +1102,7 @@ impl CIFFile {
                 ins_codes.push(ins_code);
                 // chain_keys is per-residue (feeds residue_to_chain segmentation),
                 // unlike residue_keys/chain_col reads above which are per-atom.
-                chain_keys.push(auth_chain.clone());
+                chain_keys.push(hierarchy_chain.clone());
 
                 let is_hetero = if let Some(group_col) = group_pdb_col {
                     if group_col < row.len() {
@@ -975,7 +1122,7 @@ impl CIFFile {
                 last_residue_key = Some(residue_key);
             }
 
-            if last_chain_key.as_ref() != Some(&auth_chain) {
+            if last_chain_key.as_ref() != Some(&hierarchy_chain) {
                 let label_asym = if let Some(col) = label_asym_col {
                     if col < row.len() {
                         row[col].clone()
@@ -999,12 +1146,15 @@ impl CIFFile {
                 };
                 entity_ids.push(entity);
 
-                last_chain_key = Some(auth_chain);
+                last_chain_key = Some(hierarchy_chain);
             }
         }
 
+        validate_canonical_residue_order(&chain_keys, &auth_seq_ids, &ins_codes)?;
+
         let atoms = AtomsTable {
             atom_name: atom_names_vec,
+            auth_atom_name: auth_atom_names_vec,
             element: elements_vec,
             alt_loc: alt_loc_vec,
             formal_charge: formal_charge_vec,
@@ -1012,6 +1162,7 @@ impl CIFFile {
 
         let residues = ResiduesTable {
             comp_id: comp_ids,
+            auth_comp_id: auth_comp_ids,
             label_seq_id: label_seq_ids,
             auth_seq_id: auth_seq_ids,
             ins_code: ins_codes,
@@ -1028,9 +1179,14 @@ impl CIFFile {
         let residue_to_chain = Segmentation::from_change_points(chain_keys.iter());
         // Bonds are inferred from canonical-residue templates since mmCIF rarely
         // carries explicit connectivity records.
-        let bonds =
-            infer_bonds_from_residue_templates(&atoms, &residues, &atom_to_residue, &residue_to_chain);
+        let bonds = infer_bonds_from_residue_templates(
+            &atoms,
+            &residues,
+            &atom_to_residue,
+            &residue_to_chain,
+        );
 
+        let symmetry = Arc::new(parse_symmetry_data(block)?);
         let hierarchy = Arc::new(AtomicHierarchy {
             atoms,
             residues,
@@ -1066,7 +1222,9 @@ impl CIFFile {
 
                 let occupancy = if let Some(col) = occupancy_col {
                     if col < row.len() {
-                        row[col].parse::<f32>().unwrap_or(1.0)
+                        row[col].parse::<f32>().map_err(|_| {
+                            CIFError::InvalidFile(format!("Invalid occupancy: {}", row[col]))
+                        })?
                     } else {
                         1.0
                     }
@@ -1077,7 +1235,9 @@ impl CIFFile {
 
                 let b_iso = if let Some(col) = b_iso_col {
                     if col < row.len() {
-                        row[col].parse::<f32>().unwrap_or(0.0)
+                        row[col].parse::<f32>().map_err(|_| {
+                            CIFError::InvalidFile(format!("Invalid B_iso_or_equiv: {}", row[col]))
+                        })?
                     } else {
                         0.0
                     }
@@ -1091,12 +1251,19 @@ impl CIFFile {
                 x: x_vec,
                 y: y_vec,
                 z: z_vec,
-                occupancy: Some(occupancy_vec),
-                b_iso: Some(b_iso_vec),
+                occupancy: occupancy_col.map(|_| occupancy_vec),
+                b_iso: b_iso_col.map(|_| b_iso_vec),
                 confidence: None,
             };
 
-            models.push(Model::new(Arc::clone(&hierarchy), conformation));
+            models.push(
+                Model::try_new_with_symmetry(
+                    Arc::clone(&hierarchy),
+                    conformation,
+                    Arc::clone(&symmetry),
+                )
+                .map_err(|error| CIFError::InvalidFile(error.to_string()))?,
+            );
         }
 
         ArrayTrajectory::new(models).map_err(|e| CIFError::InvalidFile(e.to_string()))
@@ -1151,6 +1318,477 @@ impl CIFFile {
     }
 }
 
+fn validate_canonical_residue_order(
+    chain_ids: &[String],
+    auth_seq_ids: &[i32],
+    ins_codes: &[Option<char>],
+) -> Result<(), CIFError> {
+    let mut completed_chains = HashSet::new();
+    for index in 1..chain_ids.len() {
+        if chain_ids[index] == chain_ids[index - 1] {
+            let previous = (auth_seq_ids[index - 1], ins_codes[index - 1]);
+            let current = (auth_seq_ids[index], ins_codes[index]);
+            if current < previous {
+                return Err(CIFError::InvalidFile(format!(
+                    "Residues in chain {} are not in canonical auth_seq_id/insertion-code order",
+                    chain_ids[index]
+                )));
+            }
+        } else {
+            completed_chains.insert(chain_ids[index - 1].as_str());
+            if completed_chains.contains(chain_ids[index].as_str()) {
+                return Err(CIFError::InvalidFile(format!(
+                    "Chain {} occurs in multiple non-contiguous blocks",
+                    chain_ids[index]
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn required_column(category: &CIFCategory, name: &str) -> Result<usize, CIFError> {
+    category
+        .get_column_index(name)
+        .ok_or_else(|| CIFError::InvalidFile(format!("Missing {}.{name} column", category.name)))
+}
+
+fn is_scalar_category(category: &CIFCategory) -> bool {
+    category.data.len() == category.columns.len()
+        && category.data.iter().all(|values| values.len() == 1)
+}
+
+fn category_row_count(category: &CIFCategory) -> usize {
+    if is_scalar_category(category) {
+        usize::from(!category.data.is_empty())
+    } else {
+        category.data.len()
+    }
+}
+
+fn category_value(category: &CIFCategory, row: usize, column: usize) -> Option<&str> {
+    if is_scalar_category(category) {
+        if row == 0 {
+            category.data.get(column)?.first().map(String::as_str)
+        } else {
+            None
+        }
+    } else {
+        category.data.get(row)?.get(column).map(String::as_str)
+    }
+}
+
+fn optional_scalar(block: &CIFDataBlock, category_name: &str, column: &str) -> Option<String> {
+    let category = block.categories.get(category_name)?;
+    let index = category.get_column_index(column)?;
+    category_value(category, 0, index).map(str::to_string)
+}
+
+fn parse_operator_matrix(category: &CIFCategory, row: usize) -> Result<Mat4, CIFError> {
+    let mut matrix = IDENTITY_MAT4;
+    for row_index in 0..3 {
+        for column_index in 0..3 {
+            let name = format!("matrix[{}][{}]", row_index + 1, column_index + 1);
+            let index = required_column(category, &name)?;
+            let value = category_value(category, row, index)
+                .ok_or_else(|| CIFError::InvalidFile(format!("Missing {name} value")))?;
+            matrix[row_index][column_index] = value
+                .parse::<f32>()
+                .map_err(|_| CIFError::InvalidFile(format!("Invalid {name}: {value}")))?;
+        }
+        let name = format!("vector[{}]", row_index + 1);
+        let index = required_column(category, &name)?;
+        let value = category_value(category, row, index)
+            .ok_or_else(|| CIFError::InvalidFile(format!("Missing {name} value")))?;
+        matrix[row_index][3] = value
+            .parse::<f32>()
+            .map_err(|_| CIFError::InvalidFile(format!("Invalid {name}: {value}")))?;
+    }
+    Ok(matrix)
+}
+
+fn parse_fraction(value: &str) -> Result<f32, CIFError> {
+    if let Some((numerator, denominator)) = value.split_once('/') {
+        let numerator = numerator
+            .parse::<f32>()
+            .map_err(|_| CIFError::InvalidFile(format!("Invalid symmetry fraction: {value}")))?;
+        let denominator = denominator
+            .parse::<f32>()
+            .map_err(|_| CIFError::InvalidFile(format!("Invalid symmetry fraction: {value}")))?;
+        if denominator == 0.0 {
+            return Err(CIFError::InvalidFile(format!(
+                "Zero symmetry denominator: {value}"
+            )));
+        }
+        Ok(numerator / denominator)
+    } else {
+        value
+            .parse::<f32>()
+            .map_err(|_| CIFError::InvalidFile(format!("Invalid symmetry value: {value}")))
+    }
+}
+
+fn parse_symmetry_axis(expression: &str) -> Result<[f32; 4], CIFError> {
+    let expression = expression.replace(' ', "").to_ascii_lowercase();
+    let mut terms = Vec::new();
+    let mut start = 0;
+    for (index, character) in expression.char_indices().skip(1) {
+        if character == '+' || character == '-' {
+            terms.push(&expression[start..index]);
+            start = index;
+        }
+    }
+    terms.push(&expression[start..]);
+
+    let mut result = [0.0; 4];
+    for term in terms {
+        if term.is_empty() {
+            continue;
+        }
+        let (sign, unsigned) = match term.as_bytes()[0] {
+            b'-' => (-1.0, &term[1..]),
+            b'+' => (1.0, &term[1..]),
+            _ => (1.0, term),
+        };
+        if let Some(axis) = unsigned.chars().last().filter(|axis| "xyz".contains(*axis)) {
+            let coefficient = &unsigned[..unsigned.len() - 1];
+            let coefficient = if coefficient.is_empty() {
+                1.0
+            } else {
+                parse_fraction(coefficient)?
+            };
+            let index = match axis {
+                'x' => 0,
+                'y' => 1,
+                'z' => 2,
+                _ => unreachable!(),
+            };
+            result[index] += sign * coefficient;
+        } else {
+            result[3] += sign * parse_fraction(unsigned)?;
+        }
+    }
+    Ok(result)
+}
+
+fn parse_xyz_operator(
+    label: impl Into<String>,
+    expression: &str,
+) -> Result<SymmetryOperator, CIFError> {
+    let axes = expression.split(',').collect::<Vec<_>>();
+    if axes.len() != 3 {
+        return Err(CIFError::InvalidFile(format!(
+            "Symmetry operation must contain three axes: {expression}"
+        )));
+    }
+    let mut matrix = IDENTITY_MAT4;
+    for (index, axis) in axes.into_iter().enumerate() {
+        matrix[index] = parse_symmetry_axis(axis)?;
+    }
+    Ok(SymmetryOperator::new(label, matrix))
+}
+
+fn fractional_to_cartesian_matrix(cell: [f32; 6]) -> Result<Mat4, CIFError> {
+    let [a, b, c, alpha, beta, gamma] = cell;
+    let (alpha, beta, gamma) = (alpha.to_radians(), beta.to_radians(), gamma.to_radians());
+    let sin_gamma = gamma.sin();
+    if a <= 0.0 || b <= 0.0 || c <= 0.0 || sin_gamma.abs() < 1e-7 {
+        return Err(CIFError::InvalidFile(
+            "Degenerate crystallographic unit cell".to_string(),
+        ));
+    }
+    let c_x = c * beta.cos();
+    let c_y = c * (alpha.cos() - beta.cos() * gamma.cos()) / sin_gamma;
+    let c_z_squared = c * c - c_x * c_x - c_y * c_y;
+    if c_z_squared <= 0.0 {
+        return Err(CIFError::InvalidFile(
+            "Degenerate crystallographic unit cell".to_string(),
+        ));
+    }
+    Ok([
+        [a, b * gamma.cos(), c_x, 0.0],
+        [0.0, b * sin_gamma, c_y, 0.0],
+        [0.0, 0.0, c_z_squared.sqrt(), 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ])
+}
+
+fn invert_affine_basis(matrix: Mat4) -> Result<Mat4, CIFError> {
+    let (a, b, c) = (matrix[0][0], matrix[0][1], matrix[0][2]);
+    let (d, e, f) = (matrix[1][0], matrix[1][1], matrix[1][2]);
+    let (g, h, i) = (matrix[2][0], matrix[2][1], matrix[2][2]);
+    let determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+    if determinant.abs() < 1e-10 {
+        return Err(CIFError::InvalidFile(
+            "Non-invertible crystallographic cell".to_string(),
+        ));
+    }
+    let inverse = 1.0 / determinant;
+    Ok([
+        [
+            (e * i - f * h) * inverse,
+            (c * h - b * i) * inverse,
+            (b * f - c * e) * inverse,
+            0.0,
+        ],
+        [
+            (f * g - d * i) * inverse,
+            (a * i - c * g) * inverse,
+            (c * d - a * f) * inverse,
+            0.0,
+        ],
+        [
+            (d * h - e * g) * inverse,
+            (b * g - a * h) * inverse,
+            (a * e - b * d) * inverse,
+            0.0,
+        ],
+        [0.0, 0.0, 0.0, 1.0],
+    ])
+}
+
+fn fractional_operator_to_cartesian(
+    operator: SymmetryOperator,
+    cell: [f32; 6],
+) -> Result<SymmetryOperator, CIFError> {
+    let fractional_to_cartesian = SymmetryOperator::new(
+        "fractional_to_cartesian",
+        fractional_to_cartesian_matrix(cell)?,
+    );
+    let cartesian_to_fractional = SymmetryOperator::new(
+        "cartesian_to_fractional",
+        invert_affine_basis(fractional_to_cartesian.matrix)?,
+    );
+    let label = operator.label.clone();
+    Ok(fractional_to_cartesian
+        .compose(&operator, "cell*symop")
+        .compose(&cartesian_to_fractional, label))
+}
+
+fn expand_operator_group(group: &str) -> Result<Vec<String>, CIFError> {
+    let mut result = Vec::new();
+    for token in group
+        .split(',')
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+    {
+        if let Some((start, end)) = token.split_once('-') {
+            let start = start
+                .trim()
+                .parse::<i32>()
+                .map_err(|_| CIFError::InvalidFile(format!("Invalid operator range: {token}")))?;
+            let end = end
+                .trim()
+                .parse::<i32>()
+                .map_err(|_| CIFError::InvalidFile(format!("Invalid operator range: {token}")))?;
+            if start > end {
+                return Err(CIFError::InvalidFile(format!(
+                    "Descending operator range: {token}"
+                )));
+            }
+            result.extend((start..=end).map(|value| value.to_string()));
+        } else {
+            result.push(token.to_string());
+        }
+    }
+    Ok(result)
+}
+
+fn operator_expression_groups(expression: &str) -> Result<Vec<Vec<String>>, CIFError> {
+    let expression = expression.trim();
+    if !expression.contains('(') {
+        return Ok(vec![expand_operator_group(expression)?]);
+    }
+    let mut groups = Vec::new();
+    let mut remainder = expression;
+    while let Some(start) = remainder.find('(') {
+        let after_start = &remainder[start + 1..];
+        let end = after_start.find(')').ok_or_else(|| {
+            CIFError::InvalidFile(format!("Unclosed operator expression: {expression}"))
+        })?;
+        groups.push(expand_operator_group(&after_start[..end])?);
+        remainder = &after_start[end + 1..];
+    }
+    if groups.is_empty() || groups.iter().any(Vec::is_empty) {
+        return Err(CIFError::InvalidFile(format!(
+            "Empty operator expression: {expression}"
+        )));
+    }
+    Ok(groups)
+}
+
+fn expand_operator_expression(
+    expression: &str,
+    operators: &HashMap<String, SymmetryOperator>,
+) -> Result<Vec<SymmetryOperator>, CIFError> {
+    let groups = operator_expression_groups(expression)?;
+    let mut expanded = vec![SymmetryOperator::identity()];
+    for group in groups {
+        let mut next = Vec::new();
+        for accumulated in &expanded {
+            for id in &group {
+                let operator = operators.get(id).ok_or_else(|| {
+                    CIFError::InvalidFile(format!("Unknown symmetry operator {id}"))
+                })?;
+                let label = if accumulated.label == "identity" {
+                    id.clone()
+                } else {
+                    format!("{}*{id}", accumulated.label)
+                };
+                next.push(accumulated.compose(operator, label));
+            }
+        }
+        expanded = next;
+    }
+    Ok(expanded)
+}
+
+fn parse_symmetry_data(block: &CIFDataBlock) -> Result<SymmetryData, CIFError> {
+    let mut operators = HashMap::new();
+    if let Some(category) = block.categories.get("pdbx_struct_oper_list") {
+        let id_column = required_column(category, "id")?;
+        for row in 0..category_row_count(category) {
+            let id = category_value(category, row, id_column)
+                .ok_or_else(|| CIFError::InvalidFile("Missing operator id".to_string()))?
+                .to_string();
+            operators.insert(
+                id.clone(),
+                SymmetryOperator::new(id, parse_operator_matrix(category, row)?),
+            );
+        }
+    }
+
+    let details_by_id: HashMap<String, String> = block
+        .categories
+        .get("pdbx_struct_assembly")
+        .map(|category| {
+            let id = category.get_column_index("id")?;
+            let details = category.get_column_index("details")?;
+            Some(
+                (0..category_row_count(category))
+                    .filter_map(|row| {
+                        Some((
+                            category_value(category, row, id)?.to_string(),
+                            category_value(category, row, details)?.to_string(),
+                        ))
+                    })
+                    .collect(),
+            )
+        })
+        .flatten()
+        .unwrap_or_default();
+
+    let mut assemblies_by_id: HashMap<String, Vec<AssemblyUnit>> = HashMap::new();
+    if let Some(category) = block.categories.get("pdbx_struct_assembly_gen") {
+        let assembly_column = required_column(category, "assembly_id")?;
+        let expression_column = required_column(category, "oper_expression")?;
+        let asym_column = required_column(category, "asym_id_list")?;
+        for row in 0..category_row_count(category) {
+            let asym_value = category_value(category, row, asym_column).ok_or_else(|| {
+                CIFError::InvalidFile("Missing assembly asym_id_list".to_string())
+            })?;
+            let asym_ids = asym_value
+                .split(',')
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>();
+            let expression = category_value(category, row, expression_column).ok_or_else(|| {
+                CIFError::InvalidFile("Missing assembly oper_expression".to_string())
+            })?;
+            let assembly_id = category_value(category, row, assembly_column)
+                .ok_or_else(|| CIFError::InvalidFile("Missing assembly_id".to_string()))?;
+            for operator in expand_operator_expression(expression, &operators)? {
+                assemblies_by_id
+                    .entry(assembly_id.to_string())
+                    .or_default()
+                    .push(AssemblyUnit {
+                        asym_ids: asym_ids.clone(),
+                        operator,
+                    });
+            }
+        }
+    }
+    let mut assemblies = assemblies_by_id
+        .into_iter()
+        .map(|(id, units)| Assembly {
+            details: details_by_id.get(&id).cloned(),
+            id,
+            units,
+        })
+        .collect::<Vec<_>>();
+    assemblies.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let cell_names = [
+        "length_a",
+        "length_b",
+        "length_c",
+        "angle_alpha",
+        "angle_beta",
+        "angle_gamma",
+    ];
+    let cell_values = cell_names
+        .iter()
+        .map(|name| optional_scalar(block, "cell", name))
+        .collect::<Vec<_>>();
+    let cell = if cell_values.iter().all(Option::is_some) {
+        let mut values = [0.0; 6];
+        for (index, value) in cell_values.into_iter().enumerate() {
+            let value = value.unwrap();
+            values[index] = value.parse::<f32>().map_err(|_| {
+                CIFError::InvalidFile(format!("Invalid cell.{}: {value}", cell_names[index]))
+            })?;
+        }
+        Some(values)
+    } else {
+        None
+    };
+
+    let space_group_name = optional_scalar(block, "symmetry", "space_group_name_H-M")
+        .or_else(|| optional_scalar(block, "space_group", "name_H-M_alt"));
+
+    let mut crystal_operators = Vec::new();
+    for (category_name, operation_column) in [
+        ("space_group_symop", "operation_xyz"),
+        ("symmetry_equiv", "pos_as_xyz"),
+    ] {
+        if let Some(category) = block.categories.get(category_name) {
+            let operation_index = required_column(category, operation_column)?;
+            let id_index = category.get_column_index("id");
+            for row_index in 0..category_row_count(category) {
+                let label = id_index
+                    .and_then(|index| category_value(category, row_index, index))
+                    .map(str::to_string)
+                    .unwrap_or_else(|| (row_index + 1).to_string());
+                let expression =
+                    category_value(category, row_index, operation_index).ok_or_else(|| {
+                        CIFError::InvalidFile(
+                            "Missing crystallographic symmetry operation".to_string(),
+                        )
+                    })?;
+                let operator = parse_xyz_operator(label, expression)?;
+                let cell = cell.ok_or_else(|| {
+                    CIFError::InvalidFile(
+                        "Crystallographic symmetry operators require complete cell parameters"
+                            .to_string(),
+                    )
+                })?;
+                crystal_operators.push(fractional_operator_to_cartesian(operator, cell)?);
+            }
+            break;
+        }
+    }
+
+    Ok(SymmetryData {
+        assemblies,
+        crystal: CrystalSymmetry {
+            space_group_name,
+            cell,
+            operators: crystal_operators,
+        },
+    })
+}
+
 /// Clean a CIF value (remove quotes, handle special values)
 fn clean_cif_value(value: &str) -> String {
     let value = value.trim();
@@ -1175,6 +1813,12 @@ mod tests {
     use super::*;
     use crate::trajectory::Trajectory;
     use ferritin_test_data::TestFile;
+
+    fn atom_site_cif(rows: &str) -> String {
+        format!(
+            "data_test\nloop_\n_atom_site.group_PDB\n_atom_site.id\n_atom_site.type_symbol\n_atom_site.label_atom_id\n_atom_site.auth_atom_id\n_atom_site.label_comp_id\n_atom_site.auth_comp_id\n_atom_site.label_asym_id\n_atom_site.auth_asym_id\n_atom_site.label_entity_id\n_atom_site.label_seq_id\n_atom_site.auth_seq_id\n_atom_site.pdbx_PDB_ins_code\n_atom_site.Cartn_x\n_atom_site.Cartn_y\n_atom_site.Cartn_z\n_atom_site.occupancy\n_atom_site.B_iso_or_equiv\n_atom_site.pdbx_PDB_model_num\n{rows}\n#\n"
+        )
+    }
 
     #[test]
     fn test_cif_file_read() {
@@ -1239,6 +1883,19 @@ mod tests {
         let model = cif.parse_to_model().unwrap();
         let ac = AtomCollection::from(&model);
 
+        let assembly_id = model
+            .symmetry
+            .assemblies
+            .first()
+            .expect("4hhb should contain biological assembly metadata")
+            .id
+            .clone();
+        let assembly_units = model.assembly_units(&assembly_id).unwrap();
+        assert!(!assembly_units.is_empty());
+        assert!(assembly_units
+            .iter()
+            .all(|unit| std::ptr::eq(unit.model(), &model)));
+
         let distinct_chain_ids: std::collections::HashSet<&str> =
             (0..ac.get_size()).map(|i| ac.get_chain_id(i)).collect();
         assert_eq!(
@@ -1262,7 +1919,10 @@ mod tests {
         // All frames share the same hierarchy
         let h0 = &traj.frame(0).hierarchy;
         let h9 = &traj.frame(9).hierarchy;
-        assert!(Arc::ptr_eq(h0, h9), "All frames must share the same Arc<AtomicHierarchy>");
+        assert!(
+            Arc::ptr_eq(h0, h9),
+            "All frames must share the same Arc<AtomicHierarchy>"
+        );
     }
 
     #[test]
@@ -1273,5 +1933,92 @@ mod tests {
 
         // parse_to_model should return only the first model
         assert_eq!(model.n_atoms(), 1231);
+    }
+
+    #[test]
+    fn test_cif_preserves_label_and_author_names_and_lowest_model() {
+        let content = atom_site_cif(
+            "ATOM 1 C CA CAA ALA ALX A AUTH 1 1 7 . 1.0 2.0 3.0 1.0 10.0 2\n\
+             ATOM 2 C CA CAA ALA ALX A AUTH 1 1 7 . 4.0 5.0 6.0 1.0 10.0 3",
+        );
+        let cif = CIFFile::new(content).unwrap();
+        let model = cif.parse_to_model().unwrap();
+        assert_eq!(model.coord(0), [1.0, 2.0, 3.0]);
+        assert_eq!(model.hierarchy.atoms.atom_name, ["CA"]);
+        assert_eq!(model.hierarchy.atoms.auth_atom_name, ["CAA"]);
+        assert_eq!(model.hierarchy.residues.comp_id, ["ALA"]);
+        assert_eq!(model.hierarchy.residues.auth_comp_id, ["ALX"]);
+    }
+
+    #[test]
+    fn test_cif_trajectory_rejects_mismatched_atom_identity() {
+        let content = atom_site_cif(
+            "ATOM 1 C CA CA ALA ALA A A 1 1 1 . 1.0 2.0 3.0 1.0 10.0 1\n\
+             ATOM 2 C CB CB ALA ALA A A 1 1 1 . 4.0 5.0 6.0 1.0 10.0 2",
+        );
+        let error = CIFFile::new(content)
+            .unwrap()
+            .parse_to_trajectory()
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("does not match"));
+    }
+
+    #[test]
+    fn test_cif_rejects_malformed_required_residue_id() {
+        let content = atom_site_cif("ATOM 1 C CA CA ALA ALA A A 1 1 nope . 1.0 2.0 3.0 1.0 10.0 1");
+        let error = CIFFile::new(content)
+            .unwrap()
+            .parse_to_model()
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("Invalid residue ID"));
+    }
+
+    #[test]
+    fn test_cif_parses_and_expands_zero_copy_assembly() {
+        let mut content =
+            atom_site_cif("ATOM 1 C CA CA ALA ALA A A 1 1 1 . 1.0 2.0 3.0 1.0 10.0 1");
+        content.push_str(
+            "loop_\n_pdbx_struct_assembly.id\n_pdbx_struct_assembly.details\n1 'biological dimer'\n#\n\
+             loop_\n_pdbx_struct_oper_list.id\n_pdbx_struct_oper_list.matrix[1][1]\n_pdbx_struct_oper_list.matrix[1][2]\n_pdbx_struct_oper_list.matrix[1][3]\n_pdbx_struct_oper_list.vector[1]\n_pdbx_struct_oper_list.matrix[2][1]\n_pdbx_struct_oper_list.matrix[2][2]\n_pdbx_struct_oper_list.matrix[2][3]\n_pdbx_struct_oper_list.vector[2]\n_pdbx_struct_oper_list.matrix[3][1]\n_pdbx_struct_oper_list.matrix[3][2]\n_pdbx_struct_oper_list.matrix[3][3]\n_pdbx_struct_oper_list.vector[3]\n\
+             1 1 0 0 0 0 1 0 0 0 0 1 0\n\
+             2 1 0 0 10 0 1 0 0 0 0 1 0\n#\n\
+             loop_\n_pdbx_struct_assembly_gen.assembly_id\n_pdbx_struct_assembly_gen.oper_expression\n_pdbx_struct_assembly_gen.asym_id_list\n1 '(1,2)' A\n#\n",
+        );
+        let model = CIFFile::new(content).unwrap().parse_to_model().unwrap();
+        let units = model.assembly_units("1").unwrap();
+        assert_eq!(units.len(), 2);
+        assert_eq!(units[0].atom_indices().collect::<Vec<_>>(), [0]);
+        assert_eq!(units[0].coords().next().unwrap(), [1.0, 2.0, 3.0]);
+        assert_eq!(units[1].coords().next().unwrap(), [11.0, 2.0, 3.0]);
+        assert!(std::ptr::eq(units[0].model(), units[1].model()));
+    }
+
+    #[test]
+    fn test_cif_parses_crystal_metadata_and_xyz_operators() {
+        let mut content =
+            atom_site_cif("ATOM 1 C CA CA ALA ALA A A 1 1 1 . 1.0 2.0 3.0 1.0 10.0 1");
+        content.push_str(
+            "_cell.length_a 10\n_cell.length_b 20\n_cell.length_c 30\n\
+             _cell.angle_alpha 90\n_cell.angle_beta 90\n_cell.angle_gamma 90\n\
+             _symmetry.space_group_name_H-M 'P 1'\n\
+             loop_\n_space_group_symop.id\n_space_group_symop.operation_xyz\n1 x,y,z\n2 -x+1/2,y+1/2,-z\n#\n",
+        );
+        let model = CIFFile::new(content).unwrap().parse_to_model().unwrap();
+        assert_eq!(
+            model.symmetry.crystal.space_group_name.as_deref(),
+            Some("P 1")
+        );
+        assert_eq!(
+            model.symmetry.crystal.cell,
+            Some([10.0, 20.0, 30.0, 90.0, 90.0, 90.0])
+        );
+        let units = model.crystal_units().unwrap();
+        assert_eq!(units.len(), 2);
+        let transformed = units[1].coords().next().unwrap();
+        assert!((transformed[0] - 4.0).abs() < 1e-5);
+        assert!((transformed[1] - 12.0).abs() < 1e-5);
+        assert!((transformed[2] + 3.0).abs() < 1e-5);
     }
 }

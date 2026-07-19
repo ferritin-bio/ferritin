@@ -23,6 +23,12 @@ impl<'a> ModelResidueView<'a> {
         &self.model.hierarchy.chains.auth_asym_id[chain_idx]
     }
 
+    /// Canonical chain identifier (`label_asym_id`).
+    pub fn label_chain_id(&self) -> &'a str {
+        let chain_idx = self.model.hierarchy.chain_of_residue(self.res_idx);
+        &self.model.hierarchy.chains.label_asym_id[chain_idx]
+    }
+
     pub fn is_amino_acid(&self) -> bool {
         is_amino_acid(self.residue_name())
     }
@@ -47,6 +53,11 @@ impl<'a> ModelResidueView<'a> {
 
     pub fn residue_name(&self) -> &'a str {
         &self.model.hierarchy.residues.comp_id[self.res_idx]
+    }
+
+    /// Author-assigned component identifier (`auth_comp_id`).
+    pub fn auth_residue_name(&self) -> &'a str {
+        &self.model.hierarchy.residues.auth_comp_id[self.res_idx]
     }
 
     pub fn find_atom_by_name(&self, name: &str) -> Option<ModelAtomView<'a>> {

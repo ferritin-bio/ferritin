@@ -4,6 +4,8 @@
 //! coordinates, occupancy, B-factors, and per-atom confidence scores. Topology
 //! (connectivity, sequence, etc.) lives in [`super::hierarchy::AtomicHierarchy`].
 
+use super::ModelError;
+
 /// Per-model coordinate data — varies across trajectory frames.
 ///
 /// Coordinates are stored as struct-of-arrays (SoA): `x[i]`, `y[i]`, `z[i]`
@@ -36,6 +38,35 @@ pub struct AtomicConformation {
 }
 
 impl AtomicConformation {
+    /// Validate all per-atom columns against `n_atoms`.
+    pub fn validate(&self, n_atoms: usize) -> Result<(), ModelError> {
+        for (name, len) in [
+            ("x", self.x.len()),
+            ("y", self.y.len()),
+            ("z", self.z.len()),
+        ] {
+            if len != n_atoms {
+                return Err(ModelError::new(format!(
+                    "conformation.{name} has length {len}, expected {n_atoms}"
+                )));
+            }
+        }
+        for (name, values) in [
+            ("occupancy", self.occupancy.as_ref()),
+            ("b_iso", self.b_iso.as_ref()),
+            ("confidence", self.confidence.as_ref()),
+        ] {
+            if let Some(values) = values
+                && values.len() != n_atoms
+            {
+                return Err(ModelError::new(format!(
+                    "conformation.{name} has length {}, expected {n_atoms}",
+                    values.len()
+                )));
+            }
+        }
+        Ok(())
+    }
     /// Number of atoms.
     pub fn n_atoms(&self) -> usize {
         self.x.len()
@@ -86,5 +117,21 @@ mod tests {
         assert!(conf.occupancy.is_none());
         assert!(conf.b_iso.is_none());
         assert!(conf.confidence.is_none());
+    }
+
+    #[test]
+    fn test_conformation_validation_rejects_mismatched_columns() {
+        let conf = AtomicConformation {
+            x: vec![0.0],
+            y: vec![],
+            z: vec![0.0],
+            occupancy: None,
+            b_iso: None,
+            confidence: None,
+        };
+        assert_eq!(
+            conf.validate(1).unwrap_err().to_string(),
+            "conformation.y has length 0, expected 1"
+        );
     }
 }
