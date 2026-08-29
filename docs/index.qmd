@@ -41,6 +41,6 @@ Access to protein PLM via the ONNX runtime. [rust-docs](https://ferritin-bio.git
 
 Utilities for working with protein language models. [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_plms/index.html). [source](https://github.com/ferritin-bio/ferritin/tree/main/ferritin-plms).
 
-### Ferritin-Structure-Mesh
+### Ferritin-Bevy
 
-Conversion of protein structures for use in [Bevy](https://bevyengine.org), [Rerun](https://rerun.io)  or other Rust Viz tools.  [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_structure_mesh/index.html). [source](https://github.com/ferritin-bio/ferritin/tree/main/ferritin-structure-mesh).
+Conversion of protein structures for use in [Bevy](https://bevyengine.org), [Rerun](https://rerun.io)  or other Rust Viz tools.  [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_bevy/index.html). [source](https://github.com/ferritin-bio/ferritin/tree/main/crates/ferritin-bevy).
