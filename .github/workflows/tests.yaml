@@ -31,5 +31,15 @@ jobs:
       - name: Run Build
         run: cargo build
 
+      - name: Check all targets (examples, tests, benches)
+        run: cargo check --workspace --all-targets
+
+      - name: Check rerun-gated code
+        run: cargo check -p ferritin-bevy --features rerun
+
+      - name: Check rerun example
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: cargo check -p ferritin-examples --features rerun --example rerun
+
       - name: Run tests
         run: cargo test --verbose

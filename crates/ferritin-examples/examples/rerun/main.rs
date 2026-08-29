@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bevy::prelude::*;
-use ferritin_core::load_structure;
-use ferritin_structure_mesh::{ColorScheme, RenderOptions, Structure, ToRerun};
+use ferritin_bevy::{ColorScheme, RenderOptions, Structure, ToRerun};
+use ferritin_core::load_model;
 use ferritin_test_data::TestFile;
 use rerun::Mesh3D;
 
@@ -12,7 +12,7 @@ fn main() -> Result<()> {
 
     // Load the structure
     let (molfile, _handle) = TestFile::protein_01().create_temp()?;
-    let ac = load_structure(molfile)?;
+    let ac = load_model(molfile)?;
 
     // Define a few materials
     let chalky = StandardMaterial {

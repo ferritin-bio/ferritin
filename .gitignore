@@ -4,7 +4,6 @@
 .DS_Store
 
 
-crates/ferritin-structure-mesh/wasm-examples/
 docs/doc
 
 # Beads / Dolt files (added by bd init)
