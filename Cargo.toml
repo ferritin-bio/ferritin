@@ -22,24 +22,24 @@ license = "MIT OR Apache-2.0"
 edition = "2024"
 
 [workspace.dependencies]
-anyhow = "1.0.103"
+anyhow = "1.0.104"
 chrono = "0.4"
-compact_str = "0.9"
+compact_str = "0.10"
 urlencoding = "2"
-validator = { version = "0.20", features = ["derive"] }
+validator = { version = "0.21", features = ["derive"] }
 bevy = { version = "0.19", default-features = false }
-bon = "3.9.3"
+bon = "3.10.0"
 candle-core =  "0.11.0"
 candle-metal-kernels = "0.11.0"
 candle-nn = "0.11.0"
 candle-transformers = "0.11.0"
-clap = { version = "4.6.1", features = ["derive"] }
-hf-hub = { version = "1.0.0-rc.1", features = ["blocking"] }
+clap = { version = "4.6.6", features = ["derive"] }
+hf-hub = { version = "1.0.0", features = ["blocking"] }
 itertools = "0.15.0"
 ndarray = "0.17.2"
-rerun = "0.33"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
+rerun = "0.36"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 strum = { version = "0.28", features = ["derive"] }
 tempfile = "3.27.0"
 tokenizers = { version = "0.23.1", features = ["onig"] }
