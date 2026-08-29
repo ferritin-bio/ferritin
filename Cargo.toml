@@ -24,9 +24,9 @@ edition = "2024"
 [workspace.dependencies]
 anyhow = "1.0.104"
 chrono = "0.4"
-compact_str = "0.9"
+compact_str = "0.10"
 urlencoding = "2"
-validator = { version = "0.20", features = ["derive"] }
+validator = { version = "0.21", features = ["derive"] }
 bevy = { version = "0.19", default-features = false }
 bon = "3.10.0"
 candle-core =  "0.11.0"
@@ -37,7 +37,7 @@ clap = { version = "4.6.6", features = ["derive"] }
 hf-hub = { version = "1.0.0", features = ["blocking"] }
 itertools = "0.15.0"
 ndarray = "0.17.2"
-rerun = "0.33"
+rerun = "0.36"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 strum = { version = "0.28", features = ["derive"] }
