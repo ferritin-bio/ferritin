@@ -87,14 +87,38 @@ impl ESM2Runner {
         let tokenizer = ESM2::load_tokenizer()?;
         Ok(ESM2Runner { model, tokenizer })
     }
+    /// Encode a sequence to token ids **with** ESM-2's BOS (`<cls>`) and EOS
+    /// (`<eos>`) special tokens.
+    ///
+    /// The bundled `tokenizer.json` has no post-processor, so `encode(.., true)`
+    /// would still NOT add them. ESM-2 is trained with BOS/EOS wrapping the
+    /// sequence, and every consumer here (`predict_contacts`,
+    /// `get_pseudo_probabilities`, `embed`, `decode_logits`) assumes an `L + 2`
+    /// row output and strips those two rows. Running the model without them
+    /// feeds a different context and its logits diverge from the HF reference,
+    /// so they must be added explicitly.
+    fn encode_with_special(&self, sequence: &str) -> Result<Vec<u32>> {
+        let bos = self
+            .tokenizer
+            .token_to_id("<cls>")
+            .ok_or_else(|| anyhow!("ESM2 tokenizer missing <cls> token"))?;
+        let eos = self
+            .tokenizer
+            .token_to_id("<eos>")
+            .ok_or_else(|| anyhow!("ESM2 tokenizer missing <eos> token"))?;
+        let inner = self
+            .tokenizer
+            .encode(sequence.to_string(), false)
+            .map_err(E::msg)?;
+        let mut ids = Vec::with_capacity(inner.get_ids().len() + 2);
+        ids.push(bos);
+        ids.extend_from_slice(inner.get_ids());
+        ids.push(eos);
+        Ok(ids)
+    }
     pub fn run_forward(&self, prot_sequence: &str) -> Result<ESM2Output> {
         let device = self.model.get_device();
-        let tokens = self
-            .tokenizer
-            .encode(prot_sequence.to_string(), false)
-            .map_err(E::msg)?
-            .get_ids()
-            .to_vec();
+        let tokens = self.encode_with_special(prot_sequence)?;
         let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
         let encoded = self.model.forward(&token_ids, None)?;
         Ok(encoded)
@@ -105,12 +129,7 @@ impl ESM2Runner {
     /// so dimensions equal the number of amino acids in `prot_sequence`).
     pub fn predict_contacts(&self, prot_sequence: &str) -> Result<Tensor> {
         let device = self.model.get_device();
-        let tokens = self
-            .tokenizer
-            .encode(prot_sequence.to_string(), false)
-            .map_err(E::msg)?
-            .get_ids()
-            .to_vec();
+        let tokens = self.encode_with_special(prot_sequence)?;
         let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
         // squeeze batch dim: (1, L, L) → (L, L)
         self.model
@@ -173,12 +192,7 @@ impl PlmRunner for ESM2Runner {
     /// Shape: `(1, L, hidden_size)` where `L` includes BOS and EOS tokens.
     fn embed(&self, sequence: &str) -> Result<Tensor> {
         let device = self.model.get_device();
-        let tokens = self
-            .tokenizer
-            .encode(sequence.to_string(), false)
-            .map_err(E::msg)?
-            .get_ids()
-            .to_vec();
+        let tokens = self.encode_with_special(sequence)?;
         let token_ids = Tensor::new(&tokens[..], device)?.unsqueeze(0)?;
         Ok(self.model.embed(&token_ids, None)?)
     }

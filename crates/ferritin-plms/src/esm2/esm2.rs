@@ -514,8 +514,12 @@ impl ESM2Attention {
 
         // Apply attention weights to values
         let attn_output = attention_weights_flat.matmul(&v)?;
+        // Un-merge heads: (batch*heads, seq, head_dim) -> (seq, batch*heads,
+        // head_dim) -> (seq, batch, embed). This must mirror the forward split
+        // (transpose(0,1)); transpose(1,2) here would scramble seq with
+        // head_dim.
         let attn_output = attn_output
-            .transpose(1, 2)?
+            .transpose(0, 1)?
             .contiguous()?
             .reshape((seq_len, batch_size, embed_dim))?;
         let output = self.out_proj.forward(&attn_output)?;
@@ -562,9 +566,13 @@ impl ESM2Layer {
         let norm_x = xs.apply(&self.self_attn_layer_norm)?;
         let (attn_out, attn_weights) = self.self_attn.forward(&norm_x, &norm_x, &norm_x)?;
         let x = (attn_out + xs)?;
-        // Pre-LayerNorm → FFN → residual
+        // Pre-LayerNorm → FFN → residual.
+        // ESM-2's intermediate activation is exact (erf-based) gelu; candle's
+        // `gelu()` is the tanh approximation, which drifts per layer and
+        // compounds across the stack. Match the LM head (which already uses
+        // `gelu_erf`) and HF modeling_esm.py.
         let norm_x2 = x.apply(&self.final_layer_norm)?;
-        let ffn_out = norm_x2.apply(&self.fc1)?.gelu()?.apply(&self.fc2)?;
+        let ffn_out = norm_x2.apply(&self.fc1)?.gelu_erf()?.apply(&self.fc2)?;
         Ok(((ffn_out + x)?, attn_weights))
     }
 }
