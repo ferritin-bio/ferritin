@@ -1,1 +1,7 @@
+# Parity fixtures are large by default and stay out of git — EXCEPT the small,
+# committed reference tensors for the parity suite (a few KB each), which the
+# non-ignored parity tests load. Large model-specific fixtures (ESMC-6B, ESM3,
+# etc.) remain generated-on-demand and gitignored.
 *.safetensors
+!esm2_parity.safetensors
+!amplify_parity.safetensors

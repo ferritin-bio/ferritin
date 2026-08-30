@@ -23,7 +23,7 @@ import argparse
 from pathlib import Path
 
 import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer
 
 MODEL_ID = "chandar-lab/AMPLIFY_120M"
 
@@ -38,6 +38,13 @@ SEQUENCES = {
 def get_logits(model, tokenizer, sequence: str) -> torch.Tensor:
     """Return per-position logits for a sequence, shape (L, vocab_size)."""
     inputs = tokenizer(sequence, return_tensors="pt")
+    # AMPLIFY expects an *additive* attention mask (0.0 keep / -inf drop), not
+    # the tokenizer's 0/1 mask. For a single unpadded sequence every token is
+    # kept, so this is an all-zeros (no-op) bias.
+    if "attention_mask" in inputs:
+        inputs["attention_mask"] = torch.where(
+            inputs["attention_mask"].bool(), 0.0, float("-inf")
+        )
     outputs = model(**inputs)
     # outputs.logits shape: (1, L+2, vocab_size) — strip BOS/EOS tokens
     logits = outputs.logits[0, 1:-1, :]  # (L, vocab_size)
@@ -59,9 +66,31 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading {args.model} ...")
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = AutoModelForMaskedLM.from_pretrained(args.model)
+    # AMPLIFY ships its modeling code in the HF repo, so recent transformers
+    # require trust_remote_code=True to load it.
+    # AMPLIFY registers its class as AutoModel (config.json auto_map), and that
+    # class already returns a MaskedLMOutput with per-position logits.
+    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
+    # low_cpu_mem_usage=False forces eager init so AMPLIFY's non-persistent
+    # `freqs_cis` RoPE buffer is materialised on CPU (not left on the meta
+    # device, which recent transformers uses by default).
+    model = AutoModel.from_pretrained(
+        args.model, trust_remote_code=True, low_cpu_mem_usage=False
+    )
     model.eval()
+
+    # `freqs_cis` is a plain (non-buffer) attribute built in __init__, so under
+    # transformers' meta-init it can be left on the meta device. Rebuild it on
+    # CPU from the model's own precompute_freqs_cis so RoPE has real data.
+    if getattr(model, "freqs_cis", None) is not None and model.freqs_cis.is_meta:
+        import importlib
+
+        pkg = type(model).__module__.rsplit(".", 1)[0]
+        precompute_freqs_cis = importlib.import_module(f"{pkg}.rotary").precompute_freqs_cis
+        model.freqs_cis = precompute_freqs_cis(
+            model.config.hidden_size // model.config.num_attention_heads,
+            model.config.max_length,
+        )
 
     tensors = {}
     for name, seq in SEQUENCES.items():
