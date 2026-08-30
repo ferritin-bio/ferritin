@@ -9,10 +9,6 @@ use anyhow::Result;
 use ferritin_plms::ESM2Models;
 use support::model_harness::run_remote_esm2_smoke;
 
-/// Fixture produced by `scripts/generate_esm2_fixtures.py` (gitignored, not committed).
-/// Generate with: `python scripts/generate_esm2_fixtures.py --output crates/ferritin-plms/tests/fixtures/`
-const ESM2_PARITY_FIXTURE: &str = "tests/fixtures/esm2_parity.safetensors";
-
 /// Max absolute logit difference threshold (ferritin-lgr issue spec: 1e-3).
 const ESM2_LOGIT_TOLERANCE: f32 = 1e-3;
 
@@ -49,54 +45,23 @@ fn test_esm2_150m_embedding() -> Result<()> {
 #[test]
 #[ignore = "requires HF model download and fixture: run scripts/generate_esm2_fixtures.py"]
 fn test_esm2_parity_vs_python_reference() -> Result<()> {
-    use candle_core::safetensors;
     use ferritin_plms::ESM2Runner;
     use ferritin_plms::device;
-    use std::collections::HashMap;
-
-    let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(ESM2_PARITY_FIXTURE);
-    assert!(
-        fixture_path.exists(),
-        "Fixture not found at {fixture_path:?}. Run scripts/generate_esm2_fixtures.py first."
-    );
+    use support::parity::{ParityFixture, SpecialTokens, align_rows, assert_logits_close};
 
     let dev = device(false)?;
     let esm2 = ESM2Runner::load_model(ESM2Models::T6_8M, dev.clone())?;
 
-    let fixtures: HashMap<String, candle_core::Tensor> =
-        safetensors::load(&fixture_path, &dev)?;
+    // The ESM2 reference (generate_esm2_fixtures.py) strips BOS/EOS and stores
+    // only the L interior residue rows, so align the Rust output to match.
+    let fixture = ParityFixture::load("esm2_parity", &dev)?;
 
     for (name, sequence) in PARITY_SEQUENCES {
-        let key = format!("{name}_logits");
-        let ref_logits = fixtures.get(&key)
-            .unwrap_or_else(|| panic!("fixture missing key '{key}'"));
-
+        let ref_logits = fixture.tensor(&format!("{name}_logits"))?;
         let output = esm2.run_forward(sequence)?;
-        let seq_len = sequence.chars().filter(|c| *c != '<' && *c != '>').count();
-        // Strip BOS at index 0 and EOS at index -1; keep inner L positions
-        let rust_logits = output.logits
-            .narrow(1, 1, seq_len)?
-            .squeeze(0)?;
-
-        let (rust_l, rust_v) = rust_logits.dims2()?;
-        let (ref_l, ref_v) = ref_logits.dims2()?;
-        assert_eq!(rust_l, ref_l, "{name}: sequence length mismatch ({rust_l} vs {ref_l})");
-        assert_eq!(rust_v, ref_v, "{name}: vocab size mismatch");
-
-        let rust_flat: Vec<f32> = rust_logits.flatten_all()?.to_vec1()?;
-        let ref_flat: Vec<f32> = ref_logits.flatten_all()?.to_vec1()?;
-
-        let max_diff = rust_flat.iter()
-            .zip(ref_flat.iter())
-            .map(|(&r, &p)| (r - p).abs())
-            .fold(0.0_f32, f32::max);
-
-        assert!(
-            max_diff <= ESM2_LOGIT_TOLERANCE,
-            "{name}: max absolute logit diff {max_diff:.6} exceeds tolerance {ESM2_LOGIT_TOLERANCE}"
-        );
-        println!("{name}: max logit diff = {max_diff:.6e}");
+        let rust_logits = align_rows(&output.logits, SpecialTokens::BOS_EOS)?;
+        assert_logits_close(&rust_logits, ref_logits, ESM2_LOGIT_TOLERANCE)?;
+        println!("{name}: logit parity OK (tol {ESM2_LOGIT_TOLERANCE:.1e})");
     }
     Ok(())
 }

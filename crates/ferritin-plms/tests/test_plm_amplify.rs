@@ -5,10 +5,7 @@ mod support;
 use ferritin_plms::amplify::amplify_runner::{AmplifyModels, AmplifyRunner};
 use ferritin_plms::device;
 use support::model_harness::{TEST_SEQUENCE, run_remote_amplify_prediction_smoke};
-
-/// Fixture produced by `scripts/generate_amplify_fixtures.py` (gitignored, not committed).
-/// Generate with: `python scripts/generate_amplify_fixtures.py --output crates/ferritin-plms/tests/fixtures/`
-const AMPLIFY_PARITY_FIXTURE: &str = "tests/fixtures/amplify_parity.safetensors";
+use support::parity::{ParityFixture, SpecialTokens, align_rows, assert_logits_close};
 
 /// Max absolute logit difference threshold (matching ferritin-1ti issue spec of 1e-3).
 const AMPLIFY_LOGIT_TOLERANCE: f32 = 1e-3;
@@ -106,58 +103,28 @@ fn test_amplify_120m_contact_map() {
 #[test]
 #[ignore = "requires HF model download and fixture: run scripts/generate_amplify_fixtures.py"]
 fn test_amplify_parity_vs_python_reference() {
-    use candle_core::safetensors;
-    use std::collections::HashMap;
-
-    let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(AMPLIFY_PARITY_FIXTURE);
-    assert!(
-        fixture_path.exists(),
-        "Fixture not found at {fixture_path:?}. Run scripts/generate_amplify_fixtures.py first."
-    );
-
     let amplify = load_amplify_120m();
-    let device = amplify.run_forward(PARITY_SEQUENCES[0].1)
+    let device = amplify
+        .run_forward(PARITY_SEQUENCES[0].1)
         .expect("forward pass failed")
         .logits
         .device()
         .clone();
 
-    let fixtures: HashMap<String, candle_core::Tensor> =
-        safetensors::load(&fixture_path, &device)
-            .expect("Failed to load AMPLIFY parity fixture");
+    // The AMPLIFY reference (generate_amplify_fixtures.py) strips BOS/EOS and
+    // stores only the L interior residue rows, so align the Rust output.
+    let fixture = ParityFixture::load("amplify_parity", &device)
+        .expect("failed to load AMPLIFY parity fixture");
 
     for (name, sequence) in PARITY_SEQUENCES {
-        let key = format!("{name}_logits");
-        let ref_logits = fixtures.get(&key)
-            .unwrap_or_else(|| panic!("fixture missing key '{key}'"));
+        let ref_logits = fixture
+            .tensor(&format!("{name}_logits"))
+            .expect("fixture missing logits key");
 
         let output = amplify.run_forward(sequence).expect("forward pass failed");
-        let seq_len = sequence.len();
-        // Strip BOS/EOS tokens from Rust output: indices [1..=seq_len]
-        let rust_logits = output.logits
-            .narrow(1, 1, seq_len)
-            .expect("narrow failed")
-            .squeeze(0)
-            .expect("squeeze failed");
-
-        let (rust_l, rust_v) = rust_logits.dims2().expect("dims2 failed");
-        let (ref_l, ref_v) = ref_logits.dims2().expect("ref dims2 failed");
-        assert_eq!(rust_l, ref_l, "{name}: sequence length mismatch");
-        assert_eq!(rust_v, ref_v, "{name}: vocab size mismatch");
-
-        let rust_flat: Vec<f32> = rust_logits.flatten_all().expect("flatten").to_vec1().expect("to_vec1");
-        let ref_flat: Vec<f32> = ref_logits.flatten_all().expect("flatten").to_vec1().expect("to_vec1");
-
-        let max_diff = rust_flat.iter()
-            .zip(ref_flat.iter())
-            .map(|(&r, &p)| (r - p).abs())
-            .fold(0.0_f32, f32::max);
-
-        assert!(
-            max_diff <= AMPLIFY_LOGIT_TOLERANCE,
-            "{name}: max absolute logit diff {max_diff:.6} exceeds tolerance {AMPLIFY_LOGIT_TOLERANCE}"
-        );
-        println!("{name}: max logit diff = {max_diff:.6e}");
+        let rust_logits = align_rows(&output.logits, SpecialTokens::BOS_EOS).expect("align failed");
+        assert_logits_close(&rust_logits, ref_logits, AMPLIFY_LOGIT_TOLERANCE)
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
+        println!("{name}: logit parity OK (tol {AMPLIFY_LOGIT_TOLERANCE:.1e})");
     }
 }

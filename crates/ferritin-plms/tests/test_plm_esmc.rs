@@ -17,6 +17,15 @@ use ferritin_plms::{
     esmc::models::esmc::{ESMC, LogitsConfig},
 };
 
+/// Cosine-similarity floor for ESMC-300M per-residue embedding parity.
+/// A 30-layer transformer accumulates F32 rounding, so this is looser than the
+/// 1e-3 logit tolerance used for the shallower ESM2/AMPLIFY ports.
+const ESMC_EMBED_COSINE_FLOOR: f32 = 0.999;
+
+/// Reference sequence for the ESMC embedding parity fixture.
+const ESMC_PARITY_SEQ: &str =
+    "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG";
+
 /// GFP — used as the primary smoke-test sequence (matches the biohub model card).
 const GFP: &str = concat!(
     "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCF",
@@ -204,5 +213,36 @@ fn test_esmc_300m_logits_shape() -> Result<()> {
         &[1, expected_len, 64],
         "ESMC-300M logits shape wrong"
     );
+    Ok(())
+}
+
+/// Numerical parity: ESMC-300M Rust per-residue embeddings vs the Python
+/// reference. The reference `(L+2, 960)` tensor **keeps** the BOS/EOS rows, so
+/// the Rust `(1, L+2, 960)` output aligns 1:1 after squeezing the batch dim
+/// (`SpecialTokens::NONE`) — a mismatch in BOS/EOS placement therefore shows up
+/// as a failure at position 0 or L+1 rather than passing silently.
+///
+/// Requires:
+///   1. `biohub/ESMC-300M` weights (~1.3 GB, cached by hf_hub on first run)
+///   2. Fixture `tests/fixtures/esmc_parity.safetensors` from
+///      `scripts/generate_esmc_fixtures.py`
+///
+/// Run: `cargo test -p ferritin-plms test_esmc_parity -- --ignored --nocapture`
+#[test]
+#[ignore = "requires HF model download and fixture: run scripts/generate_esmc_fixtures.py"]
+fn test_esmc_parity_vs_python_reference() -> Result<()> {
+    use ferritin_plms::{ESMCModels, ESMCRunner};
+    use support::parity::{ParityFixture, SpecialTokens, align_rows, assert_embeddings_close};
+
+    let device = Device::Cpu;
+    let fixture = ParityFixture::load("esmc_parity", &device)?;
+    let ref_embeddings = fixture.tensor("embeddings")?;
+
+    let runner = ESMCRunner::from_pretrained(ESMCModels::ESMC300M, device)?;
+    let rust = runner.embed_sequence(ESMC_PARITY_SEQ)?; // (1, L+2, 960)
+    let rust_embeddings = align_rows(&rust, SpecialTokens::NONE)?;
+
+    assert_embeddings_close(&rust_embeddings, ref_embeddings, ESMC_EMBED_COSINE_FLOOR)?;
+    println!("ESMC-300M embedding parity OK (cosine floor {ESMC_EMBED_COSINE_FLOOR})");
     Ok(())
 }
