@@ -108,6 +108,28 @@ impl ParityFixture {
     }
 }
 
+/// Whether the HF-download-dependent parity tests should actually run.
+///
+/// These tests need the committed fixture (cheap, in-repo) **and** the model
+/// weights, which are fetched from Hugging Face on first run and cached. That
+/// download is far too heavy for the PR path, so the tests are off unless
+/// `FERRITIN_HF_TESTS` is set to `1`/`true`. The nightly workflow sets it; a
+/// developer with the weights cached can run them the same way locally:
+///
+/// ```bash
+/// FERRITIN_HF_TESTS=1 cargo test -p ferritin-plms
+/// ```
+///
+/// A gated-off test returns early (reported as passed) rather than being
+/// `#[ignore]`d, so `cargo test` exercises the surrounding wiring without the
+/// download and the nightly `--include-ignored` run does the real comparison.
+pub fn hf_tests_enabled() -> bool {
+    matches!(
+        std::env::var("FERRITIN_HF_TESTS").as_deref(),
+        Ok("1") | Ok("true")
+    )
+}
+
 /// Resolve a fixture stem to an absolute path under `tests/fixtures/`.
 pub fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
