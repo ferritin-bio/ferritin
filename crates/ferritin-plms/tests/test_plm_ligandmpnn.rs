@@ -1,29 +1,17 @@
 //! Tests for ProteinMPNNRunner — model loading and inference via the public API.
 
+#[path = "support/mod.rs"]
+mod support;
+
 #[cfg(test)]
 mod tests {
+    use super::support::parity::{ParityFixture, assert_distribution_close};
     use candle_core::Device;
-    use ferritin_plms::ligandmpnn::configs::{MPNNExecConfig, ModelTypes, RunConfig};
     use ferritin_plms::ProteinMPNNRunner;
+    use ferritin_plms::ligandmpnn::configs::{MPNNExecConfig, ModelTypes, RunConfig};
     use ferritin_test_data::TestFile;
 
-    /// Fixture path produced by `scripts/generate_proteinmpnn_fixtures.py`.
-    /// Not committed; generate locally then run with `cargo test -- --include-ignored`.
-    const PMPNN_PARITY_FIXTURE: &str = "tests/fixtures/1BC8_log_probs.safetensors";
-
     const KL_THRESHOLD: f64 = 0.01;
-
-    /// KL(P ‖ Q) = Σ P_i · ln(P_i / Q_i).  Both slices must be probability vectors.
-    fn kl_divergence(p: &[f32], q: &[f32]) -> f64 {
-        p.iter()
-            .zip(q.iter())
-            .filter(|(pi, _)| **pi > 1e-9)
-            .map(|(pi, qi)| {
-                let qi = qi.max(1e-9_f32);
-                (*pi as f64) * ((*pi as f64).ln() - (qi as f64).ln())
-            })
-            .sum()
-    }
 
     fn run_config() -> RunConfig {
         RunConfig {
@@ -102,35 +90,16 @@ mod tests {
     #[test]
     #[ignore = "requires fixture: run scripts/generate_proteinmpnn_fixtures.py first"]
     fn test_pmpnn_parity_vs_python_reference() {
-        use candle_core::safetensors;
-        use std::collections::HashMap;
-
-        let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join(PMPNN_PARITY_FIXTURE);
-        assert!(
-            fixture_path.exists(),
-            "Fixture not found at {fixture_path:?}. Run scripts/generate_proteinmpnn_fixtures.py first."
-        );
-
         let device = Device::Cpu;
 
-        // Load Python-reference log-probs: shape (L, 21)
-        let tensors: HashMap<String, candle_core::Tensor> =
-            safetensors::load(&fixture_path, &device)
-                .expect("Failed to load parity fixture");
-        let ref_log_probs = tensors
-            .get("log_probs")
-            .expect("fixture must contain 'log_probs' tensor");
-        let (seq_len, vocab_size) = ref_log_probs.dims2().expect("expected 2D tensor");
+        // Python-reference log-probs, shape (L, 21). ProteinMPNN has no special
+        // tokens, so the reference rows align 1:1 with residues.
+        let fixture = ParityFixture::load_with_generator("1BC8_log_probs", "proteinmpnn", &device)
+            .expect("failed to load ProteinMPNN parity fixture");
+        let ref_log_probs = fixture.tensor("log_probs").expect("missing 'log_probs'");
+        let (_, vocab_size) = ref_log_probs.dims2().expect("expected 2D tensor");
         assert_eq!(vocab_size, 21, "ProteinMPNN vocab is 21 amino acids");
-
-        let ref_probs_flat: Vec<f32> = ref_log_probs
-            .exp()
-            .expect("exp failed")
-            .reshape((seq_len * vocab_size,))
-            .expect("reshape failed")
-            .to_vec1()
-            .expect("to_vec1 failed");
+        let ref_probs = ref_log_probs.exp().expect("exp failed");
 
         // Run Rust model on 1BC8.pdb (same structure used for fixture generation)
         let (weights_path, _weights_handle) = TestFile::ligmpnn_pmpnn_01()
@@ -160,30 +129,14 @@ mod tests {
             .expect("Failed to generate protein features");
 
         // get_log_probs returns (L, 21) log-probabilities
-        let rust_log_probs = runner
+        let rust_probs = runner
             .get_log_probs(&features)
-            .expect("get_log_probs failed");
-        let rust_probs_flat: Vec<f32> = rust_log_probs
+            .expect("get_log_probs failed")
             .exp()
-            .expect("exp failed")
-            .reshape((seq_len * vocab_size,))
-            .expect("reshape failed")
-            .to_vec1()
-            .expect("to_vec1 failed");
+            .expect("exp failed");
 
-        let mut max_kl: f64 = 0.0;
-        for pos in 0..seq_len {
-            let ref_slice = &ref_probs_flat[pos * 21..(pos + 1) * 21];
-            let rust_slice = &rust_probs_flat[pos * 21..(pos + 1) * 21];
-            let kl = kl_divergence(ref_slice, rust_slice);
-            if kl > max_kl {
-                max_kl = kl;
-            }
-            assert!(
-                kl < KL_THRESHOLD,
-                "KL divergence at position {pos} = {kl:.5} exceeds threshold {KL_THRESHOLD}"
-            );
-        }
-        println!("Max per-position KL divergence: {max_kl:.6}");
+        // ProteinMPNN has no special tokens; reference and Rust rows align 1:1.
+        assert_distribution_close(&rust_probs, &ref_probs, KL_THRESHOLD)
+            .expect("ProteinMPNN distribution parity");
     }
 }

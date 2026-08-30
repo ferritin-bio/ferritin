@@ -7,6 +7,8 @@
 //! cargo test -p ferritin-plms test_esm3 -- --ignored --nocapture
 //! ```
 
+mod support;
+
 use anyhow::Result;
 use candle_core::{DType, Device, Tensor};
 use ferritin_plms::{
@@ -16,6 +18,11 @@ use ferritin_plms::{
         tokenization::sequence::{decode_sequence, tokenize_sequence},
     },
 };
+
+/// Cosine-similarity floor for ESM3 sm-open per-residue embedding parity.
+/// A 48-layer trunk accumulates more F32 rounding than the shallower ports, so
+/// this is looser than the 1e-3 logit tolerance used for ESM2/AMPLIFY.
+const ESM3_EMBED_COSINE_FLOOR: f32 = 0.99;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -242,5 +249,36 @@ fn test_esm3_sm_open_gfp_logit_shape() -> Result<()> {
     let expected_len = GFP.len() + 2;
     let seq_logits = output.sequence_logits.expect("sequence logits");
     assert_eq!(seq_logits.dims(), &[1, expected_len, 64]);
+    Ok(())
+}
+
+/// Numerical parity: ESM3 sm-open Rust per-residue embeddings vs the Python
+/// reference. The reference `(L+2, 1536)` tensor keeps the BOS/EOS rows, so the
+/// Rust `(1, L+2, 1536)` output aligns 1:1 after squeezing the batch dim
+/// (`SpecialTokens::NONE`); a BOS/EOS placement mismatch surfaces as a failure
+/// at position 0 or L+1 rather than passing silently.
+///
+/// Requires gated access to `EvolutionaryScale/esm3-sm-open-v1` (accept the
+/// Cambrian Non-Commercial license and `huggingface-cli login`) plus the
+/// fixture `tests/fixtures/esm3_parity.safetensors` from
+/// `scripts/generate_esm3_fixtures.py`.
+///
+/// Run: `cargo test -p ferritin-plms test_esm3_parity -- --ignored --nocapture`
+#[test]
+#[ignore = "requires gated HF download and fixture: run scripts/generate_esm3_fixtures.py"]
+fn test_esm3_parity_vs_python_reference() -> Result<()> {
+    use ferritin_plms::{ESM3Models, ESM3Runner};
+    use support::parity::{ParityFixture, SpecialTokens, align_rows, assert_embeddings_close};
+
+    let device = Device::Cpu;
+    let fixture = ParityFixture::load("esm3_parity", &device)?;
+    let ref_embeddings = fixture.tensor("embeddings")?;
+
+    let runner = ESM3Runner::from_pretrained(ESM3Models::SmOpen, device)?;
+    let rust = runner.embed_sequence(SHORT_SEQ)?; // (1, L+2, 1536)
+    let rust_embeddings = align_rows(&rust, SpecialTokens::NONE)?;
+
+    assert_embeddings_close(&rust_embeddings, ref_embeddings, ESM3_EMBED_COSINE_FLOOR)?;
+    println!("ESM3 sm-open embedding parity OK (cosine floor {ESM3_EMBED_COSINE_FLOOR})");
     Ok(())
 }

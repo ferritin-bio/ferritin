@@ -1,3 +1,7 @@
+// Shared across integration-test binaries; not every binary exercises every
+// helper, so unused-in-this-binary items are expected.
+#![allow(dead_code)]
+
 use anyhow::{Result, anyhow};
 use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device, Error};
