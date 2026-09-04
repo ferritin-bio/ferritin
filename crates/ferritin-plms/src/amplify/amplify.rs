@@ -133,8 +133,12 @@ impl AMPLIFY {
 pub fn precompute_freqs_cis(head_dim: usize, seq_len: usize) -> Result<Tensor> {
     let half_dim = head_dim / 2;
     let theta = 10000.0_f32;
+    // AMPLIFY rotary.py: freqs = 1 / theta ** (arange(0, head_dim, 2) / head_dim),
+    // i.e. exponent 2*i / head_dim for i in 0..head_dim/2. The denominator is the
+    // full head_dim, NOT half_dim — dividing by half_dim makes the frequencies
+    // decay twice as fast and skews rotary phase with position.
     let freqs = Tensor::from_iter(
-        (0..half_dim).map(|i| 1.0 / theta.powf(2.0 * i as f32 / half_dim as f32)),
+        (0..half_dim).map(|i| 1.0 / theta.powf(2.0 * i as f32 / head_dim as f32)),
         &Device::Cpu,
     )?;
     let t = (0..seq_len).map(|x| x as f32);
