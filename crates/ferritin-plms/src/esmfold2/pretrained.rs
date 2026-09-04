@@ -31,7 +31,7 @@ use super::config::ESMFold2Config;
 use super::model::ESMFold2Model;
 use super::output::ESMFold2Output;
 use crate::esmc::pretrained::{ESMCModels, ESMCRunner};
-use anyhow::Result;
+use anyhow::{Result, bail};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use hf_hub::HFClientSync;
@@ -51,10 +51,21 @@ pub enum ESMFold2Models {
 
 impl ESMFold2Models {
     /// Returns `(hf_repo_id, config)` for this variant.
-    pub fn model_info(&self) -> (&'static str, ESMFold2Config) {
+    ///
+    /// `Full` currently returns an error: only the Fast architecture/config is
+    /// ported. The Full variant adds MSA conditioning (`msa_encoder.*` weights
+    /// that Fast disables), so pairing the Full repo with `ESMFold2Config::fast()`
+    /// would silently load a subset of the weights and emit degraded structures.
+    /// Refusing is the honest failure until a `full()` config is verified against
+    /// the reference implementation (ferritin-100.4).
+    pub fn model_info(&self) -> Result<(&'static str, ESMFold2Config)> {
         match self {
-            Self::Fast => ("biohub/ESMFold2-Fast", ESMFold2Config::fast()),
-            Self::Full => ("biohub/ESMFold2", ESMFold2Config::fast()),
+            Self::Fast => Ok(("biohub/ESMFold2-Fast", ESMFold2Config::fast())),
+            Self::Full => bail!(
+                "ESMFold2Models::Full is not yet supported: only the Fast config is ported. \
+                 The Full variant (MSA conditioning) needs a config verified against the \
+                 reference before it can load without silently degrading structures."
+            ),
         }
     }
 }
@@ -84,7 +95,7 @@ impl ESMFold2Runner {
     /// physically meaningless. Use this for shape/pipeline testing without
     /// requiring 12 GB of disk space.
     pub fn from_pretrained(model_variant: ESMFold2Models, device: Device) -> Result<Self> {
-        let (repo_id, config) = model_variant.model_info();
+        let (repo_id, config) = model_variant.model_info()?;
         let model = Self::load_structure_head(repo_id, &config, &device)?;
         Ok(Self { model, config, device, backbone: None })
     }
@@ -95,7 +106,7 @@ impl ESMFold2Runner {
         model_variant: ESMFold2Models,
         device: Device,
     ) -> Result<Self> {
-        let (repo_id, config) = model_variant.model_info();
+        let (repo_id, config) = model_variant.model_info()?;
         let model = Self::load_structure_head(repo_id, &config, &device)?;
         eprintln!("ESMFold2Runner: loading ESMC-6B backbone (~12 GB)...");
         let backbone = ESMCRunner::from_pretrained(ESMCModels::ESMC6B, device.clone())?;
@@ -180,6 +191,24 @@ impl ESMFold2Runner {
 mod tests {
     use super::*;
     use candle_core::Device;
+
+    /// `model_info` yields the Fast config for Fast and refuses Full rather than
+    /// silently pairing the Full repo with the Fast config (ferritin-100.4).
+    #[test]
+    fn test_model_info_fast_ok_full_errors() {
+        let (repo, _cfg) = ESMFold2Models::Fast
+            .model_info()
+            .expect("Fast should return a config");
+        assert_eq!(repo, "biohub/ESMFold2-Fast");
+
+        let err = ESMFold2Models::Full
+            .model_info()
+            .expect_err("Full must not load with the Fast config");
+        assert!(
+            err.to_string().contains("not yet supported"),
+            "Full error should explain it is unsupported; got: {err}"
+        );
+    }
 
     /// Shape smoke-test with stub backbone (no download needed).
     /// Uses a tiny config so the test runs in milliseconds.
