@@ -90,6 +90,24 @@ fn test_amplify_120m_contact_map() {
             "Contact estimate should be a valid number"
         );
     }
+
+    // Regression for ferritin-100.3: labels must be the actual residues, not
+    // '?' (the old code decoded the position index as a token id, so every
+    // position >= vocab size, i.e. essentially all of this ~250-residue
+    // protein, came back '?').
+    let seq: Vec<char> = TEST_SEQUENCE.chars().collect();
+    for contact in &contacts {
+        assert_eq!(
+            contact.amino_acid_1, seq[contact.position_1],
+            "amino_acid_1 at position {} should be the input residue",
+            contact.position_1
+        );
+        assert_eq!(
+            contact.amino_acid_2, seq[contact.position_2],
+            "amino_acid_2 at position {} should be the input residue",
+            contact.position_2
+        );
+    }
 }
 
 /// Numerical parity: AMPLIFY Rust logits vs HuggingFace Python reference.

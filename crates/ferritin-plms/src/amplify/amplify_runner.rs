@@ -99,10 +99,34 @@ impl AmplifyRunner {
     }
     pub fn get_contact_map(&self, prot_sequence: &str) -> Result<Vec<ContactMap>> {
         let model_output: AmplifyOutput = self.run_forward(prot_sequence)?;
-        let contact_map_tensor = model_output.get_contact_map()?;
-        let averaged = contact_map_tensor.clone().unwrap().max_keepdim(D::Minus1)?;
+        let contact_map_tensor = model_output.get_contact_map()?.ok_or_else(|| {
+            anyhow!("AMPLIFY forward() returned no attentions for the contact map")
+        })?;
+        let averaged = contact_map_tensor.max_keepdim(D::Minus1)?;
         let (position1, position2, val) = averaged.dims3()?;
         let data = averaged.to_vec3::<f32>()?;
+
+        // Per-position residue labels. The contact map is BOS/EOS-stripped, so
+        // position `p` is the p-th residue; decode the actual token ids the
+        // model saw (encode adds BOS/EOS, so the residues are ids[1..len-1])
+        // rather than decoding the position index as if it were a token id.
+        let encoded = self
+            .tokenizer
+            .encode(prot_sequence.to_string(), true)
+            .map_err(E::msg)?;
+        let ids = encoded.get_ids();
+        let residue_ids = if ids.len() >= 2 {
+            &ids[1..ids.len() - 1]
+        } else {
+            &ids[..]
+        };
+        let label_at = |p: usize| -> char {
+            residue_ids
+                .get(p)
+                .and_then(|&id| self.tokenizer.decode(&[id], true).ok())
+                .and_then(|s| s.chars().next())
+                .unwrap_or('?')
+        };
 
         let mut contacts = Vec::new();
         for i in 0..position1 {
@@ -110,19 +134,9 @@ impl AmplifyRunner {
                 for k in 0..val {
                     contacts.push(ContactMap {
                         position_1: i,
-                        amino_acid_1: self
-                            .tokenizer
-                            .decode(&[i as u32], true)
-                            .ok()
-                            .and_then(|s| s.chars().next())
-                            .unwrap_or('?'),
+                        amino_acid_1: label_at(i),
                         position_2: j,
-                        amino_acid_2: self
-                            .tokenizer
-                            .decode(&[j as u32], true)
-                            .ok()
-                            .and_then(|s| s.chars().next())
-                            .unwrap_or('?'),
+                        amino_acid_2: label_at(j),
                         contact_estimate: data[i][j][k],
                         layer: 1,
                     });
