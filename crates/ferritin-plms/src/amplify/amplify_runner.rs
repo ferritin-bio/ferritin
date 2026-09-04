@@ -72,7 +72,7 @@ impl AmplifyRunner {
         let device = self.model.get_device();
         let tokens = self
             .tokenizer
-            .encode(prot_sequence.to_string(), false)
+            .encode(prot_sequence.to_string(), true)
             .map_err(E::msg)?
             .get_ids()
             .to_vec();
@@ -166,7 +166,7 @@ impl PlmRunner for AmplifyRunner {
         let device = self.model.get_device();
         let tokens = self
             .tokenizer
-            .encode(sequence.to_string(), false)
+            .encode(sequence.to_string(), true)
             .map_err(E::msg)?
             .get_ids()
             .to_vec();
