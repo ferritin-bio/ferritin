@@ -1,9 +1,9 @@
 //!  Protein->Tensor utilities useful for Machine Learning
-use super::utilities::{AAAtom, aa1to_int, aa3to1, int_to_aa1, get_nearest_neighbours};
+use super::utilities::{AAAtom, aa1to_int, aa3to1, get_nearest_neighbours, int_to_aa1};
 use crate::ligandmpnn::proteinfeatures::ProteinFeatures;
 use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
-use ferritin_core::{AtomCollection, Model};
 use ferritin_core::info::elements::Element;
+use ferritin_core::{AtomCollection, Model};
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
 
@@ -57,10 +57,10 @@ impl StructureFeatures for AtomCollection {
             .iter_residues_aminoacid()
             .map(|res| res.residue_name().to_string())
             .map(|res| aa3to1(&res))
-            .map(|ch| aa1to_int(ch))
+            .map(aa1to_int)
             .map(|idx| int_to_aa1(idx) as u8)
             .collect();
-        Ok(Tensor::from_iter(s.into_iter(), device)?.reshape((1, n))?)
+        Tensor::from_iter(s, device)?.reshape((1, n))
     }
 
     /// Convert amino acid sequence to numeric representation
@@ -70,9 +70,9 @@ impl StructureFeatures for AtomCollection {
             .iter_residues_aminoacid()
             .map(|res| res.residue_name().to_string())
             .map(|res| aa3to1(&res))
-            .map(|res| aa1to_int(res));
+            .map(aa1to_int);
 
-        Ok(Tensor::from_iter(s, device)?.reshape((1, n))?)
+        Tensor::from_iter(s, device)?.reshape((1, n))
     }
 
     /// Calculate CB for each residue
@@ -142,7 +142,7 @@ impl StructureFeatures for AtomCollection {
         let indices = Tensor::from_slice(
             &[0i64, 1i64, 2i64, 4i64], // index of N/CA/C/O as integers
             (4,),
-            &device,
+            device,
         )?;
         let x = x_37.index_select(&indices, 2)?;
         Ok(ProteinFeatures {
@@ -181,7 +181,7 @@ impl StructureFeatures for AtomCollection {
                 }
             }
         }
-        Tensor::from_vec(backbone_data, (1, res_count, 4, 3), &device)
+        Tensor::from_vec(backbone_data, (1, res_count, 4, 3), device)
     }
 
     /// create numeric Tensor of shape [1, <sequence-length>, 37, 3]
@@ -197,7 +197,7 @@ impl StructureFeatures for AtomCollection {
                 }
             }
         }
-        Tensor::from_vec(atom37_data, (1, res_count, 37, 3), &device)
+        Tensor::from_vec(atom37_data, (1, res_count, 37, 3), device)
     }
 
     // The purpose of this function it to create 3 output tensors that relate
@@ -312,12 +312,11 @@ mod tests {
     #[test]
     fn test_decode_amino_acids_roundtrip() -> candle_core::Result<()> {
         let device = Device::Cpu;
-        let (pdb_file, _temp) = TestFile::protein_01().create_temp().map_err(|e| {
-            candle_core::Error::Msg(format!("test file setup failed: {e}"))
-        })?;
-        let ac = load_structure(pdb_file).map_err(|e| {
-            candle_core::Error::Msg(format!("load_structure failed: {e}"))
-        })?;
+        let (pdb_file, _temp) = TestFile::protein_01()
+            .create_temp()
+            .map_err(|e| candle_core::Error::Msg(format!("test file setup failed: {e}")))?;
+        let ac = load_structure(pdb_file)
+            .map_err(|e| candle_core::Error::Msg(format!("load_structure failed: {e}")))?;
 
         let encoded = ac.encode_amino_acids(&device)?;
         let decoded = ac.decode_amino_acids(&device)?;
@@ -356,12 +355,11 @@ mod tests {
     #[test]
     fn test_decode_amino_acids_shape() -> candle_core::Result<()> {
         let device = Device::Cpu;
-        let (pdb_file, _temp) = TestFile::protein_01().create_temp().map_err(|e| {
-            candle_core::Error::Msg(format!("test file setup failed: {e}"))
-        })?;
-        let ac = load_structure(pdb_file).map_err(|e| {
-            candle_core::Error::Msg(format!("load_structure failed: {e}"))
-        })?;
+        let (pdb_file, _temp) = TestFile::protein_01()
+            .create_temp()
+            .map_err(|e| candle_core::Error::Msg(format!("test file setup failed: {e}")))?;
+        let ac = load_structure(pdb_file)
+            .map_err(|e| candle_core::Error::Msg(format!("load_structure failed: {e}")))?;
 
         let n = ac.iter_residues_aminoacid().count();
         let decoded = ac.decode_amino_acids(&device)?;
@@ -373,12 +371,11 @@ mod tests {
     #[test]
     fn test_encode_amino_acids_shape_and_range() -> candle_core::Result<()> {
         let device = Device::Cpu;
-        let (pdb_file, _temp) = TestFile::protein_01().create_temp().map_err(|e| {
-            candle_core::Error::Msg(format!("test file setup failed: {e}"))
-        })?;
-        let ac = load_structure(pdb_file).map_err(|e| {
-            candle_core::Error::Msg(format!("load_structure failed: {e}"))
-        })?;
+        let (pdb_file, _temp) = TestFile::protein_01()
+            .create_temp()
+            .map_err(|e| candle_core::Error::Msg(format!("test file setup failed: {e}")))?;
+        let ac = load_structure(pdb_file)
+            .map_err(|e| candle_core::Error::Msg(format!("load_structure failed: {e}")))?;
 
         let n = ac.iter_residues_aminoacid().count();
         let encoded = ac.encode_amino_acids(&device)?;
@@ -394,12 +391,11 @@ mod tests {
     /// `get_res_index` returns one entry per amino acid residue.
     #[test]
     fn test_get_res_index_length() -> candle_core::Result<()> {
-        let (pdb_file, _temp) = TestFile::protein_01().create_temp().map_err(|e| {
-            candle_core::Error::Msg(format!("test file setup failed: {e}"))
-        })?;
-        let ac = load_structure(pdb_file).map_err(|e| {
-            candle_core::Error::Msg(format!("load_structure failed: {e}"))
-        })?;
+        let (pdb_file, _temp) = TestFile::protein_01()
+            .create_temp()
+            .map_err(|e| candle_core::Error::Msg(format!("test file setup failed: {e}")))?;
+        let ac = load_structure(pdb_file)
+            .map_err(|e| candle_core::Error::Msg(format!("load_structure failed: {e}")))?;
 
         let n = ac.iter_residues_aminoacid().count();
         let res_index = ac.get_res_index();
@@ -411,12 +407,11 @@ mod tests {
     #[test]
     fn test_create_cb_shape() -> candle_core::Result<()> {
         let device = Device::Cpu;
-        let (pdb_file, _temp) = TestFile::protein_01().create_temp().map_err(|e| {
-            candle_core::Error::Msg(format!("test file setup failed: {e}"))
-        })?;
-        let ac = load_structure(pdb_file).map_err(|e| {
-            candle_core::Error::Msg(format!("load_structure failed: {e}"))
-        })?;
+        let (pdb_file, _temp) = TestFile::protein_01()
+            .create_temp()
+            .map_err(|e| candle_core::Error::Msg(format!("test file setup failed: {e}")))?;
+        let ac = load_structure(pdb_file)
+            .map_err(|e| candle_core::Error::Msg(format!("load_structure failed: {e}")))?;
 
         let n = ac.iter_residues_aminoacid().count();
         let cb = ac.create_cb(&device)?;

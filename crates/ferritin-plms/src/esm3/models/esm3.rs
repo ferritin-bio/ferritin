@@ -154,10 +154,7 @@ impl ESM3 {
             Some((ref aff, ref mask)) => {
                 affine_ref = aff;
                 mask_ref = mask;
-                (
-                    Some(affine_ref),
-                    Some(mask_ref),
-                )
+                (Some(affine_ref), Some(mask_ref))
             }
             None => (None, None),
         };

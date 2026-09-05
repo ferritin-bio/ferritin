@@ -42,7 +42,11 @@ static ATOM_ORDER: OnceLock<HashMap<&'static str, usize>> = OnceLock::new();
 /// Map from atom name (e.g. `"CA"`) to its atom37 slot index.
 pub fn atom_order() -> &'static HashMap<&'static str, usize> {
     ATOM_ORDER.get_or_init(|| {
-        ATOM37_NAMES.iter().enumerate().map(|(i, &n)| (n, i)).collect()
+        ATOM37_NAMES
+            .iter()
+            .enumerate()
+            .map(|(i, &n)| (n, i))
+            .collect()
     })
 }
 
@@ -110,5 +114,4 @@ mod tests {
         assert_eq!(AAAtom::OXT as i32, 36);
         assert_eq!(AAAtom::Unknown as i32, -1);
     }
-
 }

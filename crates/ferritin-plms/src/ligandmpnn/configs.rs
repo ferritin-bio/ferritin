@@ -39,6 +39,7 @@ pub struct MPNNExecConfig {
 }
 
 impl MPNNExecConfig {
+    #[allow(clippy::too_many_arguments)] // CLI-driven config; consolidation is ferritin-100.8
     pub fn new(
         device: Device,
         pdb_path: String,

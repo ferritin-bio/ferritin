@@ -97,7 +97,12 @@ impl ESMFold2Runner {
     pub fn from_pretrained(model_variant: ESMFold2Models, device: Device) -> Result<Self> {
         let (repo_id, config) = model_variant.model_info()?;
         let model = Self::load_structure_head(repo_id, &config, &device)?;
-        Ok(Self { model, config, device, backbone: None })
+        Ok(Self {
+            model,
+            config,
+            device,
+            backbone: None,
+        })
     }
 
     /// Download and load the structure head (~755 MB) **and** the ESMC-6B
@@ -111,7 +116,12 @@ impl ESMFold2Runner {
         eprintln!("ESMFold2Runner: loading ESMC-6B backbone (~12 GB)...");
         let backbone = ESMCRunner::from_pretrained(ESMCModels::ESMC6B, device.clone())?;
         eprintln!("ESMFold2Runner: backbone ready.");
-        Ok(Self { model, config, device, backbone: Some(backbone) })
+        Ok(Self {
+            model,
+            config,
+            device,
+            backbone: Some(backbone),
+        })
     }
 
     fn load_structure_head(
@@ -164,11 +174,7 @@ impl ESMFold2Runner {
                 // Strip BOS (index 0) and EOS (index L+1), keeping L residues.
                 embs.narrow(1, 1, l)?
             }
-            None => Tensor::zeros(
-                &[1, l, self.config.lm_d_model],
-                ESMFOLD2_DTYPE,
-                device,
-            )?,
+            None => Tensor::zeros(&[1, l, self.config.lm_d_model], ESMFOLD2_DTYPE, device)?,
         };
 
         let res_idx: Vec<f32> = (0..l).map(|i| i as f32).collect();
@@ -215,8 +221,8 @@ mod tests {
     #[test]
     fn test_fold_protein_stub_shapes() {
         use super::super::config::ESMFold2Config;
-        use candle_nn::VarBuilder;
         use candle_core::DType;
+        use candle_nn::VarBuilder;
 
         let device = Device::Cpu;
         let cfg = ESMFold2Config {
@@ -239,7 +245,12 @@ mod tests {
         };
         let vb = VarBuilder::zeros(DType::F32, &device);
         let model = ESMFold2Model::load(vb, cfg.clone()).unwrap();
-        let runner = ESMFold2Runner { model, config: cfg, device: device.clone(), backbone: None };
+        let runner = ESMFold2Runner {
+            model,
+            config: cfg,
+            device: device.clone(),
+            backbone: None,
+        };
 
         let seq = "ACDEFGHIK"; // 9 residues
         let out = runner.fold_protein(seq, 1, 2).unwrap();
@@ -281,8 +292,7 @@ mod tests {
     #[ignore = "requires biohub/ESMFold2-Fast (~755 MB) + biohub/ESMC-6B (~12 GB)"]
     fn test_esmfold2_fold_with_backbone() -> Result<()> {
         let device = Device::Cpu;
-        let runner =
-            ESMFold2Runner::from_pretrained_with_backbone(ESMFold2Models::Fast, device)?;
+        let runner = ESMFold2Runner::from_pretrained_with_backbone(ESMFold2Models::Fast, device)?;
 
         let seq = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG";
         let out = runner.fold_protein(seq, 3, 14)?;
@@ -291,7 +301,10 @@ mod tests {
         assert_eq!(out.plddt.dims(), &[1, seq.len()]);
 
         let mean_plddt = out.plddt.mean_all()?.to_scalar::<f32>()?;
-        assert!(mean_plddt > 0.5, "expected mean pLDDT > 0.5, got {mean_plddt:.3}");
+        assert!(
+            mean_plddt > 0.5,
+            "expected mean pLDDT > 0.5, got {mean_plddt:.3}"
+        );
 
         Ok(())
     }

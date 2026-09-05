@@ -96,7 +96,11 @@ impl StructureFlatten for Model {
                             .atomic_radius()
                             .van_der_waals
                             .unwrap_or(DEFAULT_VDW_RADIUS);
-                        ProjectedAtom { chain_id: chain_id.clone(), center, radius }
+                        ProjectedAtom {
+                            chain_id: chain_id.clone(),
+                            center,
+                            radius,
+                        }
                     })
                     .collect()
             })
@@ -106,7 +110,10 @@ impl StructureFlatten for Model {
         let base = Document::new()
             .set("width", options.canvas_size)
             .set("height", options.canvas_size)
-            .set("viewBox", (0.0, 0.0, options.canvas_size, options.canvas_size));
+            .set(
+                "viewBox",
+                (0.0, 0.0, options.canvas_size, options.canvas_size),
+            );
 
         let Some((min_x, min_y, max_x, max_y)) = bounding_box(residues.iter().flatten()) else {
             return base;
@@ -132,17 +139,22 @@ impl StructureFlatten for Model {
                 })
                 .collect();
 
-            let merged = circles.iter().skip(1).fold(
-                MultiPolygon(vec![circles[0].clone()]),
-                |acc, circle| acc.union(circle),
-            );
+            let merged = circles
+                .iter()
+                .skip(1)
+                .fold(MultiPolygon(vec![circles[0].clone()]), |acc, circle| {
+                    acc.union(circle)
+                });
 
             let fill = if options.color_by_chain {
                 let chain = &atoms[0].chain_id;
-                let idx = chain_order.iter().position(|c| c == chain).unwrap_or_else(|| {
-                    chain_order.push(chain.clone());
-                    chain_order.len() - 1
-                });
+                let idx = chain_order
+                    .iter()
+                    .position(|c| c == chain)
+                    .unwrap_or_else(|| {
+                        chain_order.push(chain.clone());
+                        chain_order.len() - 1
+                    });
                 CHAIN_PALETTE[idx % CHAIN_PALETTE.len()]
             } else {
                 "blue"
@@ -157,7 +169,9 @@ impl StructureFlatten for Model {
 
 /// Axis-aligned bounding box `(min_x, min_y, max_x, max_y)` over atom circles
 /// (center ± radius), or `None` if there are no atoms.
-fn bounding_box<'a>(atoms: impl Iterator<Item = &'a ProjectedAtom>) -> Option<(f64, f64, f64, f64)> {
+fn bounding_box<'a>(
+    atoms: impl Iterator<Item = &'a ProjectedAtom>,
+) -> Option<(f64, f64, f64, f64)> {
     atoms.fold(None, |acc, atom| {
         let (cx, cy) = atom.center;
         let r = atom.radius;
@@ -250,7 +264,10 @@ mod tests {
     #[test]
     fn test_flatten_structure_respects_canvas_size() {
         let model = load_test_model();
-        let options = FlattenOptions { canvas_size: 500.0, ..Default::default() };
+        let options = FlattenOptions {
+            canvas_size: 500.0,
+            ..Default::default()
+        };
         let doc = model.flatten_structure_with(&options);
         let svg = doc.to_string();
         assert!(svg.contains(r#"width="500""#));
@@ -259,9 +276,17 @@ mod tests {
 
     #[test]
     fn test_bounding_box_matches_atom_extent() {
-        let atoms = vec![
-            ProjectedAtom { chain_id: "A".into(), center: (0.0, 0.0), radius: 1.0 },
-            ProjectedAtom { chain_id: "A".into(), center: (10.0, 5.0), radius: 2.0 },
+        let atoms = [
+            ProjectedAtom {
+                chain_id: "A".into(),
+                center: (0.0, 0.0),
+                radius: 1.0,
+            },
+            ProjectedAtom {
+                chain_id: "A".into(),
+                center: (10.0, 5.0),
+                radius: 2.0,
+            },
         ];
         let (min_x, min_y, max_x, max_y) = bounding_box(atoms.iter()).unwrap();
         assert_eq!((min_x, min_y), (-1.0, -1.0));
@@ -286,18 +311,30 @@ mod tests {
     fn test_flatten_structure_with_different_projections_differs() {
         let model = load_test_model();
         let xy = model
-            .flatten_structure_with(&FlattenOptions { projection: ProjectionAxis::Xy, ..Default::default() })
+            .flatten_structure_with(&FlattenOptions {
+                projection: ProjectionAxis::Xy,
+                ..Default::default()
+            })
             .to_string();
         let xz = model
-            .flatten_structure_with(&FlattenOptions { projection: ProjectionAxis::Xz, ..Default::default() })
+            .flatten_structure_with(&FlattenOptions {
+                projection: ProjectionAxis::Xz,
+                ..Default::default()
+            })
             .to_string();
-        assert_ne!(xy, xz, "different projection axes should generally produce different outlines");
+        assert_ne!(
+            xy, xz,
+            "different projection axes should generally produce different outlines"
+        );
     }
 
     #[test]
     fn test_flatten_structure_uniform_fill_when_not_colored_by_chain() {
         let model = load_test_model();
-        let options = FlattenOptions { color_by_chain: false, ..Default::default() };
+        let options = FlattenOptions {
+            color_by_chain: false,
+            ..Default::default()
+        };
         let doc = model.flatten_structure_with(&options);
         let svg = doc.to_string();
         assert!(svg.contains(r#"fill="blue""#));

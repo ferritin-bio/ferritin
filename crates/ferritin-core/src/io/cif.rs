@@ -158,7 +158,7 @@ impl CIFFile {
                 }
                 // Create new data block
                 current_data_block = Some(CIFDataBlock {
-                    _name: line[5..].to_string(),
+                    _name: line.strip_prefix("data_").unwrap_or(line).to_string(),
                     categories: HashMap::new(),
                 });
                 in_loop = false;
@@ -232,10 +232,10 @@ impl CIFFile {
                     if current_category.is_none()
                         || current_category.as_ref().unwrap().name != category_name
                     {
-                        if let Some(category) = current_category.take() {
-                            if let Some(block) = &mut current_data_block {
-                                block.categories.insert(category.name.clone(), category);
-                            }
+                        if let Some(category) = current_category.take()
+                            && let Some(block) = &mut current_data_block
+                        {
+                            block.categories.insert(category.name.clone(), category);
                         }
                         current_category = Some(CIFCategory::new(category_name));
                     }
@@ -428,10 +428,10 @@ impl CIFFile {
             let element = Element::from_symbol(element_str).unwrap_or_else(|| {
                 // Try to infer element from atom name if element is missing or invalid
                 let atom_name = &row[atom_name_col];
-                if atom_name.len() >= 1 {
+                if !atom_name.is_empty() {
                     let first_char = atom_name.chars().next().unwrap();
                     if first_char.is_alphabetic() && !first_char.is_numeric() {
-                        Element::from_symbol(&first_char.to_string()).unwrap_or(Element::H)
+                        Element::from_symbol(first_char.to_string()).unwrap_or(Element::H)
                     } else {
                         Element::H
                     }
@@ -628,7 +628,7 @@ impl CIFFile {
             let element_str = &row[element_col];
             let element = Element::from_symbol(element_str).unwrap_or_else(|| {
                 let first_char = element_str.chars().next().unwrap_or('C');
-                Element::from_symbol(&first_char.to_string()).unwrap_or(Element::H)
+                Element::from_symbol(first_char.to_string()).unwrap_or(Element::H)
             });
             elements_vec.push(element);
 
@@ -1016,7 +1016,7 @@ impl CIFFile {
             let element_str = &row[element_col];
             let element = Element::from_symbol(element_str).unwrap_or_else(|| {
                 let first_char = element_str.chars().next().unwrap_or('C');
-                Element::from_symbol(&first_char.to_string()).unwrap_or(Element::H)
+                Element::from_symbol(first_char.to_string()).unwrap_or(Element::H)
             });
             elements_vec.push(element);
 
@@ -1386,6 +1386,7 @@ fn optional_scalar(block: &CIFDataBlock, category_name: &str, column: &str) -> O
 
 fn parse_operator_matrix(category: &CIFCategory, row: usize) -> Result<Mat4, CIFError> {
     let mut matrix = IDENTITY_MAT4;
+    #[allow(clippy::needless_range_loop)] // indices name the matrix[i][j] CIF columns
     for row_index in 0..3 {
         for column_index in 0..3 {
             let name = format!("matrix[{}][{}]", row_index + 1, column_index + 1);
@@ -1661,7 +1662,7 @@ fn parse_symmetry_data(block: &CIFDataBlock) -> Result<SymmetryData, CIFError> {
     let details_by_id: HashMap<String, String> = block
         .categories
         .get("pdbx_struct_assembly")
-        .map(|category| {
+        .and_then(|category| {
             let id = category.get_column_index("id")?;
             let details = category.get_column_index("details")?;
             Some(
@@ -1675,7 +1676,6 @@ fn parse_symmetry_data(block: &CIFDataBlock) -> Result<SymmetryData, CIFError> {
                     .collect(),
             )
         })
-        .flatten()
         .unwrap_or_default();
 
     let mut assemblies_by_id: HashMap<String, Vec<AssemblyUnit>> = HashMap::new();
@@ -1824,7 +1824,7 @@ mod tests {
     fn test_cif_file_read() {
         let (cif_file, _temp) = TestFile::protein_01().create_temp().unwrap();
         let cif = CIFFile::read(&cif_file).unwrap();
-        assert!(cif.data_blocks.len() > 0);
+        assert!(!cif.data_blocks.is_empty());
 
         // check conversion
         let ac: AtomCollection = cif.parse_to_atom_collection().unwrap();
@@ -1892,9 +1892,11 @@ mod tests {
             .clone();
         let assembly_units = model.assembly_units(&assembly_id).unwrap();
         assert!(!assembly_units.is_empty());
-        assert!(assembly_units
-            .iter()
-            .all(|unit| std::ptr::eq(unit.model(), &model)));
+        assert!(
+            assembly_units
+                .iter()
+                .all(|unit| std::ptr::eq(unit.model(), &model))
+        );
 
         let distinct_chain_ids: std::collections::HashSet<&str> =
             (0..ac.get_size()).map(|i| ac.get_chain_id(i)).collect();

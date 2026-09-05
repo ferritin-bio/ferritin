@@ -13,12 +13,12 @@
 use anyhow::Result;
 use bevy::app::AppExit;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use ferritin_bevy::{LoadMvsEvent, MvsPlugin, OrbitCamera};
 use ferritin_molviewspec::molviewspec::nodes::{
-    ColorNamesT, ColorT, ColorThemeT, ComponentExpression, ComponentSelector,
-    ComponentSelectorT, ParseFormatT, ParseParams, RepresentationTypeT, State, StructureParams,
-    StructureTypeT, TransformParams,
+    ColorNamesT, ColorT, ColorThemeT, ComponentExpression, ComponentSelector, ComponentSelectorT,
+    ParseFormatT, ParseParams, RepresentationTypeT, State, StructureParams, StructureTypeT,
+    TransformParams,
 };
 use ferritin_test_data::TestFile;
 use tempfile::NamedTempFile;
@@ -68,8 +68,7 @@ fn main() -> Result<()> {
     ];
     for rep in &reps {
         for theme in &themes {
-            let name: &'static str =
-                Box::leak(format!("rep_{rep:?}_{theme:?}").into_boxed_str());
+            let name: &'static str = Box::leak(format!("rep_{rep:?}_{theme:?}").into_boxed_str());
             shots.push(Shot {
                 name,
                 json: single_rep_state(&p_4hhb, rep.clone(), theme.clone()),
@@ -168,15 +167,14 @@ fn take_pending_screenshot(
     queue: Res<ShotQueue>,
 ) {
     // Fire the screenshot on the last settle frame only.
-    if let QueueState::Settling(n) = queue.state {
-        if n == SETTLE_FRAMES - 1 {
-            if let Some(pending) = pending {
-                let path = format!("{OUT_DIR}/{}.png", pending.0);
-                commands
-                    .spawn(Screenshot::primary_window())
-                    .observe(save_to_disk(path));
-            }
-        }
+    if let QueueState::Settling(n) = queue.state
+        && n == SETTLE_FRAMES - 1
+        && let Some(pending) = pending
+    {
+        let path = format!("{OUT_DIR}/{}.png", pending.0);
+        commands
+            .spawn(Screenshot::primary_window())
+            .observe(save_to_disk(path));
     }
 }
 
@@ -231,7 +229,10 @@ fn preset_basic(path: &str) -> String {
         let comp = structure.component(sel(ComponentSelectorT::All)).unwrap();
         comp.representation(RepresentationTypeT::Cartoon)
             .unwrap()
-            .color(ColorT::Named(ColorNamesT::Blue), sel(ComponentSelectorT::All));
+            .color(
+                ColorT::Named(ColorNamesT::Blue),
+                sel(ComponentSelectorT::All),
+            );
         comp.focus(None, None);
     }
     to_json(&state)
@@ -308,11 +309,17 @@ fn preset_label(path: &str) -> String {
             .unwrap()
             .representation(RepresentationTypeT::Cartoon)
             .unwrap()
-            .color(ColorT::Named(ColorNamesT::Lightgray), sel(ComponentSelectorT::All));
+            .color(
+                ColorT::Named(ColorNamesT::Lightgray),
+                sel(ComponentSelectorT::All),
+            );
         let c = structure.component(sel(ComponentSelectorT::Ion)).unwrap();
         c.representation(RepresentationTypeT::BallAndStick)
             .unwrap()
-            .color(ColorT::Named(ColorNamesT::Magenta), sel(ComponentSelectorT::All));
+            .color(
+                ColorT::Named(ColorNamesT::Magenta),
+                sel(ComponentSelectorT::All),
+            );
         c.label("Catalytic metal site".to_string());
         c.focus(None, None);
     }
@@ -332,7 +339,10 @@ fn preset_superposition(path_a: &str, path_b: &str) -> String {
         let c = structure.component(sel(ComponentSelectorT::All)).unwrap();
         c.representation(RepresentationTypeT::Cartoon)
             .unwrap()
-            .color(ColorT::Named(ColorNamesT::Steelblue), sel(ComponentSelectorT::All));
+            .color(
+                ColorT::Named(ColorNamesT::Steelblue),
+                sel(ComponentSelectorT::All),
+            );
         c.focus(None, None);
     }
     {
@@ -350,7 +360,10 @@ fn preset_superposition(path_a: &str, path_b: &str) -> String {
         let c = structure.component(sel(ComponentSelectorT::All)).unwrap();
         c.representation(RepresentationTypeT::Cartoon)
             .unwrap()
-            .color(ColorT::Named(ColorNamesT::Orange), sel(ComponentSelectorT::All));
+            .color(
+                ColorT::Named(ColorNamesT::Orange),
+                sel(ComponentSelectorT::All),
+            );
         // Focus the translated copy too, so the executor's focus union frames both
         // structures instead of leaving this one clipped off-frame (ferritin-t0h.6).
         c.focus(None, None);
@@ -382,7 +395,10 @@ fn preset_symmetry(path: &str) -> String {
         let c = structure.component(sel(ComponentSelectorT::All)).unwrap();
         c.representation(RepresentationTypeT::Cartoon)
             .unwrap()
-            .color(ColorT::Named(ColorNamesT::Seagreen), sel(ComponentSelectorT::All));
+            .color(
+                ColorT::Named(ColorNamesT::Seagreen),
+                sel(ComponentSelectorT::All),
+            );
         c.focus(None, None);
     }
     to_json(&state)
@@ -427,7 +443,12 @@ fn setup_scene(mut commands: Commands, orbit: Res<OrbitCamera>) {
             illuminance: 3_000.0,
             ..default()
         },
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.0, std::f32::consts::PI, 0.0)),
+        Transform::from_rotation(Quat::from_euler(
+            EulerRot::XYZ,
+            0.0,
+            std::f32::consts::PI,
+            0.0,
+        )),
     ));
 }
 
@@ -449,4 +470,3 @@ fn sync_camera(orbit: Res<OrbitCamera>, mut camera: Query<&mut Transform, With<C
         transform.look_at(orbit.focus, up);
     }
 }
-

@@ -3,7 +3,7 @@ use candle_nn::encoding::one_hot;
 
 // Core biochemistry constants live in ferritin-core; re-export so existing
 // callers (`use crate::featurize::utilities::AAAtom`, etc.) still compile.
-pub use ferritin_core::info::amino_acids::{aa1to_int, aa3to1, int_to_aa1, ALPHABET};
+pub use ferritin_core::info::amino_acids::{ALPHABET, aa1to_int, aa3to1, int_to_aa1};
 pub use ferritin_core::info::atom37::AAAtom;
 
 macro_rules! define_residues {
@@ -187,7 +187,7 @@ pub fn compute_nearest_neighbors(
     let mask_term = ((&mask_2d.to_dtype(DType::F32)? * -1.0)? + 1.0)?;
     let d_adjust = (&masked_distances + mask_term.broadcast_mul(&d_max)?)?;
     let d_adjust = d_adjust.to_dtype(DType::F32)?;
-    Ok(topk_last_dim(&d_adjust, k.min(seq_len))?)
+    topk_last_dim(&d_adjust, k.min(seq_len))
 }
 
 // https://github.com/huggingface/candle/pull/2375/files#diff-e4d52a71060a80ac8c549f2daffcee77f9bf4de8252ad067c47b1c383c3ac828R957
@@ -261,9 +261,8 @@ pub fn calculate_cb(xyz_37: &Tensor) -> Result<Tensor> {
     let a = Tensor::stack(&[&a_x, &a_y, &a_z], 1)?;
 
     // Final CB calculation: -0.58273431 * a + 0.56802827 * b - 0.54067466 * c + CA
-    let cb = (&a * a_coeff)? + (&b * b_coeff)? + (&c * c_coeff)? + &ca;
 
-    Ok(cb?)
+    (&a * a_coeff)? + (&b * b_coeff)? + (&c * c_coeff)? + &ca
 }
 
 /// Custom Cross-Product Fn.
@@ -374,7 +373,7 @@ fn get_score(s: &Tensor, log_probs: &Tensor, mask: &Tensor) -> Result<(Tensor, T
     let s_one_hot = one_hot(s.clone(), 21, 1., 0.)?;
     let loss_per_residue = s_one_hot.mul(&log_probs.neg()?)?.sum(D::Minus1)?;
     let average_loss = loss_per_residue
-        .mul(&mask)?
+        .mul(mask)?
         .sum_keepdim(D::Minus1)?
         .div(&(mask.sum_keepdim(D::Minus1)? + 1e-8f64)?)?
         .squeeze(D::Minus1)?;

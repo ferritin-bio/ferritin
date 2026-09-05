@@ -170,14 +170,17 @@ impl Structure {
         let rotation = Quat::from_rotation_arc(Vec3::Y, direction.normalize());
         let half_height = height / 4.0;
         let make_half = |center: Vec3| -> Mesh {
-            Cylinder { radius, half_height }
-                .mesh()
-                .build()
-                .transformed_by(Transform {
-                    translation: center,
-                    rotation,
-                    ..default()
-                })
+            Cylinder {
+                radius,
+                half_height,
+            }
+            .mesh()
+            .build()
+            .transformed_by(Transform {
+                translation: center,
+                rotation,
+                ..default()
+            })
         };
         let first = make_half((pos1 + mid) * 0.5);
         let second = make_half((mid + pos2) * 0.5);
@@ -360,7 +363,11 @@ impl Structure {
                 curve[i] - curve[i - 1]
             };
             let t = raw.normalize_or_zero();
-            if t.length_squared() > 1e-8 { t } else { Vec3::Z }
+            if t.length_squared() > 1e-8 {
+                t
+            } else {
+                Vec3::Z
+            }
         };
 
         let mut prev_up: Option<Vec3> = None;
@@ -383,10 +390,10 @@ impl Structure {
                     }
                 };
             }
-            if let Some(p) = prev_up {
-                if up.dot(p) < 0.0 {
-                    up = -up;
-                }
+            if let Some(p) = prev_up
+                && up.dot(p) < 0.0
+            {
+                up = -up;
             }
             let right = up.cross(t_cur).normalize_or_zero();
             // Re-derive up from (tangent, right) so the pair is exactly
@@ -634,22 +641,22 @@ impl Structure {
         for window in ca_by_chain.windows(2) {
             let (chain_a, pos_a) = &window[0];
             let (chain_b, pos_b) = &window[1];
-            if chain_a == chain_b {
-                if let Some((mut first, second)) =
+            if chain_a == chain_b
+                && let Some((mut first, second)) =
                     Structure::half_bond_cylinders(*pos_a, *pos_b, Structure::LINE_RADIUS)
-                {
-                    let _ = first.merge(&second);
-                    match &mut combined {
-                        None => combined = Some(first),
-                        Some(acc) => {
-                            let _ = acc.merge(&first);
-                        }
+            {
+                let _ = first.merge(&second);
+                match &mut combined {
+                    None => combined = Some(first),
+                    Some(acc) => {
+                        let _ = acc.merge(&first);
                     }
                 }
             }
         }
 
-        combined.unwrap_or_else(|| Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all()))
+        combined
+            .unwrap_or_else(|| Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all()))
     }
 
     fn render_cartoon(&self) -> Mesh {
@@ -708,14 +715,20 @@ impl Structure {
                     let vc1 = first.count_vertices();
                     first.insert_attribute(
                         Mesh::ATTRIBUTE_COLOR,
-                        vec![Vec4::new(color_a.red, color_a.green, color_a.blue, color_a.alpha); vc1],
+                        vec![
+                            Vec4::new(color_a.red, color_a.green, color_a.blue, color_a.alpha);
+                            vc1
+                        ],
                     );
 
                     let color_b = self.color_scheme.get_color(&elements[idx_b]).to_srgba();
                     let vc2 = second.count_vertices();
                     second.insert_attribute(
                         Mesh::ATTRIBUTE_COLOR,
-                        vec![Vec4::new(color_b.red, color_b.green, color_b.blue, color_b.alpha); vc2],
+                        vec![
+                            Vec4::new(color_b.red, color_b.green, color_b.blue, color_b.alpha);
+                            vc2
+                        ],
                     );
 
                     let _ = first.merge(&second);
@@ -794,10 +807,10 @@ impl Structure {
 
         for atom in self.pdb.atoms() {
             let idx = atom.index();
-            if let Some(m) = mask {
-                if !m.0[idx] {
-                    continue;
-                }
+            if let Some(m) = mask
+                && !m.0[idx]
+            {
+                continue;
             }
 
             let coord = atom.coords();
@@ -816,7 +829,7 @@ impl Structure {
             );
             sphere_mesh = sphere_mesh.translated_by(center);
             sphere_mesh.compute_smooth_normals();
-            atom_map.extend(std::iter::repeat(idx).take(vc));
+            atom_map.extend(std::iter::repeat_n(idx, vc));
             match &mut combined {
                 None => combined = Some(sphere_mesh),
                 Some(acc) => {
@@ -858,21 +871,22 @@ impl Structure {
         for window in ca_data.windows(2) {
             let (chain_a, idx_a, pos_a) = &window[0];
             let (chain_b, idx_b, pos_b) = &window[1];
-            let a_ok = mask.map_or(true, |m| m.0[*idx_a]);
-            let b_ok = mask.map_or(true, |m| m.0[*idx_b]);
-            if chain_a == chain_b && a_ok && b_ok {
-                if let Some((first, second)) =
+            let a_ok = mask.is_none_or(|m| m.0[*idx_a]);
+            let b_ok = mask.is_none_or(|m| m.0[*idx_b]);
+            if chain_a == chain_b
+                && a_ok
+                && b_ok
+                && let Some((first, second)) =
                     Structure::half_bond_cylinders(*pos_a, *pos_b, Structure::LINE_RADIUS)
-                {
-                    atom_map.extend(std::iter::repeat(*idx_a).take(first.count_vertices()));
-                    atom_map.extend(std::iter::repeat(*idx_b).take(second.count_vertices()));
-                    let mut seg = first;
-                    let _ = seg.merge(&second);
-                    match &mut combined {
-                        None => combined = Some(seg),
-                        Some(acc) => {
-                            let _ = acc.merge(&seg);
-                        }
+            {
+                atom_map.extend(std::iter::repeat_n(*idx_a, first.count_vertices()));
+                atom_map.extend(std::iter::repeat_n(*idx_b, second.count_vertices()));
+                let mut seg = first;
+                let _ = seg.merge(&second);
+                match &mut combined {
+                    None => combined = Some(seg),
+                    Some(acc) => {
+                        let _ = acc.merge(&seg);
                     }
                 }
             }
@@ -891,10 +905,10 @@ impl Structure {
         // Atom spheres (filtered by mask).
         for atom in self.pdb.atoms() {
             let idx = atom.index();
-            if let Some(m) = mask {
-                if !m.0[idx] {
-                    continue;
-                }
+            if let Some(m) = mask
+                && !m.0[idx]
+            {
+                continue;
             }
 
             let coord = atom.coords();
@@ -914,7 +928,7 @@ impl Structure {
             );
             sphere_mesh = sphere_mesh.translated_by(center);
             sphere_mesh.compute_smooth_normals();
-            atom_map.extend(std::iter::repeat(idx).take(vc));
+            atom_map.extend(std::iter::repeat_n(idx, vc));
             match &mut combined {
                 None => combined = Some(sphere_mesh),
                 Some(acc) => {
@@ -933,10 +947,10 @@ impl Structure {
             for i in 0..bonds.atom_a.len() {
                 let idx_a = bonds.atom_a[i] as usize;
                 let idx_b = bonds.atom_b[i] as usize;
-                if let Some(m) = mask {
-                    if !m.0[idx_a] || !m.0[idx_b] {
-                        continue;
-                    }
+                if let Some(m) = mask
+                    && (!m.0[idx_a] || !m.0[idx_b])
+                {
+                    continue;
                 }
                 let pos1 = Vec3::from_array(self.pdb.coord(idx_a));
                 let pos2 = Vec3::from_array(self.pdb.coord(idx_b));
@@ -951,14 +965,14 @@ impl Structure {
                     Mesh::ATTRIBUTE_COLOR,
                     vec![Vec4::new(0.5, 0.5, 0.5, 0.5); vc1],
                 );
-                atom_map.extend(std::iter::repeat(idx_a).take(vc1));
+                atom_map.extend(std::iter::repeat_n(idx_a, vc1));
 
                 let vc2 = second.count_vertices();
                 second.insert_attribute(
                     Mesh::ATTRIBUTE_COLOR,
                     vec![Vec4::new(0.5, 0.5, 0.5, 0.5); vc2],
                 );
-                atom_map.extend(std::iter::repeat(idx_b).take(vc2));
+                atom_map.extend(std::iter::repeat_n(idx_b, vc2));
 
                 let _ = first.merge(&second);
                 match &mut combined {
@@ -987,10 +1001,10 @@ impl Structure {
             .enumerate()
             .filter_map(|(res_iter_idx, residue)| {
                 let ca = residue.find_atom_by_name("CA")?;
-                if let Some(m) = mask {
-                    if !m.0[ca.index()] {
-                        return None;
-                    }
+                if let Some(m) = mask
+                    && !m.0[ca.index()]
+                {
+                    return None;
                 }
                 let n = residue.find_atom_by_name("N")?;
                 let c = residue.find_atom_by_name("C")?;
@@ -1025,10 +1039,10 @@ impl Structure {
         let mut current: Vec<(usize, BackboneAtoms)> = Vec::new();
         let mut last_chain: Option<String> = None;
         for (idx, chain, bb) in indexed_backbone {
-            if let (Some(last), Some(prev_chain)) = (current.last(), last_chain.as_deref()) {
-                if Structure::is_backbone_break(last.0, prev_chain, last.1.ca, idx, &chain, bb.ca) {
-                    segments.push(std::mem::take(&mut current));
-                }
+            if let (Some(last), Some(prev_chain)) = (current.last(), last_chain.as_deref())
+                && Structure::is_backbone_break(last.0, prev_chain, last.1.ca, idx, &chain, bb.ca)
+            {
+                segments.push(std::mem::take(&mut current));
             }
             last_chain = Some(chain);
             current.push((idx, bb));
@@ -1103,10 +1117,10 @@ impl Structure {
             .enumerate()
             .filter_map(|(res_iter_idx, residue)| {
                 let ca = residue.find_atom_by_name("CA")?;
-                if let Some(m) = mask {
-                    if !m.0[ca.index()] {
-                        return None;
-                    }
+                if let Some(m) = mask
+                    && !m.0[ca.index()]
+                {
+                    return None;
                 }
                 Some((
                     res_iter_idx,
@@ -1129,10 +1143,10 @@ impl Structure {
         let mut current: Vec<(usize, Vec3)> = Vec::new();
         let mut last_chain: Option<String> = None;
         for (idx, chain, ca) in ca_data {
-            if let (Some(last), Some(prev_chain)) = (current.last(), last_chain.as_deref()) {
-                if Structure::is_backbone_break(last.0, prev_chain, last.1, idx, &chain, ca) {
-                    segments.push(std::mem::take(&mut current));
-                }
+            if let (Some(last), Some(prev_chain)) = (current.last(), last_chain.as_deref())
+                && Structure::is_backbone_break(last.0, prev_chain, last.1, idx, &chain, ca)
+            {
+                segments.push(std::mem::take(&mut current));
             }
             last_chain = Some(chain);
             current.push((idx, ca));
@@ -1184,6 +1198,7 @@ mod tests {
     // ferritin-c1k.1: BallAndStick balls must read as thicker than the sticks
     // joining them, not as one uniform-radius licorice tube.
     #[test]
+    #[allow(clippy::assertions_on_constants)] // guards an invariant between two consts
     fn test_ballandstick_stick_thinner_than_ball() {
         assert!(
             Structure::STICK_RADIUS < Structure::BALL_RADIUS,
@@ -1206,6 +1221,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)] // guards an invariant on a const
     fn test_water_radius_scale_shrinks_but_does_not_vanish() {
         assert!(
             Structure::WATER_RADIUS_SCALE > 0.0 && Structure::WATER_RADIUS_SCALE < 1.0,
@@ -1376,7 +1392,10 @@ mod tests {
         let (mesh, atom_map) = structure.to_mesh_with_atom_map(None);
         assert_eq!(mesh.count_vertices(), atom_map.len());
 
-        let sphere_vc = Sphere::new(Structure::BALL_RADIUS).mesh().build().count_vertices();
+        let sphere_vc = Sphere::new(Structure::BALL_RADIUS)
+            .mesh()
+            .build()
+            .count_vertices();
         let count_in_map = atom_map.iter().filter(|&&i| i == target_idx).count();
         assert!(
             count_in_map > sphere_vc,

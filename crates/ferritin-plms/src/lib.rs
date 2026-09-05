@@ -5,6 +5,11 @@
 //! cargo run --example amplify
 //! cargo run --example amplify --features metal
 //! ```
+
+// The crate deliberately uses the `foo/mod.rs` + inner `mod foo` layout for
+// each model family, so module_inception is expected throughout.
+#![allow(clippy::module_inception)]
+
 pub use amplify::amplify::{AMPLIFY, AmplifyOutput};
 pub use amplify::amplify_runner::{AmplifyModels, AmplifyRunner};
 pub use amplify::config::AMPLIFYConfig;

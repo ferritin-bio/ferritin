@@ -1,7 +1,7 @@
-use ferritin_core::{load_structure, load_trajectory};
 use ferritin_core::trajectory::Trajectory;
-use std::sync::Arc;
+use ferritin_core::{load_structure, load_trajectory};
 use ferritin_test_data::TestFile;
+use std::sync::Arc;
 
 #[test]
 fn test_load_structure_cif() {
@@ -25,19 +25,28 @@ fn test_load_trajectory_cif_multimodel() {
     let traj = load_trajectory(&file_path).unwrap();
 
     // 1D3Z: all frames share one Arc<AtomicHierarchy> (topology constant across NMR models)
-    assert!(traj.frame_count() > 1, "NMR trajectory must have multiple frames");
+    assert!(
+        traj.frame_count() > 1,
+        "NMR trajectory must have multiple frames"
+    );
     let n_atoms = traj.representative().n_atoms();
     assert!(n_atoms > 0, "Each frame must have atoms");
 
     // Verify all frames share the same topology
     let h0 = Arc::clone(&traj.frame(0).hierarchy);
     let hlast = Arc::clone(&traj.frame(traj.frame_count() - 1).hierarchy);
-    assert!(Arc::ptr_eq(&h0, &hlast), "All frames must share Arc<AtomicHierarchy>");
+    assert!(
+        Arc::ptr_eq(&h0, &hlast),
+        "All frames must share Arc<AtomicHierarchy>"
+    );
 
     // Verify coords differ between frames (NMR models have different coordinates)
     let coord_f0 = traj.frame(0).coord(0);
     let coord_flast = traj.frame(traj.frame_count() - 1).coord(0);
-    assert_ne!(coord_f0, coord_flast, "NMR frames must have differing coordinates");
+    assert_ne!(
+        coord_f0, coord_flast,
+        "NMR frames must have differing coordinates"
+    );
 }
 
 #[test]

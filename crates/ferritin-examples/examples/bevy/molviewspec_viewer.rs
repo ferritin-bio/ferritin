@@ -22,14 +22,15 @@
 
 use anyhow::Result;
 use bevy::ecs::hierarchy::ChildSpawnerCommands;
+use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
-use bevy::input::ButtonState;
 use bevy::prelude::*;
 use bevy_feathers::{
+    FeathersPlugins,
     dark_theme::create_dark_theme,
     theme::{ThemeBackgroundColor, UiTheme},
-    tokens, FeathersPlugins,
+    tokens,
 };
 use ferritin_bevy::{LoadMvsEvent, MvsError, MvsPlugin, MvsStateResource, OrbitCamera};
 use ferritin_molviewspec::molviewspec::nodes::{
@@ -280,19 +281,25 @@ fn preset_components(path: &str) -> String {
             .unwrap();
 
         {
-            let c = structure.component(sel(ComponentSelectorT::Protein)).unwrap();
+            let c = structure
+                .component(sel(ComponentSelectorT::Protein))
+                .unwrap();
             c.representation(RepresentationTypeT::Cartoon)
                 .unwrap()
                 .color(orange, sel(ComponentSelectorT::All));
         }
         {
-            let c = structure.component(sel(ComponentSelectorT::Nucleic)).unwrap();
+            let c = structure
+                .component(sel(ComponentSelectorT::Nucleic))
+                .unwrap();
             c.representation(RepresentationTypeT::Cartoon)
                 .unwrap()
                 .color(blue, sel(ComponentSelectorT::All));
         }
         {
-            let c = structure.component(sel(ComponentSelectorT::Ligand)).unwrap();
+            let c = structure
+                .component(sel(ComponentSelectorT::Ligand))
+                .unwrap();
             c.representation(RepresentationTypeT::BallAndStick)
                 .unwrap()
                 .color(green, sel(ComponentSelectorT::All));
@@ -331,11 +338,15 @@ fn preset_label(path: &str) -> String {
             .model_structure(model_params())
             .unwrap();
         {
-            let c = structure.component(sel(ComponentSelectorT::Protein)).unwrap();
-            c.representation(RepresentationTypeT::Cartoon).unwrap().color(
-                ColorT::Named(ColorNamesT::Lightgray),
-                sel(ComponentSelectorT::All),
-            );
+            let c = structure
+                .component(sel(ComponentSelectorT::Protein))
+                .unwrap();
+            c.representation(RepresentationTypeT::Cartoon)
+                .unwrap()
+                .color(
+                    ColorT::Named(ColorNamesT::Lightgray),
+                    sel(ComponentSelectorT::All),
+                );
         }
         {
             let c = structure.component(sel(ComponentSelectorT::Ion)).unwrap();
@@ -365,10 +376,12 @@ fn preset_superposition(path_a: &str, path_b: &str) -> String {
             .model_structure(model_params())
             .unwrap();
         let c = structure.component(sel(ComponentSelectorT::All)).unwrap();
-        c.representation(RepresentationTypeT::Cartoon).unwrap().color(
-            ColorT::Named(ColorNamesT::Steelblue),
-            sel(ComponentSelectorT::All),
-        );
+        c.representation(RepresentationTypeT::Cartoon)
+            .unwrap()
+            .color(
+                ColorT::Named(ColorNamesT::Steelblue),
+                sel(ComponentSelectorT::All),
+            );
         c.focus(None, None);
     }
     {
@@ -385,10 +398,12 @@ fn preset_superposition(path_a: &str, path_b: &str) -> String {
             translation: Some((80.0, 0.0, 0.0)),
         });
         let c = structure.component(sel(ComponentSelectorT::All)).unwrap();
-        c.representation(RepresentationTypeT::Cartoon).unwrap().color(
-            ColorT::Named(ColorNamesT::Orange),
-            sel(ComponentSelectorT::All),
-        );
+        c.representation(RepresentationTypeT::Cartoon)
+            .unwrap()
+            .color(
+                ColorT::Named(ColorNamesT::Orange),
+                sel(ComponentSelectorT::All),
+            );
         // Focus the translated copy too, so the executor's focus union frames both
         // structures instead of leaving this one clipped off-frame (ferritin-t0h.6).
         c.focus(None, None);
@@ -414,10 +429,12 @@ fn preset_symmetry(path: &str) -> String {
             .symmetry_structure(params)
             .unwrap();
         let c = structure.component(sel(ComponentSelectorT::All)).unwrap();
-        c.representation(RepresentationTypeT::Cartoon).unwrap().color(
-            ColorT::Named(ColorNamesT::Seagreen),
-            sel(ComponentSelectorT::All),
-        );
+        c.representation(RepresentationTypeT::Cartoon)
+            .unwrap()
+            .color(
+                ColorT::Named(ColorNamesT::Seagreen),
+                sel(ComponentSelectorT::All),
+            );
         c.focus(None, None);
     }
     to_json(&state)
@@ -465,7 +482,12 @@ fn setup_scene(mut commands: Commands, orbit: Res<OrbitCamera>) {
             illuminance: 3_000.0,
             ..default()
         },
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.0, std::f32::consts::PI, 0.0)),
+        Transform::from_rotation(Quat::from_euler(
+            EulerRot::XYZ,
+            0.0,
+            std::f32::consts::PI,
+            0.0,
+        )),
     ));
 }
 
@@ -500,13 +522,14 @@ fn orbit_input(
         orbit.pitch = (orbit.pitch - delta.y * 0.005).clamp(-1.5, 1.5);
     }
 
-    if mouse.pressed(MouseButton::Right) && delta != Vec2::ZERO {
-        if let Ok(transform) = camera.single() {
-            let right = transform.right();
-            let up = transform.up();
-            let pan_scale = orbit.radius * 0.001;
-            orbit.focus += (right * -delta.x + up * delta.y) * pan_scale;
-        }
+    if mouse.pressed(MouseButton::Right)
+        && delta != Vec2::ZERO
+        && let Ok(transform) = camera.single()
+    {
+        let right = transform.right();
+        let up = transform.up();
+        let pan_scale = orbit.radius * 0.001;
+        orbit.focus += (right * -delta.x + up * delta.y) * pan_scale;
     }
 
     if scroll_delta != 0.0 {
@@ -567,12 +590,12 @@ fn handle_preset_buttons(
     mut status: ResMut<StatusBar>,
 ) {
     for (interaction, button) in &query {
-        if *interaction == Interaction::Pressed {
-            if let Some(preset) = presets.0.get(button.0) {
-                loader.write(LoadMvsEvent::FromString(preset.json.clone()));
-                status.text = format!("Loaded preset: {}", preset.name);
-                status.error = false;
-            }
+        if *interaction == Interaction::Pressed
+            && let Some(preset) = presets.0.get(button.0)
+        {
+            loader.write(LoadMvsEvent::FromString(preset.json.clone()));
+            status.text = format!("Loaded preset: {}", preset.name);
+            status.error = false;
         }
     }
 }
@@ -785,11 +808,7 @@ fn collect_tree_lines(
     let is_collapsed = collapsed.contains(path);
 
     let chevron = if has_children {
-        if is_collapsed {
-            "▶"
-        } else {
-            "▼"
-        }
+        if is_collapsed { "▶" } else { "▼" }
     } else {
         "·"
     };
@@ -862,10 +881,7 @@ fn spawn_tree_row(
         row.insert(Button);
     }
     row.with_children(|r| {
-        r.spawn((
-            Text::new(label),
-            TextColor(TEXT_BRIGHT),
-        ));
+        r.spawn((Text::new(label), TextColor(TEXT_BRIGHT)));
     });
 }
 
@@ -900,10 +916,7 @@ fn spawn_top_bar(root: &mut ChildSpawnerCommands) {
         ThemeBackgroundColor(tokens::PANE_HEADER_BG),
     ))
     .with_children(|bar| {
-        bar.spawn((
-            Text::new("MolViewSpec Viewer"),
-            TextColor(TEXT_BRIGHT),
-        ));
+        bar.spawn((Text::new("MolViewSpec Viewer"), TextColor(TEXT_BRIGHT)));
 
         // Editable file-path field (click to focus, then type).
         bar.spawn((
@@ -1047,6 +1060,7 @@ fn spawn_text_button<C: Component>(parent: &mut ChildSpawnerCommands, caption: &
 }
 
 /// Hover/press feedback for the action buttons (not the tree rows or path field).
+#[allow(clippy::type_complexity)] // idiomatic Bevy query type
 fn button_hover_colors(
     mut query: Query<
         (&Interaction, &mut BackgroundColor),

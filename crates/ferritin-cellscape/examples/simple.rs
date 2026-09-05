@@ -1,12 +1,12 @@
 use geo::{BooleanOps, Coord, LineString, MultiPolygon, Point, Polygon};
 use std::error::Error;
 use std::f64::consts::PI;
-use svg::node::element::{Circle, Path};
 use svg::Document;
+use svg::node::element::{Circle, Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
     // 1. Generate some test points (x, y, radius)
-    let points = vec![
+    let points = [
         (100.0, 100.0, 30.0),
         (150.0, 120.0, 25.0),
         (120.0, 150.0, 20.0),
@@ -101,6 +101,7 @@ fn create_svg_path(polygon: &Polygon<f64>, fill: &str, stroke: &str, stroke_widt
 }
 
 /// Creates SVG circles for the original points
+#[allow(dead_code)] // kept as a reference helper for the example
 fn create_point_circles(points: &[(f64, f64, f64)]) -> svg::node::element::Group {
     let mut group = svg::node::element::Group::new().set("class", "points");
 

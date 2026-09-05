@@ -7,8 +7,8 @@ use strum::EnumIter;
 
 /// One-letter code alphabet for the 20 standard amino acids plus UNK.
 pub const ALPHABET: [char; 21] = [
-    'A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L',
-    'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y', 'X',
+    'A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W',
+    'Y', 'X',
 ];
 
 /// The 20 standard amino acids plus Unknown, with integer discriminants
@@ -16,10 +16,26 @@ pub const ALPHABET: [char; 21] = [
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum AminoAcid {
-    Ala = 0,  Cys = 1,  Asp = 2,  Glu = 3,  Phe = 4,
-    Gly = 5,  His = 6,  Ile = 7,  Lys = 8,  Leu = 9,
-    Met = 10, Asn = 11, Pro = 12, Gln = 13, Arg = 14,
-    Ser = 15, Thr = 16, Val = 17, Trp = 18, Tyr = 19,
+    Ala = 0,
+    Cys = 1,
+    Asp = 2,
+    Glu = 3,
+    Phe = 4,
+    Gly = 5,
+    His = 6,
+    Ile = 7,
+    Lys = 8,
+    Leu = 9,
+    Met = 10,
+    Asn = 11,
+    Pro = 12,
+    Gln = 13,
+    Arg = 14,
+    Ser = 15,
+    Thr = 16,
+    Val = 17,
+    Trp = 18,
+    Tyr = 19,
     Unknown = 20,
 }
 
@@ -55,13 +71,27 @@ impl AminoAcid {
     /// Parse from integer index (0–20). Out-of-range → `Unknown`.
     pub fn from_index(idx: u32) -> Self {
         match idx {
-            0  => Self::Ala, 1  => Self::Cys, 2  => Self::Asp,
-            3  => Self::Glu, 4  => Self::Phe, 5  => Self::Gly,
-            6  => Self::His, 7  => Self::Ile, 8  => Self::Lys,
-            9  => Self::Leu, 10 => Self::Met, 11 => Self::Asn,
-            12 => Self::Pro, 13 => Self::Gln, 14 => Self::Arg,
-            15 => Self::Ser, 16 => Self::Thr, 17 => Self::Val,
-            18 => Self::Trp, 19 => Self::Tyr, _  => Self::Unknown,
+            0 => Self::Ala,
+            1 => Self::Cys,
+            2 => Self::Asp,
+            3 => Self::Glu,
+            4 => Self::Phe,
+            5 => Self::Gly,
+            6 => Self::His,
+            7 => Self::Ile,
+            8 => Self::Lys,
+            9 => Self::Leu,
+            10 => Self::Met,
+            11 => Self::Asn,
+            12 => Self::Pro,
+            13 => Self::Gln,
+            14 => Self::Arg,
+            15 => Self::Ser,
+            16 => Self::Thr,
+            17 => Self::Val,
+            18 => Self::Trp,
+            19 => Self::Tyr,
+            _ => Self::Unknown,
         }
     }
 

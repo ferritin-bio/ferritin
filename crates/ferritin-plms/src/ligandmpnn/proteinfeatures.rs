@@ -49,6 +49,7 @@ impl ProteinFeatures {
     pub fn get_residue_index(&self) -> &Tensor {
         &self.r_idx
     }
+    #[allow(clippy::type_complexity)] // (vocab, tok→id, id→tok) triple; a named type adds little
     pub fn get_encoded(
         &self,
     ) -> Result<(Vec<String>, HashMap<String, usize>, HashMap<usize, String>)> {
@@ -116,13 +117,12 @@ impl ProteinFeatures {
             Some(bias_aa) => {
                 let mut bias_values = vec![0.0f32; 21];
                 for pair in bias_aa.split(',') {
-                    if let Some((aa, value_str)) = pair.split_once(':') {
-                        if let Ok(value) = value_str.parse::<f32>() {
-                            if let Some(aa_char) = aa.chars().next() {
-                                let idx = aa1to_int(aa_char) as usize;
-                                bias_values[idx] = value;
-                            }
-                        }
+                    if let Some((aa, value_str)) = pair.split_once(':')
+                        && let Ok(value) = value_str.parse::<f32>()
+                        && let Some(aa_char) = aa.chars().next()
+                    {
+                        let idx = aa1to_int(aa_char) as usize;
+                        bias_values[idx] = value;
                     }
                 }
                 Tensor::from_slice(&bias_values, 21, device)

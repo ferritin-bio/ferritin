@@ -138,6 +138,7 @@ impl PlmRunner for ESM3Runner {
 /// Uses a separate checkpoint (`esm3_structure_encoder_v0.pth`) from the main model.
 pub struct StructureEncoderRunner {
     encoder: StructureTokenEncoder,
+    #[allow(dead_code)]
     device: Device,
 }
 

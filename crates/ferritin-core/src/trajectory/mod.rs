@@ -8,8 +8,8 @@
 //!
 //! All implementations are object-safe (`dyn Trajectory` works).
 
-use std::borrow::Cow;
 use crate::model::Model;
+use std::borrow::Cow;
 
 pub mod array_trajectory;
 pub mod coordinates;

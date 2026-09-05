@@ -56,14 +56,14 @@ pub struct UnifiedTransformerBlock {
 }
 
 impl UnifiedTransformerBlock {
-    /// Creates a new UnifiedTransformerBlock.
-    ///
-    /// # Parameters
-    /// - d_model: The dimensionality of the input and output features
-    /// - n_heads: The number of attention heads
-    /// - use_geom_attn: Whether to use geometric attention
-    /// - use_plain_attn: Whether to use plain attention
-    /// - v_heads: Number of heads for geometric attention
+    // Creates a new UnifiedTransformerBlock.
+    //
+    // # Parameters
+    // - d_model: The dimensionality of the input and output features
+    // - n_heads: The number of attention heads
+    // - use_geom_attn: Whether to use geometric attention
+    // - use_plain_attn: Whether to use plain attention
+    // - v_heads: Number of heads for geometric attention
     // pub fn new(
     //     d_model: i64,
     //     n_heads: i64,
@@ -175,18 +175,18 @@ impl UnifiedTransformerBlock {
         let mut x = x.clone();
 
         // Plain (standard) attention path
-        if self.use_plain_attn {
-            if let Some(attn) = &self.attn {
-                let r1 = attn.forward(&x, sequence_id)?;
-                x = (&x + &(&r1 / self.scaling_factor)?)?;
-            }
+        if self.use_plain_attn
+            && let Some(attn) = &self.attn
+        {
+            let r1 = attn.forward(&x, sequence_id)?;
+            x = (&x + &(&r1 / self.scaling_factor)?)?;
         }
 
         // Geometric attention path (currently disabled/None in load())
-        if self.use_geom_attn {
-            if let Some(_geom_attn) = &self.geom_attn {
-                // geom_attn not yet implemented; skip silently
-            }
+        if self.use_geom_attn
+            && let Some(_geom_attn) = &self.geom_attn
+        {
+            // geom_attn not yet implemented; skip silently
         }
 
         // Feed-forward

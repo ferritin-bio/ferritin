@@ -136,7 +136,7 @@ fn cross_product(a: &Tensor, b: &Tensor) -> Result<Tensor> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candle_core::{Device, DType, Tensor};
+    use candle_core::{DType, Device, Tensor};
 
     #[test]
     fn test_apply_rot_identity() -> Result<()> {

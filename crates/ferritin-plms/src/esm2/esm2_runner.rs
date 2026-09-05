@@ -6,8 +6,8 @@ use crate::plm_runner::PlmRunner;
 use crate::types::PseudoProbability;
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{DType, Device, Tensor};
-use candle_nn::ops::softmax;
 use candle_nn::VarBuilder;
+use candle_nn::ops::softmax;
 use hf_hub::HFClientSync;
 use serde_json;
 use tokenizers::Tokenizer;
@@ -16,10 +16,26 @@ const ESM2_DTYPE: DType = DType::F32;
 
 // ESM2 tokenizer: indices 4-23 are the 20 standard amino acids.
 const ESM2_STD_AA: [(usize, char); 20] = [
-    (4, 'L'), (5, 'A'), (6, 'G'), (7, 'V'), (8, 'S'),
-    (9, 'E'), (10, 'R'), (11, 'T'), (12, 'I'), (13, 'D'),
-    (14, 'P'), (15, 'K'), (16, 'Q'), (17, 'N'), (18, 'F'),
-    (19, 'Y'), (20, 'M'), (21, 'H'), (22, 'W'), (23, 'C'),
+    (4, 'L'),
+    (5, 'A'),
+    (6, 'G'),
+    (7, 'V'),
+    (8, 'S'),
+    (9, 'E'),
+    (10, 'R'),
+    (11, 'T'),
+    (12, 'I'),
+    (13, 'D'),
+    (14, 'P'),
+    (15, 'K'),
+    (16, 'Q'),
+    (17, 'N'),
+    (18, 'F'),
+    (19, 'Y'),
+    (20, 'M'),
+    (21, 'H'),
+    (22, 'W'),
+    (23, 'C'),
 ];
 
 pub enum ESM2Models {

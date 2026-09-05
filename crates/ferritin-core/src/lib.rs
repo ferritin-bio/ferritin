@@ -11,6 +11,10 @@
 //! The main entry point is the [`AtomCollection`] struct which represents a biomolecular structure
 //! and provides methods for manipulating and analyzing it.
 //!
+
+// Deliberate `foo/mod.rs` + inner `mod foo` layout (io, model, unit).
+#![allow(clippy::module_inception)]
+
 mod atomcollection;
 mod bonds;
 pub mod data;

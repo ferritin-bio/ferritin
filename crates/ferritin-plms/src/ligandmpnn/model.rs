@@ -3,6 +3,11 @@
 //!
 //! - See the [LigandMPNN Repo](https://github.com/dauparas/LigandMPNN)
 //!
+
+// The layer stacks fold a `Result` accumulator over the encoder/decoder layers;
+// the explicit `fold(Ok(..), ..)` reads more clearly than `try_fold` here.
+#![allow(clippy::manual_try_fold)]
+
 use super::configs::{ModelTypes, ProteinMPNNConfig};
 use super::proteinfeatures::ProteinFeatures;
 use super::proteinfeaturesmodel::ProteinFeaturesModel;
@@ -112,6 +117,7 @@ impl ScoreOutput {
                     pos
                 };
 
+                #[allow(clippy::needless_range_loop)] // aa_idx also names the output amino acid
                 for aa_idx in 0..probs.len() {
                     if probs[aa_idx] > 0.01 {
                         // Only include probabilities above threshold
@@ -494,7 +500,9 @@ impl ProteinMPNN {
                 Ok((h_v, h_e, e_idx))
             }
             ModelTypes::LigandMPNN => {
-                candle_core::bail!("LigandMPNN encode not yet implemented; only ProteinMPNN encode is functional")
+                candle_core::bail!(
+                    "LigandMPNN encode not yet implemented; only ProteinMPNN encode is functional"
+                )
                 //     let (v, e, e_idx, y_nodes, y_edges, y_m) = self.features.forward(feature_dict)?;
                 //     let mut h_v = Tensor::zeros((e.dim(0)?, e.dim(1)?, e.dim(-1)?), device)?;
                 //     let mut h_e = self.w_e.forward(&e)?;

@@ -43,6 +43,7 @@ use candle_nn::{self as nn, LayerNorm, LayerNormConfig, Module, VarBuilder};
 /// where `w_i` are learnable scalar weights.
 struct FourierEmbedding {
     weights: Tensor, // [fourier_dim / 2]
+    #[allow(dead_code)]
     dim: usize,
 }
 
@@ -208,7 +209,9 @@ pub struct DiffusionModule {
     blocks: Vec<TokenBlock>, // 12 blocks
     out_proj: nn::Linear,    // c_token → 3 (Cα or token centroid)
     // TODO: atom_transformer (3 blocks, c_atom=128) for all-atom output
+    #[allow(dead_code)]
     c_token: usize,
+    #[allow(dead_code)]
     d_single: usize,
     // Noise schedule parameters
     s_max: f64,
@@ -232,6 +235,7 @@ impl DiffusionModule {
     /// * `n_token_blocks` — number of token transformer blocks (12)
     /// * `n_token_heads`  — number of heads per token block (16)
     /// * `fourier_dim`    — Fourier noise embedding dimension (256)
+    #[allow(clippy::too_many_arguments)] // one arg per diffusion-module hyperparameter
     pub fn load(
         vb: VarBuilder,
         c_token: usize,

@@ -4,17 +4,17 @@
 //! and residue information. Additional data like bonds can be added post-instantiation.
 //! The data for residues within this collection can be iterated through. Other useful queries like inter-atomic
 //! distances are supported.
-use std::sync::Arc;
 use super::bonds::{Bond, BondOrder};
 use super::info::constants::get_bonds_canonical20;
 use super::views::chain::ChainView;
 use super::views::residue::ResidueView;
 use crate::data::Segmentation;
 use crate::info::elements::Element;
-use crate::model::{AtomicConformation, AtomicHierarchy, Bonds, Model};
 use crate::model::tables::{AtomsTable, ChainsTable, ResidueGroup, ResiduesTable};
+use crate::model::{AtomicConformation, AtomicHierarchy, Bonds, Model};
 use compact_str::CompactString;
 use itertools::{Itertools, izip};
+use std::sync::Arc;
 
 /// Atom Collection
 ///
@@ -45,6 +45,7 @@ pub struct AtomCollection {
 }
 
 impl AtomCollection {
+    #[allow(clippy::too_many_arguments)] // parallel per-atom columns; grouping them is ferritin-100.8's job
     pub fn new(
         size: usize,
         coords: Vec<[f32; 3]>,
@@ -72,6 +73,7 @@ impl AtomCollection {
     ///
     /// Used by paths that already hold `CompactString` names (e.g. `filter`)
     /// to avoid a needless round-trip through `String`.
+    #[allow(clippy::too_many_arguments)] // mirrors `new`; parallel per-atom columns
     fn from_compact(
         size: usize,
         coords: Vec<[f32; 3]>,
@@ -109,7 +111,11 @@ impl AtomCollection {
     /// # Panics
     /// Panics if `values.len() != self.get_size()`.
     pub fn with_b_factor(mut self, values: Vec<f32>) -> Self {
-        assert_eq!(values.len(), self.size, "b_factor length must equal atom count");
+        assert_eq!(
+            values.len(),
+            self.size,
+            "b_factor length must equal atom count"
+        );
         self.b_factor = Some(values);
         self
     }
@@ -119,7 +125,11 @@ impl AtomCollection {
     /// # Panics
     /// Panics if `values.len() != self.get_size()`.
     pub fn with_occupancy(mut self, values: Vec<f32>) -> Self {
-        assert_eq!(values.len(), self.size, "occupancy length must equal atom count");
+        assert_eq!(
+            values.len(),
+            self.size,
+            "occupancy length must equal atom count"
+        );
         self.occupancy = Some(values);
         self
     }
@@ -154,14 +164,13 @@ impl AtomCollection {
                 .iter()
                 .map(|&atom_idx| {
                     // Find the residue index that contains this atom
-                    let residue_idx = residue_starts
+
+                    residue_starts
                         .iter()
                         .enumerate()
-                        .filter(|&(_, &res_start)| res_start <= atom_idx)
-                        .last()
+                        .rfind(|&(_, &res_start)| res_start <= atom_idx)
                         .map(|(i, _)| i)
-                        .unwrap_or(0);
-                    residue_idx
+                        .unwrap_or(0)
                 })
                 .collect();
 
@@ -210,10 +219,7 @@ impl AtomCollection {
             if self.is_hetero[curr_start_i] || self.is_hetero[next_start_i] {
                 continue;
             }
-            let next_end_i = residue_starts
-                .get(res_i + 2)
-                .copied()
-                .unwrap_or(n_atoms);
+            let next_end_i = residue_starts.get(res_i + 2).copied().unwrap_or(n_atoms);
             let c_idx = (curr_start_i..next_start_i).find(|&i| self.atom_names[i] == "C");
             let n_idx = (next_start_i..next_end_i).find(|&i| self.atom_names[i] == "N");
             if let (Some(c), Some(n)) = (c_idx, n_idx) {
@@ -327,15 +333,28 @@ impl AtomCollection {
             })
             .collect();
 
-        let selected: Vec<usize> = remap.iter().enumerate().filter_map(|(i, r)| r.map(|_| i)).collect();
+        let selected: Vec<usize> = remap
+            .iter()
+            .enumerate()
+            .filter_map(|(i, r)| r.map(|_| i))
+            .collect();
 
         let coords: Vec<[f32; 3]> = selected.iter().map(|&i| self.coords[i]).collect();
         let res_ids: Vec<i32> = selected.iter().map(|&i| self.res_ids[i]).collect();
-        let res_names: Vec<CompactString> = selected.iter().map(|&i| self.res_names[i].clone()).collect();
+        let res_names: Vec<CompactString> = selected
+            .iter()
+            .map(|&i| self.res_names[i].clone())
+            .collect();
         let is_hetero: Vec<bool> = selected.iter().map(|&i| self.is_hetero[i]).collect();
-        let elements: Vec<Element> = selected.iter().map(|&i| self.elements[i].clone()).collect();
-        let atom_names: Vec<CompactString> = selected.iter().map(|&i| self.atom_names[i].clone()).collect();
-        let chain_ids: Vec<CompactString> = selected.iter().map(|&i| self.chain_ids[i].clone()).collect();
+        let elements: Vec<Element> = selected.iter().map(|&i| self.elements[i]).collect();
+        let atom_names: Vec<CompactString> = selected
+            .iter()
+            .map(|&i| self.atom_names[i].clone())
+            .collect();
+        let chain_ids: Vec<CompactString> = selected
+            .iter()
+            .map(|&i| self.chain_ids[i].clone())
+            .collect();
 
         let bonds: Option<Vec<Bond>> = self.bonds.as_ref().map(|bonds| {
             bonds
@@ -352,7 +371,9 @@ impl AtomCollection {
                 .collect()
         });
 
-        let mut filtered = AtomCollection::from_compact(next, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, bonds);
+        let mut filtered = AtomCollection::from_compact(
+            next, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, bonds,
+        );
         if let Some(values) = &self.b_factor {
             filtered.b_factor = Some(selected.iter().map(|&i| values[i]).collect());
         }
@@ -375,7 +396,10 @@ impl AtomCollection {
     /// Build a boolean mask selecting solvent atoms (HOH, WAT, H2O).
     pub fn select_water(&self) -> Vec<bool> {
         const WATER: [&str; 3] = ["HOH", "WAT", "H2O"];
-        self.res_names.iter().map(|n| WATER.contains(&n.as_str())).collect()
+        self.res_names
+            .iter()
+            .map(|n| WATER.contains(&n.as_str()))
+            .collect()
     }
 
     /// Build a boolean mask selecting single-atom hetero residues that are not water (ions).
@@ -383,6 +407,7 @@ impl AtomCollection {
         let mut mask = vec![false; self.size];
         for residue in self.iter_residues() {
             if residue.is_ion() {
+                #[allow(clippy::needless_range_loop)] // index range spans one residue's atoms
                 for idx in residue.start_atom_idx..residue.end_atom_idx {
                     mask[idx] = true;
                 }
@@ -394,7 +419,10 @@ impl AtomCollection {
     /// Build a boolean mask selecting backbone atoms (N, CA, C, O).
     pub fn select_backbone(&self) -> Vec<bool> {
         const BACKBONE: [&str; 4] = ["N", "CA", "C", "O"];
-        self.atom_names.iter().map(|n| BACKBONE.contains(&n.as_str())).collect()
+        self.atom_names
+            .iter()
+            .map(|n| BACKBONE.contains(&n.as_str()))
+            .collect()
     }
 
     /// Build a boolean mask selecting atoms with `atom_name`.
@@ -445,11 +473,7 @@ impl AtomCollection {
         let last_atom_idx = residue_starts.last().copied();
         (0..residue_starts.len().saturating_sub(1))
             .map(move |i| ResidueView::new(self, residue_starts[i], residue_starts[i + 1]))
-            .chain(
-                last_atom_idx
-                    .map(|idx| ResidueView::new(self, idx, atom_size))
-                    .into_iter(),
-            )
+            .chain(last_atom_idx.map(|idx| ResidueView::new(self, idx, atom_size)))
     }
     /// Iterates over amino acid residues in the collection
     ///
@@ -604,21 +628,17 @@ impl From<&Model> for AtomCollection {
         let atom_names = hierarchy.atoms.atom_name.clone();
 
         let mut ac = AtomCollection::new(
-            n_atoms,
-            coords,
-            res_ids,
-            res_names,
-            is_hetero,
-            elements,
-            atom_names,
-            chain_ids,
-            None,
+            n_atoms, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None,
         );
 
         // Predicted structures (AlphaFold/ESM3) carry per-atom confidence rather than a
         // crystallographic B-factor; viz themes read both from the same slot, so prefer
         // confidence when both are present.
-        if let Some(values) = conformation.confidence.clone().or_else(|| conformation.b_iso.clone()) {
+        if let Some(values) = conformation
+            .confidence
+            .clone()
+            .or_else(|| conformation.b_iso.clone())
+        {
             ac = ac.with_b_factor(values);
         }
         if let Some(values) = conformation.occupancy.clone() {
@@ -643,30 +663,19 @@ mod tests {
         ];
         let res_ids = vec![1, 1, 1, 2, 2];
         let res_names = vec![
-            "ALA".into(), "ALA".into(), "ALA".into(),
-            "GLY".into(), "GLY".into(),
+            "ALA".into(),
+            "ALA".into(),
+            "ALA".into(),
+            "GLY".into(),
+            "GLY".into(),
         ];
         let is_hetero = vec![false, false, false, false, false];
         let elements = vec![Element::N, Element::C, Element::C, Element::N, Element::C];
-        let atom_names = vec![
-            "N".into(), "CA".into(), "C".into(),
-            "N".into(), "CA".into(),
-        ];
-        let chain_ids = vec![
-            "A".into(), "A".into(), "A".into(),
-            "A".into(), "A".into(),
-        ];
+        let atom_names = vec!["N".into(), "CA".into(), "C".into(), "N".into(), "CA".into()];
+        let chain_ids = vec!["A".into(), "A".into(), "A".into(), "A".into(), "A".into()];
 
         AtomCollection::new(
-            5,
-            coords,
-            res_ids,
-            res_names,
-            is_hetero,
-            elements,
-            atom_names,
-            chain_ids,
-            None,
+            5, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None,
         )
     }
 
@@ -677,12 +686,24 @@ mod tests {
             .with_occupancy(vec![1.0, 1.0, 0.5, 1.0, 0.3]);
 
         let model = original.to_model();
-        assert_eq!(model.conformation.b_iso.as_deref(), Some(&[10.0, 20.0, 30.0, 40.0, 50.0][..]));
-        assert_eq!(model.conformation.occupancy.as_deref(), Some(&[1.0, 1.0, 0.5, 1.0, 0.3][..]));
+        assert_eq!(
+            model.conformation.b_iso.as_deref(),
+            Some(&[10.0, 20.0, 30.0, 40.0, 50.0][..])
+        );
+        assert_eq!(
+            model.conformation.occupancy.as_deref(),
+            Some(&[1.0, 1.0, 0.5, 1.0, 0.3][..])
+        );
 
         let restored = AtomCollection::from(&model);
-        assert_eq!(restored.get_b_factors(), Some(&[10.0, 20.0, 30.0, 40.0, 50.0][..]));
-        assert_eq!(restored.get_occupancies(), Some(&[1.0, 1.0, 0.5, 1.0, 0.3][..]));
+        assert_eq!(
+            restored.get_b_factors(),
+            Some(&[10.0, 20.0, 30.0, 40.0, 50.0][..])
+        );
+        assert_eq!(
+            restored.get_occupancies(),
+            Some(&[1.0, 1.0, 0.5, 1.0, 0.3][..])
+        );
     }
 
     #[test]
@@ -692,7 +713,10 @@ mod tests {
         model.conformation.confidence = Some(vec![90.0, 91.0, 92.0, 93.0, 94.0]);
 
         let ac = AtomCollection::from(&model);
-        assert_eq!(ac.get_b_factors(), Some(&[90.0, 91.0, 92.0, 93.0, 94.0][..]));
+        assert_eq!(
+            ac.get_b_factors(),
+            Some(&[90.0, 91.0, 92.0, 93.0, 94.0][..])
+        );
     }
 
     #[test]
@@ -716,12 +740,42 @@ mod tests {
         assert_eq!(original.get_size(), restored.get_size());
 
         for i in 0..original.get_size() {
-            assert_eq!(original.get_coord(i), restored.get_coord(i), "coord mismatch at {}", i);
-            assert_eq!(original.get_res_id(i), restored.get_res_id(i), "res_id mismatch at {}", i);
-            assert_eq!(original.get_res_name(i), restored.get_res_name(i), "res_name mismatch at {}", i);
-            assert_eq!(original.get_atom_name(i), restored.get_atom_name(i), "atom_name mismatch at {}", i);
-            assert_eq!(original.get_chain_id(i), restored.get_chain_id(i), "chain_id mismatch at {}", i);
-            assert_eq!(original.get_is_hetero(i), restored.get_is_hetero(i), "is_hetero mismatch at {}", i);
+            assert_eq!(
+                original.get_coord(i),
+                restored.get_coord(i),
+                "coord mismatch at {}",
+                i
+            );
+            assert_eq!(
+                original.get_res_id(i),
+                restored.get_res_id(i),
+                "res_id mismatch at {}",
+                i
+            );
+            assert_eq!(
+                original.get_res_name(i),
+                restored.get_res_name(i),
+                "res_name mismatch at {}",
+                i
+            );
+            assert_eq!(
+                original.get_atom_name(i),
+                restored.get_atom_name(i),
+                "atom_name mismatch at {}",
+                i
+            );
+            assert_eq!(
+                original.get_chain_id(i),
+                restored.get_chain_id(i),
+                "chain_id mismatch at {}",
+                i
+            );
+            assert_eq!(
+                original.get_is_hetero(i),
+                restored.get_is_hetero(i),
+                "is_hetero mismatch at {}",
+                i
+            );
         }
     }
 
@@ -732,6 +786,7 @@ mod tests {
 
         let model_coords = model.coords_as_slice();
         assert_eq!(model_coords.len(), ac.get_size());
+        #[allow(clippy::needless_range_loop)] // paired with get_coord(i), a method not an index
         for i in 0..ac.get_size() {
             assert_eq!(model_coords[i], *ac.get_coord(i), "coord mismatch at {}", i);
         }
@@ -758,11 +813,7 @@ mod tests {
 
     #[test]
     fn test_multi_chain_roundtrip() {
-        let coords = vec![
-            [1.0, 1.0, 1.0],
-            [2.0, 2.0, 2.0],
-            [3.0, 3.0, 3.0],
-        ];
+        let coords = vec![[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]];
         let res_ids = vec![1, 1, 10];
         let res_names = vec!["ALA".into(), "ALA".into(), "GLY".into()];
         let is_hetero = vec![false, false, true];
@@ -789,19 +840,44 @@ mod tests {
         // Chain A: 3 atoms (N, CA, C), res 1 ALA
         // Chain B: 2 atoms (N, CA), res 2 GLY
         // Atom order: 0=A/N, 1=A/CA, 2=A/C, 3=B/N, 4=B/CA
-        let coords = vec![[1.,0.,0.],[2.,0.,0.],[3.,0.,0.],[4.,0.,0.],[5.,0.,0.]];
+        let coords = vec![
+            [1., 0., 0.],
+            [2., 0., 0.],
+            [3., 0., 0.],
+            [4., 0., 0.],
+            [5., 0., 0.],
+        ];
         let res_ids = vec![1, 1, 1, 2, 2];
-        let res_names: Vec<String> = ["ALA","ALA","ALA","GLY","GLY"].iter().map(|s| s.to_string()).collect();
+        let res_names: Vec<String> = ["ALA", "ALA", "ALA", "GLY", "GLY"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let is_hetero = vec![false, false, false, false, false];
         let elements = vec![Element::N, Element::C, Element::C, Element::N, Element::C];
-        let atom_names: Vec<String> = ["N","CA","C","N","CA"].iter().map(|s| s.to_string()).collect();
-        let chain_ids: Vec<String> = ["A","A","A","B","B"].iter().map(|s| s.to_string()).collect();
+        let atom_names: Vec<String> = ["N", "CA", "C", "N", "CA"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let chain_ids: Vec<String> = ["A", "A", "A", "B", "B"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let bonds = vec![
             Bond::new(0, 1, BondOrder::Single),
             Bond::new(1, 2, BondOrder::Single),
             Bond::new(3, 4, BondOrder::Single),
         ];
-        AtomCollection::new(5, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, Some(bonds))
+        AtomCollection::new(
+            5,
+            coords,
+            res_ids,
+            res_names,
+            is_hetero,
+            elements,
+            atom_names,
+            chain_ids,
+            Some(bonds),
+        )
     }
 
     #[test]
@@ -888,13 +964,19 @@ mod tests {
         ];
         let res_ids = vec![1, 1, 2, 3, 4];
         let res_names: Vec<String> = vec!["ALA", "ALA", "HOH", "ZN", "WAT"]
-            .into_iter().map(|s| s.to_string()).collect();
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
         let is_hetero = vec![false, false, true, true, true];
         let elements = vec![Element::N, Element::C, Element::O, Element::Zn, Element::O];
         let atom_names: Vec<String> = vec!["N", "CA", "O", "ZN", "O"]
-            .into_iter().map(|s| s.to_string()).collect();
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
         let chain_ids: Vec<String> = vec!["A"; 5].into_iter().map(|s| s.to_string()).collect();
-        AtomCollection::new(5, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None)
+        AtomCollection::new(
+            5, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None,
+        )
     }
 
     #[test]
@@ -955,14 +1037,25 @@ mod tests {
         // ALA is multi-atom hetero (2 atoms) — not an ion even if flagged hetero
         let coords = vec![[0.0; 3], [1.0; 3]];
         let res_ids = vec![1, 1];
-        let res_names: Vec<String> = vec!["LIG", "LIG"].into_iter().map(|s| s.to_string()).collect();
+        let res_names: Vec<String> = vec!["LIG", "LIG"]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
         let is_hetero = vec![true, true];
         let elements = vec![Element::C, Element::O];
-        let atom_names: Vec<String> = vec!["C1", "O1"].into_iter().map(|s| s.to_string()).collect();
+        let atom_names: Vec<String> = vec!["C1", "O1"]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
         let chain_ids: Vec<String> = vec!["A", "A"].into_iter().map(|s| s.to_string()).collect();
-        let ac = AtomCollection::new(2, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None);
+        let ac = AtomCollection::new(
+            2, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None,
+        );
         let lig = ac.iter_residues().next().unwrap();
-        assert!(!lig.is_ion(), "multi-atom hetero residue should not be an ion");
+        assert!(
+            !lig.is_ion(),
+            "multi-atom hetero residue should not be an ion"
+        );
     }
 
     #[test]
@@ -988,12 +1081,17 @@ mod tests {
         // in full (a fixed [u8; 4] representation would have truncated them).
         let coords = vec![[0.0; 3], [1.0; 3]];
         let res_ids = vec![1, 1];
-        let res_names: Vec<String> = vec!["AABCD", "AABCD"].into_iter().map(String::from).collect();
+        let res_names: Vec<String> = vec!["AABCD", "AABCD"]
+            .into_iter()
+            .map(String::from)
+            .collect();
         let is_hetero = vec![false, false];
         let elements = vec![Element::C, Element::O];
         let atom_names: Vec<String> = vec!["C1", "OXT"].into_iter().map(String::from).collect();
         let chain_ids: Vec<String> = vec!["AA", "AA"].into_iter().map(String::from).collect();
-        let ac = AtomCollection::new(2, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None);
+        let ac = AtomCollection::new(
+            2, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None,
+        );
 
         assert_eq!(ac.get_res_name(0), "AABCD");
         assert_eq!(ac.get_chain_id(0), "AA");

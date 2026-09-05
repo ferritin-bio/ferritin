@@ -9,7 +9,7 @@ fn test_chain_view() {
     ac.calculate_chain_indices();
 
     let chains: Vec<_> = ac.iter_chains().collect();
-    assert!(chains.len() > 0);
+    assert!(!chains.is_empty());
 
     // Test first chain
     let first_chain = &chains[0];

@@ -298,7 +298,10 @@ impl Node {
             None
         }
     }
-    pub fn component_from_source(&mut self, params: ComponentFromSourceParams) -> Option<&mut Node> {
+    pub fn component_from_source(
+        &mut self,
+        params: ComponentFromSourceParams,
+    ) -> Option<&mut Node> {
         if self.kind == KindT::Structure {
             let node = Node::new(
                 KindT::ComponentFromSource,
@@ -342,7 +345,6 @@ impl Node {
     /// Add a representation for this component.
     /// :param type: the type of representation, defaults to 'cartoon'
     /// :return: a builder that handles operations at representation level
-
     pub fn representation(
         &mut self,
         representation_type: RepresentationTypeT,
@@ -390,7 +392,9 @@ impl Node {
         if self.kind == KindT::Component {
             let node = Node::new(
                 KindT::Tooltip,
-                Some(NodeParams::TooltipInlineParams(TooltipInlineParams { text })),
+                Some(NodeParams::TooltipInlineParams(TooltipInlineParams {
+                    text,
+                })),
             );
             self.children.get_or_insert_with(Vec::new).push(node);
             self.children.as_mut().unwrap().last_mut()
@@ -406,7 +410,10 @@ impl Node {
         if self.kind == KindT::Component {
             let node = Node::new(
                 KindT::Focus,
-                Some(NodeParams::FocusInlineParams(FocusInlineParams { direction, up })),
+                Some(NodeParams::FocusInlineParams(FocusInlineParams {
+                    direction,
+                    up,
+                })),
             );
             self.children.get_or_insert_with(Vec::new).push(node);
             self.children.as_mut().unwrap().last_mut()
@@ -498,10 +505,12 @@ impl<'de> Deserialize<'de> for Node {
             None | Some(serde_json::Value::Null) => None,
             Some(v) => {
                 let p: NodeParams = match &helper.kind {
-                    KindT::Download => serde_json::from_value::<DownloadParams>(v)
-                        .map(NodeParams::DownloadParams),
-                    KindT::Parse => serde_json::from_value::<ParseParams>(v)
-                        .map(NodeParams::ParseParams),
+                    KindT::Download => {
+                        serde_json::from_value::<DownloadParams>(v).map(NodeParams::DownloadParams)
+                    }
+                    KindT::Parse => {
+                        serde_json::from_value::<ParseParams>(v).map(NodeParams::ParseParams)
+                    }
                     KindT::Structure => serde_json::from_value::<StructureParams>(v)
                         .map(NodeParams::StructureParams),
                     KindT::Representation => serde_json::from_value::<RepresentationParams>(v)
@@ -538,33 +547,44 @@ impl<'de> Deserialize<'de> for Node {
                         .map(NodeParams::FocusInlineParams),
                     KindT::Transform => serde_json::from_value::<TransformParams>(v)
                         .map(NodeParams::TransformParams),
-                    KindT::Camera => serde_json::from_value::<CameraParams>(v)
-                        .map(NodeParams::CameraParams),
-                    KindT::Canvas => serde_json::from_value::<CanvasParams>(v)
-                        .map(NodeParams::CanvasParams),
-                    KindT::Sphere => serde_json::from_value::<SphereParams>(v)
-                        .map(NodeParams::SphereParams),
-                    KindT::Line => serde_json::from_value::<LineParams>(v)
-                        .map(NodeParams::LineParams),
-                    KindT::Volume => serde_json::from_value::<VolumeParams>(v)
-                        .map(NodeParams::VolumeParams),
+                    KindT::Camera => {
+                        serde_json::from_value::<CameraParams>(v).map(NodeParams::CameraParams)
+                    }
+                    KindT::Canvas => {
+                        serde_json::from_value::<CanvasParams>(v).map(NodeParams::CanvasParams)
+                    }
+                    KindT::Sphere => {
+                        serde_json::from_value::<SphereParams>(v).map(NodeParams::SphereParams)
+                    }
+                    KindT::Line => {
+                        serde_json::from_value::<LineParams>(v).map(NodeParams::LineParams)
+                    }
+                    KindT::Volume => {
+                        serde_json::from_value::<VolumeParams>(v).map(NodeParams::VolumeParams)
+                    }
                     KindT::VolumeRepresentation => {
                         serde_json::from_value::<VolumeRepresentationParams>(v)
                             .map(NodeParams::VolumeRepresentationParams)
                     }
                     // Root and GenericVisuals carry no params; ignore any value present.
-                    KindT::Root | KindT::GenericVisuals => return Ok(Node {
-                        kind: helper.kind,
-                        params: None,
-                        children: helper.children,
-                    }),
+                    KindT::Root | KindT::GenericVisuals => {
+                        return Ok(Node {
+                            kind: helper.kind,
+                            params: None,
+                            children: helper.children,
+                        });
+                    }
                 }
                 .map_err(|e| serde::de::Error::custom(e.to_string()))?;
                 Some(p)
             }
         };
 
-        Ok(Node { kind: helper.kind, params, children: helper.children })
+        Ok(Node {
+            kind: helper.kind,
+            params,
+            children: helper.children,
+        })
     }
 }
 
@@ -602,6 +622,12 @@ pub struct State {
     pub root: Node,
     pub metadata: Metadata,
 }
+impl Default for State {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl State {
     pub fn new() -> Self {
         State {
@@ -615,6 +641,7 @@ impl State {
     }
 
     /// Parse a MVSJ string into a State.
+    #[allow(clippy::should_implement_trait)] // fallible JSON parse, not std FromStr
     pub fn from_str(s: &str) -> serde_json::Result<State> {
         serde_json::from_str(s)
     }
@@ -723,6 +750,7 @@ pub struct MvsjFile {
 }
 impl MvsjFile {
     /// Parse a multi-snapshot MVSJ string into an `MvsjFile`.
+    #[allow(clippy::should_implement_trait)] // fallible JSON parse, not std FromStr
     pub fn from_str(s: &str) -> serde_json::Result<MvsjFile> {
         serde_json::from_str(s)
     }
@@ -751,16 +779,13 @@ pub struct ParseParams {
 /// StructureType. Useful for specifying more complicated sets of structures
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum StructureTypeT {
     Model,
+    #[default]
     Assembly,
     Symmetry,
     SymmetryMates,
-}
-impl Default for StructureTypeT {
-    fn default() -> Self {
-        StructureTypeT::Assembly
-    }
 }
 
 /// Structure Params
@@ -1153,6 +1178,7 @@ pub struct ComponentInlineParams {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)] // untagged serde enum; boxing would change the wire shape
 pub enum ComponentSelector {
     Selector(ComponentSelectorT),
     Expression(ComponentExpression),

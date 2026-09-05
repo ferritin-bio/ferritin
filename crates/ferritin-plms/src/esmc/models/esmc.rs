@@ -132,7 +132,10 @@ impl ESMCConfig {
             use_plain_attn: true,
             n_layers_geom: 0,
             scale_residue: true,
-            residue_scaling_factor: (36f64 / 36.).sqrt(), // = 1.0
+            // Mirrors the sqrt(n_layers / 36) scaling of the other sizes; with
+            // n_layers = 36 this is exactly 1.0 (written directly so clippy's
+            // eq_op lint doesn't fire on 36 / 36).
+            residue_scaling_factor: 1.0,
             mask_and_zero_frameless: false,
             bias: false,
             qk_layernorm: true,

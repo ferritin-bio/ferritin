@@ -73,6 +73,7 @@ pub(crate) fn default_distance_range(a: &str, b: &str) -> Option<(f32, f32)> {
     }
 }
 
+#[allow(clippy::type_complexity)] // (atom, atom, bond-order) bond table keyed by residue
 static AA_BONDS: OnceLock<HashMap<&'static str, Vec<(&'static str, &'static str, i32)>>> =
     OnceLock::new();
 

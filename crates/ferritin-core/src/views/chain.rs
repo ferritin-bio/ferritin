@@ -52,10 +52,10 @@ impl<'a> ChainView<'a> {
         }
 
         // Add the last residue if it exists and matches the chain ID
-        if let Some(&last_idx) = atom_indices.last() {
-            if self.data.get_chain_id(last_idx) == chain_id {
-                residues.push(ResidueView::new(self.data, last_idx, last_residue_end_idx));
-            }
+        if let Some(&last_idx) = atom_indices.last()
+            && self.data.get_chain_id(last_idx) == chain_id
+        {
+            residues.push(ResidueView::new(self.data, last_idx, last_residue_end_idx));
         }
 
         residues.into_iter()

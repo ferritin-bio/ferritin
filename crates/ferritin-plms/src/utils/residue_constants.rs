@@ -8,7 +8,7 @@
 
 // Re-export core constants from ferritin-core so existing callers don't break.
 pub use ferritin_core::info::atom37::{
-    atom37_index, atom_order, AAAtom, ATOM37_NAMES, NUM_ATOM37, NUM_RESIDUES,
+    AAAtom, ATOM37_NAMES, NUM_ATOM37, NUM_RESIDUES, atom_order, atom37_index,
 };
 
 // ── Chi angle definitions ──────────────────────────────────────────────────
@@ -174,7 +174,8 @@ mod tests {
         assert_eq!(mapping[1], Some(1)); // CA
         assert_eq!(mapping[2], Some(2)); // C
         assert_eq!(mapping[3], Some(4)); // O
-        assert_eq!(mapping[4], None);    // no CB for GLY
+        assert_eq!(mapping[4], None); // no CB for GLY
+        #[allow(clippy::needless_range_loop)] // asserting a fixed index range
         for i in 4..14 {
             assert_eq!(mapping[i], None, "GLY slot {i} should be None");
         }
@@ -201,5 +202,4 @@ mod tests {
         let mapping = atom14_to_atom37_for_residue("UNK");
         assert!(mapping.iter().all(|m| m.is_none()));
     }
-
 }
