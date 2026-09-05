@@ -1,6 +1,6 @@
 
 build:
-    cargo build -p  ferritin-core -p ferritin-structure-mesh
+    cargo build -p ferritin-core
 
 
 # convert all PSEs to msvj folders
@@ -21,7 +21,7 @@ serve: docs
     quarto preview docs
 
 clean:
-    cargo clean -p ferritin-core  -p ferritin-structure-mesh
+    cargo clean -p ferritin-core
     cargo clean --doc
     rm -rf docs/doc/
     rm -rf docs/examples/example
