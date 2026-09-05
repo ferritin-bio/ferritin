@@ -148,6 +148,7 @@ impl ProteinFeaturesModel {
             .gather(edge_indices, 2)?
             .squeeze(D::Minus1)
     }
+    #[allow(clippy::vec_init_then_push)] // long fixed RBF feature list reads better as one-per-line pushes
     pub fn forward(
         &self,
         input_features: &ProteinFeatures,
@@ -158,9 +159,11 @@ impl ProteinFeaturesModel {
         let r_idx = input_features.get_residue_index();
         // Temporary implementation until chain labels are supported
         let chain_labels = Tensor::zeros_like(r_idx)?;
-        let x = (self.augment_eps > 0.0)
-            .then(|| x + x.randn_like(0.0, self.augment_eps as f64)?)
-            .unwrap_or_else(|| Ok(x.clone()))?;
+        let x = if self.augment_eps > 0.0 {
+            x + x.randn_like(0.0, self.augment_eps as f64)?
+        } else {
+            Ok(x.clone())
+        }?;
         let b = (&x.narrow(2, 1, 1)? - &x.narrow(2, 0, 1)?)?
             .squeeze(2)?
             .contiguous()?;
@@ -184,6 +187,8 @@ impl ProteinFeaturesModel {
         let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
 
         let (d_neighbors, e_idx) = self._dist(&ca, mask, self.augment_eps)?;
+        // A long, fixed list of RBF pairwise features; the explicit pushes read
+        // more clearly (one atom-pair per line) than a 25-element vec! literal.
         let mut rbf_all = Vec::new();
         rbf_all.push(self._rbf(&d_neighbors, device)?);
         rbf_all.push(self._get_rbf(&n, &n, &e_idx, device)?);
@@ -271,8 +276,8 @@ impl PositionalEncodings {
         let inverse_mask = (1.0 - &mask)?;
         let d = (clipped.mul(&mask)? + (inverse_mask * ((2.0 * max_rel) + 1.0))?)?;
         let depth = (2 * self.max_relative_feature + 2) as i64;
-        let d_onehot = one_hot(d.to_dtype(DType::U32)?, depth as usize, 1f32, 0f32)?
-            .to_dtype(DType::F32)?;
+        let d_onehot =
+            one_hot(d.to_dtype(DType::U32)?, depth as usize, 1f32, 0f32)?.to_dtype(DType::F32)?;
         self.linear.forward(&d_onehot)
     }
 }

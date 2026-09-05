@@ -27,7 +27,7 @@ use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::prelude::*;
 use bevy::ui::Node as UiNode;
-use ferritin_core::{load_model, AtomCollection, Model};
+use ferritin_core::{AtomCollection, Model, load_model};
 use ferritin_molviewspec::molviewspec::nodes::{
     CameraParams, CanvasParams, ColorT, ColorThemeT, ComponentInlineParams, ComponentSelector,
     FocusInlineParams, KindT, LabelInlineParams, LineParams, Node, NodeParams, ParseFormatT,
@@ -35,8 +35,8 @@ use ferritin_molviewspec::molviewspec::nodes::{
     StructureTypeT, TransformParams,
 };
 
-use crate::colors::{apply_mvs_colors_with_theme, color_t_to_bevy, VertexMapKind};
-use crate::selection::{evaluate_selector, AtomMask};
+use crate::colors::{VertexMapKind, apply_mvs_colors_with_theme, color_t_to_bevy};
+use crate::selection::{AtomMask, evaluate_selector};
 use crate::structure::{RenderOptions, Structure};
 
 // ---------------------------------------------------------------------------
@@ -388,17 +388,17 @@ fn execute_root(root: &Node, ctx: &mut Ctx) {
     // Canvas and camera are applied first so that any `focus` node encountered later
     // (deep inside a structure) overrides the camera — focus always wins.
     for child in children(root) {
-        if child.kind == KindT::Canvas {
-            if let Some(NodeParams::CanvasParams(p)) = &child.params {
-                apply_canvas(p, ctx);
-            }
+        if child.kind == KindT::Canvas
+            && let Some(NodeParams::CanvasParams(p)) = &child.params
+        {
+            apply_canvas(p, ctx);
         }
     }
     for child in children(root) {
-        if child.kind == KindT::Camera {
-            if let Some(NodeParams::CameraParams(p)) = &child.params {
-                apply_camera(p, ctx);
-            }
+        if child.kind == KindT::Camera
+            && let Some(NodeParams::CameraParams(p)) = &child.params
+        {
+            apply_camera(p, ctx);
         }
     }
 
@@ -441,13 +441,13 @@ fn execute_download(node: &Node, ctx: &mut Ctx) {
             continue;
         }
         // `format` is informational here; load_model auto-detects from the file.
-        if let Some(NodeParams::ParseParams(pp)) = &parse.params {
-            if matches!(pp.format, ParseFormatT::Bcif) {
-                ctx.errors.push(MvsError::UnsupportedNode {
-                    kind: KindT::Parse,
-                    reason: "bcif parsing is not supported".to_string(),
-                });
-            }
+        if let Some(NodeParams::ParseParams(pp)) = &parse.params
+            && matches!(pp.format, ParseFormatT::Bcif)
+        {
+            ctx.errors.push(MvsError::UnsupportedNode {
+                kind: KindT::Parse,
+                reason: "bcif parsing is not supported".to_string(),
+            });
         }
         for structure in children(parse) {
             if structure.kind == KindT::Structure {
@@ -467,12 +467,12 @@ fn execute_structure(node: &Node, model: &Model, ac: &AtomCollection, ctx: &mut 
     // structure. Collect it first so it can be handed to every component.
     let mut pending_transform = Transform::IDENTITY;
     for child in children(node) {
-        if child.kind == KindT::Transform {
-            if let Some(NodeParams::TransformParams(tp)) = &child.params {
-                match parse_transform(tp) {
-                    Ok(t) => pending_transform = t,
-                    Err(()) => ctx.errors.push(MvsError::InvalidTransform),
-                }
+        if child.kind == KindT::Transform
+            && let Some(NodeParams::TransformParams(tp)) = &child.params
+        {
+            match parse_transform(tp) {
+                Ok(t) => pending_transform = t,
+                Err(()) => ctx.errors.push(MvsError::InvalidTransform),
             }
         }
     }

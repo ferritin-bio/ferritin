@@ -63,7 +63,8 @@ impl<'a> ModelResidueView<'a> {
     pub fn find_atom_by_name(&self, name: &str) -> Option<ModelAtomView<'a>> {
         let mut range = self.model.hierarchy.atoms_in_residue(self.res_idx);
         let model = self.model;
-        range.find(|&i| model.hierarchy.atoms.atom_name[i] == name)
+        range
+            .find(|&i| model.hierarchy.atoms.atom_name[i] == name)
             .map(|idx| ModelAtomView::new(model, idx))
     }
 }

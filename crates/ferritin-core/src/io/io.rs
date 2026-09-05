@@ -1,8 +1,8 @@
-use crate::model::Model;
-use crate::trajectory::ArrayTrajectory;
 use crate::AtomCollection;
 use crate::io::cif;
 use crate::io::pdb;
+use crate::model::Model;
+use crate::trajectory::ArrayTrajectory;
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -44,7 +44,9 @@ pub fn load_trajectory<P: AsRef<Path>>(file_path: P) -> Result<ArrayTrajectory> 
         "cif" => cif::CIFFile::read(path)?
             .parse_to_trajectory()
             .context("Failed to parse CIF file to trajectory"),
-        "pdb" => Err(anyhow::anyhow!("PDB multi-model trajectory not yet implemented")),
+        "pdb" => Err(anyhow::anyhow!(
+            "PDB multi-model trajectory not yet implemented"
+        )),
         _ => Err(anyhow::anyhow!("Unsupported file extension: {}", extension)),
     }
 }
@@ -67,7 +69,9 @@ pub fn load_model<P: AsRef<Path>>(file_path: P) -> Result<Model> {
         "cif" => cif::CIFFile::read(path)?
             .parse_to_model()
             .context("Failed to parse CIF file to model"),
-        "pdb" => Err(anyhow::anyhow!("load_model for PDB not yet implemented; use load_trajectory for CIF files")),
+        "pdb" => Err(anyhow::anyhow!(
+            "load_model for PDB not yet implemented; use load_trajectory for CIF files"
+        )),
         _ => Err(anyhow::anyhow!("Unsupported file extension: {}", extension)),
     }
 }

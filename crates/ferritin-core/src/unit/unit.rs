@@ -420,7 +420,7 @@ mod tests {
         let model = make_test_model(10);
 
         let mask_a: Vec<bool> = (0..10).map(|i| i < 5).collect();
-        let mask_b: Vec<bool> = (0..10).map(|i| i >= 3 && i < 8).collect();
+        let mask_b: Vec<bool> = (0..10).map(|i| (3..8).contains(&i)).collect();
 
         let unit_a = Unit::from_mask(&model, &mask_a);
         let unit_b = Unit::from_mask(&model, &mask_b);

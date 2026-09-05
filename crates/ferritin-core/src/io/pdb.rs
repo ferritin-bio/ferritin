@@ -112,7 +112,7 @@ impl PDBFile {
     pub fn parse_remark(&self, number: i64) -> Result<Option<Vec<String>>, PDBError> {
         const CONTENT_START_COLUMN: usize = 11;
 
-        if number < 0 || number > 999 {
+        if !(0..=999).contains(&number) {
             return Err(PDBError::ValueError(
                 "The number must be in range 0-999".to_string(),
             ));
@@ -137,6 +137,7 @@ impl PDBFile {
     /// Parse the `CRYST1` record of the PDB file to obtain the unit cell lengths
     /// and angles (in degrees).
     #[allow(dead_code)]
+    #[allow(clippy::type_complexity)] // (a, b, c, alpha, beta, gamma) unit-cell tuple
     pub fn parse_box(&self) -> Result<Option<(f32, f32, f32, f32, f32, f32)>, PDBError> {
         for line in self.lines.iter() {
             if line.starts_with("CRYST1") {
@@ -203,10 +204,10 @@ impl PDBFile {
             let element_str = line[76..78].trim();
             let element = if element_str.is_empty() {
                 let atom_name = line[12..16].trim();
-                if atom_name.len() >= 1 {
+                if !atom_name.is_empty() {
                     let first_char = atom_name.chars().next().unwrap();
                     if first_char.is_alphabetic() && !first_char.is_numeric() {
-                        Element::from_symbol(&first_char.to_string()).unwrap()
+                        Element::from_symbol(first_char.to_string()).unwrap()
                     } else {
                         Element::H // todo: fix
                     }
@@ -249,25 +250,25 @@ impl PDBFile {
         for line in self.lines.iter() {
             if line.starts_with("CONECT") && line.len() >= 16 {
                 // Extract ID of center atom
-                if let Ok(center_id) = parse_number::<i32>(&line[6..11]) {
-                    if let Some(&center_index) = atom_id_to_index.get(&center_id) {
-                        // Iterate over atom IDs bonded to center atom
-                        for i in (11..31).step_by(5) {
-                            if i + 5 > line.len() {
-                                break;
+                if let Ok(center_id) = parse_number::<i32>(&line[6..11])
+                    && let Some(&center_index) = atom_id_to_index.get(&center_id)
+                {
+                    // Iterate over atom IDs bonded to center atom
+                    for i in (11..31).step_by(5) {
+                        if i + 5 > line.len() {
+                            break;
+                        }
+                        if let Ok(bonded_id) = parse_number::<i32>(&line[i..i + 5]) {
+                            if let Some(&bonded_index) = atom_id_to_index.get(&bonded_id) {
+                                bonds.push(Bond::new(
+                                    center_index,
+                                    bonded_index,
+                                    BondOrder::Single,
+                                ));
                             }
-                            if let Ok(bonded_id) = parse_number::<i32>(&line[i..i + 5]) {
-                                if let Some(&bonded_index) = atom_id_to_index.get(&bonded_id) {
-                                    bonds.push(Bond::new(
-                                        center_index,
-                                        bonded_index,
-                                        BondOrder::Single,
-                                    ));
-                                }
-                            } else {
-                                // No more bonded atoms
-                                break;
-                            }
+                        } else {
+                            // No more bonded atoms
+                            break;
                         }
                     }
                 }
@@ -305,6 +306,7 @@ impl PDBFile {
 
         // For single model mode, just write all atoms
         if !as_multiple_models {
+            #[allow(clippy::needless_range_loop)] // i indexes several parallel per-atom columns
             for i in 0..size {
                 let atom_line = format!(
                     "{:6}{:>5} {:4} {:>3} {:1}{:>4}{:1}   {:>8.3}{:>8.3}{:>8.3}{:>6.2}{:>6.2}          {:>2}  ",
@@ -336,6 +338,7 @@ impl PDBFile {
             // Note: This is a simplification that assumes a single model in the AtomCollection
             // In a real implementation, you'd need to handle multiple models in the collection
             self.lines.push(format!("MODEL {:>8}", 1));
+            #[allow(clippy::needless_range_loop)] // i indexes several parallel per-atom columns
             for i in 0..size {
                 let atom_line = format!(
                     "{:6}{:>5} {:4} {:>3} {:1}{:>4}{:1}   {:>8.3}{:>8.3}{:>8.3}{:>6.2}{:>6.2}          {:>2}  ",
@@ -430,7 +433,6 @@ impl PDBFile {
             self.model_start_i = vec![0]
         }
     }
-
 }
 
 /// Center atom name for proper PDB formatting
@@ -469,7 +471,6 @@ fn parse_float_from_string(line: &str, start: usize, stop: usize) -> Result<f32,
         ))
     })
 }
-
 
 #[cfg(test)]
 mod tests {

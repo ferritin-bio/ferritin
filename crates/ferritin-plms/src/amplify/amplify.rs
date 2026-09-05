@@ -67,10 +67,8 @@ impl AMPLIFY {
             if output_hidden_states {
                 hidden_states.push(x.clone());
             }
-            if output_attentions {
-                if let Some(attn) = attn {
-                    attentions.push(attn);
-                }
+            if output_attentions && let Some(attn) = attn {
+                attentions.push(attn);
             }
         }
         // Final layer norm and decoder
@@ -249,9 +247,11 @@ impl EncoderBlock {
         let scores = (query.matmul(&key.transpose(D::Minus2, D::Minus1)?)? * scale)?;
         let masked_scores = attn_mask.map_or(Ok(scores.clone()), |mask| scores.add(mask))?;
         let attn_weights = softmax_last_dim(&masked_scores)?;
-        let attn_probs = (dropout_p > 0.0)
-            .then(|| candle_nn::ops::dropout(&attn_weights, dropout_p as f32))
-            .unwrap_or_else(|| Ok(attn_weights))?;
+        let attn_probs = if dropout_p > 0.0 {
+            candle_nn::ops::dropout(&attn_weights, dropout_p as f32)
+        } else {
+            Ok(attn_weights)
+        }?;
         attn_probs.matmul(value)
     }
     fn attention_block(
@@ -306,7 +306,7 @@ impl EncoderBlock {
         // avoid RuntimeError due to misaligned operand
         let multiple_of = 8;
         let intermediate_size = (config.intermediate_size * 2) / 3;
-        let intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) / multiple_of);
+        let intermediate_size = multiple_of * intermediate_size.div_ceil(multiple_of);
         let vb = vb.pp(layer);
         let attn_linear = |d_in, d_out, vb| {
             if config.att_bias {

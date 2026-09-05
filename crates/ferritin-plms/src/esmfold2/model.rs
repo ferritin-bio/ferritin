@@ -18,6 +18,7 @@ use candle_nn::VarBuilder;
 /// The ESMC-6B backbone (frozen) is loaded separately; this struct holds only
 /// the structure-head components that are fine-tuned for structure prediction.
 pub struct ESMFold2Model {
+    #[allow(dead_code)]
     config: ESMFold2Config,
     lm_encoder: LMEncoder,
     folding_trunk: FoldingTrunk,

@@ -29,6 +29,12 @@ pub struct StructurePlugin {
     initial_files: Vec<(PathBuf, StructureSettings)>,
 }
 
+impl Default for StructurePlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StructurePlugin {
     pub fn new() -> Self {
         Self {

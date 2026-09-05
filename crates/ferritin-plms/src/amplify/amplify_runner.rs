@@ -118,7 +118,7 @@ impl AmplifyRunner {
         let residue_ids = if ids.len() >= 2 {
             &ids[1..ids.len() - 1]
         } else {
-            &ids[..]
+            ids
         };
         let label_at = |p: usize| -> char {
             residue_ids
@@ -129,6 +129,7 @@ impl AmplifyRunner {
         };
 
         let mut contacts = Vec::new();
+        #[allow(clippy::needless_range_loop)] // i/j/k index a 3-D contact tensor
         for i in 0..position1 {
             for j in 0..position2 {
                 for k in 0..val {
@@ -151,6 +152,7 @@ impl AmplifyRunner {
         let data = tensor.to_vec3::<f32>()?;
         let (_, seq_len, vocab_size) = tensor.dims3()?;
         let mut logit_positions = Vec::with_capacity(seq_len * vocab_size);
+        #[allow(clippy::needless_range_loop)] // indexes a 3-D logits tensor
         for seq_pos in 0..seq_len {
             for vocab_idx in 0..vocab_size {
                 let score = data[0][seq_pos][vocab_idx];

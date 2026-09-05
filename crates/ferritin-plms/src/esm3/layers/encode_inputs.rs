@@ -78,6 +78,7 @@ fn rbf(values: &Tensor, v_min: f64, v_max: f64, n_bins: usize) -> Result<Tensor>
 // ── EncodeInputs ──────────────────────────────────────────────────────────────
 
 pub struct EncodeInputs {
+    #[allow(dead_code)]
     d_model: usize,
     // Sequence track
     sequence_embed: nn::Embedding,
@@ -164,6 +165,7 @@ impl EncodeInputs {
     /// - `per_res_plddt`:             `(B, L)` f32 per-residue pLDDT in [0,1].
     ///
     /// Returns `(B, L, d_model)`.
+    #[allow(clippy::too_many_arguments)] // one arg per ESM3 input track
     pub fn forward(
         &self,
         sequence_tokens: Option<&Tensor>,

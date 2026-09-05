@@ -110,58 +110,58 @@ fn evaluate_expression(expr: &ComponentExpression, model: &AtomCollection) -> At
 
     for (res_iter_idx, residue) in model.iter_residues().enumerate() {
         // Chain filter (label_asym_id matched against auth_asym_id in MVP)
-        if let Some(ref chain) = expr.label_asym_id {
-            if residue.chain_id() != chain {
-                continue;
-            }
+        if let Some(ref chain) = expr.label_asym_id
+            && residue.chain_id() != chain
+        {
+            continue;
         }
-        if let Some(ref chain) = expr.auth_asym_id {
-            if residue.chain_id() != chain {
-                continue;
-            }
+        if let Some(ref chain) = expr.auth_asym_id
+            && residue.chain_id() != chain
+        {
+            continue;
         }
 
         // residue_index: 0-based residue iteration index
-        if let Some(ri) = expr.residue_index {
-            if res_iter_idx as i32 != ri {
-                continue;
-            }
+        if let Some(ri) = expr.residue_index
+            && res_iter_idx as i32 != ri
+        {
+            continue;
         }
 
         let res_id = residue.residue_id();
 
         // Exact residue seq id (label_seq_id matched against auth_seq_id in MVP)
-        if let Some(seq) = expr.label_seq_id {
-            if res_id != seq {
-                continue;
-            }
+        if let Some(seq) = expr.label_seq_id
+            && res_id != seq
+        {
+            continue;
         }
-        if let Some(seq) = expr.auth_seq_id {
-            if res_id != seq {
-                continue;
-            }
+        if let Some(seq) = expr.auth_seq_id
+            && res_id != seq
+        {
+            continue;
         }
 
         // Range filters (beg inclusive, end inclusive)
-        if let Some(beg) = expr.beg_label_seq_id {
-            if res_id < beg {
-                continue;
-            }
+        if let Some(beg) = expr.beg_label_seq_id
+            && res_id < beg
+        {
+            continue;
         }
-        if let Some(end) = expr.end_label_seq_id {
-            if res_id > end {
-                continue;
-            }
+        if let Some(end) = expr.end_label_seq_id
+            && res_id > end
+        {
+            continue;
         }
-        if let Some(beg) = expr.beg_auth_seq_id {
-            if res_id < beg {
-                continue;
-            }
+        if let Some(beg) = expr.beg_auth_seq_id
+            && res_id < beg
+        {
+            continue;
         }
-        if let Some(end) = expr.end_auth_seq_id {
-            if res_id > end {
-                continue;
-            }
+        if let Some(end) = expr.end_auth_seq_id
+            && res_id > end
+        {
+            continue;
         }
 
         // residue_index: 0-based index of this residue in iteration order
@@ -170,30 +170,30 @@ fn evaluate_expression(expr: &ComponentExpression, model: &AtomCollection) -> At
         // Residue passed — now check per-atom fields
         for idx in residue.atom_range() {
             // atom_index: 0-based global atom index
-            if let Some(ai) = expr.atom_index {
-                if idx as i32 != ai {
-                    continue;
-                }
+            if let Some(ai) = expr.atom_index
+                && idx as i32 != ai
+            {
+                continue;
             }
 
             // label_atom_id / auth_atom_id
             let atom_name = model.get_atom_name(idx);
-            if let Some(ref la) = expr.label_atom_id {
-                if atom_name != la {
-                    continue;
-                }
+            if let Some(ref la) = expr.label_atom_id
+                && atom_name != la
+            {
+                continue;
             }
-            if let Some(ref aa) = expr.auth_atom_id {
-                if atom_name != aa {
-                    continue;
-                }
+            if let Some(ref aa) = expr.auth_atom_id
+                && atom_name != aa
+            {
+                continue;
             }
 
             // type_symbol (element symbol, uppercase)
-            if let Some(ref sym) = expr.type_symbol {
-                if model.get_element(idx).symbol() != sym.as_str() {
-                    continue;
-                }
+            if let Some(ref sym) = expr.type_symbol
+                && model.get_element(idx).symbol() != sym.as_str()
+            {
+                continue;
             }
 
             mask[idx] = true;
@@ -511,8 +511,15 @@ mod tests {
         };
         let sel = ComponentSelector::Expression(expr);
         let mask = evaluate_selector(&sel, &ac);
-        assert_eq!(mask.count_true(), 3, "residue_index 0 must select ALA (3 atoms)");
-        assert!(mask.0[0] && mask.0[1] && mask.0[2], "atoms 0-2 should be selected");
+        assert_eq!(
+            mask.count_true(),
+            3,
+            "residue_index 0 must select ALA (3 atoms)"
+        );
+        assert!(
+            mask.0[0] && mask.0[1] && mask.0[2],
+            "atoms 0-2 should be selected"
+        );
 
         // residue_index=1 → GLY (2 atoms)
         let expr2 = ComponentExpression {
@@ -520,7 +527,11 @@ mod tests {
             ..Default::default()
         };
         let mask2 = evaluate_selector(&ComponentSelector::Expression(expr2), &ac);
-        assert_eq!(mask2.count_true(), 2, "residue_index 1 must select GLY (2 atoms)");
+        assert_eq!(
+            mask2.count_true(),
+            2,
+            "residue_index 1 must select GLY (2 atoms)"
+        );
 
         // residue_index=3 → ZN (1 atom); residues: 0=ALA, 1=GLY, 2=HOH, 3=ZN, 4=LIG
         let expr3 = ComponentExpression {
@@ -528,7 +539,11 @@ mod tests {
             ..Default::default()
         };
         let mask3 = evaluate_selector(&ComponentSelector::Expression(expr3), &ac);
-        assert_eq!(mask3.count_true(), 1, "residue_index 3 must select ZN (1 atom)");
+        assert_eq!(
+            mask3.count_true(),
+            1,
+            "residue_index 3 must select ZN (1 atom)"
+        );
     }
 
     // T2-26: residue_index combined with atom_name → single atom
@@ -542,7 +557,11 @@ mod tests {
             ..Default::default()
         };
         let mask = evaluate_selector(&ComponentSelector::Expression(expr), &ac);
-        assert_eq!(mask.count_true(), 1, "residue 1 CA should be exactly 1 atom");
+        assert_eq!(
+            mask.count_true(),
+            1,
+            "residue 1 CA should be exactly 1 atom"
+        );
         assert!(mask.0[4], "atom index 4 is GLY CA");
     }
 }

@@ -368,7 +368,7 @@ impl ESM2ContactHead {
     /// # Arguments
     /// * `tokens`     – input token IDs, shape `(batch, seq_len)`
     /// * `attentions` – stacked per-layer attention weights,
-    ///                   shape `(batch, layers, heads, seq_len, seq_len)`
+    ///   shape `(batch, layers, heads, seq_len, seq_len)`
     ///
     /// # Returns
     /// Contact probability matrix, shape `(batch, seq_len−2, seq_len−2)`
@@ -628,7 +628,7 @@ impl ESM2 {
         // Transpose to sequence-first format for transformer processing
         xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
         // Process through transformer layers
-        for (_layer_idx, layer) in self.layers.iter().enumerate() {
+        for layer in self.layers.iter() {
             let (new_xs, _attn) = layer.forward(&xs)?;
             xs = new_xs;
         }
@@ -648,7 +648,7 @@ impl ESM2 {
     pub fn embed(&self, x: &Tensor, attention_mask: Option<&Tensor>) -> Result<Tensor> {
         let mut xs = self.embeddings.forward(x, attention_mask)?;
         xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
-        for (_layer_idx, layer) in self.layers.iter().enumerate() {
+        for layer in self.layers.iter() {
             let (new_xs, _attn) = layer.forward(&xs)?;
             xs = new_xs;
         }
@@ -895,7 +895,7 @@ mod tests {
         let vals: Vec<f32> = contacts.flatten_all()?.to_vec1()?;
         for &v in &vals {
             assert!(
-                v >= 0.0 && v <= 1.0,
+                (0.0..=1.0).contains(&v),
                 "contact probability out of [0,1]: {v}"
             );
         }

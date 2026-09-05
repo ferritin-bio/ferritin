@@ -5,7 +5,9 @@ use bevy::color::Srgba;
 use bevy::math::Vec4;
 use bevy::prelude::{Color, Mesh};
 use ferritin_core::AtomCollection;
-use ferritin_molviewspec::molviewspec::nodes::{ColorNamesT, ColorT, ColorThemeT, ComponentSelector};
+use ferritin_molviewspec::molviewspec::nodes::{
+    ColorNamesT, ColorT, ColorThemeT, ComponentSelector,
+};
 
 /// Represents different color schemes for rendering atoms.
 #[derive(Clone)]
@@ -65,16 +67,14 @@ pub fn initial_colors_from_theme(
     match theme {
         ColorThemeT::Uniform => vec![white; n_verts],
 
-        ColorThemeT::ElementSymbol => {
-            vertex_map
-                .iter()
-                .map(|&atom_idx| {
-                    let elem = model.get_element(atom_idx);
-                    let c = element_color(elem);
-                    Vec4::new(c.red, c.green, c.blue, c.alpha)
-                })
-                .collect()
-        }
+        ColorThemeT::ElementSymbol => vertex_map
+            .iter()
+            .map(|&atom_idx| {
+                let elem = model.get_element(atom_idx);
+                let c = element_color(elem);
+                Vec4::new(c.red, c.green, c.blue, c.alpha)
+            })
+            .collect(),
 
         ColorThemeT::ChainId => {
             // Assign each unique chain an index in encounter order; wrap palette.
@@ -114,10 +114,9 @@ pub fn initial_colors_from_theme(
                     let res_idx = match map_kind {
                         VertexMapKind::AtomMap => {
                             // Find which residue owns this atom.
-                            model.get_residue_start_indices()
-                                .and_then(|rs| {
-                                    rs.partition_point(|&s| s <= idx).checked_sub(1)
-                                })
+                            model
+                                .get_residue_start_indices()
+                                .and_then(|rs| rs.partition_point(|&s| s <= idx).checked_sub(1))
                                 .unwrap_or(0)
                         }
                         VertexMapKind::ResidueMap => idx,
@@ -135,7 +134,11 @@ pub fn initial_colors_from_theme(
                     .map(|&idx| {
                         let atom_idx = resolve_atom_index(model, idx, map_kind);
                         let v = values[atom_idx];
-                        let t = if max > min { (v - min) / (max - min) } else { 0.5 };
+                        let t = if max > min {
+                            (v - min) / (max - min)
+                        } else {
+                            0.5
+                        };
                         uncertainty_gradient(t)
                     })
                     .collect()
@@ -243,27 +246,23 @@ fn occupancy_color(v: f32) -> Vec4 {
 /// Returns one `Vec4` color per amino-acid residue in iteration order.
 fn detect_secondary_structure_colors(model: &AtomCollection) -> Vec<Vec4> {
     // Canonical SS colors matching the cartoon renderer.
-    let helix_color = Vec4::new(1.0, 0.6, 0.6, 1.0);   // salmon
-    let sheet_color = Vec4::new(0.6, 0.6, 1.0, 1.0);   // periwinkle
-    let loop_color  = Vec4::new(0.6, 0.9, 0.6, 1.0);   // light-green
+    let helix_color = Vec4::new(1.0, 0.6, 0.6, 1.0); // salmon
+    let sheet_color = Vec4::new(0.6, 0.6, 1.0, 1.0); // periwinkle
+    let loop_color = Vec4::new(0.6, 0.9, 0.6, 1.0); // light-green
 
     // Collect CA positions for each amino-acid residue.
     let ca_positions: Vec<Option<[f32; 3]>> = model
         .iter_residues_aminoacid()
-        .map(|res| {
-            res.find_atom_by_name("CA").map(|a| *a.coords())
-        })
+        .map(|res| res.find_atom_by_name("CA").map(|a| *a.coords()))
         .collect();
 
     let n = ca_positions.len();
     let mut ss_colors = vec![loop_color; n];
 
     for i in 1..n.saturating_sub(1) {
-        let (Some(prev), Some(curr), Some(next)) = (
-            ca_positions[i - 1],
-            ca_positions[i],
-            ca_positions[i + 1],
-        ) else {
+        let (Some(prev), Some(curr), Some(next)) =
+            (ca_positions[i - 1], ca_positions[i], ca_positions[i + 1])
+        else {
             continue;
         };
         let d1 = dist(prev, curr);
@@ -337,13 +336,19 @@ pub fn apply_mvs_colors_with_theme(
         return;
     }
     let mut vertex_colors = initial_colors_from_theme(theme, model, vertex_map, &map_kind);
-    apply_color_overrides(&mut vertex_colors, color_nodes, model, vertex_map, &map_kind);
+    apply_color_overrides(
+        &mut vertex_colors,
+        color_nodes,
+        model,
+        vertex_map,
+        &map_kind,
+    );
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, vertex_colors);
 }
 
 /// Overlay `color_nodes` on top of an existing `vertex_colors` array in-place.
 fn apply_color_overrides(
-    vertex_colors: &mut Vec<Vec4>,
+    vertex_colors: &mut [Vec4],
     color_nodes: &[(ComponentSelector, ColorT)],
     model: &AtomCollection,
     vertex_map: &[usize],
@@ -405,14 +410,14 @@ pub fn color_t_to_bevy(color: &ColorT) -> Color {
 /// Returns `Color::WHITE` with a `warn!` on any parse error.
 pub fn parse_hex_color(s: &str) -> Color {
     let s = s.trim_start_matches('#');
-    if s.len() == 6 {
-        if let (Ok(r), Ok(g), Ok(b)) = (
+    if s.len() == 6
+        && let (Ok(r), Ok(g), Ok(b)) = (
             u8::from_str_radix(&s[0..2], 16),
             u8::from_str_radix(&s[2..4], 16),
             u8::from_str_radix(&s[4..6], 16),
-        ) {
-            return Color::srgb(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0);
-        }
+        )
+    {
+        return Color::srgb(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0);
     }
     bevy::log::warn!("Invalid hex color '{}'; falling back to white", s);
     Color::WHITE
@@ -921,7 +926,10 @@ mod tests {
         let has_non_white = colors.iter().any(|c| {
             (c[0] - 1.0).abs() > 0.05 || (c[1] - 1.0).abs() > 0.05 || (c[2] - 1.0).abs() > 0.05
         });
-        assert!(has_non_white, "ElementSymbol theme should produce non-white colors");
+        assert!(
+            has_non_white,
+            "ElementSymbol theme should produce non-white colors"
+        );
     }
 
     // T2-51: ChainId theme gives distinct colors per chain
@@ -1003,9 +1011,21 @@ mod tests {
                 initial_colors_from_theme(&theme, &ac, &vertex_map, &VertexMapKind::AtomMap);
             assert_eq!(colors.len(), 9);
             for c in colors {
-                assert!((c[0] - 1.0).abs() < 1e-6, "{:?} should fall back to white", theme);
-                assert!((c[1] - 1.0).abs() < 1e-6, "{:?} should fall back to white", theme);
-                assert!((c[2] - 1.0).abs() < 1e-6, "{:?} should fall back to white", theme);
+                assert!(
+                    (c[0] - 1.0).abs() < 1e-6,
+                    "{:?} should fall back to white",
+                    theme
+                );
+                assert!(
+                    (c[1] - 1.0).abs() < 1e-6,
+                    "{:?} should fall back to white",
+                    theme
+                );
+                assert!(
+                    (c[2] - 1.0).abs() < 1e-6,
+                    "{:?} should fall back to white",
+                    theme
+                );
             }
         }
     }
@@ -1014,9 +1034,8 @@ mod tests {
     // range to a blue-white-red gradient instead of falling back to white.
     #[test]
     fn test_uncertainty_theme_uses_real_gradient() {
-        let ac = make_test_collection().with_b_factor(vec![
-            0.0, 12.5, 25.0, 37.5, 50.0, 62.5, 75.0, 87.5, 100.0,
-        ]);
+        let ac = make_test_collection()
+            .with_b_factor(vec![0.0, 12.5, 25.0, 37.5, 50.0, 62.5, 75.0, 87.5, 100.0]);
         let vertex_map: Vec<usize> = (0..9).collect();
         let colors = initial_colors_from_theme(
             &ColorThemeT::Uncertainty,
@@ -1027,17 +1046,24 @@ mod tests {
         // Lowest value -> blue-heavy, highest value -> red-heavy, not uniform white.
         let low = colors[0];
         let high = colors[8];
-        assert!(low[2] > low[0], "lowest b_factor should read blue-leaning: {:?}", low);
-        assert!(high[0] > high[2], "highest b_factor should read red-leaning: {:?}", high);
+        assert!(
+            low[2] > low[0],
+            "lowest b_factor should read blue-leaning: {:?}",
+            low
+        );
+        assert!(
+            high[0] > high[2],
+            "highest b_factor should read red-leaning: {:?}",
+            high
+        );
         assert_ne!(low, high);
     }
 
     // ferritin-clv: PlddtConfidence buckets values into AlphaFold-style bands.
     #[test]
     fn test_plddt_confidence_theme_bands_values() {
-        let ac = make_test_collection().with_b_factor(vec![
-            95.0, 95.0, 95.0, 80.0, 80.0, 60.0, 60.0, 30.0, 30.0,
-        ]);
+        let ac = make_test_collection()
+            .with_b_factor(vec![95.0, 95.0, 95.0, 80.0, 80.0, 60.0, 60.0, 30.0, 30.0]);
         let vertex_map: Vec<usize> = (0..9).collect();
         let colors = initial_colors_from_theme(
             &ColorThemeT::PlddtConfidence,
@@ -1055,9 +1081,8 @@ mod tests {
     // ferritin-clv: Occupancy maps partial occupancy toward red, full occupancy toward white.
     #[test]
     fn test_occupancy_theme_uses_real_gradient() {
-        let ac = make_test_collection().with_occupancy(vec![
-            1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.5, 0.2, 0.2,
-        ]);
+        let ac = make_test_collection()
+            .with_occupancy(vec![1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.5, 0.2, 0.2]);
         let vertex_map: Vec<usize> = (0..9).collect();
         let colors = initial_colors_from_theme(
             &ColorThemeT::Occupancy,
@@ -1065,7 +1090,14 @@ mod tests {
             &vertex_map,
             &VertexMapKind::AtomMap,
         );
-        assert_eq!(colors[0], Vec4::new(1.0, 1.0, 1.0, 1.0), "full occupancy is white");
-        assert!(colors[7][1] < colors[0][1], "partial occupancy should read less white/more red");
+        assert_eq!(
+            colors[0],
+            Vec4::new(1.0, 1.0, 1.0, 1.0),
+            "full occupancy is white"
+        );
+        assert!(
+            colors[7][1] < colors[0][1],
+            "partial occupancy should read less white/more red"
+        );
     }
 }

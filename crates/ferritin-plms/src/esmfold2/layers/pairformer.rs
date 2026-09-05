@@ -262,7 +262,7 @@ impl PairformerBlock {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candle_core::{Device,DType, Tensor};
+    use candle_core::{DType, Device, Tensor};
 
     const B: usize = 1;
     const N: usize = 8;

@@ -23,12 +23,15 @@ fn test_molspecview_json_1cbs() {
     ];
 
     for json_file in json_files_component_list {
-        let file = File::open(json_file).expect(&format!("Failed to open file: {}", json_file));
+        let file =
+            File::open(json_file).unwrap_or_else(|_| panic!("Failed to open file: {}", json_file));
         let reader = BufReader::new(file);
-        let _: Vec<ComponentExpression> = from_reader(reader).expect(&format!(
-            "Failed to parse JSON as a Vector of ComponentExpressions: {}",
-            json_file
-        ));
+        let _: Vec<ComponentExpression> = from_reader(reader).unwrap_or_else(|_| {
+            panic!(
+                "Failed to parse JSON as a Vector of ComponentExpressions: {}",
+                json_file
+            )
+        });
     }
 
     // // Todo: Fix the Resideu_range_component/////
@@ -466,14 +469,20 @@ fn test_builder_parse_rejects_non_download_parent() {
     let result = node.parse(ParseParams {
         format: ParseFormatT::Mmcif,
     });
-    assert!(result.is_none(), "parse() must return None for non-Download parent");
+    assert!(
+        result.is_none(),
+        "parse() must return None for non-Download parent"
+    );
 }
 
 #[test]
 fn test_builder_assembly_structure_rejects_non_parse_parent() {
     let mut node = Node::new(KindT::Download, None);
     let result = node.assembly_structure(StructureParams::default());
-    assert!(result.is_none(), "assembly_structure() must return None for non-Parse parent");
+    assert!(
+        result.is_none(),
+        "assembly_structure() must return None for non-Parse parent"
+    );
 }
 
 #[test]
@@ -483,42 +492,63 @@ fn test_builder_model_structure_rejects_non_parse_parent() {
     // For now, assert component() rejects a non-Structure parent (covers same guard pattern).
     let mut node = Node::new(KindT::Parse, None);
     let result = node.component(ComponentSelector::default());
-    assert!(result.is_none(), "component() must return None for non-Structure parent");
+    assert!(
+        result.is_none(),
+        "component() must return None for non-Structure parent"
+    );
 }
 
 #[test]
 fn test_builder_component_rejects_non_structure_parent() {
     let mut node = Node::new(KindT::Parse, None);
     let result = node.component(ComponentSelector::default());
-    assert!(result.is_none(), "component() must return None for non-Structure parent");
+    assert!(
+        result.is_none(),
+        "component() must return None for non-Structure parent"
+    );
 }
 
 #[test]
 fn test_builder_representation_rejects_non_component_parent() {
     let mut node = Node::new(KindT::Structure, None);
     let result = node.representation(RepresentationTypeT::Cartoon);
-    assert!(result.is_none(), "representation() must return None for non-Component parent");
+    assert!(
+        result.is_none(),
+        "representation() must return None for non-Component parent"
+    );
 }
 
 #[test]
 fn test_builder_color_rejects_non_representation_parent() {
     let mut node = Node::new(KindT::Component, None);
-    let result = node.color(ColorT::Hex("#ff0000".to_string()), ComponentSelector::default());
-    assert!(result.is_none(), "color() must return None for non-Representation parent");
+    let result = node.color(
+        ColorT::Hex("#ff0000".to_string()),
+        ComponentSelector::default(),
+    );
+    assert!(
+        result.is_none(),
+        "color() must return None for non-Representation parent"
+    );
 }
 
 #[test]
 fn test_builder_label_rejects_non_component_parent() {
     let mut node = Node::new(KindT::Representation, None);
     let result = node.label("text".to_string());
-    assert!(result.is_none(), "label() must return None for non-Component parent");
+    assert!(
+        result.is_none(),
+        "label() must return None for non-Component parent"
+    );
 }
 
 #[test]
 fn test_builder_transform_rejects_non_structure_parent() {
     let mut node = Node::new(KindT::Parse, None);
     let result = node.transform(TransformParams::default());
-    assert!(result.is_none(), "transform() must return None for non-Structure parent");
+    assert!(
+        result.is_none(),
+        "transform() must return None for non-Structure parent"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -536,7 +566,10 @@ fn test_deser_focus_empty_params_is_focus_inline() {
     let json = r#"{"kind":"focus","params":{}}"#;
     let node: Node = serde_json::from_str(json).expect("valid focus node");
     match node.params {
-        Some(NodeParams::FocusInlineParams(FocusInlineParams { direction: None, up: None })) => {}
+        Some(NodeParams::FocusInlineParams(FocusInlineParams {
+            direction: None,
+            up: None,
+        })) => {}
         other => panic!("expected FocusInlineParams{{None,None}}, got {:?}", other),
     }
 }
@@ -559,9 +592,15 @@ fn test_deser_focus_with_direction() {
 #[test]
 fn test_deser_transform_with_rotation() {
     let rotation = vec![
-        -0.7202161f64, -0.33009904, -0.61018308,
-        0.36257631, 0.57075962, -0.73673053,
-        0.59146191, -0.75184312, -0.29138417,
+        -0.7202161f64,
+        -0.33009904,
+        -0.61018308,
+        0.36257631,
+        0.57075962,
+        -0.73673053,
+        0.59146191,
+        -0.75184312,
+        -0.29138417,
     ];
     let json = serde_json::json!({
         "kind": "transform",
@@ -588,7 +627,10 @@ fn test_deser_transform_empty_params() {
     let json = r#"{"kind":"transform","params":{}}"#;
     let node: Node = serde_json::from_str(json).expect("valid transform empty params");
     match node.params {
-        Some(NodeParams::TransformParams(TransformParams { rotation: None, translation: None })) => {}
+        Some(NodeParams::TransformParams(TransformParams {
+            rotation: None,
+            translation: None,
+        })) => {}
         other => panic!("expected empty TransformParams, got {:?}", other),
     }
 }
@@ -600,7 +642,10 @@ fn test_deser_component_string_selector() {
     let node: Node = serde_json::from_str(json).expect("valid component node");
     match node.params {
         Some(NodeParams::ComponentInlineParams(p)) => {
-            assert!(matches!(p.selector, ComponentSelector::Selector(ComponentSelectorT::All)));
+            assert!(matches!(
+                p.selector,
+                ComponentSelector::Selector(ComponentSelectorT::All)
+            ));
         }
         other => panic!("expected ComponentInlineParams, got {:?}", other),
     }
@@ -609,7 +654,8 @@ fn test_deser_component_string_selector() {
 // T1-06: component node with expression selector
 #[test]
 fn test_deser_component_expression_selector() {
-    let json = r#"{"kind":"component","params":{"selector":{"label_asym_id":"A","label_seq_id":42}}}"#;
+    let json =
+        r#"{"kind":"component","params":{"selector":{"label_asym_id":"A","label_seq_id":42}}}"#;
     let node: Node = serde_json::from_str(json).expect("valid component expression node");
     match node.params {
         Some(NodeParams::ComponentInlineParams(p)) => match p.selector {
@@ -630,7 +676,10 @@ fn test_deser_representation_cartoon() {
     let node: Node = serde_json::from_str(json).expect("valid representation node");
     match node.params {
         Some(NodeParams::RepresentationParams(p)) => {
-            assert!(matches!(p.representation_type, RepresentationTypeT::Cartoon));
+            assert!(matches!(
+                p.representation_type,
+                RepresentationTypeT::Cartoon
+            ));
         }
         other => panic!("expected RepresentationParams, got {:?}", other),
     }
@@ -664,7 +713,8 @@ fn test_deser_label_text() {
 // T1-10: download node round-trip
 #[test]
 fn test_deser_download_url() {
-    let json = r#"{"kind":"download","params":{"url":"https://files.wwpdb.org/download/1cbs.cif"}}"#;
+    let json =
+        r#"{"kind":"download","params":{"url":"https://files.wwpdb.org/download/1cbs.cif"}}"#;
     let node: Node = serde_json::from_str(json).expect("valid download node");
     match node.params {
         Some(NodeParams::DownloadParams(p)) => {
@@ -705,7 +755,10 @@ fn test_deser_structure_model() {
 fn test_deser_root_no_params() {
     let json = r#"{"kind":"root"}"#;
     let node: Node = serde_json::from_str(json).expect("valid root node");
-    assert!(node.params.is_none(), "root without params should have params=None");
+    assert!(
+        node.params.is_none(),
+        "root without params should have params=None"
+    );
 }
 
 // T1-26: root node with explicit null params
@@ -713,15 +766,17 @@ fn test_deser_root_no_params() {
 fn test_deser_root_null_params() {
     let json = r#"{"kind":"root","params":null}"#;
     let node: Node = serde_json::from_str(json).expect("valid root null-params node");
-    assert!(node.params.is_none(), "root with params:null should have params=None");
+    assert!(
+        node.params.is_none(),
+        "root with params:null should have params=None"
+    );
 }
 
 // T1-27: full components/state.mvsj round-trip (focus + transform)
 #[test]
 fn test_deser_components_example_roundtrip() {
     let path = "tests/mol-spec-examples/components/state.mvsj";
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|_| panic!("cannot read {}", path));
+    let content = std::fs::read_to_string(path).unwrap_or_else(|_| panic!("cannot read {}", path));
     let state: State = serde_json::from_str(&content)
         .unwrap_or_else(|e| panic!("failed to parse {}: {}", path, e));
     // The components example has a focus node with params:{}
@@ -732,15 +787,17 @@ fn test_deser_components_example_roundtrip() {
         }
         node.children.iter().flatten().any(find_focus)
     }
-    assert!(find_focus(&state.root), "components example must contain a FocusInlineParams node");
+    assert!(
+        find_focus(&state.root),
+        "components example must contain a FocusInlineParams node"
+    );
 }
 
 // T1-28: superposition/state.mvsj round-trip (transform with rotation)
 #[test]
 fn test_deser_superposition_example_roundtrip() {
     let path = "tests/mol-spec-examples/superposition/state.mvsj";
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|_| panic!("cannot read {}", path));
+    let content = std::fs::read_to_string(path).unwrap_or_else(|_| panic!("cannot read {}", path));
     let state: State = serde_json::from_str(&content)
         .unwrap_or_else(|e| panic!("failed to parse {}: {}", path, e));
     fn find_transform(node: &Node) -> bool {
@@ -749,15 +806,17 @@ fn test_deser_superposition_example_roundtrip() {
         }
         node.children.iter().flatten().any(find_transform)
     }
-    assert!(find_transform(&state.root), "superposition example must contain a TransformParams with rotation");
+    assert!(
+        find_transform(&state.root),
+        "superposition example must contain a TransformParams with rotation"
+    );
 }
 
 // T1-29: basic/state.mvsj round-trip
 #[test]
 fn test_deser_basic_example_roundtrip() {
     let path = "tests/mol-spec-examples/basic/state.mvsj";
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|_| panic!("cannot read {}", path));
+    let content = std::fs::read_to_string(path).unwrap_or_else(|_| panic!("cannot read {}", path));
     let _state: State = serde_json::from_str(&content)
         .unwrap_or_else(|e| panic!("failed to parse {}: {}", path, e));
 }
@@ -769,9 +828,14 @@ fn test_builder_serialize_deserialize_roundtrip() {
     state
         .download("https://files.wwpdb.org/download/1cbs.cif")
         .expect("download node")
-        .parse(ParseParams { format: ParseFormatT::Mmcif })
+        .parse(ParseParams {
+            format: ParseFormatT::Mmcif,
+        })
         .expect("parse node")
-        .assembly_structure(StructureParams { structure_type: StructureTypeT::Assembly, ..Default::default() })
+        .assembly_structure(StructureParams {
+            structure_type: StructureTypeT::Assembly,
+            ..Default::default()
+        })
         .expect("structure node")
         .component(ComponentSelector::Selector(ComponentSelectorT::All))
         .expect("component node")
@@ -797,10 +861,18 @@ fn test_builder_model_structure_ok() {
     let result = state
         .download("https://example.com/1abc.cif")
         .expect("download")
-        .parse(ParseParams { format: ParseFormatT::Mmcif })
+        .parse(ParseParams {
+            format: ParseFormatT::Mmcif,
+        })
         .expect("parse")
-        .model_structure(StructureParams { structure_type: StructureTypeT::Model, ..Default::default() });
-    assert!(result.is_some(), "model_structure() must return Some on Parse parent");
+        .model_structure(StructureParams {
+            structure_type: StructureTypeT::Model,
+            ..Default::default()
+        });
+    assert!(
+        result.is_some(),
+        "model_structure() must return Some on Parse parent"
+    );
 }
 
 // T1-32: State version must be "1.0"
@@ -817,14 +889,19 @@ fn test_builder_focus_on_component() {
     let result = state
         .download("https://example.com/1abc.cif")
         .expect("download")
-        .parse(ParseParams { format: ParseFormatT::Mmcif })
+        .parse(ParseParams {
+            format: ParseFormatT::Mmcif,
+        })
         .expect("parse")
         .assembly_structure(StructureParams::default())
         .expect("structure")
         .component(ComponentSelector::default())
         .expect("component")
         .focus(Some((0.0, 0.0, 1.0)), None);
-    assert!(result.is_some(), "focus() must return Some on Component parent");
+    assert!(
+        result.is_some(),
+        "focus() must return Some on Component parent"
+    );
 }
 
 // T1-34: focus() rejects non-Component parent
@@ -853,7 +930,9 @@ fn test_builder_tooltip_on_component() {
 #[test]
 fn test_builder_canvas_on_state() {
     let mut state = State::new();
-    let params = CanvasParams { background_color: ColorT::Hex("#ffffff".to_string()) };
+    let params = CanvasParams {
+        background_color: ColorT::Hex("#ffffff".to_string()),
+    };
     let result = state.canvas(params);
     assert!(result.is_some(), "canvas() must return Some");
 }
@@ -864,7 +943,10 @@ fn test_builder_generic_visuals_on_state() {
     let mut state = State::new();
     let result = state.generic_visuals();
     assert!(result.is_some(), "generic_visuals() must return Some");
-    assert_eq!(state.root.children.as_ref().unwrap()[0].kind, KindT::GenericVisuals);
+    assert_eq!(
+        state.root.children.as_ref().unwrap()[0].kind,
+        KindT::GenericVisuals
+    );
 }
 
 // T1-38: sphere() on GenericVisuals parent
@@ -905,7 +987,9 @@ fn test_state_from_str_roundtrip() {
     state
         .download("https://files.wwpdb.org/download/1cbs.cif")
         .expect("download")
-        .parse(ParseParams { format: ParseFormatT::Mmcif })
+        .parse(ParseParams {
+            format: ParseFormatT::Mmcif,
+        })
         .expect("parse")
         .assembly_structure(StructureParams::default())
         .expect("structure")
@@ -923,8 +1007,8 @@ fn test_state_from_str_roundtrip() {
 fn test_state_from_reader_basic_example() {
     let file = std::fs::File::open("tests/mol-spec-examples/basic/state.mvsj")
         .expect("open basic state.mvsj");
-    let state = State::from_reader(std::io::BufReader::new(file))
-        .expect("from_reader must succeed");
+    let state =
+        State::from_reader(std::io::BufReader::new(file)).expect("from_reader must succeed");
     assert_eq!(state.root.kind, KindT::Root);
 }
 
@@ -934,8 +1018,7 @@ fn test_state_from_reader_basic_example() {
 
 fn load_example(name: &str) -> State {
     let path = format!("tests/mol-spec-examples/{}/state.mvsj", name);
-    let content = std::fs::read_to_string(&path)
-        .unwrap_or_else(|_| panic!("cannot read {}", path));
+    let content = std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("cannot read {}", path));
     State::from_str(&content).unwrap_or_else(|e| panic!("parse error in {}: {}", path, e))
 }
 
@@ -943,20 +1026,22 @@ fn find_node<'a, F: Fn(&Node) -> bool>(node: &'a Node, pred: &F) -> Option<&'a N
     if pred(node) {
         return Some(node);
     }
-    node.children.iter().flatten().find_map(|c| find_node(c, pred))
+    node.children
+        .iter()
+        .flatten()
+        .find_map(|c| find_node(c, pred))
 }
 
 // T1-42: basic — structure type Model, component All, cartoon, color named blue
 #[test]
 fn test_roundtrip_basic() {
     let state = load_example("basic");
-    let structure = find_node(&state.root, &|n| {
-        matches!(n.params, Some(NodeParams::StructureParams(ref p)) if matches!(p.structure_type, StructureTypeT::Model))
-    });
+    let structure = find_node(
+        &state.root,
+        &|n| matches!(n.params, Some(NodeParams::StructureParams(ref p)) if matches!(p.structure_type, StructureTypeT::Model)),
+    );
     assert!(structure.is_some(), "basic: must have a model structure");
-    let color = find_node(&state.root, &|n| {
-        matches!(n.kind, KindT::Color)
-    });
+    let color = find_node(&state.root, &|n| matches!(n.kind, KindT::Color));
     assert!(color.is_some(), "basic: must have a color node");
 }
 
@@ -967,13 +1052,26 @@ fn test_roundtrip_components() {
     let mut component_count = 0;
     let mut focus_count = 0;
     fn count(node: &Node, cc: &mut usize, fc: &mut usize) {
-        if node.kind == KindT::Component { *cc += 1; }
-        if matches!(node.params, Some(NodeParams::FocusInlineParams(_))) { *fc += 1; }
-        for child in node.children.iter().flatten() { count(child, cc, fc); }
+        if node.kind == KindT::Component {
+            *cc += 1;
+        }
+        if matches!(node.params, Some(NodeParams::FocusInlineParams(_))) {
+            *fc += 1;
+        }
+        for child in node.children.iter().flatten() {
+            count(child, cc, fc);
+        }
     }
     count(&state.root, &mut component_count, &mut focus_count);
-    assert!(component_count >= 5, "components: expected >=5 component nodes, got {}", component_count);
-    assert_eq!(focus_count, 1, "components: expected exactly 1 FocusInlineParams");
+    assert!(
+        component_count >= 5,
+        "components: expected >=5 component nodes, got {}",
+        component_count
+    );
+    assert_eq!(
+        focus_count, 1,
+        "components: expected exactly 1 FocusInlineParams"
+    );
 }
 
 // T1-44: label — has a label node and a focus node under the same component
@@ -993,15 +1091,20 @@ fn test_roundtrip_label() {
 #[test]
 fn test_roundtrip_superposition() {
     let state = load_example("superposition");
-    let transform = find_node(&state.root, &|n| {
-        matches!(n.params, Some(NodeParams::TransformParams(ref p)) if p.rotation.is_some())
-    });
+    let transform = find_node(
+        &state.root,
+        &|n| matches!(n.params, Some(NodeParams::TransformParams(ref p)) if p.rotation.is_some()),
+    );
     let transform = transform.expect("superposition: must have a TransformParams with rotation");
     if let Some(NodeParams::TransformParams(ref p)) = transform.params {
         let rot = p.rotation.as_ref().unwrap();
         assert_eq!(rot.len(), 9, "rotation must have 9 elements");
         let diff = (rot[0] - (-0.7202161_f64)).abs();
-        assert!(diff < 1e-5, "rotation[0] expected ~-0.720216, got {}", rot[0]);
+        assert!(
+            diff < 1e-5,
+            "rotation[0] expected ~-0.720216, got {}",
+            rot[0]
+        );
     }
 }
 
@@ -1009,9 +1112,10 @@ fn test_roundtrip_superposition() {
 #[test]
 fn test_roundtrip_symmetry() {
     let state = load_example("symmetry");
-    let structure = find_node(&state.root, &|n| {
-        matches!(n.params, Some(NodeParams::StructureParams(ref p)) if matches!(p.structure_type, StructureTypeT::Symmetry))
-    });
+    let structure = find_node(
+        &state.root,
+        &|n| matches!(n.params, Some(NodeParams::StructureParams(ref p)) if matches!(p.structure_type, StructureTypeT::Symmetry)),
+    );
     let structure = structure.expect("symmetry: must have a Symmetry structure");
     if let Some(NodeParams::StructureParams(ref p)) = structure.params {
         assert_eq!(p.ijk_min, Some((-1, -1, -1)));
@@ -1102,8 +1206,8 @@ fn test_volume_isosurface_roundtrip() {
     let json = serde_json::to_string(&root).expect("serialize volume state");
     let parsed: Node = serde_json::from_str(&json).expect("deserialize volume state");
 
-    let volume_node = find_node(&parsed, &|n| n.kind == KindT::Volume)
-        .expect("Volume node must round-trip");
+    let volume_node =
+        find_node(&parsed, &|n| n.kind == KindT::Volume).expect("Volume node must round-trip");
     if let Some(NodeParams::VolumeParams(ref p)) = volume_node.params {
         assert_eq!(p.channel_id.as_deref(), Some("2fo-fc"));
     } else {
@@ -1154,11 +1258,7 @@ fn test_mvsj_file_two_snapshot_sequence() {
     assert_eq!(story.snapshots[0].root.kind, KindT::Root);
     assert_eq!(story.snapshots[1].title.as_deref(), Some("Overview"));
     assert_eq!(
-        story.snapshots[1]
-            .root
-            .children
-            .as_ref()
-            .map(|c| c.len()),
+        story.snapshots[1].root.children.as_ref().map(|c| c.len()),
         Some(1)
     );
     assert_eq!(story.snapshots[0].linger_duration_ms, Some(3000));

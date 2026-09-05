@@ -16,12 +16,13 @@ use bevy::ecs::hierarchy::ChildSpawnerCommands;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
 use bevy_feathers::{
+    FeathersPlugins,
     dark_theme::create_dark_theme,
     theme::{ThemeBackgroundColor, UiTheme},
-    tokens, FeathersPlugins,
+    tokens,
 };
 use ferritin_bevy::{ColorScheme, RenderOptions, Structure};
-use ferritin_core::{load_model, Model};
+use ferritin_core::{Model, load_model};
 use ferritin_test_data::TestFile;
 
 // ---- Resources -----------------------------------------------------------------
@@ -144,7 +145,12 @@ fn setup_scene(mut commands: Commands) {
             illuminance: 3_000.0,
             ..default()
         },
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.0, std::f32::consts::PI, 0.0)),
+        Transform::from_rotation(Quat::from_euler(
+            EulerRot::XYZ,
+            0.0,
+            std::f32::consts::PI,
+            0.0,
+        )),
     ));
 }
 
@@ -180,6 +186,7 @@ fn rebuild_protein(
 }
 
 /// Update ViewerState when a control button is pressed; update hover colours too.
+#[allow(clippy::type_complexity)] // idiomatic Bevy query type
 fn handle_button_interactions(
     mut query: Query<
         (&Interaction, &ButtonAction, &mut BackgroundColor),
@@ -279,7 +286,10 @@ fn setup_ui(mut commands: Commands) {
                     panel,
                     "Representation",
                     &[
-                        ("Wireframe", ButtonAction::SetRender(RenderOptions::Wireframe)),
+                        (
+                            "Wireframe",
+                            ButtonAction::SetRender(RenderOptions::Wireframe),
+                        ),
                         ("Cartoon", ButtonAction::SetRender(RenderOptions::Cartoon)),
                         (
                             "Ball+Stick",
@@ -300,15 +310,11 @@ fn setup_ui(mut commands: Commands) {
                         ),
                         (
                             "Teal",
-                            ButtonAction::SetColor(ColorScheme::Solid(Color::srgb(
-                                0.0, 0.8, 0.8,
-                            ))),
+                            ButtonAction::SetColor(ColorScheme::Solid(Color::srgb(0.0, 0.8, 0.8))),
                         ),
                         (
                             "Gold",
-                            ButtonAction::SetColor(ColorScheme::Solid(Color::srgb(
-                                1.0, 0.8, 0.2,
-                            ))),
+                            ButtonAction::SetColor(ColorScheme::Solid(Color::srgb(1.0, 0.8, 0.2))),
                         ),
                     ],
                 );

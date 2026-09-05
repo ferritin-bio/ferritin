@@ -73,6 +73,7 @@ pub struct ConfidenceHead {
     pae_head: nn::Linear,
     pde_head: nn::Linear,
     distogram_head: nn::Linear,
+    #[allow(dead_code)]
     num_plddt_bins: usize,
 }
 
@@ -150,7 +151,7 @@ impl ConfidenceHead {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candle_core::{Device, DType, Tensor};
+    use candle_core::{DType, Device, Tensor};
 
     const B: usize = 1;
     const N: usize = 12;

@@ -3,9 +3,9 @@
 //! After construction via [`Bonds::from_unsorted`], bonds are sorted by `atom_a`
 //! and `atom_bond_starts` provides O(1) access to all bonds for a given atom.
 
+use super::tables::{AtomsTable, ResidueGroup, ResiduesTable};
 use crate::data::Segmentation;
 use crate::info::constants::get_bonds_canonical20;
-use super::tables::{AtomsTable, ResiduesTable, ResidueGroup};
 
 /// Bond connectivity stored as SoA (struct-of-arrays).
 ///
@@ -42,8 +42,16 @@ impl Bonds {
         order: Vec<u8>,
         n_atoms: usize,
     ) -> Self {
-        assert_eq!(atom_a.len(), atom_b.len(), "atom_a and atom_b must have the same length");
-        assert_eq!(atom_a.len(), order.len(), "atom_a and order must have the same length");
+        assert_eq!(
+            atom_a.len(),
+            atom_b.len(),
+            "atom_a and atom_b must have the same length"
+        );
+        assert_eq!(
+            atom_a.len(),
+            order.len(),
+            "atom_a and order must have the same length"
+        );
 
         let n_bonds = atom_a.len();
 
@@ -59,7 +67,12 @@ impl Bonds {
         let mut atom_bond_starts = vec![0u32; n_atoms + 1];
         for &a in &sorted_a {
             let a = a as usize;
-            assert!(a < n_atoms, "atom index {} out of range (n_atoms={})", a, n_atoms);
+            assert!(
+                a < n_atoms,
+                "atom index {} out of range (n_atoms={})",
+                a,
+                n_atoms
+            );
             atom_bond_starts[a + 1] += 1;
         }
         // prefix-sum
@@ -125,10 +138,14 @@ pub(crate) fn infer_bonds_from_residue_templates(
         let range = atom_to_residue.segment(res_idx);
         if let Some(bond_dict_for_res) = aa_bond_info.get(residues.comp_id[res_idx].as_str()) {
             for &(name1, name2, bond_order) in bond_dict_for_res {
-                let indices1: Vec<usize> =
-                    range.clone().filter(|&i| atoms.atom_name[i] == name1).collect();
-                let indices2: Vec<usize> =
-                    range.clone().filter(|&i| atoms.atom_name[i] == name2).collect();
+                let indices1: Vec<usize> = range
+                    .clone()
+                    .filter(|&i| atoms.atom_name[i] == name1)
+                    .collect();
+                let indices2: Vec<usize> = range
+                    .clone()
+                    .filter(|&i| atoms.atom_name[i] == name2)
+                    .collect();
                 for &i in &indices1 {
                     for &j in &indices2 {
                         atom_a.push(i as u32);
