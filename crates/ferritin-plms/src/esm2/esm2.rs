@@ -46,32 +46,63 @@ use tokenizers::Tokenizer;
 // for embeddings
 const MAX_SEQ_LEN: usize = 10000;
 
-#[derive(Deserialize, Clone)]
+/// ESM-2 architecture configuration, deserialized from a HuggingFace
+/// `config.json`.
+///
+/// # Which fields are required
+///
+/// Fields that change shapes or numerics are **required**: a missing one is a
+/// parse error rather than a silent default, because defaulting them would
+/// produce a model that loads and computes the wrong thing.
+///
+/// Everything else — training hyper-parameters, provenance strings, and
+/// metadata the forward pass never reads — carries `#[serde(default)]`. Real
+/// ESM-family configs omit these freely: `westlake-repl/SaProt_35M_AF2` has no
+/// `is_folding_model`, `esmfold_config` or `vocab_list`, and demanding them
+/// made its config unparseable (ferritin-goh.9).
+#[derive(Deserialize, Clone, Debug)]
 pub struct ESM2Config {
-    pub num_attention_heads: usize,
-    pub attention_probs_dropout_prob: f32,
-    pub classifier_dropout: Option<f32>,
-    pub emb_layer_norm_before: bool,
-    pub esmfold_config: Option<String>,
-    pub hidden_act: String,
-    pub hidden_dropout_prob: f32,
+    // ── Required: shapes ──
     pub hidden_size: usize,
-    pub initializer_range: f32,
-    pub intermediate_size: i32,
-    pub is_folding_model: bool,
-    pub layer_norm_eps: f32,
-    pub mask_token_id: i32,
-    pub max_position_embeddings: i32,
-    pub model_type: String,
     pub num_hidden_layers: i32,
-    pub pad_token_id: i32,
-    pub position_embedding_type: String,
-    pub token_dropout: bool,
-    pub torch_dtype: String,
-    pub transformers_version: String,
-    pub use_cache: bool,
-    pub vocab_list: Option<Vec<String>>,
+    pub num_attention_heads: usize,
+    pub intermediate_size: i32,
     pub vocab_size: i32,
+    pub max_position_embeddings: i32,
+
+    // ── Required: numerics and behaviour ──
+    /// `rotary` vs `absolute` changes the attention math outright.
+    pub position_embedding_type: String,
+    pub hidden_act: String,
+    pub layer_norm_eps: f32,
+    pub emb_layer_norm_before: bool,
+    pub token_dropout: bool,
+    pub mask_token_id: i32,
+    pub pad_token_id: i32,
+
+    // ── Optional: not read by the forward pass ──
+    #[serde(default)]
+    pub attention_probs_dropout_prob: f32,
+    #[serde(default)]
+    pub hidden_dropout_prob: f32,
+    #[serde(default)]
+    pub classifier_dropout: Option<f32>,
+    #[serde(default)]
+    pub initializer_range: f32,
+    #[serde(default)]
+    pub is_folding_model: bool,
+    #[serde(default)]
+    pub esmfold_config: Option<String>,
+    #[serde(default)]
+    pub model_type: String,
+    #[serde(default)]
+    pub torch_dtype: String,
+    #[serde(default)]
+    pub transformers_version: String,
+    #[serde(default)]
+    pub use_cache: bool,
+    #[serde(default)]
+    pub vocab_list: Option<Vec<String>>,
 }
 
 impl ESM2Config {

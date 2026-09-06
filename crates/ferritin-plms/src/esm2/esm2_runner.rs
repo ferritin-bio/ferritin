@@ -82,14 +82,7 @@ impl ESM2Runner {
     /// actually achieves against the Python reference (ferritin-100.9).
     pub fn load_model_with(modeltype: ESM2Models, opts: &LoadOptions) -> Result<ESM2Runner> {
         let (source, fallback_config) = ESM2Models::get_model_files(modeltype);
-        // Try to load config from HF hub; fall back to hardcoded config if unavailable.
-        let config = match source.fetch_optional("config.json") {
-            Some(config_path) => {
-                let config_str = std::fs::read_to_string(config_path)?;
-                serde_json::from_str::<ESM2Config>(&config_str).unwrap_or(fallback_config)
-            }
-            None => fallback_config,
-        };
+        let config = Self::resolve_config(&source, fallback_config)?;
         let vb = source.var_builder("model.safetensors", opts)?;
         let model = ESM2::load(vb, config.clone())?;
         let tokenizer = ESM2::load_tokenizer()?;
@@ -99,6 +92,41 @@ impl ESM2Runner {
             config,
         })
     }
+    /// Load `config.json` from the hub, falling back to the built-in config.
+    ///
+    /// The fallback is **loud**. It used to be
+    /// `serde_json::from_str(..).unwrap_or(fallback_config)`, which discarded
+    /// the parse error without a word: a config the struct could not represent
+    /// silently became a different model's config. For a checkpoint like
+    /// `SaProt_35M_AF2` — 446-token vocabulary against ESM-2's 33 — the
+    /// VarBuilder would probably have errored on the embedding shape, but any
+    /// divergence that happened to be shape-compatible would have loaded
+    /// cleanly and produced wrong numbers (ferritin-goh.9).
+    fn resolve_config(source: &WeightSource, fallback: ESM2Config) -> Result<ESM2Config> {
+        let Some(path) = source.fetch_optional("config.json") else {
+            eprintln!(
+                "warning: {}: could not download config.json; using the built-in \
+                 config for this variant. Verify it matches the checkpoint.",
+                source.repo_id
+            );
+            return Ok(fallback);
+        };
+
+        let config_str = std::fs::read_to_string(path)?;
+        match serde_json::from_str::<ESM2Config>(&config_str) {
+            Ok(config) => Ok(config),
+            Err(e) => {
+                eprintln!(
+                    "warning: {}: config.json did not parse as an ESM2Config ({e}); \
+                     using the built-in config instead. If this checkpoint is not an \
+                     ESM-2 variant, the built-in config is probably wrong for it.",
+                    source.repo_id
+                );
+                Ok(fallback)
+            }
+        }
+    }
+
     /// Encode a sequence to token ids **with** ESM-2's BOS (`<cls>`) and EOS
     /// (`<eos>`) special tokens.
     ///
