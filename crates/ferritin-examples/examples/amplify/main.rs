@@ -28,7 +28,7 @@ fn main() -> Result<()> {
         "350M" => AmplifyModels::AMP350M,
         &_ => panic!("Only 2 options"),
     };
-    let amprunner = AmplifyRunner::load_model(amp_model, device)?;
+    let amprunner = AmplifyRunner::from_pretrained(amp_model, device)?;
     let prot_sequence = args.protein_string.unwrap_or_else(|| {
         println!("No --protein-string provided, using default demo sequence.");
         DEFAULT_SEQUENCE.to_string()

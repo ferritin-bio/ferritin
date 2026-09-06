@@ -58,7 +58,7 @@ fn assert_contract_holds(runner: &dyn PlmRunner) -> Result<()> {
 #[test]
 #[ignore = "requires downloading facebook/esm2_t6_8M_UR50D weights"]
 fn test_esm2_special_token_contract() -> Result<()> {
-    let runner = ESM2Runner::load_model(ESM2Models::T6_8M, device(false)?)?;
+    let runner = ESM2Runner::from_pretrained(ESM2Models::T6_8M, device(false)?)?;
     assert_eq!(runner.special_tokens(), SpecialTokenLayout::BOS_EOS);
     assert_contract_holds(&runner)
 }
@@ -66,7 +66,7 @@ fn test_esm2_special_token_contract() -> Result<()> {
 #[test]
 #[ignore = "requires downloading chandar-lab/AMPLIFY_120M weights"]
 fn test_amplify_special_token_contract() -> Result<()> {
-    let runner = AmplifyRunner::load_model(AmplifyModels::AMP120M, device(false)?)?;
+    let runner = AmplifyRunner::from_pretrained(AmplifyModels::AMP120M, device(false)?)?;
     assert_eq!(runner.special_tokens(), SpecialTokenLayout::BOS_EOS);
     assert_contract_holds(&runner)
 }
@@ -77,8 +77,8 @@ fn test_amplify_special_token_contract() -> Result<()> {
 #[test]
 #[ignore = "requires downloading both ESM2 and AMPLIFY weights"]
 fn test_embed_residues_aligns_across_models() -> Result<()> {
-    let esm2 = ESM2Runner::load_model(ESM2Models::T6_8M, device(false)?)?;
-    let amplify = AmplifyRunner::load_model(AmplifyModels::AMP120M, device(false)?)?;
+    let esm2 = ESM2Runner::from_pretrained(ESM2Models::T6_8M, device(false)?)?;
+    let amplify = AmplifyRunner::from_pretrained(AmplifyModels::AMP120M, device(false)?)?;
 
     let a = esm2.embed_residues(SEQ)?;
     let b = amplify.embed_residues(SEQ)?;
@@ -97,7 +97,7 @@ fn test_embed_residues_aligns_across_models() -> Result<()> {
 #[test]
 #[ignore = "requires downloading facebook/esm2_t6_8M_UR50D weights"]
 fn test_logits_shape_matches_metadata() -> Result<()> {
-    let runner = ESM2Runner::load_model(ESM2Models::T6_8M, device(false)?)?;
+    let runner = ESM2Runner::from_pretrained(ESM2Models::T6_8M, device(false)?)?;
     let logits = runner.logits(SEQ)?;
     let metadata = runner.metadata();
 
@@ -118,7 +118,7 @@ fn test_logits_shape_matches_metadata() -> Result<()> {
 #[test]
 #[ignore = "requires downloading facebook/esm2_t6_8M_UR50D weights"]
 fn test_metadata_is_populated() -> Result<()> {
-    let runner = ESM2Runner::load_model(ESM2Models::T6_8M, device(false)?)?;
+    let runner = ESM2Runner::from_pretrained(ESM2Models::T6_8M, device(false)?)?;
     let metadata = runner.metadata();
 
     // ESM2 t6_8M: 6 layers, width 320, 33-token vocabulary.

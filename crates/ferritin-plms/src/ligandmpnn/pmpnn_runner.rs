@@ -22,7 +22,7 @@ pub enum ProteinMPNNModels {
 
 impl ProteinMPNNModels {
     /// Weight source and file for this variant.
-    pub fn hf_info(&self) -> (WeightSource, &'static str) {
+    pub fn model_info(&self) -> (WeightSource, &'static str) {
         match self {
             Self::V48_020 => (
                 WeightSource::pth("zcpbx/ligandmpnn-weights", Some("model_state_dict"))
@@ -30,6 +30,12 @@ impl ProteinMPNNModels {
                 "model_params/proteinmpnn_v_48_020.pt",
             ),
         }
+    }
+
+    /// Renamed to [`model_info`][Self::model_info] (ferritin-100.8).
+    #[deprecated(since = "0.3.6", note = "renamed to `model_info`")]
+    pub fn hf_info(&self) -> (WeightSource, &'static str) {
+        self.model_info()
     }
 }
 
@@ -39,13 +45,25 @@ pub struct ProteinMPNNRunner {
 
 impl ProteinMPNNRunner {
     /// Load a ProteinMPNN model from HuggingFace hub.
+    pub fn from_pretrained(modeltype: ProteinMPNNModels, device: Device) -> Result<Self> {
+        Self::from_pretrained_with(modeltype, &LoadOptions::new(device))
+    }
+
+    /// Renamed to [`from_pretrained`][Self::from_pretrained] (ferritin-100.8).
+    #[deprecated(since = "0.3.6", note = "renamed to `from_pretrained`")]
     pub fn load_model(modeltype: ProteinMPNNModels, device: Device) -> Result<Self> {
-        Self::load_model_with(modeltype, &LoadOptions::new(device))
+        Self::from_pretrained(modeltype, device)
+    }
+
+    /// Renamed to [`from_pretrained_with`][Self::from_pretrained_with] (ferritin-100.8).
+    #[deprecated(since = "0.3.6", note = "renamed to `from_pretrained_with`")]
+    pub fn load_model_with(modeltype: ProteinMPNNModels, opts: &LoadOptions) -> Result<Self> {
+        Self::from_pretrained_with(modeltype, opts)
     }
 
     /// Load with an explicit device and dtype (ferritin-100.9).
-    pub fn load_model_with(modeltype: ProteinMPNNModels, opts: &LoadOptions) -> Result<Self> {
-        let (source, filename) = modeltype.hf_info();
+    pub fn from_pretrained_with(modeltype: ProteinMPNNModels, opts: &LoadOptions) -> Result<Self> {
+        let (source, filename) = modeltype.model_info();
         let weights_path = source.fetch(filename)?;
         Self::from_path_with(&weights_path, opts)
     }

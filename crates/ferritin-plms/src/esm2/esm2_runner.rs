@@ -44,8 +44,9 @@ pub enum ESM2Models {
     T48_15B,
 }
 impl ESM2Models {
-    pub fn get_model_files(model: Self) -> (WeightSource, ESM2Config) {
-        let (repo, config) = match model {
+    /// Where this variant's weights live, plus its built-in fallback config.
+    pub fn model_info(&self) -> (WeightSource, ESM2Config) {
+        let (repo, config) = match self {
             Self::T6_8M => ("facebook/esm2_t6_8M_UR50D", ESM2Config::t6_8m()),
             Self::T12_35M => ("facebook/esm2_t12_35M_UR50D", ESM2Config::t12_35m()),
             Self::T30_150M => ("facebook/esm2_t30_150M_UR50D", ESM2Config::t30_150m()),
@@ -54,6 +55,12 @@ impl ESM2Models {
             Self::T48_15B => ("facebook/esm2_t48_15B_UR50D", ESM2Config::t48_15b()),
         };
         (WeightSource::safetensors(repo).at_revision("main"), config)
+    }
+
+    /// Renamed to [`model_info`][Self::model_info] (ferritin-100.8).
+    #[deprecated(since = "0.3.6", note = "renamed to `model_info`, which takes &self")]
+    pub fn get_model_files(model: Self) -> (WeightSource, ESM2Config) {
+        model.model_info()
     }
 }
 
@@ -68,11 +75,23 @@ impl ESM2Runner {
     /// Load model from HuggingFace hub at F32, downloading config.json,
     /// tokenizer files, and weights.
     ///
-    /// Use [`load_model_with`][Self::load_model_with] to load at F16 or BF16 —
-    /// `T36_3B` and `T48_15B` are not loadable at F32 on most machines
-    /// (~12 GB and ~60 GB respectively).
+    /// Use [`from_pretrained_with`][Self::from_pretrained_with] to load at F16
+    /// or BF16 — `T36_3B` and `T48_15B` are not loadable at F32 on most
+    /// machines (~12 GB and ~60 GB respectively).
+    pub fn from_pretrained(modeltype: ESM2Models, device: Device) -> Result<ESM2Runner> {
+        Self::from_pretrained_with(modeltype, &LoadOptions::new(device))
+    }
+
+    /// Renamed to [`from_pretrained`][Self::from_pretrained] (ferritin-100.8).
+    #[deprecated(since = "0.3.6", note = "renamed to `from_pretrained`")]
     pub fn load_model(modeltype: ESM2Models, device: Device) -> Result<ESM2Runner> {
-        Self::load_model_with(modeltype, &LoadOptions::new(device))
+        Self::from_pretrained(modeltype, device)
+    }
+
+    /// Renamed to [`from_pretrained_with`][Self::from_pretrained_with] (ferritin-100.8).
+    #[deprecated(since = "0.3.6", note = "renamed to `from_pretrained_with`")]
+    pub fn load_model_with(modeltype: ESM2Models, opts: &LoadOptions) -> Result<ESM2Runner> {
+        Self::from_pretrained_with(modeltype, opts)
     }
 
     /// Load model with an explicit device and dtype.
@@ -80,8 +99,8 @@ impl ESM2Runner {
     /// Reduced precision halves the memory footprint but changes the numerics;
     /// see `tests/test_plm_dtype_parity.rs` for the tolerance each dtype
     /// actually achieves against the Python reference (ferritin-100.9).
-    pub fn load_model_with(modeltype: ESM2Models, opts: &LoadOptions) -> Result<ESM2Runner> {
-        let (source, fallback_config) = ESM2Models::get_model_files(modeltype);
+    pub fn from_pretrained_with(modeltype: ESM2Models, opts: &LoadOptions) -> Result<ESM2Runner> {
+        let (source, fallback_config) = modeltype.model_info();
         let config = Self::resolve_config(&source, fallback_config)?;
         let vb = source.var_builder("model.safetensors", opts)?;
         let model = ESM2::load(vb, config.clone())?;

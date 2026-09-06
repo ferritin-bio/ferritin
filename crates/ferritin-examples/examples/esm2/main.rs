@@ -34,7 +34,7 @@ fn main() -> Result<()> {
         "15B" => ESM2Models::T48_15B,
         _ => return Err(E::msg("Invalid model ID")),
     };
-    let modelrunner = ESM2Runner::load_model(model_enum, device(args.cpu)?)?;
+    let modelrunner = ESM2Runner::from_pretrained(model_enum, device(args.cpu)?)?;
     println!("Encoding.......");
     let prot_string = args.protein_string.unwrap_or_else(|| {
         println!("No --protein-string provided, using default demo sequence.");
