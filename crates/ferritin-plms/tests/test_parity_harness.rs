@@ -124,3 +124,80 @@ fn fixture_load_missing_names_generator_script() {
             .ends_with("tests/fixtures/nonexistent_parity.safetensors")
     );
 }
+
+// ── Declared parity coverage (ferritin-100.20) ───────────────────────────────
+
+/// The declared coverage table must match what is actually on disk.
+///
+/// This is what keeps the skip-when-absent behaviour from turning the nightly
+/// into a vacuous green. Committing a fixture without flipping its entry to
+/// `Committed` — or deleting a committed one — fails here.
+#[test]
+fn test_parity_coverage_is_accurate() {
+    use support::parity::{CoverageStatus, PARITY_COVERAGE, fixture_path};
+
+    for entry in PARITY_COVERAGE {
+        let exists = fixture_path(entry.fixture).exists();
+        match entry.status {
+            CoverageStatus::Committed => assert!(
+                exists,
+                "'{}' is declared Committed but is missing from tests/fixtures/. \
+                 Restore it, or change its PARITY_COVERAGE status.",
+                entry.fixture
+            ),
+            CoverageStatus::NotGenerated { .. } => assert!(
+                !exists,
+                "'{}' exists on disk but is declared NotGenerated. Flip its \
+                 PARITY_COVERAGE entry to Committed so its parity test runs.",
+                entry.fixture
+            ),
+        }
+    }
+}
+
+/// Every fixture in `tests/fixtures/` must be declared, so a fixture cannot be
+/// added without its coverage status being stated.
+#[test]
+fn test_no_undeclared_fixtures_on_disk() {
+    use support::parity::declared_coverage;
+
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    for entry in std::fs::read_dir(&dir)
+        .expect("tests/fixtures should exist")
+        .flatten()
+    {
+        let path = entry.path();
+        if path.extension().is_none_or(|e| e != "safetensors") {
+            continue;
+        }
+        let stem = path.file_stem().unwrap().to_string_lossy().to_string();
+        assert!(
+            declared_coverage(&stem).is_some(),
+            "fixture '{stem}' is on disk but absent from PARITY_COVERAGE; declare it there"
+        );
+    }
+}
+
+/// Records which ports currently have NO numerical parity coverage.
+///
+/// Deliberately an assertion on the exact set rather than a `println!`: the gap
+/// is a reviewed fact, so closing one (or opening a new one) has to be a
+/// conscious edit here. Shrinking this list is the goal.
+#[test]
+fn test_uncovered_ports_are_the_known_set() {
+    use support::parity::{CoverageStatus, PARITY_COVERAGE};
+
+    let mut uncovered: Vec<&str> = PARITY_COVERAGE
+        .iter()
+        .filter(|c| matches!(c.status, CoverageStatus::NotGenerated { .. }))
+        .map(|c| c.fixture)
+        .collect();
+    uncovered.sort_unstable();
+
+    assert_eq!(
+        uncovered,
+        ["1BC8_log_probs", "esm3_parity", "esmc_parity"],
+        "the set of ports without parity coverage changed; update this test and \
+         ferritin-100.20 deliberately rather than letting it drift"
+    );
+}

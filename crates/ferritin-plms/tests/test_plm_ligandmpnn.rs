@@ -94,8 +94,13 @@ mod tests {
 
         // Python-reference log-probs, shape (L, 21). ProteinMPNN has no special
         // tokens, so the reference rows align 1:1 with residues.
-        let fixture = ParityFixture::load_with_generator("1BC8_log_probs", "proteinmpnn", &device)
-            .expect("failed to load ProteinMPNN parity fixture");
+        // Skips (loudly) while no 1BC8_log_probs fixture is committed — see
+        // PARITY_COVERAGE and ferritin-100.20.
+        let Some(fixture) = ParityFixture::load_or_skip("1BC8_log_probs", &device)
+            .expect("ProteinMPNN parity fixture lookup failed")
+        else {
+            return;
+        };
         let ref_log_probs = fixture.tensor("log_probs").expect("missing 'log_probs'");
         let (_, vocab_size) = ref_log_probs.dims2().expect("expected 2D tensor");
         assert_eq!(vocab_size, 21, "ProteinMPNN vocab is 21 amino acids");

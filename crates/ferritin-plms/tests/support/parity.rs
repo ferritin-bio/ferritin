@@ -44,6 +44,82 @@ use candle_core::{Device, Tensor};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+// ── Declared parity coverage ─────────────────────────────────────────────────
+
+/// Whether a port's parity fixture is committed to the repo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoverageStatus {
+    /// The fixture is in `tests/fixtures/` and its parity test really runs.
+    Committed,
+    /// No fixture exists, so this port has **no numerical parity coverage**.
+    /// Its parity test skips rather than failing the nightly forever
+    /// (ferritin-100.20).
+    NotGenerated {
+        /// Why it has not been generated — what a fixer would need.
+        reason: &'static str,
+    },
+}
+
+/// One port's parity-fixture status.
+#[derive(Debug, Clone, Copy)]
+pub struct ParityCoverage {
+    /// Fixture stem, without `.safetensors`.
+    pub fixture: &'static str,
+    /// The `<X>` in `scripts/generate_<X>_fixtures.py`.
+    pub generator: &'static str,
+    pub status: CoverageStatus,
+}
+
+/// Which ports actually have numerical parity coverage, and which do not.
+///
+/// This table exists so that "no parity coverage" is a recorded, reviewed fact
+/// rather than something that quietly grows. `test_parity_coverage_is_accurate`
+/// asserts it against what is really on disk, so adding a fixture without
+/// declaring it — or adding a port with no fixture at all — fails CI instead of
+/// passing vacuously.
+///
+/// Before ferritin-100.20 the three `NotGenerated` entries failed the nightly
+/// every single night, because `tests/fixtures/.gitignore` describes them as
+/// "generated-on-demand" but nothing in CI generates them.
+pub const PARITY_COVERAGE: &[ParityCoverage] = &[
+    ParityCoverage {
+        fixture: "esm2_parity",
+        generator: "esm2",
+        status: CoverageStatus::Committed,
+    },
+    ParityCoverage {
+        fixture: "amplify_parity",
+        generator: "amplify",
+        status: CoverageStatus::Committed,
+    },
+    ParityCoverage {
+        fixture: "esmc_parity",
+        generator: "esmc",
+        status: CoverageStatus::NotGenerated {
+            reason: "needs the `esm` SDK and an ESMC-300M download to generate",
+        },
+    },
+    ParityCoverage {
+        fixture: "esm3_parity",
+        generator: "esm3",
+        status: CoverageStatus::NotGenerated {
+            reason: "needs the `esm` SDK and gated EvolutionaryScale weights (HF_TOKEN)",
+        },
+    },
+    ParityCoverage {
+        fixture: "1BC8_log_probs",
+        generator: "proteinmpnn",
+        status: CoverageStatus::NotGenerated {
+            reason: "needs the dauparas/ProteinMPNN Python package checked out and installed",
+        },
+    },
+];
+
+/// Look up a fixture's declared coverage, if it is declared at all.
+pub fn declared_coverage(fixture: &str) -> Option<&'static ParityCoverage> {
+    PARITY_COVERAGE.iter().find(|c| c.fixture == fixture)
+}
+
 /// A loaded parity fixture: the safetensors key→tensor map plus the fixture
 /// name, used for good error messages.
 #[derive(Debug)]
@@ -100,6 +176,48 @@ impl ParityFixture {
                 keys.join(", ")
             )
         })
+    }
+
+    /// Load a fixture, or return `None` if it is declared as not generated.
+    ///
+    /// This is what keeps the nightly signal honest. A fixture that
+    /// [`PARITY_COVERAGE`] marks `NotGenerated` is a known gap: the test skips
+    /// and says so, rather than failing every night for a reason no run can fix.
+    ///
+    /// A fixture declared [`Committed`][CoverageStatus::Committed] but missing
+    /// from disk is a **regression** — someone deleted a checked-in fixture —
+    /// and still errors. So does an undeclared fixture: add it to the table.
+    pub fn load_or_skip(name: &str, device: &Device) -> Result<Option<Self>> {
+        let coverage = declared_coverage(name).ok_or_else(|| {
+            anyhow::anyhow!(
+                "parity fixture '{name}' is not listed in PARITY_COVERAGE; add it there \
+                 so its coverage status is explicit (ferritin-100.20)"
+            )
+        })?;
+
+        match coverage.status {
+            CoverageStatus::Committed => {
+                Self::load_with_generator(name, coverage.generator, device).map(Some)
+            }
+            CoverageStatus::NotGenerated { reason } => {
+                if fixture_path(name).exists() {
+                    bail!(
+                        "parity fixture '{name}' exists on disk but PARITY_COVERAGE still \
+                         declares it NotGenerated — flip it to Committed so its test runs \
+                         (ferritin-100.20)"
+                    );
+                }
+                eprintln!(
+                    "SKIPPING {name} parity: no fixture committed, so this port has NO \
+                     numerical parity coverage. Reason: {reason}. Generate with \
+                     `python scripts/generate_{}_fixtures.py --output \
+                     crates/ferritin-plms/tests/fixtures/` and flip its PARITY_COVERAGE \
+                     entry to Committed (ferritin-100.20).",
+                    coverage.generator
+                );
+                Ok(None)
+            }
+        }
     }
 
     /// The fixture stem, for diagnostics.

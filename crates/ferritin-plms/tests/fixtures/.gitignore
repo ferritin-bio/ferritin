@@ -1,7 +1,14 @@
-# Parity fixtures are large by default and stay out of git — EXCEPT the small,
-# committed reference tensors for the parity suite (a few KB each), which the
-# non-ignored parity tests load. Large model-specific fixtures (ESMC-6B, ESM3,
-# etc.) remain generated-on-demand and gitignored.
+# Parity fixtures can be large, so they are gitignored by default and
+# un-ignored individually as they are committed.
+#
+# "Not committed" is NOT the same as "generated on demand" — nothing in CI
+# generates them, so an un-committed fixture means that port has no numerical
+# parity coverage at all. That gap is declared explicitly in PARITY_COVERAGE
+# (tests/support/parity.rs) and enforced by test_parity_coverage_is_accurate,
+# rather than left implicit here (ferritin-100.20).
+#
+# To add coverage: generate the fixture, un-ignore it below, and flip its
+# PARITY_COVERAGE entry to Committed.
 *.safetensors
 !esm2_parity.safetensors
 !amplify_parity.safetensors
