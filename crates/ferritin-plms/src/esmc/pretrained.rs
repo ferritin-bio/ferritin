@@ -33,6 +33,7 @@
 use crate::esmc::models::esmc::{ESMC, ESMCConfig, LogitsConfig};
 use crate::loader::{LoadOptions, WeightSource, optional_prefix};
 use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
+use crate::registry::{self, ModelCard};
 use anyhow::{Result, bail};
 use candle_core::{Device, Tensor};
 
@@ -59,31 +60,44 @@ pub enum ESMCModels {
 }
 
 impl ESMCModels {
+    /// This variant's registry id.
+    pub const fn registry_id(&self) -> &'static str {
+        match self {
+            Self::ESMC300M => "esmc-300m",
+            Self::ESMC600M => "esmc-600m",
+            Self::ESMC6B => "esmc-6b",
+        }
+    }
+
+    /// This variant's [`ModelCard`].
+    pub fn card(&self) -> &'static ModelCard {
+        registry::lookup(self.registry_id())
+            .expect("every ESMCModels variant must have a registry entry")
+    }
+
     /// Returns `(weight_source, filename, config)` for this variant.
     ///
-    /// These point at the **EvolutionaryScale** originals, not the
-    /// `biohub/ESMC-*` re-exports the loader used to request. Those re-exports
-    /// are TransformerEngine-FUSED — `attn.layernorm_qkv.weight` as one fused
-    /// tensor with separate `layer_norm_weight`/`layer_norm_bias`,
-    /// `ffn.fc1_weight`/`fc2_weight`, an `lm_head` instead of
-    /// `sequence_head`, plus 90 empty `_extra_state` tensors — so nothing this
-    /// port asks for resolved (ferritin-100.23).
+    /// Repo and filename come from [`REGISTRY`][crate::registry::REGISTRY]
+    /// (ferritin-goh.1). Those point at the **EvolutionaryScale** originals,
+    /// not the `biohub/ESMC-*` re-exports this once used: those are
+    /// TransformerEngine-FUSED, so nothing this port asks for resolved
+    /// (ferritin-100.23).
     ///
-    /// `ESMC6B` is not yet supported: see [`ESMC6B_UNSUPPORTED`].
+    /// `ESMC6B` is refused; see [`ESMC6B_UNSUPPORTED`].
     pub fn model_info(&self) -> Result<(WeightSource, &'static str, ESMCConfig)> {
-        match self {
-            Self::ESMC300M => Ok((
-                WeightSource::pth("EvolutionaryScale/esmc-300m-2024-12", None),
-                "data/weights/esmc_300m_2024_12_v0.pth",
-                ESMCConfig::esmc_300m(),
-            )),
-            Self::ESMC600M => Ok((
-                WeightSource::pth("EvolutionaryScale/esmc-600m-2024-12", None),
-                "data/weights/esmc_600m_2024_12_v0.pth",
-                ESMCConfig::esmc_600m(),
-            )),
-            Self::ESMC6B => bail!("{ESMC6B_UNSUPPORTED}"),
+        let card = self.card();
+        if let Some(reason) = card.unsupported {
+            bail!(
+                "{} is not supported: {reason}. {ESMC6B_UNSUPPORTED}",
+                card.id
+            );
         }
+        let config = match self {
+            Self::ESMC300M => ESMCConfig::esmc_300m(),
+            Self::ESMC600M => ESMCConfig::esmc_600m(),
+            Self::ESMC6B => ESMCConfig::esmc_6b(),
+        };
+        Ok((card.source, card.file, config))
     }
 }
 

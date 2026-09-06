@@ -4,6 +4,7 @@
 use super::esm2::{ESM2, ESM2Config, ESM2Output};
 use crate::loader::{LoadOptions, WeightSource};
 use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
+use crate::registry::{self, ModelCard};
 use crate::types::PseudoProbability;
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{Device, Tensor};
@@ -44,17 +45,40 @@ pub enum ESM2Models {
     T48_15B,
 }
 impl ESM2Models {
+    /// This variant's registry id.
+    pub const fn registry_id(&self) -> &'static str {
+        match self {
+            Self::T6_8M => "esm2-t6-8m",
+            Self::T12_35M => "esm2-t12-35m",
+            Self::T30_150M => "esm2-t30-150m",
+            Self::T33_650M => "esm2-t33-650m",
+            Self::T36_3B => "esm2-t36-3b",
+            Self::T48_15B => "esm2-t48-15b",
+        }
+    }
+
+    /// This variant's [`ModelCard`].
+    pub fn card(&self) -> &'static ModelCard {
+        registry::lookup(self.registry_id())
+            .expect("every ESM2Models variant must have a registry entry")
+    }
+
     /// Where this variant's weights live, plus its built-in fallback config.
+    ///
+    /// The weight source comes from [`REGISTRY`][crate::registry::REGISTRY]
+    /// rather than being repeated here (ferritin-goh.1). The config stays a
+    /// separate hardcoded fallback because it is only used when the hub's
+    /// config.json is unreachable or unparseable.
     pub fn model_info(&self) -> (WeightSource, ESM2Config) {
-        let (repo, config) = match self {
-            Self::T6_8M => ("facebook/esm2_t6_8M_UR50D", ESM2Config::t6_8m()),
-            Self::T12_35M => ("facebook/esm2_t12_35M_UR50D", ESM2Config::t12_35m()),
-            Self::T30_150M => ("facebook/esm2_t30_150M_UR50D", ESM2Config::t30_150m()),
-            Self::T33_650M => ("facebook/esm2_t33_650M_UR50D", ESM2Config::t33_650m()),
-            Self::T36_3B => ("facebook/esm2_t36_3B_UR50D", ESM2Config::t36_3b()),
-            Self::T48_15B => ("facebook/esm2_t48_15B_UR50D", ESM2Config::t48_15b()),
+        let config = match self {
+            Self::T6_8M => ESM2Config::t6_8m(),
+            Self::T12_35M => ESM2Config::t12_35m(),
+            Self::T30_150M => ESM2Config::t30_150m(),
+            Self::T33_650M => ESM2Config::t33_650m(),
+            Self::T36_3B => ESM2Config::t36_3b(),
+            Self::T48_15B => ESM2Config::t48_15b(),
         };
-        (WeightSource::safetensors(repo).at_revision("main"), config)
+        (self.card().source, config)
     }
 
     /// Renamed to [`model_info`][Self::model_info] (ferritin-100.8).
