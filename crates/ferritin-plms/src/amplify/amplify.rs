@@ -99,7 +99,12 @@ impl AMPLIFY {
         let layer_norm_2 = rms_norm(cfg.hidden_size, cfg.norm_eps, vb.pp("layer_norm_2"))?;
         let decoder = linear(cfg.hidden_size, cfg.vocab_size, vb.pp("decoder"))?;
         let head_dim = cfg.hidden_size / cfg.num_attention_heads;
-        let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?.to_device(vb.device())?;
+        // The rotary table is computed in F32 for precision, then cast to the
+        // model's dtype — without the cast, an F16/BF16 model fails in
+        // apply_rotary_emb with "dtype mismatch in mul" (ferritin-100.9).
+        let freqs_cis = precompute_freqs_cis(head_dim, cfg.max_length)?
+            .to_device(vb.device())?
+            .to_dtype(vb.dtype())?;
         Ok(Self {
             encoder,
             transformer_encoder,

@@ -65,8 +65,22 @@ pub struct ESM2Runner {
     config: ESM2Config,
 }
 impl ESM2Runner {
-    /// Load model from HuggingFace hub, downloading config.json, tokenizer files, and weights.
+    /// Load model from HuggingFace hub at F32, downloading config.json,
+    /// tokenizer files, and weights.
+    ///
+    /// Use [`load_model_with`][Self::load_model_with] to load at F16 or BF16 —
+    /// `T36_3B` and `T48_15B` are not loadable at F32 on most machines
+    /// (~12 GB and ~60 GB respectively).
     pub fn load_model(modeltype: ESM2Models, device: Device) -> Result<ESM2Runner> {
+        Self::load_model_with(modeltype, &LoadOptions::new(device))
+    }
+
+    /// Load model with an explicit device and dtype.
+    ///
+    /// Reduced precision halves the memory footprint but changes the numerics;
+    /// see `tests/test_plm_dtype_parity.rs` for the tolerance each dtype
+    /// actually achieves against the Python reference (ferritin-100.9).
+    pub fn load_model_with(modeltype: ESM2Models, opts: &LoadOptions) -> Result<ESM2Runner> {
         let (source, fallback_config) = ESM2Models::get_model_files(modeltype);
         // Try to load config from HF hub; fall back to hardcoded config if unavailable.
         let config = match source.fetch_optional("config.json") {
@@ -76,7 +90,7 @@ impl ESM2Runner {
             }
             None => fallback_config,
         };
-        let vb = source.var_builder("model.safetensors", &LoadOptions::new(device))?;
+        let vb = source.var_builder("model.safetensors", opts)?;
         let model = ESM2::load(vb, config.clone())?;
         let tokenizer = ESM2::load_tokenizer()?;
         Ok(ESM2Runner {

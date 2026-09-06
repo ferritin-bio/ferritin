@@ -40,15 +40,25 @@ pub struct ProteinMPNNRunner {
 impl ProteinMPNNRunner {
     /// Load a ProteinMPNN model from HuggingFace hub.
     pub fn load_model(modeltype: ProteinMPNNModels, device: Device) -> Result<Self> {
+        Self::load_model_with(modeltype, &LoadOptions::new(device))
+    }
+
+    /// Load with an explicit device and dtype (ferritin-100.9).
+    pub fn load_model_with(modeltype: ProteinMPNNModels, opts: &LoadOptions) -> Result<Self> {
         let (source, filename) = modeltype.hf_info();
         let weights_path = source.fetch(filename)?;
-        Self::from_path(&weights_path, device)
+        Self::from_path_with(&weights_path, opts)
     }
 
     /// Load from a local .pt file (e.g. from ferritin-test-data or a cached download).
     pub fn from_path(path: impl AsRef<Path>, device: Device) -> Result<Self> {
+        Self::from_path_with(path, &LoadOptions::new(device))
+    }
+
+    /// Load from a local file with an explicit device and dtype.
+    pub fn from_path_with(path: impl AsRef<Path>, opts: &LoadOptions) -> Result<Self> {
         let path = path.as_ref();
-        let vb = var_builder_from_path(path, PMPNN_FORMAT, &LoadOptions::new(device))?;
+        let vb = var_builder_from_path(path, PMPNN_FORMAT, opts)?;
         let config = ProteinMPNNConfig::proteinmpnn();
         let model = ProteinMPNN::load(vb, &config)
             .map_err(|e| anyhow!("Failed to load ProteinMPNN weights: {e}"))?;

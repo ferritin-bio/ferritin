@@ -69,10 +69,18 @@ impl ESM3Runner {
     ///
     /// The `.pth` checkpoint is loaded directly via `candle_core::pickle::PthTensors`.
     pub fn from_pretrained(variant: ESM3Models, device: Device) -> Result<Self> {
+        Self::from_pretrained_with(variant, &LoadOptions::new(device))
+    }
+
+    /// Load with an explicit device and dtype (ferritin-100.9).
+    pub fn from_pretrained_with(variant: ESM3Models, opts: &LoadOptions) -> Result<Self> {
         let (source, filename, config) = variant.model_info();
-        let vb = source.var_builder(filename, &LoadOptions::new(device.clone()))?;
+        let vb = source.var_builder(filename, opts)?;
         let model = ESM3::load(vb, config)?;
-        Ok(Self { model, device })
+        Ok(Self {
+            model,
+            device: opts.device.clone(),
+        })
     }
 
     /// Tokenize `sequence` and return per-residue embeddings `(1, L, d_model)`.
@@ -172,12 +180,17 @@ pub struct StructureEncoderRunner {
 impl StructureEncoderRunner {
     /// Download and load the structure encoder from HuggingFace.
     pub fn from_pretrained(device: Device) -> Result<Self> {
-        let vb = ESM3_REPO.var_builder(
-            "esm3_structure_encoder_v0.pth",
-            &LoadOptions::new(device.clone()),
-        )?;
+        Self::from_pretrained_with(&LoadOptions::new(device))
+    }
+
+    /// Load with an explicit device and dtype (ferritin-100.9).
+    pub fn from_pretrained_with(opts: &LoadOptions) -> Result<Self> {
+        let vb = ESM3_REPO.var_builder("esm3_structure_encoder_v0.pth", opts)?;
         let encoder = StructureTokenEncoder::load(vb, VqVaeConfig::default())?;
-        Ok(Self { encoder, device })
+        Ok(Self {
+            encoder,
+            device: opts.device.clone(),
+        })
     }
 
     /// Encode backbone coordinates to structure tokens.
