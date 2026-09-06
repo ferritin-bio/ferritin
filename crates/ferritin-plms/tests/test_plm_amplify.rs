@@ -17,23 +17,33 @@ const PARITY_SEQUENCES: &[(&str, &str)] = &[
     ("alt_charged", "KEKEKEK"),
 ];
 
+/// Load AMPLIFY 120M, surfacing the underlying error on failure.
+///
+/// These loads fail intermittently in the full concurrent `--include-ignored`
+/// run while passing reliably in isolation (ferritin-100.25). A bare
+/// `.expect("Failed to load ...")` discarded the cause, which is why that
+/// issue could not name one — so the source error is included here.
 fn load_amplify_120m() -> AmplifyRunner {
-    AmplifyRunner::from_pretrained(AmplifyModels::AMP120M, device(false).unwrap())
-        .expect("Failed to load AMPLIFY 120M model")
+    match AmplifyRunner::from_pretrained(AmplifyModels::AMP120M, device(false).unwrap()) {
+        Ok(runner) => runner,
+        Err(e) => panic!("Failed to load AMPLIFY 120M model: {e:#}"),
+    }
 }
 
 #[test]
 #[ignore = "requires downloading model files"]
 fn test_load_amplify_120m() {
-    run_remote_amplify_prediction_smoke(AmplifyModels::AMP120M)
-        .expect("Failed to load AMPLIFY 120M model");
+    if let Err(e) = run_remote_amplify_prediction_smoke(AmplifyModels::AMP120M) {
+        panic!("Failed to load AMPLIFY 120M model: {e:#}");
+    }
 }
 
 #[test]
 #[ignore = "requires downloading model files"]
 fn test_amplify_120m_prediction() {
-    run_remote_amplify_prediction_smoke(AmplifyModels::AMP120M)
-        .expect("Failed to get prediction from AMPLIFY 120M");
+    if let Err(e) = run_remote_amplify_prediction_smoke(AmplifyModels::AMP120M) {
+        panic!("Failed to get prediction from AMPLIFY 120M: {e:#}");
+    }
 }
 
 #[test]
