@@ -1,11 +1,11 @@
 //! ESMFold2 structure-prediction demo.
 //!
-//! Downloads ESMFold2-Fast weights from HuggingFace (~755 MB on first run,
-//! cached locally thereafter) and folds the given protein sequence.
-//!
-//! Note: the ESMC-6B backbone is not yet loaded, so coordinates will not be
-//! physically meaningful until that wiring is complete. The mmCIF output and
-//! pLDDT tensors are exercised end-to-end regardless.
+//! **Currently non-functional.** ESMFold2 pretrained weights cannot be loaded:
+//! the ported architecture does not match the released `biohub/ESMFold2-Fast`
+//! checkpoint, so `from_pretrained` refuses (ferritin-100.16). This example
+//! parses and reports the input, then prints that refusal and exits — it does
+//! not write an mmCIF file, because any coordinates it produced would be
+//! meaningless. See `docs/decisions/esmfold2-port-mismatch.md`.
 //!
 //! ```shell
 //! cargo run --example esmfold2 -p ferritin-examples
@@ -56,29 +56,30 @@ fn main() -> Result<()> {
     let input = StructurePredictionInput::new().add_protein(protein);
     println!("Input:    {input}");
 
-    println!("Loading ESMFold2-Fast (downloads ~755 MB on first run)…");
-    let runner = ESMFold2Runner::from_pretrained(ESMFold2Models::Fast, device)?;
-
-    println!(
-        "Folding {} residues (loops={} steps={})…",
-        args.sequence.len(),
-        args.num_loops,
-        args.num_sampling_steps
-    );
-    let output = runner.fold_protein(&args.sequence, args.num_loops, args.num_sampling_steps)?;
-
-    let mmcif = output.to_mmcif(&args.sequence, "A", "esmfold2_pred")?;
-    std::fs::write(&args.out, &mmcif)?;
-
-    let atom_count = mmcif.lines().filter(|l| l.starts_with("ATOM")).count();
-    println!("Wrote {atom_count} ATOM records → '{}'", args.out);
-
-    println!("\n--- mmCIF preview ---");
-    for line in mmcif.lines().take(20) {
-        println!("{line}");
-    }
-    if mmcif.lines().count() > 20 {
-        println!("… ({} total lines)", mmcif.lines().count());
+    println!("Loading ESMFold2-Fast…");
+    match ESMFold2Runner::from_pretrained(ESMFold2Models::Fast, device) {
+        Ok(_runner) => {
+            // Unreachable while the port is mismatched; kept so this example
+            // starts working again the moment loading is restored.
+            unreachable!(
+                "ESMFold2 loading unexpectedly succeeded — restore the folding \
+                 path in this example (ferritin-100.16)"
+            );
+        }
+        Err(e) => {
+            eprintln!("\nESMFold2 cannot fold sequences yet:\n\n{e}\n");
+            eprintln!(
+                "Requested: {} residues, loops={}, steps={} → would have written '{}'.",
+                args.sequence.len(),
+                args.num_loops,
+                args.num_sampling_steps,
+                args.out
+            );
+            eprintln!(
+                "No mmCIF was written: coordinates from a mismatched checkpoint \
+                 would be meaningless."
+            );
+        }
     }
 
     Ok(())

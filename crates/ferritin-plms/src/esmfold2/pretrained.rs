@@ -3,40 +3,56 @@
 //! Downloads the structure-head weights from HuggingFace and optionally wires
 //! in the ESMC-6B backbone for end-to-end structure prediction.
 //!
-//! ## Weight layout
+//! ## Pretrained loading is currently refused
 //!
-//! `biohub/ESMFold2-Fast` `model.safetensors` (~755 MB) contains the structure
-//! head only. The ESMC-6B backbone (~12 GB) must be loaded from a second repo
-//! (`biohub/ESMC-6B`).
+//! The ported module graph in this crate does **not** match the released
+//! `biohub/ESMFold2-Fast` checkpoint: none of the checkpoint's 1032 tensors
+//! resolve to a parameter of [`ESMFold2Model`]. This is not a prefix or
+//! rename mismatch — the checkpoint's `lm_encoder` is a pair-track stack of
+//! triangle-multiplication blocks, not the transformer adapter modelled here;
+//! `folding_trunk` has no triangle attention; `structure_head` nests under
+//! `diffusion_module` with AdaLN blocks and an atom decoder; and whole
+//! components (`parcae_*`, `language_model.*`, `inputs_embedder.*`,
+//! `rel_pos`, `z_init_1`/`z_init_2`, `token_bonds`) are not modelled at all.
 //!
-//! | Weight prefix          | Component                                 |
-//! |------------------------|-------------------------------------------|
-//! | `lm_encoder.*`         | LM adapter (4 blocks, 2560 → d_single=384) |
-//! | `folding_trunk.*`      | 24-layer Pairformer trunk                 |
-//! | `inputs.atom_encoder.*`| Atom encoder (3 blocks, d_atom=128→768)   |
-//! | `msa_encoder.*`        | MSA encoder (disabled in Fast)            |
-//! | `structure_head.*`     | Diffusion module (token 12-block + atom 3-block) |
-//! | `confidence_head.*`    | pLDDT / pAE / pDE / distogram heads       |
+//! Both [`ESMFold2Runner::from_pretrained`] and
+//! [`ESMFold2Runner::from_pretrained_with_backbone`] therefore return an error
+//! naming that cause, rather than loading weights that would produce
+//! meaningless coordinates. See `docs/decisions/esmfold2-port-mismatch.md`
+//! for the full evidence and `docs/decisions/esmfold2-checkpoint-tensors.md`
+//! for the checkpoint's real tensor inventory (ferritin-100.16).
 //!
-//! ## Two loading modes
-//!
-//! - [`ESMFold2Runner::from_pretrained`] — structure head only (~755 MB).
-//!   Backbone hidden states are zero-initialised; coordinates will be
-//!   physically meaningless but all shapes are correct (useful for shape testing).
-//!
-//! - [`ESMFold2Runner::from_pretrained_with_backbone`] — structure head +
-//!   ESMC-6B backbone (~12 GB total). Required for real structure predictions.
+//! The layer implementations and [`ESMFold2Model::load`] itself remain usable
+//! with a `VarBuilder` you supply (e.g. `VarBuilder::zeros`) for shape and
+//! pipeline testing; only the pretrained path refuses.
 
 use super::config::ESMFold2Config;
 use super::model::ESMFold2Model;
 use super::output::ESMFold2Output;
-use crate::esmc::pretrained::{ESMCModels, ESMCRunner};
+use crate::esmc::pretrained::ESMCRunner;
 use anyhow::{Result, bail};
 use candle_core::{DType, Device, Tensor};
-use candle_nn::VarBuilder;
-use hf_hub::HFClientSync;
 
 const ESMFOLD2_DTYPE: DType = DType::F32;
+
+/// Why [`ESMFold2Runner::from_pretrained`] and
+/// [`ESMFold2Runner::from_pretrained_with_backbone`] refuse to load.
+///
+/// Not one of the 1032 tensors in `biohub/ESMFold2-Fast` `model.safetensors`
+/// resolves to a parameter of the ported [`ESMFold2Model`]: the checkpoint is
+/// a different network from the one implemented here, so this is not a prefix
+/// or rename mismatch that path-patching could fix.
+pub const ARCHITECTURE_MISMATCH: &str = "\
+ESMFold2 pretrained weights cannot be loaded: the ported architecture does not match the \
+released checkpoint. None of the 1032 tensors in biohub/ESMFold2-Fast model.safetensors \
+resolve to a parameter of this model — the checkpoint's lm_encoder is a pair-track stack of \
+triangle-multiplication blocks (not a transformer adapter), folding_trunk has no triangle \
+attention, structure_head nests under diffusion_module with AdaLN blocks and an atom decoder, \
+and the parcae_*, language_model.*, inputs_embedder.*, rel_pos, z_init_1/z_init_2 and \
+token_bonds components are not modelled at all. Loading is refused rather than patched, \
+because resolving the paths without re-porting the forward pass would emit plausible-looking \
+but meaningless coordinates. See docs/decisions/esmfold2-port-mismatch.md (ferritin-100.16). \
+ESMFold2Model::load still works with a VarBuilder you supply, for shape testing.";
 
 // ── ESMFold2Models enum ───────────────────────────────────────────────────────
 
@@ -88,61 +104,55 @@ pub struct ESMFold2Runner {
 }
 
 impl ESMFold2Runner {
-    /// Download and load the ESMFold2 structure head only (~755 MB).
+    /// Loading the pretrained structure head is **not supported** — this
+    /// always returns an error (ferritin-100.16).
     ///
-    /// The ESMC-6B backbone is **not** loaded; hidden states passed to
-    /// `fold_protein` will be all-zeros, so predicted coordinates are
-    /// physically meaningless. Use this for shape/pipeline testing without
-    /// requiring 12 GB of disk space.
-    pub fn from_pretrained(model_variant: ESMFold2Models, device: Device) -> Result<Self> {
-        let (repo_id, config) = model_variant.model_info()?;
-        let model = Self::load_structure_head(repo_id, &config, &device)?;
-        Ok(Self {
-            model,
-            config,
-            device,
-            backbone: None,
-        })
+    /// The ported module graph does not match the released
+    /// `biohub/ESMFold2-Fast` checkpoint, so there are no weights to load.
+    /// See [`ARCHITECTURE_MISMATCH`] and the module docs for details.
+    ///
+    /// To exercise the pipeline with correct shapes, build an
+    /// [`ESMFold2Model`] directly from a `VarBuilder` you control
+    /// (e.g. `VarBuilder::zeros`) and construct the runner around it.
+    pub fn from_pretrained(model_variant: ESMFold2Models, _device: Device) -> Result<Self> {
+        // Validate the variant first so `Full` still reports its own reason.
+        let (repo_id, _config) = model_variant.model_info()?;
+        bail!("{ARCHITECTURE_MISMATCH} (requested repo: {repo_id})");
     }
 
-    /// Download and load the structure head (~755 MB) **and** the ESMC-6B
-    /// backbone (~12 GB).  Required for predictions with meaningful pLDDT.
+    /// Loading the pretrained structure head plus the ESMC-6B backbone is
+    /// **not supported** — this always returns an error (ferritin-100.16).
+    ///
+    /// The backbone itself loads fine ([`ESMCRunner`]); it is the ESMFold2
+    /// structure head that has no loadable weights. See
+    /// [`ARCHITECTURE_MISMATCH`].
     pub fn from_pretrained_with_backbone(
         model_variant: ESMFold2Models,
-        device: Device,
+        _device: Device,
     ) -> Result<Self> {
-        let (repo_id, config) = model_variant.model_info()?;
-        let model = Self::load_structure_head(repo_id, &config, &device)?;
-        eprintln!("ESMFold2Runner: loading ESMC-6B backbone (~12 GB)...");
-        let backbone = ESMCRunner::from_pretrained(ESMCModels::ESMC6B, device.clone())?;
-        eprintln!("ESMFold2Runner: backbone ready.");
-        Ok(Self {
+        let (repo_id, _config) = model_variant.model_info()?;
+        bail!("{ARCHITECTURE_MISMATCH} (requested repo: {repo_id})");
+    }
+
+    /// Build a runner around an already-constructed model.
+    ///
+    /// This is the only working way to obtain an [`ESMFold2Runner`] while
+    /// pretrained loading is refused: supply your own `VarBuilder` to
+    /// [`ESMFold2Model::load`]. With `backbone: None`, `fold_protein` feeds
+    /// zeroed hidden states, so shapes are correct but coordinates are not
+    /// physically meaningful.
+    pub fn new(
+        model: ESMFold2Model,
+        config: ESMFold2Config,
+        device: Device,
+        backbone: Option<ESMCRunner>,
+    ) -> Self {
+        Self {
             model,
             config,
             device,
-            backbone: Some(backbone),
-        })
-    }
-
-    fn load_structure_head(
-        repo_id: &str,
-        config: &ESMFold2Config,
-        device: &Device,
-    ) -> Result<ESMFold2Model> {
-        eprintln!("ESMFold2Runner: downloading structure head from {repo_id}...");
-        let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
-        let client = HFClientSync::new()?;
-        let weights_path = client
-            .model(owner, name)
-            .download_file()
-            .filename("model.safetensors")
-            .send()?;
-        eprintln!("ESMFold2Runner: weights at {}", weights_path.display());
-
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[&weights_path], ESMFOLD2_DTYPE, device)?
-        };
-        Ok(ESMFold2Model::load(vb, config.clone())?)
+            backbone,
+        }
     }
 
     /// Fold a single protein sequence.
@@ -209,6 +219,7 @@ mod tests {
 
         let err = ESMFold2Models::Full
             .model_info()
+            .map(|_| ())
             .expect_err("Full must not load with the Fast config");
         assert!(
             err.to_string().contains("not yet supported"),
@@ -245,12 +256,7 @@ mod tests {
         };
         let vb = VarBuilder::zeros(DType::F32, &device);
         let model = ESMFold2Model::load(vb, cfg.clone()).unwrap();
-        let runner = ESMFold2Runner {
-            model,
-            config: cfg,
-            device: device.clone(),
-            backbone: None,
-        };
+        let runner = ESMFold2Runner::new(model, cfg, device.clone(), None);
 
         let seq = "ACDEFGHIK"; // 9 residues
         let out = runner.fold_protein(seq, 1, 2).unwrap();
@@ -261,51 +267,46 @@ mod tests {
         assert_eq!(out.iptm.dims(), &[1]);
     }
 
-    /// Integration test: downloads structure head (~755 MB) and folds ubiquitin.
-    /// The backbone is stubbed with zeros so coordinates are not meaningful,
-    /// but all shapes and the full pipeline must succeed.
+    /// Pretrained loading is refused with an explanation, not with a bare
+    /// `cannot find tensor ...` (ferritin-100.16).
     ///
-    /// Run with:
-    ///   cargo test -p ferritin-plms test_esmfold2_fold_stub_integration -- --ignored
+    /// This replaces the former `test_esmfold2_fold_stub_integration` and
+    /// `test_esmfold2_fold_with_backbone` integration tests, which downloaded
+    /// ~755 MB (and ~12 GB) only to fail on the first missing tensor. Neither
+    /// can pass until the port is rewritten against the real checkpoint, so
+    /// they assert the refusal instead — and need no network to do it.
     #[test]
-    #[ignore = "requires downloading biohub/ESMFold2-Fast weights (~755 MB)"]
-    fn test_esmfold2_fold_stub_integration() {
-        let device = Device::Cpu;
-        let runner =
-            ESMFold2Runner::from_pretrained(ESMFold2Models::Fast, device).expect("load failed");
-
-        // Ubiquitin (76 aa)
-        let seq = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG";
-        let out = runner.fold_protein(seq, 1, 2).expect("fold_protein failed");
-
-        assert_eq!(out.sample_atom_coords.dims(), &[1, seq.len(), 3]);
-        assert_eq!(out.plddt.dims(), &[1, seq.len()]);
+    fn test_from_pretrained_refuses_with_reason() {
+        for err in [
+            ESMFold2Runner::from_pretrained(ESMFold2Models::Fast, Device::Cpu)
+                .map(|_| ())
+                .expect_err("Fast must refuse: the port does not match the checkpoint"),
+            ESMFold2Runner::from_pretrained_with_backbone(ESMFold2Models::Fast, Device::Cpu)
+                .map(|_| ())
+                .expect_err("Fast+backbone must refuse: the port does not match the checkpoint"),
+        ] {
+            let msg = err.to_string();
+            assert!(
+                msg.contains("does not match the released checkpoint"),
+                "error should name the architecture mismatch; got: {msg}"
+            );
+            assert!(
+                msg.contains("biohub/ESMFold2-Fast"),
+                "error should name the checkpoint; got: {msg}"
+            );
+        }
     }
 
-    /// Full end-to-end integration: ESMC-6B backbone + structure head.
-    /// Folds ubiquitin and asserts pLDDT > 0.5 on average (backbone gives
-    /// real signal; exact quality depends on diffusion steps).
-    ///
-    /// Run with:
-    ///   cargo test -p ferritin-plms test_esmfold2_fold_with_backbone -- --ignored
+    /// `Full` keeps reporting its own unsupported-variant reason (ferritin-100.4)
+    /// rather than being masked by the architecture-mismatch refusal.
     #[test]
-    #[ignore = "requires biohub/ESMFold2-Fast (~755 MB) + biohub/ESMC-6B (~12 GB)"]
-    fn test_esmfold2_fold_with_backbone() -> Result<()> {
-        let device = Device::Cpu;
-        let runner = ESMFold2Runner::from_pretrained_with_backbone(ESMFold2Models::Fast, device)?;
-
-        let seq = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG";
-        let out = runner.fold_protein(seq, 3, 14)?;
-
-        assert_eq!(out.sample_atom_coords.dims(), &[1, seq.len(), 3]);
-        assert_eq!(out.plddt.dims(), &[1, seq.len()]);
-
-        let mean_plddt = out.plddt.mean_all()?.to_scalar::<f32>()?;
+    fn test_from_pretrained_full_reports_variant_error() {
+        let err = ESMFold2Runner::from_pretrained(ESMFold2Models::Full, Device::Cpu)
+            .map(|_| ())
+            .expect_err("Full must refuse");
         assert!(
-            mean_plddt > 0.5,
-            "expected mean pLDDT > 0.5, got {mean_plddt:.3}"
+            err.to_string().contains("not yet supported"),
+            "Full should report the unsupported-variant error; got: {err}"
         );
-
-        Ok(())
     }
 }
