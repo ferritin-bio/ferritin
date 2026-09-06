@@ -175,36 +175,27 @@ fn test_esmfold2_mmcif_bfactor_from_plddt() -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Integration test (requires weights + forward-pass implementation)
+// Pretrained loading (currently refused — ferritin-100.16)
 // ---------------------------------------------------------------------------
 
+/// `from_pretrained` refuses with an explanation instead of downloading
+/// ~755 MB and then failing on the first missing tensor.
+///
+/// This replaces the former `test_esmfold2_fold_protein_integration`, which
+/// could not pass: the ported architecture does not match the released
+/// `biohub/ESMFold2-Fast` checkpoint (none of its 1032 tensors resolve to a
+/// model parameter). See `docs/decisions/esmfold2-port-mismatch.md`. The test
+/// is no longer `#[ignore]`d because it needs no network.
 #[test]
-#[ignore = "requires downloading ESMFold2-Fast weights (~755 MB) and forward pass implementation"]
-fn test_esmfold2_fold_protein_integration() -> Result<()> {
+fn test_esmfold2_from_pretrained_refuses() {
     use ferritin_plms::{ESMFold2Models, ESMFold2Runner};
 
-    let device = Device::Cpu;
-    let runner = ESMFold2Runner::from_pretrained(ESMFold2Models::Fast, device)?;
-
-    let sequence = "MKTAYIAKQRQISFVKSHFSRQLEERLKK";
-    let output = runner.fold_protein(sequence, 3, 14)?;
-
-    // pLDDT should be in [0, 1]
-    let plddt_vals = output.plddt.to_vec1::<f32>()?;
-    assert_eq!(plddt_vals.len(), sequence.len());
-    for v in &plddt_vals {
-        assert!(*v >= 0.0 && *v <= 1.0, "pLDDT out of range: {v}");
-    }
-
-    // Should produce valid mmCIF
-    let mmcif = output.to_mmcif(sequence, "A", "integration_test")?;
-    assert!(mmcif.contains("data_integration_test"));
-    assert!(mmcif.lines().any(|l| l.starts_with("ATOM")));
-
-    println!(
-        "pLDDT mean: {:.3}",
-        plddt_vals.iter().sum::<f32>() / plddt_vals.len() as f32
+    let err = ESMFold2Runner::from_pretrained(ESMFold2Models::Fast, Device::Cpu)
+        .map(|_| ())
+        .expect_err("pretrained loading must refuse while the port is mismatched");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("does not match the released checkpoint"),
+        "error should name the architecture mismatch; got: {msg}"
     );
-    println!("mmCIF size: {} bytes", mmcif.len());
-    Ok(())
 }
