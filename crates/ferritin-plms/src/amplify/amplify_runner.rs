@@ -34,7 +34,19 @@ pub struct AmplifyRunner {
     tokenizer: Tokenizer,
 }
 impl AmplifyRunner {
+    /// Load model from HuggingFace hub at F32.
+    ///
+    /// Use [`load_model_with`][Self::load_model_with] for F16 or BF16.
     pub fn load_model(modeltype: AmplifyModels, device: Device) -> Result<AmplifyRunner> {
+        Self::load_model_with(modeltype, &LoadOptions::new(device))
+    }
+
+    /// Load model with an explicit device and dtype.
+    ///
+    /// Reduced precision halves the memory footprint but changes the numerics;
+    /// see `tests/test_plm_dtype_parity.rs` for the achievable tolerance
+    /// (ferritin-100.9).
+    pub fn load_model_with(modeltype: AmplifyModels, opts: &LoadOptions) -> Result<AmplifyRunner> {
         let source = AmplifyModels::get_model_files(modeltype);
         let config_filename = source.fetch("config.json")?;
         let tokenizer_filename = source.fetch("tokenizer.json")?;
@@ -44,7 +56,7 @@ impl AmplifyRunner {
             .replace("Swiglu", "swiglu");
         let config: AMPLIFYConfig = serde_json::from_str(&config_str)?;
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
-        let vb = source.var_builder("model.safetensors", &LoadOptions::new(device))?;
+        let vb = source.var_builder("model.safetensors", opts)?;
         let model = AMPLIFY::load(vb, &config)?;
         Ok(AmplifyRunner { model, tokenizer })
     }

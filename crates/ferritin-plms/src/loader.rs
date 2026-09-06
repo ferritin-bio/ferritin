@@ -65,6 +65,24 @@ impl LoadOptions {
         self.dtype = dtype;
         self
     }
+
+    /// Reject dtype/device combinations the backend cannot run.
+    ///
+    /// candle's CPU backend has no BF16 `matmul`, so a BF16 model on CPU fails
+    /// partway through loading or on the first forward pass with a bare
+    /// "unsupported dtype BF16 for op matmul". Catching it here says what to do
+    /// instead (ferritin-100.9).
+    pub fn validate(&self) -> Result<()> {
+        if self.dtype == DType::BF16 && self.device.is_cpu() {
+            bail!(
+                "BF16 is not supported on the CPU backend: candle has no BF16 matmul there, \
+                 so loading or the first forward pass would fail with a bare \
+                 'unsupported dtype BF16 for op matmul'. Use F16 for half precision on CPU, \
+                 or run on Metal/CUDA."
+            );
+        }
+        Ok(())
+    }
 }
 
 // ── Format ────────────────────────────────────────────────────────────────────
@@ -214,6 +232,7 @@ pub fn var_builder_from_path(
     format: Format,
     opts: &LoadOptions,
 ) -> Result<VarBuilder<'static>> {
+    opts.validate()?;
     match format {
         Format::Safetensors => {
             // SAFETY: mmap of a file we just materialised in the HF cache. As
@@ -308,6 +327,30 @@ mod tests {
                 root_key: Some("model_state_dict")
             }
         );
+    }
+
+    /// BF16 on CPU is refused up front with an explanation rather than
+    /// surfacing candle's bare matmul error mid-load (ferritin-100.9).
+    #[test]
+    fn test_load_options_rejects_bf16_on_cpu() {
+        let err = LoadOptions::new(Device::Cpu)
+            .with_dtype(DType::BF16)
+            .validate()
+            .expect_err("BF16 on CPU must be refused");
+        assert!(
+            err.to_string().contains("not supported on the CPU backend"),
+            "error should explain the CPU limitation; got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_load_options_accepts_f16_and_f32_on_cpu() {
+        for dtype in [DType::F32, DType::F16] {
+            LoadOptions::new(Device::Cpu)
+                .with_dtype(dtype)
+                .validate()
+                .unwrap_or_else(|e| panic!("{dtype:?} should be allowed on CPU: {e}"));
+        }
     }
 
     #[test]

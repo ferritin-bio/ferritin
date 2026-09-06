@@ -81,8 +81,18 @@ impl ESMCRunner {
     /// VarBuilder root to `vb.pp("esmc")` when found, otherwise uses the
     /// flat (unwrapped) layout.
     pub fn from_pretrained(model: ESMCModels, device: Device) -> Result<Self> {
+        Self::from_pretrained_with(model, &LoadOptions::new(device))
+    }
+
+    /// Load with an explicit device and dtype.
+    ///
+    /// `ESMC6B` is ~24 GB at F32 but ~12 GB at BF16 — its on-disk precision —
+    /// so reduced precision is the difference between loadable and not on a
+    /// 32 GB machine. See `tests/test_plm_dtype_parity.rs` for the numerical
+    /// cost (ferritin-100.9).
+    pub fn from_pretrained_with(model: ESMCModels, opts: &LoadOptions) -> Result<Self> {
         let (source, config) = model.model_info();
-        let vb = source.var_builder("model.safetensors", &LoadOptions::new(device))?;
+        let vb = source.var_builder("model.safetensors", opts)?;
         // Weights saved from ESMCForMaskedLM nest the backbone under "esmc".
         let vb_root = optional_prefix(vb, "esmc", "embed.weight");
         let esmc = ESMC::load(vb_root, config.clone())?;
