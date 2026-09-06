@@ -182,8 +182,8 @@ fn test_esmc_300m_logits_shape() -> Result<()> {
     use ferritin_plms::loader::{LoadOptions, optional_prefix};
 
     let device = Device::Cpu;
-    let (source, config) = Variants::ESMC300M.model_info();
-    let vb = source.var_builder("model.safetensors", &LoadOptions::new(device.clone()))?;
+    let (source, filename, config) = Variants::ESMC300M.model_info()?;
+    let vb = source.var_builder(filename, &LoadOptions::new(device.clone()))?;
     let vb_root = optional_prefix(vb, "esmc", "embed.weight");
     let model = ESMC::load(vb_root, config)?;
 
@@ -233,4 +233,51 @@ fn test_esmc_parity_vs_python_reference() -> Result<()> {
     assert_embeddings_close(&rust_embeddings, ref_embeddings, ESMC_EMBED_COSINE_FLOOR)?;
     println!("ESMC-300M embedding parity OK (cosine floor {ESMC_EMBED_COSINE_FLOOR})");
     Ok(())
+}
+
+/// 300M and 600M point at the EvolutionaryScale originals, not the fused
+/// `biohub/ESMC-*` re-exports whose layout nothing in this port could resolve
+/// (ferritin-100.23).
+#[test]
+fn test_esmc_model_info_targets_evolutionaryscale() {
+    use ferritin_plms::esmc::pretrained::ESMCModels;
+
+    for (variant, repo, file) in [
+        (
+            ESMCModels::ESMC300M,
+            "EvolutionaryScale/esmc-300m-2024-12",
+            "data/weights/esmc_300m_2024_12_v0.pth",
+        ),
+        (
+            ESMCModels::ESMC600M,
+            "EvolutionaryScale/esmc-600m-2024-12",
+            "data/weights/esmc_600m_2024_12_v0.pth",
+        ),
+    ] {
+        let (source, filename, _config) =
+            variant.model_info().expect("variant should be supported");
+        assert_eq!(source.repo_id, repo);
+        assert_eq!(filename, file);
+    }
+}
+
+/// ESMC6B refuses with the specific reason rather than failing partway through
+/// a six-shard download (ferritin-100.24).
+#[test]
+fn test_esmc_6b_refuses_with_reason() {
+    use ferritin_plms::esmc::pretrained::ESMCModels;
+
+    let err = ESMCModels::ESMC6B
+        .model_info()
+        .map(|_| ())
+        .expect_err("ESMC6B is not supported yet");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("shards"),
+        "error should name the sharding problem; got: {msg}"
+    );
+    assert!(
+        msg.contains("ESMC300M and ESMC600M work"),
+        "error should say which variants do work; got: {msg}"
+    );
 }
