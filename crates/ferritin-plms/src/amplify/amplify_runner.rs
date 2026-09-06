@@ -5,25 +5,26 @@
 use super::super::types::{ContactMap, PseudoProbability};
 use super::amplify::{AMPLIFY, AmplifyOutput};
 use super::config::AMPLIFYConfig;
+use crate::loader::{LoadOptions, WeightSource};
 use crate::plm_runner::PlmRunner;
 use anyhow::{Error as E, Result, anyhow};
-use candle_core::{D, DType, Device, Tensor};
-use candle_nn::VarBuilder;
+use candle_core::{D, Device, Tensor};
 use candle_nn::ops;
-use hf_hub::HFClientSync;
 use tokenizers::Tokenizer;
-
-const AMPLIFY_DTYPE: DType = DType::F32;
 
 pub enum AmplifyModels {
     AMP120M,
     AMP350M,
 }
 impl AmplifyModels {
-    pub fn get_model_files(model: Self) -> (&'static str, &'static str) {
+    pub fn get_model_files(model: Self) -> WeightSource {
         match model {
-            AmplifyModels::AMP120M => ("chandar-lab/AMPLIFY_120M", "main"),
-            AmplifyModels::AMP350M => ("chandar-lab/AMPLIFY_350M", "main"),
+            AmplifyModels::AMP120M => {
+                WeightSource::safetensors("chandar-lab/AMPLIFY_120M").at_revision("main")
+            }
+            AmplifyModels::AMP350M => {
+                WeightSource::safetensors("chandar-lab/AMPLIFY_350M").at_revision("main")
+            }
         }
     }
 }
@@ -34,37 +35,16 @@ pub struct AmplifyRunner {
 }
 impl AmplifyRunner {
     pub fn load_model(modeltype: AmplifyModels, device: Device) -> Result<AmplifyRunner> {
-        let (model_id, revision) = AmplifyModels::get_model_files(modeltype);
-        let (owner, name) = model_id.split_once('/').unwrap_or(("", model_id));
-        let client = HFClientSync::new()?;
-        let repo = client.model(owner, name);
-        let (config_filename, tokenizer_filename, weights_filename) = {
-            let config = repo
-                .download_file()
-                .filename("config.json")
-                .revision(revision)
-                .send()?;
-            let tokenizer = repo
-                .download_file()
-                .filename("tokenizer.json")
-                .revision(revision)
-                .send()?;
-            let weights = repo
-                .download_file()
-                .filename("model.safetensors")
-                .revision(revision)
-                .send()?;
-            (config, tokenizer, weights)
-        };
+        let source = AmplifyModels::get_model_files(modeltype);
+        let config_filename = source.fetch("config.json")?;
+        let tokenizer_filename = source.fetch("tokenizer.json")?;
         let config_str = std::fs::read_to_string(config_filename)?;
         let config_str = config_str
             .replace("SwiGLU", "swiglu")
             .replace("Swiglu", "swiglu");
         let config: AMPLIFYConfig = serde_json::from_str(&config_str)?;
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights_filename], AMPLIFY_DTYPE, &device)?
-        };
+        let vb = source.var_builder("model.safetensors", &LoadOptions::new(device))?;
         let model = AMPLIFY::load(vb, &config)?;
         Ok(AmplifyRunner { model, tokenizer })
     }

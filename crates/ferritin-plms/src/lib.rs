@@ -39,6 +39,7 @@ pub mod esmc;
 pub mod esmfold2;
 pub mod featurize;
 pub mod ligandmpnn;
+pub mod loader;
 pub mod plm_runner;
 pub mod types;
 pub mod utils;

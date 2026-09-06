@@ -31,13 +31,10 @@
 //! code works against both the wrapped and unwrapped formats.
 
 use crate::esmc::models::esmc::{ESMC, ESMCConfig};
+use crate::loader::{LoadOptions, WeightSource, optional_prefix};
 use crate::plm_runner::PlmRunner;
 use anyhow::Result;
-use candle_core::{DType, Device, Tensor};
-use candle_nn::VarBuilder;
-use hf_hub::HFClientSync;
-
-const ESMC_DTYPE: DType = DType::F32;
+use candle_core::{Device, Tensor};
 
 /// Available ESMC model variants hosted on HuggingFace.
 pub enum ESMCModels {
@@ -50,12 +47,21 @@ pub enum ESMCModels {
 }
 
 impl ESMCModels {
-    /// Returns `(hf_repo_id, config)` for this variant.
-    pub fn model_info(&self) -> (&'static str, ESMCConfig) {
+    /// Returns `(weight_source, config)` for this variant.
+    pub fn model_info(&self) -> (WeightSource, ESMCConfig) {
         match self {
-            Self::ESMC300M => ("biohub/ESMC-300M", ESMCConfig::esmc_300m()),
-            Self::ESMC600M => ("biohub/ESMC-600M", ESMCConfig::esmc_600m()),
-            Self::ESMC6B => ("biohub/ESMC-6B", ESMCConfig::esmc_6b()),
+            Self::ESMC300M => (
+                WeightSource::safetensors("biohub/ESMC-300M"),
+                ESMCConfig::esmc_300m(),
+            ),
+            Self::ESMC600M => (
+                WeightSource::safetensors("biohub/ESMC-600M"),
+                ESMCConfig::esmc_600m(),
+            ),
+            Self::ESMC6B => (
+                WeightSource::safetensors("biohub/ESMC-6B"),
+                ESMCConfig::esmc_6b(),
+            ),
         }
     }
 }
@@ -73,29 +79,10 @@ impl ESMCRunner {
     /// VarBuilder root to `vb.pp("esmc")` when found, otherwise uses the
     /// flat (unwrapped) layout.
     pub fn from_pretrained(model: ESMCModels, device: Device) -> Result<Self> {
-        let (repo_id, config) = model.model_info();
-        let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
-        let client = HFClientSync::new()?;
-        let weights_path = client
-            .model(owner, name)
-            .download_file()
-            .filename("model.safetensors")
-            .send()?;
-
-        let vb =
-            unsafe { VarBuilder::from_mmaped_safetensors(&[&weights_path], ESMC_DTYPE, &device)? };
-
-        // Detect whether weights use the HF ESMCForMaskedLM prefix "esmc."
-        // by probing for the embedding matrix at the prefixed path.
-        let vb_root = if vb
-            .get((config.embedding_dim, config.d_model), "esmc.embed.weight")
-            .is_ok()
-        {
-            vb.pp("esmc")
-        } else {
-            vb
-        };
-
+        let (source, config) = model.model_info();
+        let vb = source.var_builder("model.safetensors", &LoadOptions::new(device))?;
+        // Weights saved from ESMCForMaskedLM nest the backbone under "esmc".
+        let vb_root = optional_prefix(vb, "esmc", "embed.weight");
         let esmc = ESMC::load(vb_root, config)?;
         Ok(Self { model: esmc })
     }

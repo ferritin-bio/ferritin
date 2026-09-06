@@ -25,14 +25,10 @@
 use crate::esm3::models::esm3::{ESM3, ESM3Config};
 use crate::esm3::models::vqvae::{StructureTokenEncoder, VqVaeConfig};
 use crate::esm3::tokenization::sequence::tokenize_sequence;
+use crate::loader::{LoadOptions, WeightSource};
 use crate::plm_runner::PlmRunner;
-use anyhow::{Context, Result};
-use candle_core::pickle::PthTensors;
-use candle_core::{DType, Device, Tensor};
-use candle_nn::VarBuilder;
-use hf_hub::HFClientSync;
-
-const ESM3_DTYPE: DType = DType::F32;
+use anyhow::Result;
+use candle_core::{Device, Tensor};
 
 // ── ESM3Models enum ───────────────────────────────────────────────────────────
 
@@ -42,15 +38,14 @@ pub enum ESM3Models {
     SmOpen,
 }
 
+/// The `esm3-sm-open-v1` repo, whose `.pth` checkpoints store tensors at the root.
+const ESM3_REPO: WeightSource = WeightSource::pth("EvolutionaryScale/esm3-sm-open-v1", None);
+
 impl ESM3Models {
-    /// HuggingFace repo and `.pth` filename for this variant.
-    pub fn model_info(&self) -> (&'static str, &'static str, ESM3Config) {
+    /// Weight source, `.pth` filename, and config for this variant.
+    pub fn model_info(&self) -> (WeightSource, &'static str, ESM3Config) {
         match self {
-            Self::SmOpen => (
-                "EvolutionaryScale/esm3-sm-open-v1",
-                "esm3_sm_open_v1.pth",
-                ESM3Config::sm_open(),
-            ),
+            Self::SmOpen => (ESM3_REPO, "esm3_sm_open_v1.pth", ESM3Config::sm_open()),
         }
     }
 }
@@ -74,21 +69,8 @@ impl ESM3Runner {
     ///
     /// The `.pth` checkpoint is loaded directly via `candle_core::pickle::PthTensors`.
     pub fn from_pretrained(variant: ESM3Models, device: Device) -> Result<Self> {
-        let (repo_id, filename, config) = variant.model_info();
-        let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
-
-        let client = HFClientSync::new().context("failed to initialise HF client")?;
-        let weights_path = client
-            .model(owner, name)
-            .download_file()
-            .filename(filename)
-            .send()
-            .with_context(|| format!("failed to download {} from {}", filename, repo_id))?;
-
-        let pth = PthTensors::new(&weights_path, None)
-            .with_context(|| format!("failed to parse {}", weights_path.display()))?;
-        let vb = VarBuilder::from_backend(Box::new(pth), ESM3_DTYPE, device.clone());
-
+        let (source, filename, config) = variant.model_info();
+        let vb = source.var_builder(filename, &LoadOptions::new(device.clone()))?;
         let model = ESM3::load(vb, config)?;
         Ok(Self { model, device })
     }
@@ -145,22 +127,10 @@ pub struct StructureEncoderRunner {
 impl StructureEncoderRunner {
     /// Download and load the structure encoder from HuggingFace.
     pub fn from_pretrained(device: Device) -> Result<Self> {
-        let repo_id = "EvolutionaryScale/esm3-sm-open-v1";
-        let filename = "esm3_structure_encoder_v0.pth";
-        let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
-
-        let client = HFClientSync::new().context("failed to initialise HF client")?;
-        let weights_path = client
-            .model(owner, name)
-            .download_file()
-            .filename(filename)
-            .send()
-            .with_context(|| format!("failed to download {} from {}", filename, repo_id))?;
-
-        let pth = PthTensors::new(&weights_path, None)
-            .with_context(|| format!("failed to parse {}", weights_path.display()))?;
-        let vb = VarBuilder::from_backend(Box::new(pth), ESM3_DTYPE, device.clone());
-
+        let vb = ESM3_REPO.var_builder(
+            "esm3_structure_encoder_v0.pth",
+            &LoadOptions::new(device.clone()),
+        )?;
         let encoder = StructureTokenEncoder::load(vb, VqVaeConfig::default())?;
         Ok(Self { encoder, device })
     }

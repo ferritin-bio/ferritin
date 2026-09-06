@@ -2,17 +2,14 @@
 //!
 //! Class for loading and running the ESM2 models
 use super::esm2::{ESM2, ESM2Config, ESM2Output};
+use crate::loader::{LoadOptions, WeightSource};
 use crate::plm_runner::PlmRunner;
 use crate::types::PseudoProbability;
 use anyhow::{Error as E, Result, anyhow};
-use candle_core::{DType, Device, Tensor};
-use candle_nn::VarBuilder;
+use candle_core::{Device, Tensor};
 use candle_nn::ops::softmax;
-use hf_hub::HFClientSync;
 use serde_json;
 use tokenizers::Tokenizer;
-
-const ESM2_DTYPE: DType = DType::F32;
 
 // ESM2 tokenizer: indices 4-23 are the 20 standard amino acids.
 const ESM2_STD_AA: [(usize, char); 20] = [
@@ -47,23 +44,16 @@ pub enum ESM2Models {
     T48_15B,
 }
 impl ESM2Models {
-    pub fn get_model_files(model: Self) -> (&'static str, &'static str, ESM2Config) {
-        match model {
-            Self::T6_8M => ("facebook/esm2_t6_8M_UR50D", "main", ESM2Config::t6_8m()),
-            Self::T12_35M => ("facebook/esm2_t12_35M_UR50D", "main", ESM2Config::t12_35m()),
-            Self::T30_150M => (
-                "facebook/esm2_t30_150M_UR50D",
-                "main",
-                ESM2Config::t30_150m(),
-            ),
-            Self::T33_650M => (
-                "facebook/esm2_t33_650M_UR50D",
-                "main",
-                ESM2Config::t33_650m(),
-            ),
-            Self::T36_3B => ("facebook/esm2_t36_3B_UR50D", "main", ESM2Config::t36_3b()),
-            Self::T48_15B => ("facebook/esm2_t48_15B_UR50D", "main", ESM2Config::t48_15b()),
-        }
+    pub fn get_model_files(model: Self) -> (WeightSource, ESM2Config) {
+        let (repo, config) = match model {
+            Self::T6_8M => ("facebook/esm2_t6_8M_UR50D", ESM2Config::t6_8m()),
+            Self::T12_35M => ("facebook/esm2_t12_35M_UR50D", ESM2Config::t12_35m()),
+            Self::T30_150M => ("facebook/esm2_t30_150M_UR50D", ESM2Config::t30_150m()),
+            Self::T33_650M => ("facebook/esm2_t33_650M_UR50D", ESM2Config::t33_650m()),
+            Self::T36_3B => ("facebook/esm2_t36_3B_UR50D", ESM2Config::t36_3b()),
+            Self::T48_15B => ("facebook/esm2_t48_15B_UR50D", ESM2Config::t48_15b()),
+        };
+        (WeightSource::safetensors(repo).at_revision("main"), config)
     }
 }
 
@@ -74,31 +64,16 @@ pub struct ESM2Runner {
 impl ESM2Runner {
     /// Load model from HuggingFace hub, downloading config.json, tokenizer files, and weights.
     pub fn load_model(modeltype: ESM2Models, device: Device) -> Result<ESM2Runner> {
-        let (model_id, revision, fallback_config) = ESM2Models::get_model_files(modeltype);
-        let (owner, name) = model_id.split_once('/').unwrap_or(("", model_id));
-        let client = HFClientSync::new()?;
-        let repo = client.model(owner, name);
+        let (source, fallback_config) = ESM2Models::get_model_files(modeltype);
         // Try to load config from HF hub; fall back to hardcoded config if unavailable.
-        let config = match repo
-            .download_file()
-            .filename("config.json")
-            .revision(revision)
-            .send()
-        {
-            Ok(config_path) => {
+        let config = match source.fetch_optional("config.json") {
+            Some(config_path) => {
                 let config_str = std::fs::read_to_string(config_path)?;
                 serde_json::from_str::<ESM2Config>(&config_str).unwrap_or(fallback_config)
             }
-            Err(_) => fallback_config,
+            None => fallback_config,
         };
-        let weights_filename = repo
-            .download_file()
-            .filename("model.safetensors")
-            .revision(revision)
-            .send()?;
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[weights_filename], ESM2_DTYPE, &device)?
-        };
+        let vb = source.var_builder("model.safetensors", &LoadOptions::new(device))?;
         let model = ESM2::load(vb, config)?;
         let tokenizer = ESM2::load_tokenizer()?;
         Ok(ESM2Runner { model, tokenizer })

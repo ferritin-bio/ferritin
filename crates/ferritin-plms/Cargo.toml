@@ -23,7 +23,6 @@ candle-nn.workspace = true
 candle-transformers.workspace = true
 clap.workspace = true
 ferritin-core = { path = "../ferritin-core" }
-ferritin-test-data = { path = "../ferritin-test-data" }
 hf-hub.workspace = true
 serde.workspace = true
 serde_json.workspace = true
