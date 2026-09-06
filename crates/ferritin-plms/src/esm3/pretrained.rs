@@ -32,6 +32,7 @@ use crate::esm3::models::vqvae::StructureTokenEncoder;
 use crate::esm3::tokenization::sequence::tokenize_sequence;
 use crate::loader::{LoadOptions, WeightSource};
 use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
+use crate::registry::{self, ModelCard};
 use anyhow::{Result, bail};
 use candle_core::{Device, Tensor};
 
@@ -43,13 +44,14 @@ pub enum ESM3Models {
     SmOpen,
 }
 
-/// The `esm3-sm-open-v1` repo, whose `.pth` checkpoints store tensors at the root.
-const ESM3_REPO: WeightSource = WeightSource::pth("EvolutionaryScale/esm3-sm-open-v1", None);
+/// The structure encoder's registry id.
+pub const STRUCTURE_ENCODER_ID: &str = "esm3-structure-encoder-v0";
 
 /// Why [`StructureEncoderRunner::from_pretrained`] refuses to load.
 ///
 /// The main ESM3 model loads correctly (ferritin-100.21), but the VQ-VAE
-/// structure encoder is a different shape from the one ported here.
+/// structure encoder is a different shape from the one ported here. Its
+/// [`ModelCard`] carries the same fact in machine-readable form.
 pub const STRUCTURE_ENCODER_MISMATCH: &str = "\
 ESM3 structure-encoder weights cannot be loaded: the ported VQ-VAE encoder does not match \
 data/weights/esm3_structure_encoder_v0.pth. The checkpoint roots its stack at 'transformer', \
@@ -61,15 +63,30 @@ because resolving the paths without porting the real encoder would emit structur
 look plausible and are wrong (ferritin-100.22). ESM3Runner itself is unaffected and works.";
 
 impl ESM3Models {
-    /// Weight source, `.pth` filename, and config for this variant.
-    pub fn model_info(&self) -> (WeightSource, &'static str, ESM3Config) {
+    /// This variant's registry id.
+    pub const fn registry_id(&self) -> &'static str {
         match self {
-            Self::SmOpen => (
-                ESM3_REPO,
-                "data/weights/esm3_sm_open_v1.pth",
-                ESM3Config::sm_open(),
-            ),
+            Self::SmOpen => "esm3-sm-open-v1",
         }
+    }
+
+    /// This variant's [`ModelCard`].
+    pub fn card(&self) -> &'static ModelCard {
+        registry::lookup(self.registry_id())
+            .expect("every ESM3Models variant must have a registry entry")
+    }
+
+    /// Weight source, `.pth` filename, and config for this variant.
+    ///
+    /// Repo and filename come from [`REGISTRY`][crate::registry::REGISTRY]
+    /// (ferritin-goh.1). Note the path: the checkpoints live under
+    /// `data/weights/`, not at the repo root (ferritin-100.21).
+    pub fn model_info(&self) -> (WeightSource, &'static str, ESM3Config) {
+        let card = self.card();
+        let config = match self {
+            Self::SmOpen => ESM3Config::sm_open(),
+        };
+        (card.source, card.file, config)
     }
 }
 
@@ -215,6 +232,12 @@ impl StructureEncoderRunner {
     /// Loading the structure encoder is **not supported** — this always
     /// returns an error (ferritin-100.22).
     pub fn from_pretrained_with(_opts: &LoadOptions) -> Result<Self> {
+        // The registry records the same refusal, so the two cannot drift:
+        // test_structure_encoder_refusal_matches_registry pins them together.
+        debug_assert!(
+            registry::lookup(STRUCTURE_ENCODER_ID).is_some_and(|c| !c.is_loadable()),
+            "the registry should agree that the structure encoder is unsupported"
+        );
         bail!("{STRUCTURE_ENCODER_MISMATCH}");
     }
 

@@ -5,6 +5,7 @@ use super::configs::ProteinMPNNConfig;
 use super::model::ProteinMPNN;
 use super::proteinfeatures::ProteinFeatures;
 use crate::loader::{Format, LoadOptions, WeightSource, var_builder_from_path};
+use crate::registry::{self, ModelCard};
 use crate::types::PseudoProbability;
 use anyhow::{Result, anyhow};
 use candle_core::{Device, Tensor};
@@ -21,15 +22,25 @@ pub enum ProteinMPNNModels {
 }
 
 impl ProteinMPNNModels {
-    /// Weight source and file for this variant.
-    pub fn model_info(&self) -> (WeightSource, &'static str) {
+    /// This variant's registry id.
+    pub const fn registry_id(&self) -> &'static str {
         match self {
-            Self::V48_020 => (
-                WeightSource::pth("zcpbx/ligandmpnn-weights", Some("model_state_dict"))
-                    .at_revision("main"),
-                "model_params/proteinmpnn_v_48_020.pt",
-            ),
+            Self::V48_020 => "proteinmpnn-v48-020",
         }
+    }
+
+    /// This variant's [`ModelCard`].
+    pub fn card(&self) -> &'static ModelCard {
+        registry::lookup(self.registry_id())
+            .expect("every ProteinMPNNModels variant must have a registry entry")
+    }
+
+    /// Weight source and file for this variant.
+    ///
+    /// Delegates to [`REGISTRY`][crate::registry::REGISTRY] (ferritin-goh.1).
+    pub fn model_info(&self) -> (WeightSource, &'static str) {
+        let card = self.card();
+        (card.source, card.file)
     }
 
     /// Renamed to [`model_info`][Self::model_info] (ferritin-100.8).

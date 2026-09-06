@@ -31,6 +31,7 @@ use super::model::ESMFold2Model;
 use super::output::ESMFold2Output;
 use crate::esmc::pretrained::ESMCRunner;
 use crate::plm_runner::PlmRunner;
+use crate::registry;
 use anyhow::{Result, bail};
 use candle_core::{DType, Device, Tensor};
 
@@ -77,7 +78,16 @@ impl ESMFold2Models {
     /// the reference implementation (ferritin-100.4).
     pub fn model_info(&self) -> Result<(&'static str, ESMFold2Config)> {
         match self {
-            Self::Fast => Ok(("biohub/ESMFold2-Fast", ESMFold2Config::fast())),
+            Self::Fast => Ok((
+                // Repo comes from REGISTRY rather than being repeated here
+                // (ferritin-goh.1). The card also records that this model
+                // cannot currently be loaded at all (ferritin-100.17).
+                registry::lookup("esmfold2-fast")
+                    .expect("esmfold2-fast must have a registry entry")
+                    .source
+                    .repo_id,
+                ESMFold2Config::fast(),
+            )),
             Self::Full => bail!(
                 "ESMFold2Models::Full is not yet supported: only the Fast config is ported. \
                  The Full variant (MSA conditioning) needs a config verified against the \

@@ -7,6 +7,7 @@ use super::amplify::{AMPLIFY, AmplifyOutput};
 use super::config::AMPLIFYConfig;
 use crate::loader::{LoadOptions, WeightSource};
 use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
+use crate::registry::{self, ModelCard};
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{D, Device, Tensor};
 use candle_nn::ops;
@@ -17,16 +18,26 @@ pub enum AmplifyModels {
     AMP350M,
 }
 impl AmplifyModels {
-    /// Where this variant's weights live.
-    pub fn model_info(&self) -> WeightSource {
+    /// This variant's registry id.
+    pub const fn registry_id(&self) -> &'static str {
         match self {
-            AmplifyModels::AMP120M => {
-                WeightSource::safetensors("chandar-lab/AMPLIFY_120M").at_revision("main")
-            }
-            AmplifyModels::AMP350M => {
-                WeightSource::safetensors("chandar-lab/AMPLIFY_350M").at_revision("main")
-            }
+            AmplifyModels::AMP120M => "amplify-120m",
+            AmplifyModels::AMP350M => "amplify-350m",
         }
+    }
+
+    /// This variant's [`ModelCard`].
+    pub fn card(&self) -> &'static ModelCard {
+        registry::lookup(self.registry_id())
+            .expect("every AmplifyModels variant must have a registry entry")
+    }
+
+    /// Where this variant's weights live.
+    ///
+    /// Delegates to [`REGISTRY`][crate::registry::REGISTRY] rather than
+    /// repeating the repo string (ferritin-goh.1).
+    pub fn model_info(&self) -> WeightSource {
+        self.card().source
     }
 
     /// Renamed to [`model_info`][Self::model_info] (ferritin-100.8).

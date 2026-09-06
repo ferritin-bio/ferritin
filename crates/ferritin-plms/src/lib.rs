@@ -41,9 +41,11 @@ pub mod featurize;
 pub mod ligandmpnn;
 pub mod loader;
 pub mod plm_runner;
+pub mod registry;
 pub mod types;
 pub mod utils;
 pub use plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
+pub use registry::{Family, ModelCard, ParityStatus, REGISTRY, TokenizerSpec};
 
 /// Returns the best available device for computation.
 ///
