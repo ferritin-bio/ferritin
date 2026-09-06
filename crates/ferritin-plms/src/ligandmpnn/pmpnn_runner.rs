@@ -4,15 +4,16 @@
 use super::configs::ProteinMPNNConfig;
 use super::model::ProteinMPNN;
 use super::proteinfeatures::ProteinFeatures;
+use crate::loader::{Format, LoadOptions, WeightSource, var_builder_from_path};
 use crate::types::PseudoProbability;
 use anyhow::{Result, anyhow};
-use candle_core::pickle::PthTensors;
-use candle_core::{DType, Device, Tensor};
-use candle_nn::VarBuilder;
-use hf_hub::HFClientSync;
+use candle_core::{Device, Tensor};
 use std::path::Path;
 
-const PMPNN_DTYPE: DType = DType::F32;
+/// ProteinMPNN `.pt` checkpoints nest their tensors under `model_state_dict`.
+const PMPNN_FORMAT: Format = Format::Pth {
+    root_key: Some("model_state_dict"),
+};
 
 pub enum ProteinMPNNModels {
     /// proteinmpnn_v_48_020: k_neighbors=48, dropout=0.2
@@ -20,13 +21,12 @@ pub enum ProteinMPNNModels {
 }
 
 impl ProteinMPNNModels {
-    fn hf_info(&self) -> (&'static str, &'static str, &'static str, &'static str) {
-        // (owner, repo, revision, filename)
+    /// Weight source and file for this variant.
+    pub fn hf_info(&self) -> (WeightSource, &'static str) {
         match self {
             Self::V48_020 => (
-                "zcpbx",
-                "ligandmpnn-weights",
-                "main",
+                WeightSource::pth("zcpbx/ligandmpnn-weights", Some("model_state_dict"))
+                    .at_revision("main"),
                 "model_params/proteinmpnn_v_48_020.pt",
             ),
         }
@@ -40,28 +40,28 @@ pub struct ProteinMPNNRunner {
 impl ProteinMPNNRunner {
     /// Load a ProteinMPNN model from HuggingFace hub.
     pub fn load_model(modeltype: ProteinMPNNModels, device: Device) -> Result<Self> {
-        let (owner, repo, revision, filename) = modeltype.hf_info();
-        let client = HFClientSync::new()?;
-        let hf_repo = client.model(owner, repo);
-        let weights_path = hf_repo
-            .download_file()
-            .filename(filename)
-            .revision(revision)
-            .send()
-            .map_err(|e| anyhow!("Failed to download ProteinMPNN weights from HF hub: {e}"))?;
+        let (source, filename) = modeltype.hf_info();
+        let weights_path = source.fetch(filename)?;
         Self::from_path(&weights_path, device)
     }
 
     /// Load from a local .pt file (e.g. from ferritin-test-data or a cached download).
     pub fn from_path(path: impl AsRef<Path>, device: Device) -> Result<Self> {
         let path = path.as_ref();
-        let pth = PthTensors::new(path, Some("model_state_dict"))
-            .map_err(|e| anyhow!("Failed to open {}: {e}", path.display()))?;
-        let vb = VarBuilder::from_backend(Box::new(pth), PMPNN_DTYPE, device);
+        let vb = var_builder_from_path(path, PMPNN_FORMAT, &LoadOptions::new(device))?;
         let config = ProteinMPNNConfig::proteinmpnn();
         let model = ProteinMPNN::load(vb, &config)
             .map_err(|e| anyhow!("Failed to load ProteinMPNN weights: {e}"))?;
         Ok(Self { model })
+    }
+
+    /// Consume the runner and yield the loaded model.
+    ///
+    /// Lets callers that need the bare [`ProteinMPNN`] — such as
+    /// `MPNNExecConfig::load_model` — go through this tested loading path
+    /// instead of duplicating the download (ferritin-100.10).
+    pub fn into_model(self) -> ProteinMPNN {
+        self.model
     }
 
     /// Run ProteinMPNN and return a (L, 21) log-probability tensor for all positions.

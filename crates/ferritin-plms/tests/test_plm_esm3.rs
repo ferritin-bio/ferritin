@@ -212,22 +212,13 @@ fn test_esm3_sm_open_embed_short_sequence() -> Result<()> {
 #[test]
 #[ignore = "requires downloading EvolutionaryScale/esm3-sm-open-v1 weights (~5 GB)"]
 fn test_esm3_sm_open_gfp_logit_shape() -> Result<()> {
-    use candle_core::DType;
-    use candle_core::pickle::PthTensors;
-    use candle_nn::VarBuilder;
-    use hf_hub::HFClientSync;
+    use ferritin_plms::esm3::pretrained::ESM3Models;
+    use ferritin_plms::loader::LoadOptions;
 
     let device = Device::Cpu;
-    let client = HFClientSync::new()?;
-    let weights_path = client
-        .model("EvolutionaryScale", "esm3-sm-open-v1")
-        .download_file()
-        .filename("esm3_sm_open_v1.pth")
-        .send()?;
-
-    let pth = PthTensors::new(&weights_path, None)?;
-    let vb = VarBuilder::from_backend(Box::new(pth), DType::F32, device.clone());
-    let model = ESM3::load(vb, ESM3Config::sm_open())?;
+    let (source, filename, config) = ESM3Models::SmOpen.model_info();
+    let vb = source.var_builder(filename, &LoadOptions::new(device.clone()))?;
+    let model = ESM3::load(vb, config)?;
 
     let token_ids = tokenize_sequence(GFP, true);
     let tokens = Tensor::new(token_ids.as_slice(), &device)?.unsqueeze(0)?;

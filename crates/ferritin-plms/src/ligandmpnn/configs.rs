@@ -14,15 +14,13 @@
 //! - `RunConfig` - Runtime execution parameters// Core Configs for handling CLI ARGs and Model Params
 
 use super::model::ProteinMPNN;
+use super::pmpnn_runner::{ProteinMPNNModels, ProteinMPNNRunner};
 use super::proteinfeatures::ProteinFeatures;
 use crate::StructureFeatures;
-use anyhow::Error;
-use candle_core::pickle::PthTensors;
+use anyhow::{Error, anyhow};
 use candle_core::{DType, Device, Tensor};
-use candle_nn::VarBuilder;
 use clap::ValueEnum;
 use ferritin_core::load_structure;
-use ferritin_test_data::TestFile;
 
 /// Responsible for taking CLI args and returning the Features and Model
 ///
@@ -61,21 +59,26 @@ impl MPNNExecConfig {
             device,
         })
     }
-    // Todo: refactor this to use loader.
+    /// Load the weights for `model_type`.
+    ///
+    /// Delegates to [`ProteinMPNNRunner::load_model`], which downloads from
+    /// `zcpbx/ligandmpnn-weights`. This previously extracted an embedded test
+    /// fixture (`TestFile::ligmpnn_pmpnn_01`) to a temp file, which made the
+    /// 37 MB `ferritin-test-data` crate a runtime dependency of every
+    /// downstream consumer (ferritin-100.10).
     pub fn load_model(&self, model_type: ModelTypes) -> Result<ProteinMPNN, Error> {
-        let default_dtype = DType::F32;
         match model_type {
-            ModelTypes::ProteinMPNN => {
-                // this is a hidden dep....
-                // todo: use hf_hub
-                let (mpnn_file, _handle) = TestFile::ligmpnn_pmpnn_01().create_temp()?;
-                let pth = PthTensors::new(mpnn_file, Some("model_state_dict"))?;
-                let vb =
-                    VarBuilder::from_backend(Box::new(pth), default_dtype, self.device.clone());
-                let pconf = ProteinMPNNConfig::proteinmpnn();
-                Ok(ProteinMPNN::load(vb, &pconf).expect("Unable to load the PMPNN Model"))
-            }
-            _ => panic!("not implented!"),
+            ModelTypes::ProteinMPNN => Ok(ProteinMPNNRunner::load_model(
+                ProteinMPNNModels::V48_020,
+                self.device.clone(),
+            )?
+            .into_model()),
+            // Reachable from `--model-type ligand_mpnn` on the CLI, so this
+            // must be an error rather than a panic (ferritin-100.11).
+            ModelTypes::LigandMPNN => Err(anyhow!(
+                "LigandMPNN weight loading is not implemented; only --model-type protein_mpnn \
+                 is supported (ferritin-100.11)"
+            )),
         }
     }
     pub fn generate_protein_features(&self) -> Result<ProteinFeatures, Error> {
@@ -274,4 +277,61 @@ pub struct RunConfig {
     pub zero_indexed: Option<i32>,
     pub homo_oligomer: Option<i32>,
     pub fasta_seq_separation: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn exec_config() -> MPNNExecConfig {
+        MPNNExecConfig::new(
+            Device::Cpu,
+            // load_model never reads the structure, so a placeholder is fine.
+            "unused.pdb".to_string(),
+            RunConfig {
+                model_type: None,
+                seed: None,
+                temperature: None,
+                verbose: None,
+                save_stats: None,
+                batch_size: None,
+                number_of_batches: None,
+                file_ending: None,
+                zero_indexed: None,
+                homo_oligomer: None,
+                fasta_seq_separation: None,
+            },
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("MPNNExecConfig::new should not fail")
+    }
+
+    /// `--model-type ligand_mpnn` is reachable from the CLI, so the unsupported
+    /// variant must return an error rather than aborting the process
+    /// (ferritin-100.11).
+    #[test]
+    fn test_load_model_ligandmpnn_errors_not_panics() {
+        let err = exec_config()
+            .load_model(ModelTypes::LigandMPNN)
+            .map(|_| ())
+            .expect_err("LigandMPNN is unsupported and must return an error");
+        assert!(
+            err.to_string().contains("not implemented"),
+            "error should say LigandMPNN is unimplemented; got: {err}"
+        );
+    }
+
+    /// The ProteinMPNN branch loads from HuggingFace rather than extracting the
+    /// `ferritin-test-data` fixture it used to depend on (ferritin-100.10).
+    #[test]
+    #[ignore = "downloads zcpbx/ligandmpnn-weights from HuggingFace"]
+    fn test_load_model_proteinmpnn_loads_from_hub() {
+        exec_config()
+            .load_model(ModelTypes::ProteinMPNN)
+            .expect("ProteinMPNN should load from the hub");
+    }
 }

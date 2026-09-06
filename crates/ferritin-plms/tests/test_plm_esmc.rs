@@ -178,29 +178,13 @@ fn test_esmc_300m_embed_gfp() -> Result<()> {
 #[test]
 #[ignore = "requires downloading biohub/ESMC-300M weights (~1.3 GB)"]
 fn test_esmc_300m_logits_shape() -> Result<()> {
-    use candle_core::DType;
-    use candle_nn::VarBuilder;
     use ferritin_plms::esmc::pretrained::ESMCModels as Variants;
-    use hf_hub::HFClientSync;
+    use ferritin_plms::loader::{LoadOptions, optional_prefix};
 
     let device = Device::Cpu;
-    let (repo_id, config) = Variants::ESMC300M.model_info();
-    let (owner, name) = repo_id.split_once('/').unwrap_or(("", repo_id));
-    let client = HFClientSync::new()?;
-    let weights_path = client
-        .model(owner, name)
-        .download_file()
-        .filename("model.safetensors")
-        .send()?;
-    let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[&weights_path], DType::F32, &device)? };
-    let vb_root = if vb
-        .get((config.embedding_dim, config.d_model), "esmc.embed.weight")
-        .is_ok()
-    {
-        vb.pp("esmc")
-    } else {
-        vb
-    };
+    let (source, config) = Variants::ESMC300M.model_info();
+    let vb = source.var_builder("model.safetensors", &LoadOptions::new(device.clone()))?;
+    let vb_root = optional_prefix(vb, "esmc", "embed.weight");
     let model = ESMC::load(vb_root, config)?;
 
     let short_seq = "MQIFVKTLTGKTITLEVEP"; // 19 residues → 21 tokens
