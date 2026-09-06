@@ -219,7 +219,11 @@ fn test_esmc_parity_vs_python_reference() -> Result<()> {
     use support::parity::{ParityFixture, SpecialTokens, align_rows, assert_embeddings_close};
 
     let device = Device::Cpu;
-    let fixture = ParityFixture::load("esmc_parity", &device)?;
+    // Skips (loudly) while no esmc_parity fixture is committed — see
+    // PARITY_COVERAGE and ferritin-100.20.
+    let Some(fixture) = ParityFixture::load_or_skip("esmc_parity", &device)? else {
+        return Ok(());
+    };
     let ref_embeddings = fixture.tensor("embeddings")?;
 
     let runner = ESMCRunner::from_pretrained(ESMCModels::ESMC300M, device)?;

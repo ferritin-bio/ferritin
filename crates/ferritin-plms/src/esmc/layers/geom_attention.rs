@@ -43,29 +43,70 @@ impl GeometricReasoningOriginalImpl {
     //         rotation_scale_per_head: Tensor::zeros((v_heads,), device)?,
     //     })
     // }
+    /// Load geometric attention from a `VarBuilder` rooted at `geom_attn`.
+    ///
+    /// Weight layout, verified against both `esm3_sm_open_v1.pth` and
+    /// `esm3_structure_encoder_v0.pth` (ferritin-100.21):
+    ///
+    /// ```text
+    /// s_norm.weight[/.bias]      — (d_model,)
+    /// proj.weight[/.bias]        — (15 * v_heads, d_model)
+    /// out_proj.weight[/.bias]    — (d_model, 3 * v_heads)
+    /// distance_scale_per_head    — (v_heads,)
+    /// rotation_scale_per_head    — (v_heads,)
+    /// ```
+    ///
+    /// The main ESM3 model stores these **without** bias terms while the VQ-VAE
+    /// structure encoder stores them **with** bias, so `config.bias` selects.
     pub fn load(vb: VarBuilder, config: &ESMCConfig) -> Result<Self> {
         let ESMCConfig {
             d_model,
             v_head_transformer,
             mask_and_zero_frameless,
+            bias,
             ..
         } = config;
 
         let num_vector_messages = 1usize;
 
-        // todo: this is a hidden param. Needs to be fixed
-        let v_heads = v_head_transformer.unwrap_or(128);
+        // Previously defaulted to 128, which silently mis-sized every geometric
+        // projection for the main ESM3 model (v_heads = 256). The checkpoint's
+        // per-head scale tensors give the true value, so a missing config is an
+        // error rather than a guess.
+        let v_heads = v_head_transformer.ok_or_else(|| {
+            candle_core::Error::Msg(
+                "geometric attention needs v_head_transformer to be set; it determines the \
+                 projection sizes and cannot be guessed"
+                    .to_string(),
+            )
+        })?;
 
         let dim_proj = 4 * v_heads * 3 + v_heads * 3 * num_vector_messages;
         let channels_out = v_heads * 3 * num_vector_messages;
 
-        let ln_conf = LayerNormConfig::from(1e-5);
-        let s_norm = nn::layer_norm(*d_model, ln_conf, vb.pp("layer_norm"))?;
+        let s_norm = if *bias {
+            nn::layer_norm(*d_model, LayerNormConfig::from(1e-5), vb.pp("s_norm"))?
+        } else {
+            LayerNorm::new_no_bias(vb.pp("s_norm").get((*d_model,), "weight")?, 1e-5)
+        };
 
-        let proj = nn::linear(*d_model, dim_proj, vb.pp("linear1"))?;
-        let out_proj = nn::linear(channels_out, *d_model, vb.pp("outproj"))?;
-        let distance_scale_per_head = Tensor::zeros((v_heads,), vb.dtype(), vb.device())?;
-        let rotation_scale_per_head = Tensor::zeros((v_heads,), vb.dtype(), vb.device())?;
+        let (proj, out_proj) = if *bias {
+            (
+                nn::linear(*d_model, dim_proj, vb.pp("proj"))?,
+                nn::linear(channels_out, *d_model, vb.pp("out_proj"))?,
+            )
+        } else {
+            (
+                nn::linear_no_bias(*d_model, dim_proj, vb.pp("proj"))?,
+                nn::linear_no_bias(channels_out, *d_model, vb.pp("out_proj"))?,
+            )
+        };
+
+        // These are learned per-head scales. They used to be zero-initialised
+        // rather than loaded, which made geometric attention silently wrong
+        // while the model still loaded cleanly (ferritin-100.21).
+        let distance_scale_per_head = vb.get((v_heads,), "distance_scale_per_head")?;
+        let rotation_scale_per_head = vb.get((v_heads,), "rotation_scale_per_head")?;
 
         Ok(Self {
             c_s: *d_model,

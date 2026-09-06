@@ -57,8 +57,10 @@ impl UnifiedTransformerBlock {
         let attn = MultiHeadAttention::load(vb.pp("attn"), &esmc_cfg)?;
 
         let geom_attn = if layer_idx < config.n_layers_geom {
+            // Checkpoints name this block "geom_attn", not "geometric"
+            // (ferritin-100.21).
             Some(GeometricReasoningOriginalImpl::load(
-                vb.pp("geometric"),
+                vb.pp("geom_attn"),
                 &esmc_cfg,
             )?)
         } else {

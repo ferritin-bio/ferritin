@@ -262,7 +262,11 @@ fn test_esm3_parity_vs_python_reference() -> Result<()> {
     use support::parity::{ParityFixture, SpecialTokens, align_rows, assert_embeddings_close};
 
     let device = Device::Cpu;
-    let fixture = ParityFixture::load("esm3_parity", &device)?;
+    // Skips (loudly) while no esm3_parity fixture is committed — see
+    // PARITY_COVERAGE and ferritin-100.20.
+    let Some(fixture) = ParityFixture::load_or_skip("esm3_parity", &device)? else {
+        return Ok(());
+    };
     let ref_embeddings = fixture.tensor("embeddings")?;
 
     let runner = ESM3Runner::from_pretrained(ESM3Models::SmOpen, device)?;
@@ -272,4 +276,30 @@ fn test_esm3_parity_vs_python_reference() -> Result<()> {
     assert_embeddings_close(&rust_embeddings, ref_embeddings, ESM3_EMBED_COSINE_FLOOR)?;
     println!("ESM3 sm-open embedding parity OK (cosine floor {ESM3_EMBED_COSINE_FLOOR})");
     Ok(())
+}
+
+/// The structure encoder refuses to load, with the mismatch named.
+///
+/// Nothing exercised `StructureEncoderRunner` before ferritin-100.21, which is
+/// how its loading defects went unnoticed. Fixing the main model's checkpoint
+/// path revealed that the ported VQ-VAE encoder is a different shape from the
+/// released one, so it refuses rather than half-loading (ferritin-100.22).
+///
+/// Needs no weights: the refusal precedes any download.
+#[test]
+fn test_esm3_structure_encoder_refuses_with_reason() {
+    use ferritin_plms::esm3::pretrained::StructureEncoderRunner;
+
+    let err = StructureEncoderRunner::from_pretrained(Device::Cpu)
+        .map(|_| ())
+        .expect_err("the structure encoder must refuse while the port is mismatched");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("does not match"),
+        "error should name the mismatch; got: {msg}"
+    );
+    assert!(
+        msg.contains("ESM3Runner itself is unaffected"),
+        "error should say the main model still works; got: {msg}"
+    );
 }
