@@ -58,7 +58,7 @@ impl ESM2Models {
     }
 
     /// Renamed to [`model_info`][Self::model_info] (ferritin-100.8).
-    #[deprecated(since = "0.3.6", note = "renamed to `model_info`, which takes &self")]
+    #[deprecated(since = "0.4.0", note = "renamed to `model_info`, which takes &self")]
     pub fn get_model_files(model: Self) -> (WeightSource, ESM2Config) {
         model.model_info()
     }
@@ -83,13 +83,13 @@ impl ESM2Runner {
     }
 
     /// Renamed to [`from_pretrained`][Self::from_pretrained] (ferritin-100.8).
-    #[deprecated(since = "0.3.6", note = "renamed to `from_pretrained`")]
+    #[deprecated(since = "0.4.0", note = "renamed to `from_pretrained`")]
     pub fn load_model(modeltype: ESM2Models, device: Device) -> Result<ESM2Runner> {
         Self::from_pretrained(modeltype, device)
     }
 
     /// Renamed to [`from_pretrained_with`][Self::from_pretrained_with] (ferritin-100.8).
-    #[deprecated(since = "0.3.6", note = "renamed to `from_pretrained_with`")]
+    #[deprecated(since = "0.4.0", note = "renamed to `from_pretrained_with`")]
     pub fn load_model_with(modeltype: ESM2Models, opts: &LoadOptions) -> Result<ESM2Runner> {
         Self::from_pretrained_with(modeltype, opts)
     }
