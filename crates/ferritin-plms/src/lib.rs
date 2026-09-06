@@ -5,6 +5,38 @@
 //! cargo run --example amplify
 //! cargo run --example amplify --features metal
 //! ```
+//!
+//! # Model support matrix
+//!
+//! Generated from [`registry::REGISTRY`]; regenerate with
+//! `cargo test -p ferritin-plms --lib print_support_matrix -- --ignored --nocapture`.
+//! `test_lib_rs_support_matrix_is_current` fails if this copy drifts.
+//!
+//! The column to read first is **Parity**. "It compiles" and even "it loads"
+//! are not what you need before trusting a number — you need to know whether
+//! anyone has compared this port's output against the reference
+//! implementation. Two models have. The rest are unverified: not known to be
+//! wrong, but nothing proves them right.
+//!
+//! <!-- BEGIN SUPPORT MATRIX -->
+//! | Model | Family | Weights | Parity | Status |
+//! |---|---|---|---|---|
+//! | `esm2-t6-8m` | Esm2 | `facebook/esm2_t6_8M_UR50D` (safetensors) | verified (`esm2_parity`) | supported |
+//! | `esm2-t12-35m` | Esm2 | `facebook/esm2_t12_35M_UR50D` (safetensors) | **not checked** | supported |
+//! | `esm2-t30-150m` | Esm2 | `facebook/esm2_t30_150M_UR50D` (safetensors) | **not checked** | supported |
+//! | `esm2-t33-650m` | Esm2 | `facebook/esm2_t33_650M_UR50D` (safetensors) | **not checked** | supported |
+//! | `esm2-t36-3b` | Esm2 | `facebook/esm2_t36_3B_UR50D` (safetensors) | **not checked** | supported |
+//! | `esm2-t48-15b` | Esm2 | `facebook/esm2_t48_15B_UR50D` (safetensors) | **not checked** | supported |
+//! | `amplify-120m` | Amplify | `chandar-lab/AMPLIFY_120M` (safetensors) | verified (`amplify_parity`) | supported |
+//! | `amplify-350m` | Amplify | `chandar-lab/AMPLIFY_350M` (safetensors) | **not checked** | supported |
+//! | `esmc-300m` | Esmc | `EvolutionaryScale/esmc-300m-2024-12` (pth) | **not checked** | supported |
+//! | `esmc-600m` | Esmc | `EvolutionaryScale/esmc-600m-2024-12` (pth) | **not checked** | supported |
+//! | `esmc-6b` | Esmc | `EvolutionaryScale/esmc-6b-2024-12` (safetensors) | **not checked** | **unsupported** — weights are sharded across six safetensors files (ferritin-100.24) |
+//! | `esm3-sm-open-v1` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | **not checked** | supported |
+//! | `esm3-structure-encoder-v0` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | **not checked** | **unsupported** — the ported VQ-VAE encoder is a different shape from the released checkpoint (ferritin-100.22) |
+//! | `esmfold2-fast` | Esmfold2 | `biohub/ESMFold2-Fast` (safetensors) | **not checked** | **unsupported** — the ported architecture does not match the released checkpoint (ferritin-100.17) |
+//! | `proteinmpnn-v48-020` | Mpnn | `zcpbx/ligandmpnn-weights` (pth) | **not checked** | supported |
+//! <!-- END SUPPORT MATRIX -->
 
 // The crate deliberately uses the `foo/mod.rs` + inner `mod foo` layout for
 // each model family, so module_inception is expected throughout.

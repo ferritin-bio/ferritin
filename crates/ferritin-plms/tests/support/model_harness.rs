@@ -21,8 +21,18 @@ pub enum PortStatus {
     Partial,
 }
 
+/// Test-coverage annotation for one model.
+///
+/// This is deliberately NOT a second model list. `registry::REGISTRY` is the
+/// canonical inventory — which models exist, where their weights live, and
+/// whether their numerics have been checked (ferritin-goh.1). This table only
+/// records what automated coverage each one has, keyed to a registry id by
+/// [`ModelPortCase::registry_id`]; `test_port_cases_reference_real_models`
+/// keeps the two from drifting apart (ferritin-100.13).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ModelPortCase {
+    /// The `ModelCard::id` this case annotates.
+    pub registry_id: &'static str,
     pub family: &'static str,
     pub variant: &'static str,
     pub source_artifact: &'static str,
@@ -37,6 +47,7 @@ pub struct ModelPortCase {
 pub const MODEL_PORT_CASES: &[ModelPortCase] = &[
     ModelPortCase {
         family: "amplify",
+        registry_id: "amplify-120m",
         variant: "AMP120M",
         source_artifact: "huggingface safetensors",
         rust_backend: "candle",
@@ -48,6 +59,7 @@ pub const MODEL_PORT_CASES: &[ModelPortCase] = &[
     },
     ModelPortCase {
         family: "amplify",
+        registry_id: "amplify-350m",
         variant: "AMP350M",
         source_artifact: "huggingface safetensors",
         rust_backend: "candle",
@@ -59,6 +71,7 @@ pub const MODEL_PORT_CASES: &[ModelPortCase] = &[
     },
     ModelPortCase {
         family: "esm2",
+        registry_id: "esm2-t6-8m",
         variant: "T6_8M",
         source_artifact: "huggingface safetensors",
         rust_backend: "candle",
@@ -70,6 +83,7 @@ pub const MODEL_PORT_CASES: &[ModelPortCase] = &[
     },
     ModelPortCase {
         family: "esm2",
+        registry_id: "esm2-t30-150m",
         variant: "T30_150M",
         source_artifact: "huggingface safetensors",
         rust_backend: "candle",
@@ -81,6 +95,7 @@ pub const MODEL_PORT_CASES: &[ModelPortCase] = &[
     },
     ModelPortCase {
         family: "proteinmpnn",
+        registry_id: "proteinmpnn-v48-020",
         variant: "v48_020",
         source_artifact: "embedded pytorch checkpoint",
         rust_backend: "candle",
@@ -92,6 +107,7 @@ pub const MODEL_PORT_CASES: &[ModelPortCase] = &[
     },
     ModelPortCase {
         family: "esmc",
+        registry_id: "esmc-300m",
         variant: "ESMC-300M",
         source_artifact: "huggingface safetensors (biohub/ESMC-300M)",
         rust_backend: "candle",
