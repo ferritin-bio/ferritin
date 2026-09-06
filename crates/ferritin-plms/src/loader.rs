@@ -35,8 +35,22 @@ use anyhow::{Context, Result, bail};
 use candle_core::pickle::PthTensors;
 use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
-use hf_hub::{HFClientSync, HFRepositorySync, RepoTypeModel};
+use hf_hub::{HFClientSync, HFError, HFRepositorySync, RepoTypeModel};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+/// How long to keep retrying a download that is blocked on another
+/// downloader's cache lock.
+///
+/// hf-hub's own lock timeout is a hardcoded 10 seconds
+/// (`CACHE_LOCK_TIMEOUT_SECS`), which is far shorter than a multi-hundred-MB
+/// download takes on a cold cache. So whenever two threads or processes want
+/// the same not-yet-cached file, the one that does not win the lock fails
+/// almost immediately (ferritin-100.25).
+const CACHE_LOCK_RETRY_BUDGET: Duration = Duration::from_secs(600);
+
+/// Pause between retries while waiting for another downloader to finish.
+const CACHE_LOCK_RETRY_PAUSE: Duration = Duration::from_secs(2);
 
 // ── LoadOptions ───────────────────────────────────────────────────────────────
 
@@ -185,12 +199,38 @@ impl WeightSource {
     /// Errors name both the repo and the file — previously only ESM3 did this,
     /// so a failure elsewhere surfaced as a bare transport error.
     pub fn fetch(&self, filename: &str) -> Result<PathBuf> {
-        self.repo()?
-            .download_file()
-            .filename(filename.to_string())
-            .maybe_revision(self.revision.map(str::to_string))
-            .send()
-            .with_context(|| format!("failed to download {filename} from {}", self.repo_id))
+        let repo = self.repo()?;
+        let deadline = Instant::now() + CACHE_LOCK_RETRY_BUDGET;
+
+        loop {
+            let attempt = repo
+                .download_file()
+                .filename(filename.to_string())
+                .maybe_revision(self.revision.map(str::to_string))
+                .send();
+
+            match attempt {
+                Ok(path) => return Ok(path),
+
+                // Another thread or process is downloading this same file and
+                // holds its cache lock. hf-hub gives up after 10 seconds, which
+                // a large download will always exceed — so wait for the
+                // downloader rather than failing (ferritin-100.25).
+                Err(HFError::CacheLockTimeout { .. }) if Instant::now() < deadline => {
+                    eprintln!(
+                        "{}: waiting on another download of {filename} (cache lock held)…",
+                        self.repo_id
+                    );
+                    std::thread::sleep(CACHE_LOCK_RETRY_PAUSE);
+                }
+
+                Err(e) => {
+                    return Err(anyhow::Error::new(e)).with_context(|| {
+                        format!("failed to download {filename} from {}", self.repo_id)
+                    });
+                }
+            }
+        }
     }
 
     /// Download `filename`, returning `None` if it is absent or unreachable.
@@ -331,6 +371,22 @@ mod tests {
 
     /// BF16 on CPU is refused up front with an explanation rather than
     /// surfacing candle's bare matmul error mid-load (ferritin-100.9).
+    /// The retry budget must exceed hf-hub's own 10-second lock timeout by
+    /// enough to cover a large download, or a concurrent waiter still gives up
+    /// before the downloader finishes (ferritin-100.25).
+    #[test]
+    fn test_cache_lock_retry_budget_outlasts_a_large_download() {
+        assert!(
+            CACHE_LOCK_RETRY_BUDGET >= Duration::from_secs(300),
+            "budget must cover a multi-hundred-MB download; hf-hub's own lock \
+             timeout is only 10s and is not configurable"
+        );
+        assert!(
+            CACHE_LOCK_RETRY_PAUSE < CACHE_LOCK_RETRY_BUDGET,
+            "pause must be shorter than the budget or only one retry happens"
+        );
+    }
+
     #[test]
     fn test_load_options_rejects_bf16_on_cpu() {
         let err = LoadOptions::new(Device::Cpu)
