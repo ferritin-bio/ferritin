@@ -56,4 +56,8 @@
 
 export.auto: false
 sync:
-    remote: "git+ssh://git@github.com/ferritin-bio/ferritin.git"
+    # HTTPS rather than SSH: dolt's push shells out to git, and an SSH remote
+    # requires a loaded SSH agent key. HTTPS picks up any configured credential
+    # helper (osxkeychain, gh, GCM), so it works in environments without one —
+    # CI, fresh clones, and agent-less shells.
+    remote: "git+https://github.com/ferritin-bio/ferritin.git"
