@@ -30,7 +30,7 @@ impl AmplifyModels {
     }
 
     /// Renamed to [`model_info`][Self::model_info] (ferritin-100.8).
-    #[deprecated(since = "0.3.6", note = "renamed to `model_info`, which takes &self")]
+    #[deprecated(since = "0.4.0", note = "renamed to `model_info`, which takes &self")]
     pub fn get_model_files(model: Self) -> WeightSource {
         model.model_info()
     }
@@ -49,13 +49,13 @@ impl AmplifyRunner {
     }
 
     /// Renamed to [`from_pretrained`][Self::from_pretrained] (ferritin-100.8).
-    #[deprecated(since = "0.3.6", note = "renamed to `from_pretrained`")]
+    #[deprecated(since = "0.4.0", note = "renamed to `from_pretrained`")]
     pub fn load_model(modeltype: AmplifyModels, device: Device) -> Result<AmplifyRunner> {
         Self::from_pretrained(modeltype, device)
     }
 
     /// Renamed to [`from_pretrained_with`][Self::from_pretrained_with] (ferritin-100.8).
-    #[deprecated(since = "0.3.6", note = "renamed to `from_pretrained_with`")]
+    #[deprecated(since = "0.4.0", note = "renamed to `from_pretrained_with`")]
     pub fn load_model_with(modeltype: AmplifyModels, opts: &LoadOptions) -> Result<AmplifyRunner> {
         Self::from_pretrained_with(modeltype, opts)
     }
