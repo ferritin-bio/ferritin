@@ -62,7 +62,7 @@ fn test_esm2_parity_vs_python_reference() -> Result<()> {
     }
 
     let dev = device(false)?;
-    let esm2 = ESM2Runner::load_model(ESM2Models::T6_8M, dev.clone())?;
+    let esm2 = ESM2Runner::from_pretrained(ESM2Models::T6_8M, dev.clone())?;
 
     // The ESM2 reference (generate_esm2_fixtures.py) strips BOS/EOS and stores
     // only the L interior residue rows, so align the Rust output to match.

@@ -17,8 +17,9 @@ pub enum AmplifyModels {
     AMP350M,
 }
 impl AmplifyModels {
-    pub fn get_model_files(model: Self) -> WeightSource {
-        match model {
+    /// Where this variant's weights live.
+    pub fn model_info(&self) -> WeightSource {
+        match self {
             AmplifyModels::AMP120M => {
                 WeightSource::safetensors("chandar-lab/AMPLIFY_120M").at_revision("main")
             }
@@ -26,6 +27,12 @@ impl AmplifyModels {
                 WeightSource::safetensors("chandar-lab/AMPLIFY_350M").at_revision("main")
             }
         }
+    }
+
+    /// Renamed to [`model_info`][Self::model_info] (ferritin-100.8).
+    #[deprecated(since = "0.3.6", note = "renamed to `model_info`, which takes &self")]
+    pub fn get_model_files(model: Self) -> WeightSource {
+        model.model_info()
     }
 }
 
@@ -36,9 +43,21 @@ pub struct AmplifyRunner {
 impl AmplifyRunner {
     /// Load model from HuggingFace hub at F32.
     ///
-    /// Use [`load_model_with`][Self::load_model_with] for F16 or BF16.
+    /// Use [`from_pretrained_with`][Self::from_pretrained_with] for F16 or BF16.
+    pub fn from_pretrained(modeltype: AmplifyModels, device: Device) -> Result<AmplifyRunner> {
+        Self::from_pretrained_with(modeltype, &LoadOptions::new(device))
+    }
+
+    /// Renamed to [`from_pretrained`][Self::from_pretrained] (ferritin-100.8).
+    #[deprecated(since = "0.3.6", note = "renamed to `from_pretrained`")]
     pub fn load_model(modeltype: AmplifyModels, device: Device) -> Result<AmplifyRunner> {
-        Self::load_model_with(modeltype, &LoadOptions::new(device))
+        Self::from_pretrained(modeltype, device)
+    }
+
+    /// Renamed to [`from_pretrained_with`][Self::from_pretrained_with] (ferritin-100.8).
+    #[deprecated(since = "0.3.6", note = "renamed to `from_pretrained_with`")]
+    pub fn load_model_with(modeltype: AmplifyModels, opts: &LoadOptions) -> Result<AmplifyRunner> {
+        Self::from_pretrained_with(modeltype, opts)
     }
 
     /// Load model with an explicit device and dtype.
@@ -46,8 +65,11 @@ impl AmplifyRunner {
     /// Reduced precision halves the memory footprint but changes the numerics;
     /// see `tests/test_plm_dtype_parity.rs` for the achievable tolerance
     /// (ferritin-100.9).
-    pub fn load_model_with(modeltype: AmplifyModels, opts: &LoadOptions) -> Result<AmplifyRunner> {
-        let source = AmplifyModels::get_model_files(modeltype);
+    pub fn from_pretrained_with(
+        modeltype: AmplifyModels,
+        opts: &LoadOptions,
+    ) -> Result<AmplifyRunner> {
+        let source = modeltype.model_info();
         let config_filename = source.fetch("config.json")?;
         let tokenizer_filename = source.fetch("tokenizer.json")?;
         let config_str = std::fs::read_to_string(config_filename)?;

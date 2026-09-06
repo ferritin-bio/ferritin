@@ -61,14 +61,14 @@ impl MPNNExecConfig {
     }
     /// Load the weights for `model_type`.
     ///
-    /// Delegates to [`ProteinMPNNRunner::load_model`], which downloads from
+    /// Delegates to [`ProteinMPNNRunner::from_pretrained`], which downloads from
     /// `zcpbx/ligandmpnn-weights`. This previously extracted an embedded test
     /// fixture (`TestFile::ligmpnn_pmpnn_01`) to a temp file, which made the
     /// 37 MB `ferritin-test-data` crate a runtime dependency of every
     /// downstream consumer (ferritin-100.10).
     pub fn load_model(&self, model_type: ModelTypes) -> Result<ProteinMPNN, Error> {
         match model_type {
-            ModelTypes::ProteinMPNN => Ok(ProteinMPNNRunner::load_model(
+            ModelTypes::ProteinMPNN => Ok(ProteinMPNNRunner::from_pretrained(
                 ProteinMPNNModels::V48_020,
                 self.device.clone(),
             )?

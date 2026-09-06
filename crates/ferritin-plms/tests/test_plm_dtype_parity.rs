@@ -79,8 +79,9 @@ const AMPLIFY_F16_MIN_AGREEMENT: f32 = 0.85; // measured 0.923
 #[ignore = "requires downloading facebook/esm2_t6_8M_UR50D weights"]
 fn test_esm2_f16_matches_f32() -> Result<()> {
     let dev = device(false)?;
-    let f32_model = ESM2Runner::load_model_with(ESM2Models::T6_8M, &LoadOptions::new(dev.clone()))?;
-    let f16_model = ESM2Runner::load_model_with(
+    let f32_model =
+        ESM2Runner::from_pretrained_with(ESM2Models::T6_8M, &LoadOptions::new(dev.clone()))?;
+    let f16_model = ESM2Runner::from_pretrained_with(
         ESM2Models::T6_8M,
         &LoadOptions::new(dev).with_dtype(DType::F16),
     )?;
@@ -117,9 +118,11 @@ fn test_esm2_f16_matches_f32() -> Result<()> {
 #[ignore = "requires downloading chandar-lab/AMPLIFY_120M weights"]
 fn test_amplify_f16_matches_f32() -> Result<()> {
     let dev = device(false)?;
-    let f32_model =
-        AmplifyRunner::load_model_with(AmplifyModels::AMP120M, &LoadOptions::new(dev.clone()))?;
-    let f16_model = AmplifyRunner::load_model_with(
+    let f32_model = AmplifyRunner::from_pretrained_with(
+        AmplifyModels::AMP120M,
+        &LoadOptions::new(dev.clone()),
+    )?;
+    let f16_model = AmplifyRunner::from_pretrained_with(
         AmplifyModels::AMP120M,
         &LoadOptions::new(dev).with_dtype(DType::F16),
     )?;
@@ -155,7 +158,7 @@ fn test_amplify_f16_matches_f32() -> Result<()> {
 #[ignore = "requires downloading chandar-lab/AMPLIFY_120M weights"]
 fn test_amplify_f16_rotary_dtype_matches_model() -> Result<()> {
     let dev = device(false)?;
-    let model = AmplifyRunner::load_model_with(
+    let model = AmplifyRunner::from_pretrained_with(
         AmplifyModels::AMP120M,
         &LoadOptions::new(dev).with_dtype(DType::F16),
     )?;

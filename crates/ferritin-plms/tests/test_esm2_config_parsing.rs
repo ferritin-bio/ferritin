@@ -136,3 +136,20 @@ fn test_unknown_fields_are_ignored() {
 
     serde_json::from_value::<ESM2Config>(value).expect("unknown fields should be ignored");
 }
+
+/// The deprecated `get_model_files` shim still returns what `model_info` does,
+/// so a downstream caller on the old name keeps working for one release
+/// (ferritin-100.8).
+#[test]
+#[allow(deprecated)]
+fn test_deprecated_get_model_files_shim_matches_model_info() {
+    use ferritin_plms::ESM2Models;
+
+    let (new_source, new_config) = ESM2Models::T6_8M.model_info();
+    let (old_source, old_config) = ESM2Models::get_model_files(ESM2Models::T6_8M);
+
+    assert_eq!(old_source.repo_id, new_source.repo_id);
+    assert_eq!(old_source.revision, new_source.revision);
+    assert_eq!(old_config.hidden_size, new_config.hidden_size);
+    assert_eq!(old_config.vocab_size, new_config.vocab_size);
+}

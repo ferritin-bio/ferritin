@@ -146,7 +146,7 @@ pub fn validate_proteinmpnn_checkpoint() -> Result<(), Error> {
 }
 
 pub fn run_remote_esm2_smoke(model: ESM2Models) -> Result<()> {
-    let esm2 = ESM2Runner::load_model(model, device(false)?)?;
+    let esm2 = ESM2Runner::from_pretrained(model, device(false)?)?;
     let output = esm2.run_forward(TEST_SEQUENCE)?;
     let output_sequence = esm2.decode_logits(output)?;
     let hamming = hamming_ratio(TEST_SEQUENCE, &output_sequence);
@@ -159,7 +159,7 @@ pub fn run_remote_esm2_smoke(model: ESM2Models) -> Result<()> {
 }
 
 pub fn run_remote_amplify_prediction_smoke(model: AmplifyModels) -> Result<()> {
-    let amplify = AmplifyRunner::load_model(model, device(false)?)?;
+    let amplify = AmplifyRunner::from_pretrained(model, device(false)?)?;
     let prediction = amplify
         .get_best_prediction(TEST_SEQUENCE)
         .map_err(|err| anyhow!("AMPLIFY prediction failed: {err}"))?;
