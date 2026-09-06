@@ -37,18 +37,6 @@ use crate::registry::{self, ModelCard};
 use anyhow::{Result, bail};
 use candle_core::{Device, Tensor};
 
-/// Why [`ESMCModels::ESMC6B`] cannot be loaded yet.
-///
-/// Its checkpoint uses the same unfused layout as 300M/600M, so this is
-/// plumbing rather than an architecture mismatch — but two pieces are missing.
-pub const ESMC6B_UNSUPPORTED: &str = "\
-ESMCModels::ESMC6B is not yet supported. EvolutionaryScale/esmc-6b-2024-12 splits its 808 \
-tensors across six safetensors shards (model-0000{1..6}-of-00006.safetensors with a \
-model.safetensors.index.json), and WeightSource::var_builder loads a single file; it also \
-names its output head 'lm_head' at the top level rather than 'sequence_head' under the 'esmc' \
-prefix this port descends into. Refusing until both are handled, rather than loading part of \
-the model (ferritin-100.24). ESMC300M and ESMC600M work.";
-
 /// Available ESMC model variants hosted on HuggingFace.
 pub enum ESMCModels {
     /// ESMC 300M — 30 layers, d_model=960 (~1.3 GB weights)
@@ -83,14 +71,12 @@ impl ESMCModels {
     /// TransformerEngine-FUSED, so nothing this port asks for resolved
     /// (ferritin-100.23).
     ///
-    /// `ESMC6B` is refused; see [`ESMC6B_UNSUPPORTED`].
+    /// `ESMC6B` loads through its shard index and keeps its head at
+    /// `lm_head` rather than `sequence_head` (ferritin-100.24).
     pub fn model_info(&self) -> Result<(WeightSource, &'static str, ESMCConfig)> {
         let card = self.card();
         if let Some(reason) = card.unsupported {
-            bail!(
-                "{} is not supported: {reason}. {ESMC6B_UNSUPPORTED}",
-                card.id
-            );
+            bail!("{} is not supported: {reason}", card.id);
         }
         let config = match self {
             Self::ESMC300M => ESMCConfig::esmc_300m(),
@@ -129,8 +115,17 @@ impl ESMCRunner {
         let (source, filename, config) = model.model_info()?;
         let vb = source.var_builder(filename, opts)?;
         // Weights saved from ESMCForMaskedLM nest the backbone under "esmc".
+        // ESMC-6B nests its backbone under "esmc." but keeps its head at the
+        // top level as "lm_head"; 300M/600M are flat with "sequence_head".
+        // So the head is resolved from the ORIGINAL root, not the descended
+        // one (ferritin-100.24).
+        let head = if vb.contains_tensor("lm_head.0.weight") {
+            vb.pp("lm_head")
+        } else {
+            vb.pp("sequence_head")
+        };
         let vb_root = optional_prefix(vb, "esmc", "embed.weight");
-        let esmc = ESMC::load(vb_root, config.clone())?;
+        let esmc = ESMC::load_with_head(vb_root, head, config.clone())?;
         Ok(Self {
             model: esmc,
             config,

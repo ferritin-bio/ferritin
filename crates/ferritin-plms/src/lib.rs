@@ -31,7 +31,7 @@
 //! | `amplify-350m` | Amplify | `chandar-lab/AMPLIFY_350M` (safetensors) | **not checked** | supported |
 //! | `esmc-300m` | Esmc | `EvolutionaryScale/esmc-300m-2024-12` (pth) | **not checked** | supported |
 //! | `esmc-600m` | Esmc | `EvolutionaryScale/esmc-600m-2024-12` (pth) | **not checked** | supported |
-//! | `esmc-6b` | Esmc | `EvolutionaryScale/esmc-6b-2024-12` (safetensors) | **not checked** | **unsupported** — weights are sharded across six safetensors files (ferritin-100.24) |
+//! | `esmc-6b` | Esmc | `EvolutionaryScale/esmc-6b-2024-12` (safetensors) | **not checked** | supported |
 //! | `esm3-sm-open-v1` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | **not checked** | supported |
 //! | `esm3-structure-encoder-v0` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | **not checked** | **unsupported** — the ported VQ-VAE encoder is a different shape from the released checkpoint (ferritin-100.22) |
 //! | `esmfold2-fast` | Esmfold2 | `biohub/ESMFold2-Fast` (safetensors) | **not checked** | **unsupported** — the ported architecture does not match the released checkpoint (ferritin-100.17) |

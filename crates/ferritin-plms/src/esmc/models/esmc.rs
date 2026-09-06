@@ -182,7 +182,20 @@ pub struct ESMC {
 }
 
 impl ESMC {
+    /// Load with the output head at the conventional `sequence_head` path.
     pub fn load(vb: VarBuilder, config: ESMCConfig) -> Result<Self> {
+        let head = vb.pp("sequence_head");
+        Self::load_with_head(vb, head, config)
+    }
+
+    /// Load with the output head supplied separately.
+    ///
+    /// ESMC-300M and 600M are flat checkpoints whose head sits at
+    /// `sequence_head`, alongside the backbone. ESMC-6B nests its backbone
+    /// under an `esmc.` prefix but leaves its head at the top level, named
+    /// `lm_head` — so the head's root is not reachable by descending from the
+    /// backbone's, and the caller has to say where it is (ferritin-100.24).
+    pub fn load_with_head(vb: VarBuilder, head: VarBuilder, config: ESMCConfig) -> Result<Self> {
         let ESMCConfig {
             d_model,
             tokenizer,
@@ -196,7 +209,7 @@ impl ESMC {
         Ok(Self {
             embed: nn::embedding(embedding_dim, d_model, vb.pp("embed"))?,
             transformer: TransformerStack::load(vb.pp("transformer"), &config)?,
-            sequence_head: RegressionHead::load(vb.pp("sequence_head"), &config)?,
+            sequence_head: RegressionHead::load(head, &config)?,
             tokenizer: tokenizer_collection.sequence,
             device,
         })

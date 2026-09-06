@@ -253,6 +253,11 @@ fn test_esmc_model_info_targets_evolutionaryscale() {
             "EvolutionaryScale/esmc-600m-2024-12",
             "data/weights/esmc_600m_2024_12_v0.pth",
         ),
+        (
+            ESMCModels::ESMC6B,
+            "EvolutionaryScale/esmc-6b-2024-12",
+            "model.safetensors.index.json",
+        ),
     ] {
         let (source, filename, _config) =
             variant.model_info().expect("variant should be supported");
@@ -261,23 +266,71 @@ fn test_esmc_model_info_targets_evolutionaryscale() {
     }
 }
 
-/// ESMC6B refuses with the specific reason rather than failing partway through
-/// a six-shard download (ferritin-100.24).
+/// Every tensor path the ESMC loader will request exists in the real ESMC-6B
+/// shard index (ferritin-100.24).
+///
+/// The 6B model itself cannot be loaded on a modest machine — ~24 GB at F32,
+/// ~12 GB at F16 — so this checks the part that can be checked cheaply: that
+/// the names the loader asks for are the names the checkpoint has. It fetches
+/// only `model.safetensors.index.json` (~60 KB), not the 12 GB of shards.
+///
+/// Catches the two things that made 6B special: the backbone nests under
+/// `esmc.` while the head sits at the top level as `lm_head`, and the weights
+/// are split across six shards.
 #[test]
-fn test_esmc_6b_refuses_with_reason() {
+#[ignore = "fetches the ESMC-6B shard index (~60 KB, no weights)"]
+fn test_esmc_6b_index_contains_every_path_the_loader_requests() -> Result<()> {
     use ferritin_plms::esmc::pretrained::ESMCModels;
+    use std::collections::BTreeMap;
 
-    let err = ESMCModels::ESMC6B
-        .model_info()
-        .map(|_| ())
-        .expect_err("ESMC6B is not supported yet");
-    let msg = err.to_string();
+    let (source, index_file, config) = ESMCModels::ESMC6B.model_info()?;
     assert!(
-        msg.contains("shards"),
-        "error should name the sharding problem; got: {msg}"
+        index_file.ends_with(".index.json"),
+        "6B should be loaded through its shard index; got {index_file}"
     );
+
+    let path = source.fetch(index_file)?;
+    let raw = std::fs::read_to_string(&path)?;
+    let index: serde_json::Value = serde_json::from_str(&raw)?;
+    let weight_map: BTreeMap<String, String> = serde_json::from_value(index["weight_map"].clone())?;
+
+    assert_eq!(
+        weight_map
+            .values()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        6,
+        "ESMC-6B is published as six shards"
+    );
+
+    let mut expected = vec![
+        // Backbone, under the "esmc." prefix optional_prefix descends into.
+        "esmc.embed.weight".to_string(),
+        "esmc.transformer.norm.weight".to_string(),
+        // Head, at the TOP level and named lm_head — not sequence_head.
+        "lm_head.0.weight".to_string(),
+        "lm_head.2.weight".to_string(),
+        "lm_head.3.weight".to_string(),
+    ];
+    for layer in 0..config.n_layers {
+        expected.push(format!(
+            "esmc.transformer.blocks.{layer}.attn.out_proj.weight"
+        ));
+        expected.push(format!("esmc.transformer.blocks.{layer}.ffn.1.weight"));
+    }
+
+    for name in &expected {
+        assert!(
+            weight_map.contains_key(name),
+            "the loader will request {name}, which the 6B index does not contain"
+        );
+    }
+
+    // And the head is genuinely NOT where the flat checkpoints keep it.
     assert!(
-        msg.contains("ESMC300M and ESMC600M work"),
-        "error should say which variants do work; got: {msg}"
+        !weight_map.contains_key("esmc.sequence_head.0.weight")
+            && !weight_map.contains_key("sequence_head.0.weight"),
+        "6B should have no sequence_head; that is why load_with_head exists"
     );
+    Ok(())
 }

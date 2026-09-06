@@ -150,9 +150,48 @@ fn test_loadable_embedding_models_are_covered() {
             "esm3-sm-open-v1",
             "esmc-300m",
             "esmc-600m",
+            "esmc-6b",
         ],
         "the set of loadable embedding models changed; add or remove a \
          conformance test to match"
+    );
+}
+
+/// Which loadable models have no conformance test above, and why.
+///
+/// Kept as an explicit list rather than a silent gap. Every entry here is a
+/// model whose card is unchecked against real weights, so a wrong dimension
+/// would not be caught.
+#[test]
+fn test_uncovered_loadable_models_are_accounted_for() {
+    let covered = ["esm2-t6-8m", "amplify-120m", "esmc-300m"];
+
+    let uncovered: Vec<&str> = REGISTRY
+        .iter()
+        .filter(|c| c.is_loadable() && c.is_embedding_model())
+        .map(|c| c.id)
+        .filter(|id| !covered.contains(id))
+        .collect();
+
+    // The larger ESM2 variants, AMPLIFY-350M, ESMC-600M and ESM3 are simply
+    // big downloads. ESMC-6B is different in kind: at ~24 GB F32 / ~12 GB F16
+    // it cannot be loaded on a modest machine at all, so its card was verified
+    // against the published shard index instead — see
+    // test_esmc_6b_index_contains_every_path_the_loader_requests.
+    assert_eq!(
+        uncovered,
+        [
+            "esm2-t12-35m",
+            "esm2-t30-150m",
+            "esm2-t33-650m",
+            "esm2-t36-3b",
+            "esm2-t48-15b",
+            "amplify-350m",
+            "esmc-600m",
+            "esmc-6b",
+            "esm3-sm-open-v1",
+        ],
+        "a model gained or lost conformance coverage; say which and why"
     );
 }
 
