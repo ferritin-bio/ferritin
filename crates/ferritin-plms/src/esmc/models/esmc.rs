@@ -268,6 +268,11 @@ impl ESMC {
         Tensor::from_vec(token_ids, len, &self.device)
     }
 
+    /// Device the model's weights live on.
+    pub fn device(&self) -> &Device {
+        &self.device
+    }
+
     /// Decode a 1-D or 2-D token-ID tensor back to an amino-acid string.
     ///
     /// Handles a batched `(1, L)` tensor by squeezing the batch dimension.

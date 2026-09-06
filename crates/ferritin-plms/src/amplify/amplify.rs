@@ -109,6 +109,10 @@ impl AMPLIFY {
             config: cfg.clone(),
         })
     }
+    /// The configuration this model was loaded with.
+    pub fn config(&self) -> &AMPLIFYConfig {
+        &self.config
+    }
     pub fn get_device(&self) -> &Device {
         self.freqs_cis.device()
     }

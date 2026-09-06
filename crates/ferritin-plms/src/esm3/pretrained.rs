@@ -26,7 +26,7 @@ use crate::esm3::models::esm3::{ESM3, ESM3Config};
 use crate::esm3::models::vqvae::{StructureTokenEncoder, VqVaeConfig};
 use crate::esm3::tokenization::sequence::tokenize_sequence;
 use crate::loader::{LoadOptions, WeightSource};
-use crate::plm_runner::PlmRunner;
+use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 
@@ -110,6 +110,51 @@ impl PlmRunner for ESM3Runner {
 
     fn model_name(&self) -> &str {
         "esm3"
+    }
+
+    /// `embed_sequence` calls `tokenize_sequence(.., true)`, which prepends
+    /// `SEQUENCE_BOS_TOKEN` and appends `SEQUENCE_EOS_TOKEN`.
+    fn special_tokens(&self) -> SpecialTokenLayout {
+        SpecialTokenLayout::BOS_EOS
+    }
+
+    fn metadata(&self) -> ModelMetadata {
+        let config = &self.model.config;
+        ModelMetadata {
+            d_model: config.d_model,
+            n_layers: config.n_layers,
+            vocab_size: config.d_sequence_vocab,
+            // Rotary positions: no hard architectural cap.
+            max_positions: None,
+        }
+    }
+
+    fn device(&self) -> &Device {
+        &self.device
+    }
+
+    /// Sequence-track logits `(1, L + 2, d_sequence_vocab)`.
+    ///
+    /// Only the sequence track is supplied; the other tracks are `None`.
+    fn logits(&self, sequence: &str) -> Result<Tensor> {
+        let token_ids = tokenize_sequence(sequence, true);
+        let tokens = Tensor::new(token_ids.as_slice(), &self.device)?.unsqueeze(0)?;
+        let output = self.model.forward(
+            Some(&tokens),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )?;
+        output
+            .sequence_logits
+            .ok_or_else(|| anyhow::anyhow!("ESM3 forward() returned no sequence logits"))
     }
 }
 

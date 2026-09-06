@@ -6,7 +6,7 @@ use super::super::types::{ContactMap, PseudoProbability};
 use super::amplify::{AMPLIFY, AmplifyOutput};
 use super::config::AMPLIFYConfig;
 use crate::loader::{LoadOptions, WeightSource};
-use crate::plm_runner::PlmRunner;
+use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{D, Device, Tensor};
 use candle_nn::ops;
@@ -71,9 +71,23 @@ impl AmplifyRunner {
         let decoded = decoded.replace(" ", "");
         Ok(decoded)
     }
+    /// Per-residue pseudo-probabilities over the full AMPLIFY vocabulary.
+    ///
+    /// `position` is the residue index: BOS and EOS rows are stripped first,
+    /// so there is exactly one position per input residue. Previously these
+    /// rows were included, which both over-counted positions by two and
+    /// shifted every label by one — position 0 was BOS, not the first residue
+    /// (ferritin-100.18).
+    ///
+    /// Unlike [`ESM2Runner::get_pseudo_probabilities`], every amino acid is
+    /// returned rather than only those above a probability threshold.
     pub fn get_pseudo_probabilities(&self, prot_sequence: &str) -> Result<Vec<PseudoProbability>> {
         let model_output: AmplifyOutput = self.run_forward(prot_sequence)?;
-        let predictions = model_output.logits;
+        let layout = <Self as PlmRunner>::special_tokens(self);
+        let residue_rows = model_output.logits.dim(1)?.saturating_sub(layout.total());
+        let predictions = model_output
+            .logits
+            .narrow(1, layout.leading, residue_rows)?;
         let outputs = self.extract_logits(&predictions)?;
         Ok(outputs)
     }
@@ -126,7 +140,10 @@ impl AmplifyRunner {
         }
         Ok(contacts)
     }
-    // Softmax and simplify
+    /// Softmax `tensor` and flatten it into per-(position, amino acid) rows.
+    ///
+    /// `tensor` must already have its special-token rows stripped, so
+    /// `seq_pos` is a residue index.
     fn extract_logits(&self, tensor: &Tensor) -> Result<Vec<PseudoProbability>> {
         let tensor = ops::softmax(tensor, D::Minus1)?;
         let data = tensor.to_vec3::<f32>()?;
@@ -178,5 +195,31 @@ impl PlmRunner for AmplifyRunner {
 
     fn model_name(&self) -> &str {
         "amplify"
+    }
+
+    /// AMPLIFY's `tokenizer.json` has a `TemplateProcessing` post-processor
+    /// that adds `<bos>` (3) and `<eos>` (4), so `encode(.., true)` wraps the
+    /// sequence.
+    fn special_tokens(&self) -> SpecialTokenLayout {
+        SpecialTokenLayout::BOS_EOS
+    }
+
+    fn metadata(&self) -> ModelMetadata {
+        let config = self.model.config();
+        ModelMetadata {
+            d_model: config.hidden_size,
+            n_layers: config.num_hidden_layers,
+            vocab_size: config.vocab_size,
+            max_positions: Some(config.max_length),
+        }
+    }
+
+    fn device(&self) -> &Device {
+        self.model.get_device()
+    }
+
+    /// Masked-LM logits `(1, L + 2, vocab_size)`.
+    fn logits(&self, sequence: &str) -> Result<Tensor> {
+        Ok(self.run_forward(sequence)?.logits)
     }
 }
