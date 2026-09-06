@@ -8,13 +8,18 @@
 //! The `.pth` file is a plain PyTorch state dict saved via `torch.save(model.state_dict(), ...)`.
 //! No wrapping key is used; `PthTensors::new(path, None)` loads it directly.
 //!
+//! Note the repo path: the checkpoints live under `data/weights/`, not at the
+//! repo root. Requesting the bare filename returns
+//! "Entry not found: esm3_sm_open_v1.pth" (ferritin-100.21).
+//!
 //! | Model attribute (Python) | VarBuilder prefix |
 //! |--------------------------|-------------------|
 //! | `encoder.*`              | `encoder.*`       |
 //! | `transformer.*`          | `transformer.*`   |
 //! | `output_heads.*`         | `output_heads.*`  |
 //!
-//! The structure encoder uses a separate checkpoint (`esm3_structure_encoder_v0.pth`):
+//! The structure encoder uses a separate checkpoint
+//! (`data/weights/esm3_structure_encoder_v0.pth`):
 //!
 //! | Python attribute        | VarBuilder prefix  |
 //! |-------------------------|--------------------|
@@ -23,11 +28,11 @@
 //! | `codebook.embeddings`   | `codebook.*`       |
 
 use crate::esm3::models::esm3::{ESM3, ESM3Config};
-use crate::esm3::models::vqvae::{StructureTokenEncoder, VqVaeConfig};
+use crate::esm3::models::vqvae::StructureTokenEncoder;
 use crate::esm3::tokenization::sequence::tokenize_sequence;
 use crate::loader::{LoadOptions, WeightSource};
 use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
-use anyhow::Result;
+use anyhow::{Result, bail};
 use candle_core::{Device, Tensor};
 
 // ── ESM3Models enum ───────────────────────────────────────────────────────────
@@ -41,11 +46,29 @@ pub enum ESM3Models {
 /// The `esm3-sm-open-v1` repo, whose `.pth` checkpoints store tensors at the root.
 const ESM3_REPO: WeightSource = WeightSource::pth("EvolutionaryScale/esm3-sm-open-v1", None);
 
+/// Why [`StructureEncoderRunner::from_pretrained`] refuses to load.
+///
+/// The main ESM3 model loads correctly (ferritin-100.21), but the VQ-VAE
+/// structure encoder is a different shape from the one ported here.
+pub const STRUCTURE_ENCODER_MISMATCH: &str = "\
+ESM3 structure-encoder weights cannot be loaded: the ported VQ-VAE encoder does not match \
+data/weights/esm3_structure_encoder_v0.pth. The checkpoint roots its stack at 'transformer', \
+not 'encoder'; its two blocks contain only geom_attn and ffn, with no multi-head 'attn' \
+sub-module and no per-stack final 'norm.weight'; it carries a \
+relative_positional_embedding.embedding.weight that this port does not model; and its \
+pre_vq_proj has a bias that the port loads without. Loading is refused rather than patched, \
+because resolving the paths without porting the real encoder would emit structure tokens that \
+look plausible and are wrong (ferritin-100.22). ESM3Runner itself is unaffected and works.";
+
 impl ESM3Models {
     /// Weight source, `.pth` filename, and config for this variant.
     pub fn model_info(&self) -> (WeightSource, &'static str, ESM3Config) {
         match self {
-            Self::SmOpen => (ESM3_REPO, "esm3_sm_open_v1.pth", ESM3Config::sm_open()),
+            Self::SmOpen => (
+                ESM3_REPO,
+                "data/weights/esm3_sm_open_v1.pth",
+                ESM3Config::sm_open(),
+            ),
         }
     }
 }
@@ -170,7 +193,8 @@ impl PlmRunner for ESM3Runner {
 
 /// Wraps the ESM3 structure token encoder for converting backbone coordinates to tokens.
 ///
-/// Uses a separate checkpoint (`esm3_structure_encoder_v0.pth`) from the main model.
+/// Uses a separate checkpoint (`data/weights/esm3_structure_encoder_v0.pth`)
+/// from the main model.
 pub struct StructureEncoderRunner {
     encoder: StructureTokenEncoder,
     #[allow(dead_code)]
@@ -178,19 +202,20 @@ pub struct StructureEncoderRunner {
 }
 
 impl StructureEncoderRunner {
-    /// Download and load the structure encoder from HuggingFace.
+    /// Loading the structure encoder is **not supported** — this always
+    /// returns an error (ferritin-100.22).
+    ///
+    /// The ported VQ-VAE encoder does not match
+    /// `data/weights/esm3_structure_encoder_v0.pth`. See
+    /// [`STRUCTURE_ENCODER_MISMATCH`].
     pub fn from_pretrained(device: Device) -> Result<Self> {
         Self::from_pretrained_with(&LoadOptions::new(device))
     }
 
-    /// Load with an explicit device and dtype (ferritin-100.9).
-    pub fn from_pretrained_with(opts: &LoadOptions) -> Result<Self> {
-        let vb = ESM3_REPO.var_builder("esm3_structure_encoder_v0.pth", opts)?;
-        let encoder = StructureTokenEncoder::load(vb, VqVaeConfig::default())?;
-        Ok(Self {
-            encoder,
-            device: opts.device.clone(),
-        })
+    /// Loading the structure encoder is **not supported** — this always
+    /// returns an error (ferritin-100.22).
+    pub fn from_pretrained_with(_opts: &LoadOptions) -> Result<Self> {
+        bail!("{STRUCTURE_ENCODER_MISMATCH}");
     }
 
     /// Encode backbone coordinates to structure tokens.

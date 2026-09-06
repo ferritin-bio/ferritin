@@ -60,7 +60,10 @@ impl VqVaeConfig {
             scale_residue: false,
             mask_and_zero_frameless: true,
             qk_layernorm: true,
-            bias: false,
+            // esm3_structure_encoder_v0.pth stores geom_attn with bias terms
+            // (s_norm.bias, proj.bias, out_proj.bias), unlike the main model
+            // (ferritin-100.21).
+            bias: true,
             // Vocab/embedding sizes unused by TransformerStack
             d_sequence_vocab: 0,
             d_structure_vocab: self.n_codes,
