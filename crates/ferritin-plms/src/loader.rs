@@ -245,9 +245,95 @@ impl WeightSource {
     ///
     /// This is the only place in the crate that performs the safetensors mmap,
     /// and the only place the dtype is applied.
+    /// Suffix marking a HuggingFace shard index rather than a weight file.
+    const SHARD_INDEX_SUFFIX: &'static str = ".index.json";
+
     pub fn var_builder(&self, filename: &str, opts: &LoadOptions) -> Result<VarBuilder<'static>> {
+        if filename.ends_with(Self::SHARD_INDEX_SUFFIX) {
+            return self.var_builder_sharded(filename, opts);
+        }
         let path = self.fetch(filename)?;
         self.var_builder_from_path(&path, opts)
+    }
+
+    /// Build a [`VarBuilder`] over a checkpoint split across several
+    /// safetensors shards.
+    ///
+    /// Large checkpoints ship as `model-0000N-of-0000M.safetensors` plus a
+    /// `model.safetensors.index.json` whose `weight_map` says which shard holds
+    /// each tensor. candle's `from_mmaped_safetensors` already takes a slice of
+    /// paths, so all this does is read the index, fetch every shard it names,
+    /// and hand candle the lot (ferritin-100.24).
+    ///
+    /// Shard order does not matter — candle indexes by tensor name — but the
+    /// shards are deduplicated and sorted so the mmap set is deterministic.
+    pub fn var_builder_sharded(
+        &self,
+        index_filename: &str,
+        opts: &LoadOptions,
+    ) -> Result<VarBuilder<'static>> {
+        opts.validate()?;
+        if !matches!(self.format, Format::Safetensors) {
+            bail!(
+                "{}: sharded loading is only defined for safetensors, but {index_filename} \
+                 was requested for a {:?} source",
+                self.repo_id,
+                self.format
+            );
+        }
+
+        let index_path = self.fetch(index_filename)?;
+        let shards = Self::shard_names(&index_path)?;
+
+        let paths = shards
+            .iter()
+            .map(|shard| self.fetch(shard))
+            .collect::<Result<Vec<_>>>()?;
+
+        // SAFETY: as in var_builder_from_path — mmap of files we just
+        // materialised in the HF cache.
+        let vb = unsafe {
+            VarBuilder::from_mmaped_safetensors(&paths, opts.dtype, &opts.device).with_context(
+                || {
+                    format!(
+                        "failed to mmap {} shards from {}",
+                        paths.len(),
+                        self.repo_id
+                    )
+                },
+            )?
+        };
+        Ok(vb)
+    }
+
+    /// Read a shard index and return the shard filenames it references, sorted
+    /// and deduplicated.
+    fn shard_names(index_path: &Path) -> Result<Vec<String>> {
+        #[derive(serde::Deserialize)]
+        struct ShardIndex {
+            weight_map: std::collections::BTreeMap<String, String>,
+        }
+
+        let raw = std::fs::read_to_string(index_path)
+            .with_context(|| format!("failed to read shard index {}", index_path.display()))?;
+        let index: ShardIndex = serde_json::from_str(&raw).with_context(|| {
+            format!(
+                "shard index {} is not a HuggingFace weight_map",
+                index_path.display()
+            )
+        })?;
+
+        if index.weight_map.is_empty() {
+            bail!(
+                "shard index {} has an empty weight_map",
+                index_path.display()
+            );
+        }
+
+        let mut shards: Vec<String> = index.weight_map.into_values().collect();
+        shards.sort_unstable();
+        shards.dedup();
+        Ok(shards)
     }
 
     /// Build a [`VarBuilder`] over an already-downloaded (or local) file.
@@ -384,6 +470,134 @@ mod tests {
         assert!(
             CACHE_LOCK_RETRY_PAUSE < CACHE_LOCK_RETRY_BUDGET,
             "pause must be shorter than the budget or only one retry happens"
+        );
+    }
+
+    /// A shard index resolves to its unique shard files, sorted and deduped.
+    ///
+    /// The 6-shard ESMC-6B index maps 808 tensors onto 6 files, so the
+    /// many-tensors-to-one-shard collapse is the case that matters.
+    #[test]
+    fn test_shard_names_dedupes_and_sorts() {
+        let dir = std::env::temp_dir().join("ferritin-shard-index-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("model.safetensors.index.json");
+        std::fs::write(
+            &path,
+            r#"{
+                "metadata": {"total_size": 123},
+                "weight_map": {
+                    "b.weight": "model-00002-of-00002.safetensors",
+                    "a.weight": "model-00001-of-00002.safetensors",
+                    "a.bias":   "model-00001-of-00002.safetensors"
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let shards = WeightSource::shard_names(&path).unwrap();
+        assert_eq!(
+            shards,
+            [
+                "model-00001-of-00002.safetensors",
+                "model-00002-of-00002.safetensors"
+            ],
+            "three tensors across two shards should yield two unique files"
+        );
+    }
+
+    #[test]
+    fn test_shard_names_rejects_a_non_index() {
+        let dir = std::env::temp_dir().join("ferritin-shard-index-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("not-an-index.json");
+        std::fs::write(&path, r#"{"hello": "world"}"#).unwrap();
+
+        let err = WeightSource::shard_names(&path)
+            .map(|_| ())
+            .expect_err("a file without weight_map is not a shard index");
+        assert!(
+            err.to_string().contains("weight_map"),
+            "error should say what was expected; got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_shard_names_rejects_an_empty_weight_map() {
+        let dir = std::env::temp_dir().join("ferritin-shard-index-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("empty-index.json");
+        std::fs::write(&path, r#"{"weight_map": {}}"#).unwrap();
+
+        let err = WeightSource::shard_names(&path)
+            .map(|_| ())
+            .expect_err("an empty weight_map names no shards");
+        assert!(err.to_string().contains("empty weight_map"));
+    }
+
+    /// candle resolves tensors across several mmapped shards.
+    ///
+    /// This is the mechanism ESMC-6B needs, exercised on real safetensors
+    /// files rather than assumed. The 6B checkpoint itself cannot be loaded
+    /// here — it is ~24 GB at F32 and ~12 GB at F16 — so this stands in for
+    /// the multi-file part of it (ferritin-100.24).
+    #[test]
+    fn test_var_builder_resolves_tensors_across_shards() {
+        use candle_core::Tensor;
+        use std::collections::HashMap;
+
+        let dir = std::env::temp_dir().join("ferritin-shard-vb-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let device = Device::Cpu;
+
+        let shard_a = dir.join("model-00001-of-00002.safetensors");
+        let shard_b = dir.join("model-00002-of-00002.safetensors");
+
+        let mut a = HashMap::new();
+        a.insert(
+            "block.0.weight".to_string(),
+            Tensor::zeros((2, 3), DType::F32, &device).unwrap(),
+        );
+        candle_core::safetensors::save(&a, &shard_a).unwrap();
+
+        let mut b = HashMap::new();
+        b.insert(
+            "block.1.weight".to_string(),
+            Tensor::ones((4, 5), DType::F32, &device).unwrap(),
+        );
+        candle_core::safetensors::save(&b, &shard_b).unwrap();
+
+        // SAFETY: files this test just wrote and does not mutate.
+        let vb = unsafe {
+            VarBuilder::from_mmaped_safetensors(&[shard_a, shard_b], DType::F32, &device).unwrap()
+        };
+
+        assert!(
+            vb.contains_tensor("block.0.weight"),
+            "a tensor from the first shard should resolve"
+        );
+        assert!(
+            vb.contains_tensor("block.1.weight"),
+            "a tensor from the second shard should resolve"
+        );
+        assert_eq!(vb.get((2, 3), "block.0.weight").unwrap().dims(), &[2, 3]);
+        assert_eq!(vb.get((4, 5), "block.1.weight").unwrap().dims(), &[4, 5]);
+    }
+
+    /// A `.pth` source cannot be sharded this way, and says so rather than
+    /// producing a confusing mmap failure.
+    #[test]
+    fn test_sharded_loading_is_refused_for_pth() {
+        let err = WeightSource::pth("owner/name", None)
+            .var_builder_sharded(
+                "model.safetensors.index.json",
+                &LoadOptions::new(Device::Cpu),
+            )
+            .map(|_| ())
+            .expect_err("pth sources cannot be sharded");
+        assert!(
+            err.to_string().contains("only defined for safetensors"),
+            "got: {err}"
         );
     }
 

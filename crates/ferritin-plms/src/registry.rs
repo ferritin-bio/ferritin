@@ -353,8 +353,9 @@ pub const REGISTRY: &[ModelCard] = &[
         id: "esmc-6b",
         family: Family::Esmc,
         source: WeightSource::safetensors("EvolutionaryScale/esmc-6b-2024-12"),
-        // Sharded across six files; see `unsupported`.
-        file: "model-00001-of-00006.safetensors",
+        // Sharded across six files; the loader follows this index
+        // (ferritin-100.24).
+        file: "model.safetensors.index.json",
         tokenizer: TokenizerSpec::BuiltinVocab("esmc::tokenizer::EsmSequenceTokenizer"),
         specials: SpecialTokenLayout::BOS_EOS,
         metadata: ModelMetadata {
@@ -365,11 +366,7 @@ pub const REGISTRY: &[ModelCard] = &[
         },
         approx_bytes_f32: 24 * GB,
         parity: ParityStatus::Unverified,
-        unsupported: Some(
-            "weights are sharded across six safetensors files, which the loader cannot yet \
-             follow, and the head is named lm_head at the top level rather than sequence_head \
-             (ferritin-100.24)",
-        ),
+        unsupported: None,
     },
     // ── ESM3 ─────────────────────────────────────────────────────────────────
     ModelCard {
@@ -649,10 +646,7 @@ mod tests {
             .map(|c| c.id)
             .collect();
         unsupported.sort_unstable();
-        assert_eq!(
-            unsupported,
-            ["esm3-structure-encoder-v0", "esmc-6b", "esmfold2-fast"]
-        );
+        assert_eq!(unsupported, ["esm3-structure-encoder-v0", "esmfold2-fast"]);
 
         for card in REGISTRY.iter().filter(|c| !c.is_loadable()) {
             let reason = card.unsupported.unwrap();
