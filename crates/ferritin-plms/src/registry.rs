@@ -146,6 +146,18 @@ impl ModelCard {
     pub const fn is_embedding_model(&self) -> bool {
         !matches!(self.tokenizer, TokenizerSpec::None)
     }
+
+    /// Lowercase family name, for matching against string-keyed tables.
+    pub const fn family_str(&self) -> &'static str {
+        match self.family {
+            Family::Esm2 => "esm2",
+            Family::Amplify => "amplify",
+            Family::Esmc => "esmc",
+            Family::Esm3 => "esm3",
+            Family::Esmfold2 => "esmfold2",
+            Family::Mpnn => "proteinmpnn",
+        }
+    }
 }
 
 const GB: u64 = 1024 * 1024 * 1024;
@@ -448,6 +460,60 @@ pub const REGISTRY: &[ModelCard] = &[
     },
 ];
 
+// ── Support matrix ────────────────────────────────────────────────────────────
+
+/// Render [`REGISTRY`] as a markdown support matrix.
+///
+/// The column that matters is **Parity**. "Does it compile" and even "does it
+/// load" are not what a user needs to know before trusting a number — what
+/// they need is whether anyone has ever compared this port's output against
+/// the reference implementation. Today two models have, and the table says so
+/// rather than leaving it to be inferred from which fixtures happen to exist
+/// (ferritin-100.13).
+///
+/// The copy embedded in the crate docs is checked against this function by
+/// `test_lib_rs_support_matrix_is_current`, so the two cannot drift.
+pub fn support_matrix_markdown() -> String {
+    let mut out = String::new();
+    out.push_str("| Model | Family | Weights | Parity | Status |\n");
+    out.push_str("|---|---|---|---|---|\n");
+
+    for card in REGISTRY {
+        let format = match card.source.format {
+            crate::loader::Format::Safetensors => "safetensors",
+            crate::loader::Format::Pth { .. } => "pth",
+        };
+        let parity = match card.parity {
+            ParityStatus::Verified { fixture } => {
+                format!("verified (`{fixture}`)")
+            }
+            ParityStatus::Unverified => "**not checked**".to_string(),
+        };
+        let status = match card.unsupported {
+            None => "supported".to_string(),
+            Some(reason) => {
+                // Keep the table readable; the full reason lives on the card.
+                let short = reason.split(" (ferritin-").next().unwrap_or(reason);
+                let issue = reason
+                    .rsplit_once("(ferritin-")
+                    .map(|(_, tail)| tail.trim_end_matches(')'))
+                    .unwrap_or("");
+                let first = short.split(&[',', ':'][..]).next().unwrap_or(short);
+                if issue.is_empty() {
+                    format!("**unsupported** — {first}")
+                } else {
+                    format!("**unsupported** — {first} (ferritin-{issue})")
+                }
+            }
+        };
+        out.push_str(&format!(
+            "| `{}` | {:?} | `{}` ({format}) | {parity} | {status} |\n",
+            card.id, card.family, card.source.repo_id,
+        ));
+    }
+    out
+}
+
 // ── Lookups ───────────────────────────────────────────────────────────────────
 
 /// Find a model by its registry id.
@@ -630,5 +696,80 @@ mod tests {
     fn test_loadable_excludes_unsupported() {
         assert!(loadable().all(|c| c.unsupported.is_none()));
         assert!(!loadable().any(|c| c.id == "esmfold2-fast"));
+    }
+}
+
+#[cfg(test)]
+mod matrix {
+    use super::*;
+
+    /// Regeneration helper: prints the matrix for pasting into `lib.rs`.
+    ///
+    /// ```shell
+    /// cargo test -p ferritin-plms --lib print_support_matrix -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "prints the matrix for copying into lib.rs"]
+    fn print_support_matrix() {
+        println!("{}", support_matrix_markdown());
+    }
+
+    /// The copy in the crate docs must match what the registry renders.
+    ///
+    /// A stale matrix is worse than none: it would tell a user a model is
+    /// parity-verified, or supported, after that stopped being true.
+    #[test]
+    fn test_lib_rs_support_matrix_is_current() {
+        const LIB_RS: &str = include_str!("lib.rs");
+        const BEGIN: &str = "//! <!-- BEGIN SUPPORT MATRIX -->";
+        const END: &str = "//! <!-- END SUPPORT MATRIX -->";
+
+        let start = LIB_RS
+            .find(BEGIN)
+            .expect("lib.rs should carry a BEGIN SUPPORT MATRIX marker")
+            + BEGIN.len();
+        let end = LIB_RS
+            .find(END)
+            .expect("lib.rs should carry an END SUPPORT MATRIX marker");
+
+        let embedded: String = LIB_RS[start..end]
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| {
+                format!(
+                    "{}\n",
+                    l.trim_start().trim_start_matches("//!").trim_start()
+                )
+            })
+            .collect();
+
+        let rendered: String = support_matrix_markdown()
+            .lines()
+            .map(|l| format!("{l}\n"))
+            .collect();
+
+        assert_eq!(
+            embedded, rendered,
+            "the support matrix in lib.rs is stale. Regenerate it with:\n  \
+             cargo test -p ferritin-plms --lib print_support_matrix -- --ignored --nocapture\n\
+             then replace the block between the SUPPORT MATRIX markers."
+        );
+    }
+
+    /// Every model in the matrix carries an explicit parity verdict.
+    #[test]
+    fn test_matrix_states_parity_for_every_model() {
+        let matrix = support_matrix_markdown();
+        for card in REGISTRY {
+            let row = matrix
+                .lines()
+                .find(|l| l.contains(&format!("`{}`", card.id)))
+                .unwrap_or_else(|| panic!("{} missing from the matrix", card.id));
+            assert!(
+                row.contains("verified") || row.contains("not checked"),
+                "{}: the matrix must state a parity verdict; got: {row}",
+                card.id
+            );
+        }
     }
 }

@@ -124,7 +124,7 @@ impl AmplifyRunner {
     /// shifted every label by one — position 0 was BOS, not the first residue
     /// (ferritin-100.18).
     ///
-    /// Unlike [`ESM2Runner::get_pseudo_probabilities`], every amino acid is
+    /// Unlike [`crate::ESM2Runner::get_pseudo_probabilities`], every amino acid is
     /// returned rather than only those above a probability threshold.
     pub fn get_pseudo_probabilities(&self, prot_sequence: &str) -> Result<Vec<PseudoProbability>> {
         let model_output: AmplifyOutput = self.run_forward(prot_sequence)?;
