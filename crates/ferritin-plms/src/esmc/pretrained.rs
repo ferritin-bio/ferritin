@@ -30,9 +30,9 @@
 //! present and sets the VarBuilder root accordingly, so the same Rust model
 //! code works against both the wrapped and unwrapped formats.
 
-use crate::esmc::models::esmc::{ESMC, ESMCConfig};
+use crate::esmc::models::esmc::{ESMC, ESMCConfig, LogitsConfig};
 use crate::loader::{LoadOptions, WeightSource, optional_prefix};
-use crate::plm_runner::PlmRunner;
+use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 
@@ -69,6 +69,8 @@ impl ESMCModels {
 /// Wraps a loaded ESMC model for sequence embedding inference.
 pub struct ESMCRunner {
     model: ESMC,
+    /// Retained so `PlmRunner::metadata` can report dimensions.
+    config: ESMCConfig,
 }
 
 impl ESMCRunner {
@@ -83,8 +85,11 @@ impl ESMCRunner {
         let vb = source.var_builder("model.safetensors", &LoadOptions::new(device))?;
         // Weights saved from ESMCForMaskedLM nest the backbone under "esmc".
         let vb_root = optional_prefix(vb, "esmc", "embed.weight");
-        let esmc = ESMC::load(vb_root, config)?;
-        Ok(Self { model: esmc })
+        let esmc = ESMC::load(vb_root, config.clone())?;
+        Ok(Self {
+            model: esmc,
+            config,
+        })
     }
 
     /// Tokenize `sequence` and run a forward pass.
@@ -109,5 +114,40 @@ impl PlmRunner for ESMCRunner {
 
     fn model_name(&self) -> &str {
         "esmc"
+    }
+
+    /// `ESMC::encode` calls `tokenize_sequence(.., true)`, which wraps the
+    /// sequence in BOS and EOS.
+    fn special_tokens(&self) -> SpecialTokenLayout {
+        SpecialTokenLayout::BOS_EOS
+    }
+
+    fn metadata(&self) -> ModelMetadata {
+        ModelMetadata {
+            d_model: self.config.d_model,
+            n_layers: self.config.n_layers,
+            vocab_size: self.config.embedding_dim,
+            // Rotary positions: no hard architectural cap.
+            max_positions: None,
+        }
+    }
+
+    fn device(&self) -> &Device {
+        self.model.device()
+    }
+
+    /// Sequence logits `(1, L + 2, vocab_size)`.
+    fn logits(&self, sequence: &str) -> Result<Tensor> {
+        let tokens = self.model.encode(sequence)?.unsqueeze(0)?;
+        let out = self.model.logits(
+            &tokens,
+            LogitsConfig {
+                sequence: true,
+                return_embeddings: false,
+                return_hidden_states: false,
+            },
+        )?;
+        out.sequence_logits
+            .ok_or_else(|| anyhow::anyhow!("ESMC logits() returned no sequence logits"))
     }
 }

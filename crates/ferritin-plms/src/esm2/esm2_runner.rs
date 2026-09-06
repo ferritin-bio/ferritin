@@ -3,7 +3,7 @@
 //! Class for loading and running the ESM2 models
 use super::esm2::{ESM2, ESM2Config, ESM2Output};
 use crate::loader::{LoadOptions, WeightSource};
-use crate::plm_runner::PlmRunner;
+use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
 use crate::types::PseudoProbability;
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{Device, Tensor};
@@ -60,6 +60,9 @@ impl ESM2Models {
 pub struct ESM2Runner {
     model: ESM2,
     tokenizer: Tokenizer,
+    /// Retained so `PlmRunner::metadata` can report dimensions without
+    /// hardcoding them per variant.
+    config: ESM2Config,
 }
 impl ESM2Runner {
     /// Load model from HuggingFace hub, downloading config.json, tokenizer files, and weights.
@@ -74,9 +77,13 @@ impl ESM2Runner {
             None => fallback_config,
         };
         let vb = source.var_builder("model.safetensors", &LoadOptions::new(device))?;
-        let model = ESM2::load(vb, config)?;
+        let model = ESM2::load(vb, config.clone())?;
         let tokenizer = ESM2::load_tokenizer()?;
-        Ok(ESM2Runner { model, tokenizer })
+        Ok(ESM2Runner {
+            model,
+            tokenizer,
+            config,
+        })
     }
     /// Encode a sequence to token ids **with** ESM-2's BOS (`<cls>`) and EOS
     /// (`<eos>`) special tokens.
@@ -190,5 +197,29 @@ impl PlmRunner for ESM2Runner {
 
     fn model_name(&self) -> &str {
         "esm2"
+    }
+
+    /// ESM-2 wraps sequences in `<cls>` and `<eos>`; `encode_with_special`
+    /// adds them because the bundled `tokenizer.json` has no post-processor.
+    fn special_tokens(&self) -> SpecialTokenLayout {
+        SpecialTokenLayout::BOS_EOS
+    }
+
+    fn metadata(&self) -> ModelMetadata {
+        ModelMetadata {
+            d_model: self.config.hidden_size,
+            n_layers: self.config.num_hidden_layers as usize,
+            vocab_size: self.config.vocab_size as usize,
+            max_positions: Some(self.config.max_position_embeddings as usize),
+        }
+    }
+
+    fn device(&self) -> &Device {
+        self.model.get_device()
+    }
+
+    /// Masked-LM logits `(1, L + 2, vocab_size)`.
+    fn logits(&self, sequence: &str) -> Result<Tensor> {
+        Ok(self.run_forward(sequence)?.logits)
     }
 }

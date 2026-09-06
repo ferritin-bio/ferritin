@@ -30,6 +30,7 @@ use super::config::ESMFold2Config;
 use super::model::ESMFold2Model;
 use super::output::ESMFold2Output;
 use crate::esmc::pretrained::ESMCRunner;
+use crate::plm_runner::PlmRunner;
 use anyhow::{Result, bail};
 use candle_core::{DType, Device, Tensor};
 
@@ -178,12 +179,10 @@ impl ESMFold2Runner {
         // ESMC-6B backbone → (1, L, 2560).
         // When backbone is None, use zeros (stub for shape testing).
         let hidden_states = match &self.backbone {
-            Some(esmc) => {
-                // embed_sequence returns (1, L+2, d_model) with BOS and EOS tokens.
-                let embs = esmc.embed_sequence(sequence)?;
-                // Strip BOS (index 0) and EOS (index L+1), keeping L residues.
-                embs.narrow(1, 1, l)?
-            }
+            // `embed_residues` strips the backbone's special tokens per its own
+            // declared layout, so this no longer hardcodes ESMC's BOS/EOS
+            // (ferritin-100.7).
+            Some(esmc) => esmc.embed_residues(sequence)?,
             None => Tensor::zeros(&[1, l, self.config.lm_d_model], ESMFOLD2_DTYPE, device)?,
         };
 

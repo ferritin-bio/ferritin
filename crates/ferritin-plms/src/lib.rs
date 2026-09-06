@@ -43,7 +43,7 @@ pub mod loader;
 pub mod plm_runner;
 pub mod types;
 pub mod utils;
-pub use plm_runner::PlmRunner;
+pub use plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
 
 /// Returns the best available device for computation.
 ///
