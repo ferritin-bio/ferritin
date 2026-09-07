@@ -278,28 +278,58 @@ fn test_esm3_parity_vs_python_reference() -> Result<()> {
     Ok(())
 }
 
-/// The structure encoder refuses to load, with the mismatch named.
+/// The structure encoder loads from the released checkpoint and emits tokens.
 ///
-/// Nothing exercised `StructureEncoderRunner` before ferritin-100.21, which is
-/// how its loading defects went unnoticed. Fixing the main model's checkpoint
-/// path revealed that the ported VQ-VAE encoder is a different shape from the
-/// released one, so it refuses rather than half-loading (ferritin-100.22).
+/// This replaces a test that asserted the encoder *refuses* to load. It did,
+/// for good reason: the port targeted a network the checkpoint does not
+/// contain. Every one of those differences is now modelled, so the refusal is
+/// gone and this pins the behaviour that replaced it (ferritin-100.22).
 ///
-/// Needs no weights: the refusal precedes any download.
+/// What this does and does not establish: it proves all 34 tensors resolve and
+/// that the encoder emits in-range, deterministic tokens. It does **not**
+/// establish numerical parity — no Python reference has been run against it,
+/// so a subtly wrong geometry would still pass here.
 #[test]
-fn test_esm3_structure_encoder_refuses_with_reason() {
+#[ignore = "downloads esm3_structure_encoder_v0.pth (~60 MB)"]
+fn test_esm3_structure_encoder_loads_and_encodes() -> anyhow::Result<()> {
+    use candle_core::Tensor;
     use ferritin_plms::esm3::pretrained::StructureEncoderRunner;
 
-    let err = StructureEncoderRunner::from_pretrained(Device::Cpu)
-        .map(|_| ())
-        .expect_err("the structure encoder must refuse while the port is mismatched");
-    let msg = err.to_string();
+    let runner = StructureEncoderRunner::from_pretrained(Device::Cpu)?;
+
+    // An ideal alpha-helix: rise 1.5 A, 100 degrees per residue.
+    let l = 32usize;
+    let (r, rise, turn) = (2.3f64, 1.5f64, 100f64.to_radians());
+    let mut v: Vec<f32> = Vec::with_capacity(l * 9);
+    for i in 0..l {
+        for off in [-1.0f64, 0.0, 1.0] {
+            let t = (i as f64 + off * 0.35) * turn;
+            let z = (i as f64 + off * 0.35) * rise;
+            v.extend_from_slice(&[(r * t.cos()) as f32, (r * t.sin()) as f32, z as f32]);
+        }
+    }
+    let coords = Tensor::from_vec(v, (1, l, 3, 3), &Device::Cpu)?;
+
+    let tokens = runner.encode(&coords)?;
+    assert_eq!(tokens.dims(), &[1, l], "one structure token per residue");
+
+    let ids = tokens.flatten_all()?.to_vec1::<u32>()?;
     assert!(
-        msg.contains("does not match"),
-        "error should name the mismatch; got: {msg}"
+        ids.iter().all(|&i| i < 4096),
+        "tokens must index the 4096-entry codebook; got max {:?}",
+        ids.iter().max()
     );
+
+    // A helix is locally periodic, so its interior should not tokenize as 32
+    // distinct states — that would mean the geometry is not reaching the
+    // codebook.
+    let distinct: std::collections::HashSet<u32> = ids[4..l - 4].iter().copied().collect();
     assert!(
-        msg.contains("ESM3Runner itself is unaffected"),
-        "error should say the main model still works; got: {msg}"
+        distinct.len() < ids[4..l - 4].len(),
+        "a regular helix should reuse structure tokens; got {distinct:?}"
     );
+
+    let again = runner.encode(&coords)?.flatten_all()?.to_vec1::<u32>()?;
+    assert_eq!(ids, again, "encoding must be deterministic");
+    Ok(())
 }

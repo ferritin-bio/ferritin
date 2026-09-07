@@ -43,7 +43,8 @@ impl Module for SwiGLU {
 // ── ESM3 UnifiedTransformerBlock ─────────────────────────────────────────────
 
 pub struct UnifiedTransformerBlock {
-    attn: MultiHeadAttention,
+    /// Absent in the structure encoder, whose blocks are geometric-only.
+    attn: Option<MultiHeadAttention>,
     geom_attn: Option<GeometricReasoningOriginalImpl>,
     ffn: SwiGLU,
     scaling_factor: f64,
@@ -54,7 +55,7 @@ impl UnifiedTransformerBlock {
         // Build an ESMCConfig shim so we can reuse the existing load() implementations.
         let esmc_cfg = esmc_config_from_esm3(config);
 
-        let attn = MultiHeadAttention::load(vb.pp("attn"), &esmc_cfg)?;
+        let attn = Some(MultiHeadAttention::load(vb.pp("attn"), &esmc_cfg)?);
 
         let geom_attn = if layer_idx < config.n_layers_geom {
             // Checkpoints name this block "geom_attn", not "geometric"
@@ -77,6 +78,27 @@ impl UnifiedTransformerBlock {
         })
     }
 
+    /// A geometric-only block, as used by the ESM3 structure encoder.
+    ///
+    /// The released `esm3_structure_encoder_v0.pth` has no `attn.*` tensors at
+    /// all — its two blocks are `geom_attn` plus `ffn`. Loading it through
+    /// [`load`][Self::load] fails on `attn.layernorm_qkv.0.weight`, which is
+    /// how this difference was found (ferritin-100.22).
+    pub fn load_geometric(vb: VarBuilder, config: &ESM3Config) -> Result<Self> {
+        let esmc_cfg = esmc_config_from_esm3(config);
+        let geom_attn = Some(GeometricReasoningOriginalImpl::load(
+            vb.pp("geom_attn"),
+            &esmc_cfg,
+        )?);
+        let ffn = SwiGLU::load(vb.pp("ffn"), config)?;
+        Ok(Self {
+            attn: None,
+            geom_attn,
+            ffn,
+            scaling_factor: config.residue_scaling_factor(),
+        })
+    }
+
     pub fn forward(
         &self,
         x: &Tensor,
@@ -87,9 +109,11 @@ impl UnifiedTransformerBlock {
     ) -> Result<Tensor> {
         let mut x = x.clone();
 
-        // Standard multi-head attention residual
-        let r1 = self.attn.forward(&x, sequence_id)?;
-        x = (&x + (r1 / self.scaling_factor)?)?;
+        // Standard multi-head attention residual, when the block has one.
+        if let Some(attn) = &self.attn {
+            let r1 = attn.forward(&x, sequence_id)?;
+            x = (&x + (r1 / self.scaling_factor)?)?;
+        }
 
         // Geometric attention residual (only in layers where geom_attn is present)
         if let (Some(geom), Some(aff), Some(mask)) = (&self.geom_attn, affine, affine_mask) {

@@ -627,11 +627,7 @@ pub const REGISTRY: &[ModelCard] = &[
         },
         approx_bytes_f32: 30 * MB,
         parity: ParityStatus::Unverified,
-        unsupported: Some(
-            "the ported VQ-VAE encoder is a different shape from the released checkpoint: its \
-             blocks have no multi-head attn, it roots at 'transformer' not 'encoder', and it \
-             carries a relative positional embedding this port does not model (ferritin-100.22)",
-        ),
+        unsupported: None,
     },
     // ── ESMFold2 ─────────────────────────────────────────────────────────────
     ModelCard {
@@ -870,7 +866,7 @@ mod tests {
             .map(|c| c.id)
             .collect();
         unsupported.sort_unstable();
-        assert_eq!(unsupported, ["esm3-structure-encoder-v0", "esmfold2-fast"]);
+        assert_eq!(unsupported, ["esmfold2-fast"]);
 
         for card in REGISTRY.iter().filter(|c| !c.is_loadable()) {
             let reason = card.unsupported.unwrap();
