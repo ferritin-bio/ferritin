@@ -44,6 +44,18 @@ pub enum ESM2Models {
     T33_650M,
     T36_3B,
     T48_15B,
+    /// ESM-1v UR90S ensemble member 1 (ferritin-goh.4).
+    Esm1v1,
+    /// ESM-1v UR90S ensemble member 2 (ferritin-goh.4).
+    Esm1v2,
+    /// ESM-1v UR90S ensemble member 3 (ferritin-goh.4).
+    Esm1v3,
+    /// ESM-1v UR90S ensemble member 4 (ferritin-goh.4).
+    Esm1v4,
+    /// ESM-1v UR90S ensemble member 5 (ferritin-goh.4).
+    Esm1v5,
+    /// ESM-1b — learned absolute positions.
+    Esm1b,
     /// SaProt 35M — ESM-2 architecture, structure-aware alphabet (ferritin-goh.3).
     SaProt35M,
     /// SaProt 650M — the variant most people use.
@@ -59,6 +71,12 @@ impl ESM2Models {
             Self::T33_650M => "esm2-t33-650m",
             Self::T36_3B => "esm2-t36-3b",
             Self::T48_15B => "esm2-t48-15b",
+            Self::Esm1v1 => "esm1v-t33-650m-ur90s-1",
+            Self::Esm1v2 => "esm1v-t33-650m-ur90s-2",
+            Self::Esm1v3 => "esm1v-t33-650m-ur90s-3",
+            Self::Esm1v4 => "esm1v-t33-650m-ur90s-4",
+            Self::Esm1v5 => "esm1v-t33-650m-ur90s-5",
+            Self::Esm1b => "esm1b-t33-650m-ur50s",
             Self::SaProt35M => "saprot-35m-af2",
             Self::SaProt650M => "saprot-650m-af2",
         }
@@ -84,6 +102,12 @@ impl ESM2Models {
             Self::T33_650M => ESM2Config::t33_650m(),
             Self::T36_3B => ESM2Config::t36_3b(),
             Self::T48_15B => ESM2Config::t48_15b(),
+            Self::Esm1v1 => ESM2Config::esm1v_t33_650m(),
+            Self::Esm1v2 => ESM2Config::esm1v_t33_650m(),
+            Self::Esm1v3 => ESM2Config::esm1v_t33_650m(),
+            Self::Esm1v4 => ESM2Config::esm1v_t33_650m(),
+            Self::Esm1v5 => ESM2Config::esm1v_t33_650m(),
+            Self::Esm1b => ESM2Config::esm1b_t33_650m(),
             Self::SaProt35M => ESM2Config::saprot_35m(),
             Self::SaProt650M => ESM2Config::saprot_650m(),
         };

@@ -27,6 +27,12 @@
 //! | `esm2-t33-650m` | Esm2 | `facebook/esm2_t33_650M_UR50D` (safetensors) | **not checked** | supported |
 //! | `esm2-t36-3b` | Esm2 | `facebook/esm2_t36_3B_UR50D` (safetensors) | **not checked** | supported |
 //! | `esm2-t48-15b` | Esm2 | `facebook/esm2_t48_15B_UR50D` (safetensors) | **not checked** | supported |
+//! | `esm1v-t33-650m-ur90s-1` | Esm2 | `facebook/esm1v_t33_650M_UR90S_1` (pth) | **not checked** | supported |
+//! | `esm1v-t33-650m-ur90s-2` | Esm2 | `facebook/esm1v_t33_650M_UR90S_2` (pth) | **not checked** | supported |
+//! | `esm1v-t33-650m-ur90s-3` | Esm2 | `facebook/esm1v_t33_650M_UR90S_3` (pth) | **not checked** | supported |
+//! | `esm1v-t33-650m-ur90s-4` | Esm2 | `facebook/esm1v_t33_650M_UR90S_4` (pth) | **not checked** | supported |
+//! | `esm1v-t33-650m-ur90s-5` | Esm2 | `facebook/esm1v_t33_650M_UR90S_5` (pth) | **not checked** | supported |
+//! | `esm1b-t33-650m-ur50s` | Esm2 | `facebook/esm1b_t33_650M_UR50S` (pth) | **not checked** | supported |
 //! | `saprot-35m-af2` | Esm2 | `westlake-repl/SaProt_35M_AF2` (pth) | **not checked** | supported |
 //! | `saprot-650m-af2` | Esm2 | `westlake-repl/SaProt_650M_AF2` (pth) | **not checked** | supported |
 //! | `amplify-120m` | Amplify | `chandar-lab/AMPLIFY_120M` (safetensors) | verified (`amplify_parity`) | supported |

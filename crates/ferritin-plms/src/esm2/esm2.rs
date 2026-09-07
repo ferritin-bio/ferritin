@@ -140,6 +140,33 @@ impl ESM2Config {
     ///
     /// Only a fallback: the hub config.json parses since ferritin-goh.9, so
     /// this is used only when that download fails.
+    /// Whether this model uses learned absolute position embeddings rather
+    /// than rotary ones.
+    ///
+    /// The field was parsed and then ignored before ferritin-goh.4; branching
+    /// on it is what unlocks the whole ESM-1 generation from the ESM-2 module.
+    pub fn uses_absolute_positions(&self) -> bool {
+        self.position_embedding_type == "absolute"
+    }
+
+    /// ESM-1v — the zero-shot variant-effect model. Five UR90S ensemble
+    /// members share these dimensions and differ only in weights.
+    pub fn esm1v_t33_650m() -> Self {
+        Self {
+            num_attention_heads: 20,
+            hidden_size: 1280,
+            intermediate_size: 5120,
+            num_hidden_layers: 33,
+            position_embedding_type: "absolute".to_string(),
+            ..Self::base_config()
+        }
+    }
+
+    /// ESM-1b — same architecture as ESM-1v.
+    pub fn esm1b_t33_650m() -> Self {
+        Self::esm1v_t33_650m()
+    }
+
     pub fn saprot_35m() -> Self {
         Self {
             num_attention_heads: 20,
@@ -305,18 +332,63 @@ pub struct ESM2Embeddings {
     /// See: https://github.com/huggingface/transformers/blob/main/src/transformers/models/esm/modeling_esm.py
     token_dropout: bool,
     mask_token_id: u32,
+    /// Learned absolute position embeddings, for the ESM-1 generation.
+    ///
+    /// `None` for ESM-2 and SaProt, which rotate queries and keys inside
+    /// attention instead. ESM-1b and the five ESM-1v checkpoints declare
+    /// `position_embedding_type: "absolute"` and carry a
+    /// `position_embeddings.weight` table (ferritin-goh.4).
+    position_embeddings: Option<Embedding>,
+    /// Needed to reproduce HuggingFace's position numbering; see
+    /// [`ESM2Embeddings::position_ids`].
+    pad_token_id: u32,
 }
 impl ESM2Embeddings {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
         let vocab_size = config.vocab_size as usize;
         let hidden_size = config.hidden_size;
         let word_embeddings = vb.get((vocab_size, hidden_size), "word_embeddings.weight")?;
+
+        let position_embeddings = if config.uses_absolute_positions() {
+            let table = vb.get(
+                (config.max_position_embeddings as usize, hidden_size),
+                "position_embeddings.weight",
+            )?;
+            Some(Embedding::new(table, hidden_size))
+        } else {
+            None
+        };
+
         Ok(Self {
             word_embeddings: Embedding::new(word_embeddings, hidden_size),
             // ESM-2 does NOT use an embedding scale; that was ESM-1 only.
             token_dropout: config.token_dropout,
             mask_token_id: config.mask_token_id as u32,
+            position_embeddings,
+            pad_token_id: config.pad_token_id as u32,
         })
+    }
+
+    /// Position ids in HuggingFace's numbering.
+    ///
+    /// Not `0..seq_len`. `EsmEmbeddings` derives them from the input, via
+    /// `create_position_ids_from_input_ids`: non-pad positions are numbered
+    /// cumulatively and then offset by `pad_token_id`, so with the usual
+    /// `pad_token_id = 1` the first real token is position **2**, not 0.
+    /// Padding keeps position `pad_token_id`.
+    ///
+    /// Reproducing that offset matters: shifting every position by two would
+    /// index a different row of the learned table at every residue and give
+    /// plausible-looking, wrong embeddings.
+    fn position_ids(&self, input_ids: &Tensor) -> Result<Tensor> {
+        let device = input_ids.device();
+        let pad = Tensor::full(self.pad_token_id, input_ids.shape(), device)?;
+        // cumsum goes through matmul, which candle does not implement for
+        // integer dtypes — so count in F32 and convert back.
+        let mask = input_ids.ne(&pad)?.to_dtype(DType::F32)?;
+        let incremental = (mask.cumsum(1)? * &mask)?;
+        let offset = Tensor::full(self.pad_token_id as f32, input_ids.shape(), device)?;
+        (incremental + offset)?.to_dtype(DType::U32)
     }
     pub fn embed_tokens(&self, x: &Tensor) -> Result<Tensor> {
         self.word_embeddings.forward(x)
@@ -358,6 +430,14 @@ impl ESM2Embeddings {
                 .unsqueeze(2)?
                 .to_dtype(embeddings.dtype())?;
             embeddings = embeddings.broadcast_mul(&scale)?;
+        }
+
+        // ESM-1 adds learned absolute positions here; ESM-2 rotates inside
+        // attention instead and leaves this untouched (ferritin-goh.4).
+        if let Some(table) = &self.position_embeddings {
+            let positions = table.forward(&self.position_ids(input_ids)?)?;
+            let positions = positions.to_dtype(embeddings.dtype())?;
+            embeddings = (embeddings + positions)?;
         }
 
         Ok(embeddings)
@@ -507,7 +587,10 @@ pub struct ESM2Attention {
     out_proj: Linear,
     num_heads: usize,
     head_dim: usize,
-    rotary_emb: RotaryEmbedding,
+    /// `None` for absolute-position models, which add learned positions in
+    /// the embeddings instead. Applying rotary on top of those would rotate
+    /// queries and keys that are already position-encoded (ferritin-goh.4).
+    rotary_emb: Option<RotaryEmbedding>,
 }
 impl ESM2Attention {
     pub fn load(vb: VarBuilder, config: &ESM2Config) -> Result<Self> {
@@ -522,7 +605,14 @@ impl ESM2Attention {
         let k_proj = linear(kdim, embed_dim, vb.pp("self.key"))?;
         let v_proj = linear(vdim, embed_dim, vb.pp("self.value"))?;
         let out_proj = linear(embed_dim, embed_dim, vb.pp("output.dense"))?;
-        let rotary_emb = RotaryEmbedding::load(vb.pp("self.rotary_embeddings"), config)?;
+        let rotary_emb = if config.uses_absolute_positions() {
+            None
+        } else {
+            Some(RotaryEmbedding::load(
+                vb.pp("self.rotary_embeddings"),
+                config,
+            )?)
+        };
         Ok(Self {
             q_proj,
             k_proj,
@@ -557,8 +647,12 @@ impl ESM2Attention {
             .transpose(0, 1)?
             .contiguous()?;
 
-        // Apply rotary position embeddings
-        let (q, k) = self.rotary_emb.forward(&q, &k)?;
+        // Apply rotary position embeddings, unless this model encodes
+        // position in the embeddings instead (ferritin-goh.4).
+        let (q, k) = match &self.rotary_emb {
+            Some(rotary) => rotary.forward(&q, &k)?,
+            None => (q, k),
+        };
 
         // Scale then compute attention scores.
         // Scaling before RoPE is the ESM-2 convention (HF modeling_esm.py:
@@ -823,6 +917,8 @@ mod tests {
             &device,
         )?;
         let embeddings = ESM2Embeddings {
+            position_embeddings: None,
+            pad_token_id: 1,
             word_embeddings: Embedding::new(weight, config.hidden_size),
             token_dropout: config.token_dropout,
             mask_token_id: config.mask_token_id as u32,
@@ -851,6 +947,8 @@ mod tests {
         let mask_id = 32u32;
         let weight = Tensor::ones((vocab, hidden), DType::F32, &device)?;
         let embeddings = ESM2Embeddings {
+            position_embeddings: None,
+            pad_token_id: 1,
             word_embeddings: Embedding::new(weight, hidden),
             token_dropout: true,
             mask_token_id: mask_id,
@@ -928,6 +1026,77 @@ mod tests {
             }
         }
         Tensor::from_vec(data, &[batch, layers, heads, seq_len, seq_len], device)
+    }
+
+    /// Position ids follow HuggingFace's numbering, not `0..seq_len`.
+    ///
+    /// `create_position_ids_from_input_ids` numbers non-pad tokens
+    /// cumulatively and offsets by `pad_token_id`, so with `pad_token_id = 1`
+    /// the first real token is position 2. Getting this wrong would index a
+    /// different row of the learned table at every residue and produce
+    /// plausible, wrong embeddings — which no shape assertion would catch
+    /// (ferritin-goh.4).
+    #[test]
+    fn test_absolute_position_ids_use_the_huggingface_offset() -> Result<()> {
+        let device = Device::Cpu;
+        let embeddings = ESM2Embeddings {
+            position_embeddings: None,
+            pad_token_id: 1,
+            word_embeddings: Embedding::new(Tensor::zeros((33, 8), DType::F32, &device)?, 8),
+            token_dropout: false,
+            mask_token_id: 32,
+        };
+
+        // Four real tokens, no padding.
+        let input = Tensor::new(&[[5u32, 6, 7, 8]], &device)?;
+        let ids = embeddings.position_ids(&input)?.to_vec2::<u32>()?;
+        assert_eq!(
+            ids,
+            vec![vec![2u32, 3, 4, 5]],
+            "the first real token is position 2, not 0"
+        );
+
+        Ok(())
+    }
+
+    /// Padded positions keep `pad_token_id` and do not advance the counter.
+    #[test]
+    fn test_absolute_position_ids_skip_padding() -> Result<()> {
+        let device = Device::Cpu;
+        let embeddings = ESM2Embeddings {
+            position_embeddings: None,
+            pad_token_id: 1,
+            word_embeddings: Embedding::new(Tensor::zeros((33, 8), DType::F32, &device)?, 8),
+            token_dropout: false,
+            mask_token_id: 32,
+        };
+
+        // Two real tokens then two pads.
+        let input = Tensor::new(&[[5u32, 6, 1, 1]], &device)?;
+        let ids = embeddings.position_ids(&input)?.to_vec2::<u32>()?;
+        assert_eq!(
+            ids,
+            vec![vec![2u32, 3, 1, 1]],
+            "padding keeps pad_token_id and does not advance the count"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_position_embedding_type_selects_the_mechanism() {
+        assert!(
+            !ESM2Config::t6_8m().uses_absolute_positions(),
+            "ESM-2 is rotary"
+        );
+        assert!(
+            ESM2Config::esm1v_t33_650m().uses_absolute_positions(),
+            "ESM-1v is absolute"
+        );
+        assert!(
+            !ESM2Config::saprot_35m().uses_absolute_positions(),
+            "SaProt inherits ESM-2's rotary positions"
+        );
     }
 
     /// Contact map shape: output should be (batch, seq_len-2, seq_len-2).

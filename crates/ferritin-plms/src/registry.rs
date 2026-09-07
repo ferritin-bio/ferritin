@@ -277,6 +277,123 @@ pub const REGISTRY: &[ModelCard] = &[
         parity: ParityStatus::Unverified,
         unsupported: None,
     },
+    // ── ESM-1: learned absolute positions rather than rotary ─────────────────
+    //
+    // The five ESM-1v UR90S members are meant to be ensembled for zero-shot
+    // variant effect prediction, so all five are registered; they are
+    // near-identical cards distinguished only by weights (ferritin-goh.4).
+    ModelCard {
+        id: "esm1v-t33-650m-ur90s-1",
+        family: Family::Esm2,
+        source: WeightSource::pth("facebook/esm1v_t33_650M_UR90S_1", None),
+        file: "pytorch_model.bin",
+        // Vocabulary is byte-identical to ESM-2's, so the embedded tokenizer
+        // serves both (verified, ferritin-goh.4).
+        tokenizer: TokenizerSpec::Embedded("esm2/tokenizer.json"),
+        specials: SpecialTokenLayout::BOS_EOS,
+        metadata: ModelMetadata {
+            d_model: 1280,
+            n_layers: 33,
+            vocab_size: 33,
+            max_positions: Some(1026),
+        },
+        approx_bytes_f32: 2 * GB + 600 * MB,
+        parity: ParityStatus::Unverified,
+        unsupported: None,
+    },
+    ModelCard {
+        id: "esm1v-t33-650m-ur90s-2",
+        family: Family::Esm2,
+        source: WeightSource::pth("facebook/esm1v_t33_650M_UR90S_2", None),
+        file: "pytorch_model.bin",
+        // Vocabulary is byte-identical to ESM-2's, so the embedded tokenizer
+        // serves both (verified, ferritin-goh.4).
+        tokenizer: TokenizerSpec::Embedded("esm2/tokenizer.json"),
+        specials: SpecialTokenLayout::BOS_EOS,
+        metadata: ModelMetadata {
+            d_model: 1280,
+            n_layers: 33,
+            vocab_size: 33,
+            max_positions: Some(1026),
+        },
+        approx_bytes_f32: 2 * GB + 600 * MB,
+        parity: ParityStatus::Unverified,
+        unsupported: None,
+    },
+    ModelCard {
+        id: "esm1v-t33-650m-ur90s-3",
+        family: Family::Esm2,
+        source: WeightSource::pth("facebook/esm1v_t33_650M_UR90S_3", None),
+        file: "pytorch_model.bin",
+        // Vocabulary is byte-identical to ESM-2's, so the embedded tokenizer
+        // serves both (verified, ferritin-goh.4).
+        tokenizer: TokenizerSpec::Embedded("esm2/tokenizer.json"),
+        specials: SpecialTokenLayout::BOS_EOS,
+        metadata: ModelMetadata {
+            d_model: 1280,
+            n_layers: 33,
+            vocab_size: 33,
+            max_positions: Some(1026),
+        },
+        approx_bytes_f32: 2 * GB + 600 * MB,
+        parity: ParityStatus::Unverified,
+        unsupported: None,
+    },
+    ModelCard {
+        id: "esm1v-t33-650m-ur90s-4",
+        family: Family::Esm2,
+        source: WeightSource::pth("facebook/esm1v_t33_650M_UR90S_4", None),
+        file: "pytorch_model.bin",
+        // Vocabulary is byte-identical to ESM-2's, so the embedded tokenizer
+        // serves both (verified, ferritin-goh.4).
+        tokenizer: TokenizerSpec::Embedded("esm2/tokenizer.json"),
+        specials: SpecialTokenLayout::BOS_EOS,
+        metadata: ModelMetadata {
+            d_model: 1280,
+            n_layers: 33,
+            vocab_size: 33,
+            max_positions: Some(1026),
+        },
+        approx_bytes_f32: 2 * GB + 600 * MB,
+        parity: ParityStatus::Unverified,
+        unsupported: None,
+    },
+    ModelCard {
+        id: "esm1v-t33-650m-ur90s-5",
+        family: Family::Esm2,
+        source: WeightSource::pth("facebook/esm1v_t33_650M_UR90S_5", None),
+        file: "pytorch_model.bin",
+        // Vocabulary is byte-identical to ESM-2's, so the embedded tokenizer
+        // serves both (verified, ferritin-goh.4).
+        tokenizer: TokenizerSpec::Embedded("esm2/tokenizer.json"),
+        specials: SpecialTokenLayout::BOS_EOS,
+        metadata: ModelMetadata {
+            d_model: 1280,
+            n_layers: 33,
+            vocab_size: 33,
+            max_positions: Some(1026),
+        },
+        approx_bytes_f32: 2 * GB + 600 * MB,
+        parity: ParityStatus::Unverified,
+        unsupported: None,
+    },
+    ModelCard {
+        id: "esm1b-t33-650m-ur50s",
+        family: Family::Esm2,
+        source: WeightSource::pth("facebook/esm1b_t33_650M_UR50S", None),
+        file: "pytorch_model.bin",
+        tokenizer: TokenizerSpec::Embedded("esm2/tokenizer.json"),
+        specials: SpecialTokenLayout::BOS_EOS,
+        metadata: ModelMetadata {
+            d_model: 1280,
+            n_layers: 33,
+            vocab_size: 33,
+            max_positions: Some(1026),
+        },
+        approx_bytes_f32: 2 * GB + 600 * MB,
+        parity: ParityStatus::Unverified,
+        unsupported: None,
+    },
     // ── SaProt: ESM-2 architecture over a structure-aware alphabet ───────────
     ModelCard {
         id: "saprot-35m-af2",
