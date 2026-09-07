@@ -260,6 +260,41 @@ impl ESM2Config {
     }
 }
 
+/// The additive value used for padded key positions, chosen per dtype.
+///
+/// It has to be large enough that `exp(score + fill - max)` underflows to zero
+/// and small enough to stay finite in the tensor's dtype. F16 tops out at
+/// ±65504, so the usual `-1e9` (or `f32::MIN`) would saturate to `-inf` there;
+/// `-1e4` is still ~10^4 below any realistic scaled dot product, so softmax
+/// returns exactly 0 for those positions in every supported dtype.
+fn attention_mask_fill_value(dtype: DType) -> f64 {
+    match dtype {
+        DType::F16 => -1e4,
+        _ => -1e9,
+    }
+}
+
+/// Turn a `(batch, seq_len)` padding mask (1 = real token, 0 = pad) into an
+/// additive attention bias of shape `(batch, 1, 1, seq_len)`.
+///
+/// The bias is `0` at real tokens and a large negative constant at pads, and is
+/// meant to be added to the attention **scores before softmax**. Multiplying the
+/// probabilities after softmax is not equivalent: it leaves the surviving
+/// probabilities un-renormalised and still lets pad positions steal mass.
+///
+/// The trailing axis indexes **keys**, so adding this bias stops every query
+/// from attending to a padded position. Padded *queries* are left alone — their
+/// own output rows are garbage but nothing downstream of attention mixes across
+/// positions, so they cannot contaminate the real residues.
+fn padding_attention_bias(mask: &Tensor, dtype: DType) -> Result<Tensor> {
+    let (batch, seq_len) = mask.dims2()?;
+    let mask = mask.to_dtype(dtype)?;
+    let ones = Tensor::ones((batch, seq_len), dtype, mask.device())?;
+    // (1 - mask) * fill → 0 where real, `fill` where pad.
+    let bias = (ones - &mask)?.affine(attention_mask_fill_value(dtype), 0.0)?;
+    bias.reshape((batch, 1, 1, seq_len))
+}
+
 fn rotate_half(x: &Tensor) -> Result<Tensor> {
     let l = x.dim(D::Minus1)?;
     let x1 = x.narrow(D::Minus1, 0, l / 2)?;
@@ -625,7 +660,17 @@ impl ESM2Attention {
     }
     /// Returns `(output, attention_weights)`.
     /// `attention_weights` shape: `(batch, heads, seq_len, seq_len)`.
-    fn forward(&self, query: &Tensor, key: &Tensor, value: &Tensor) -> Result<(Tensor, Tensor)> {
+    ///
+    /// `attention_bias`: optional additive padding bias of shape
+    /// `(batch, 1, 1, seq_len)` from [`padding_attention_bias`], added to the
+    /// scores before softmax.
+    fn forward(
+        &self,
+        query: &Tensor,
+        key: &Tensor,
+        value: &Tensor,
+        attention_bias: Option<&Tensor>,
+    ) -> Result<(Tensor, Tensor)> {
         let (seq_len, batch_size, embed_dim) = query.dims3()?;
 
         // Project inputs to queries, keys, values
@@ -659,6 +704,26 @@ impl ESM2Attention {
         // "query_layer = query_layer * self.attention_head_size**-0.5")
         let scale = (self.head_dim as f64).powf(-0.5);
         let attention_scores = q.matmul(&k.transpose(1, 2)?)?.affine(scale, 0.0)?;
+
+        // Mask padded keys BEFORE softmax. `attention_scores` is
+        // (batch*heads, seq_len, seq_len) — a flat leading axis, NOT
+        // (batch, heads, seq, seq) — and the q/k/v reshape above
+        // (`reshape((seq_len, batch*heads, head_dim))`) splits the trailing
+        // `heads*head_dim` axis, so the flattened index is **batch-major**:
+        // `b * num_heads + h`. Expanding (batch, 1, 1, seq) over the head axis
+        // and reshaping reproduces exactly that order; building it head-major
+        // would apply sequence b's mask to a different sequence's heads.
+        let attention_scores = match attention_bias {
+            Some(bias) => {
+                let bias = bias
+                    .to_dtype(attention_scores.dtype())?
+                    .expand((batch_size, self.num_heads, 1, seq_len))?
+                    .contiguous()?
+                    .reshape((batch_size * self.num_heads, 1, seq_len))?;
+                attention_scores.broadcast_add(&bias)?
+            }
+            None => attention_scores,
+        };
 
         // Softmax → (batch*heads, seq_len, seq_len)
         let attention_weights_flat = ops::softmax_last_dim(&attention_scores)?;
@@ -716,10 +781,14 @@ impl ESM2Layer {
     }
     /// Returns `(hidden_states, attention_weights)` where attention_weights
     /// has shape `(batch, heads, seq_len, seq_len)`.
-    fn forward(&self, xs: &Tensor) -> Result<(Tensor, Tensor)> {
+    ///
+    /// `attention_bias`: optional additive padding bias, `(batch, 1, 1, seq_len)`.
+    fn forward(&self, xs: &Tensor, attention_bias: Option<&Tensor>) -> Result<(Tensor, Tensor)> {
         // Pre-LayerNorm → attention → residual
         let norm_x = xs.apply(&self.self_attn_layer_norm)?;
-        let (attn_out, attn_weights) = self.self_attn.forward(&norm_x, &norm_x, &norm_x)?;
+        let (attn_out, attn_weights) =
+            self.self_attn
+                .forward(&norm_x, &norm_x, &norm_x, attention_bias)?;
         let x = (attn_out + xs)?;
         // Pre-LayerNorm → FFN → residual.
         // ESM-2's intermediate activation is exact (erf-based) gelu; candle's
@@ -786,15 +855,17 @@ impl ESM2 {
     /// Run a forward pass.
     ///
     /// `attention_mask`: optional `(batch, seq_len)` tensor (1 = real token, 0 = pad).
-    /// Used for token-dropout compensation in the embeddings; pass `None` for single-
-    /// sequence inference where no padding is present.
+    /// Used for token-dropout compensation in the embeddings and to keep padded
+    /// positions out of self-attention; pass `None` for single-sequence inference
+    /// where no padding is present.
     pub fn forward(&self, x: &Tensor, attention_mask: Option<&Tensor>) -> Result<ESM2Output> {
         let mut xs = self.embeddings.forward(x, attention_mask)?;
+        let attention_bias = self.attention_bias(attention_mask, xs.dtype())?;
         // Transpose to sequence-first format for transformer processing
         xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
         // Process through transformer layers
         for layer in self.layers.iter() {
-            let (new_xs, _attn) = layer.forward(&xs)?;
+            let (new_xs, _attn) = layer.forward(&xs, attention_bias.as_ref())?;
             xs = new_xs;
         }
         // Apply final layer normalization
@@ -812,14 +883,30 @@ impl ESM2 {
     /// the final `lm_head` projection, giving raw contextualised embeddings.
     pub fn embed(&self, x: &Tensor, attention_mask: Option<&Tensor>) -> Result<Tensor> {
         let mut xs = self.embeddings.forward(x, attention_mask)?;
+        let attention_bias = self.attention_bias(attention_mask, xs.dtype())?;
         xs = xs.transpose(0, 1)?; // (B, T, E) -> (T, B, E)
         for layer in self.layers.iter() {
-            let (new_xs, _attn) = layer.forward(&xs)?;
+            let (new_xs, _attn) = layer.forward(&xs, attention_bias.as_ref())?;
             xs = new_xs;
         }
         xs = self.layer_norm_after.forward(&xs)?;
         xs = xs.transpose(0, 1)?; // (T, B, E) -> (B, T, E)
         Ok(xs)
+    }
+
+    /// Build the additive self-attention bias for an optional padding mask.
+    ///
+    /// Returns `None` when no mask is supplied, which keeps the unpadded path
+    /// allocation-free and bit-identical to the pre-mask behaviour.
+    fn attention_bias(
+        &self,
+        attention_mask: Option<&Tensor>,
+        dtype: DType,
+    ) -> Result<Option<Tensor>> {
+        match attention_mask {
+            Some(mask) => Ok(Some(padding_attention_bias(mask, dtype)?)),
+            None => Ok(None),
+        }
     }
 
     pub(crate) fn get_device(&self) -> &Device {
@@ -846,12 +933,13 @@ impl ESM2 {
         attention_mask: Option<&Tensor>,
     ) -> Result<Tensor> {
         let mut xs = self.embeddings.forward(tokens, attention_mask)?;
+        let attention_bias = self.attention_bias(attention_mask, xs.dtype())?;
         xs = xs.transpose(0, 1)?; // (B, T, E) → (T, B, E)
 
         // Collect per-layer attention: each is (batch, heads, seq_len, seq_len)
         let mut layer_attentions: Vec<Tensor> = Vec::with_capacity(self.layers.len());
         for layer in &self.layers {
-            let (new_xs, attn_weights) = layer.forward(&xs)?;
+            let (new_xs, attn_weights) = layer.forward(&xs, attention_bias.as_ref())?;
             xs = new_xs;
             layer_attentions.push(attn_weights);
         }
@@ -861,9 +949,17 @@ impl ESM2 {
         // head only uses the attention weights, not the final hidden states.
 
         // Stack → (batch, layers, heads, seq_len, seq_len)
-        let attentions = Tensor::stack(&layer_attentions, 1)?;
+        let mut attentions = Tensor::stack(&layer_attentions, 1)?;
 
-        // ESM model zeroes attention to pad tokens; replicate that here.
+        // ESM zeroes attention rows AND columns for pad tokens after softmax
+        // (esm/model/esm2.py). Half of that is now redundant: masking the scores
+        // before softmax already drives every padded *key* column to 0. The other
+        // half is not — a padded *query* still produces a full row of
+        // probabilities summing to 1 over the real tokens, and the contact head's
+        // APC step sums over both axes, so those rows have to be zeroed here.
+        // (Before this commit the whole block was dead code: the result was
+        // dropped with `let _ =`. With `attention_mask: None`, the only thing any
+        // caller passes today, this branch still does nothing.)
         if let Some(mask) = attention_mask {
             // mask: (batch, seq_len) → broadcast to (batch, 1, 1, seq_len, seq_len)
             let mask_f = mask.to_dtype(attentions.dtype())?;
@@ -871,7 +967,7 @@ impl ESM2 {
             let m2 = mask_f.unsqueeze(1)?.unsqueeze(2)?.unsqueeze(4)?;
             // Zero out both the row and the column for each padded position
             // by multiplying both masks (outer product along seq dims)
-            let _ = attentions.broadcast_mul(&m1)?.broadcast_mul(&m2)?;
+            attentions = attentions.broadcast_mul(&m1)?.broadcast_mul(&m2)?;
         }
 
         let head = self.contact_head.as_ref().ok_or_else(|| {
@@ -1234,6 +1330,281 @@ mod tests {
         let tokens = encoding.get_tokens();
         assert_eq!(tokens.len(), 6);
         assert_eq!(tokens, &["M", "L", "K", "L", "R", "V"]);
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Padding-mask tests (ferritin-100.12 step 1)
+    //
+    // These run a *whole* tiny ESM-2 built from deterministic pseudo-random
+    // weights, so they need no checkpoint download and no network.
+    // -----------------------------------------------------------------------
+
+    /// Deterministic, platform-independent weight generator. A real RNG is not
+    /// needed — only values that are non-degenerate and reproducible.
+    struct Lcg(u64);
+    impl Lcg {
+        fn next_f32(&mut self) -> f32 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let unit = (self.0 >> 33) as f32 / (1u64 << 31) as f32; // [0, 1)
+            (unit - 0.5) * 0.5 // [-0.25, 0.25)
+        }
+        fn tensor(&mut self, dims: &[usize], device: &Device) -> Result<Tensor> {
+            let n: usize = dims.iter().product();
+            let v: Vec<f32> = (0..n).map(|_| self.next_f32()).collect();
+            Tensor::from_vec(v, dims.to_vec(), device)
+        }
+    }
+
+    fn tiny_config() -> ESM2Config {
+        ESM2Config {
+            num_attention_heads: 2,
+            hidden_size: 8,
+            intermediate_size: 16,
+            num_hidden_layers: 2,
+            ..ESM2Config::t6_8m()
+        }
+    }
+
+    /// Build a complete, runnable ESM-2 with random weights and no contact head.
+    fn tiny_model(device: &Device) -> Result<ESM2> {
+        let config = tiny_config();
+        let hidden = config.hidden_size;
+        let inter = config.intermediate_size as usize;
+        let vocab = config.vocab_size as usize;
+        let head_dim = config.head_dim();
+
+        let mut rng = Lcg(0x5EED_1234);
+        let mut ts: std::collections::HashMap<String, Tensor> = std::collections::HashMap::new();
+
+        let layer_norm =
+            |ts: &mut std::collections::HashMap<String, Tensor>, prefix: &str| -> Result<()> {
+                ts.insert(
+                    format!("{prefix}.weight"),
+                    Tensor::ones(hidden, DType::F32, device)?,
+                );
+                ts.insert(
+                    format!("{prefix}.bias"),
+                    Tensor::zeros(hidden, DType::F32, device)?,
+                );
+                Ok(())
+            };
+
+        ts.insert(
+            "esm.embeddings.word_embeddings.weight".to_string(),
+            rng.tensor(&[vocab, hidden], device)?,
+        );
+        layer_norm(&mut ts, "esm.encoder.emb_layer_norm_after")?;
+        layer_norm(&mut ts, "lm_head.layer_norm")?;
+        ts.insert(
+            "lm_head.dense.weight".to_string(),
+            rng.tensor(&[hidden, hidden], device)?,
+        );
+        ts.insert(
+            "lm_head.dense.bias".to_string(),
+            rng.tensor(&[hidden], device)?,
+        );
+        ts.insert("lm_head.bias".to_string(), rng.tensor(&[vocab], device)?);
+
+        // inv_freq as ESM-2 defines it: 1 / 10000^(2i/head_dim)
+        let inv_freq: Vec<f32> = (0..config.inv_freq_size())
+            .map(|i| 1.0f32 / 10000f32.powf(2.0 * i as f32 / head_dim as f32))
+            .collect();
+
+        for i in 0..config.num_hidden_layers {
+            let p = format!("esm.encoder.layer.{i}");
+            for proj in ["query", "key", "value"] {
+                ts.insert(
+                    format!("{p}.attention.self.{proj}.weight"),
+                    rng.tensor(&[hidden, hidden], device)?,
+                );
+                ts.insert(
+                    format!("{p}.attention.self.{proj}.bias"),
+                    rng.tensor(&[hidden], device)?,
+                );
+            }
+            ts.insert(
+                format!("{p}.attention.self.rotary_embeddings.inv_freq"),
+                Tensor::from_vec(inv_freq.clone(), inv_freq.len(), device)?,
+            );
+            ts.insert(
+                format!("{p}.attention.output.dense.weight"),
+                rng.tensor(&[hidden, hidden], device)?,
+            );
+            ts.insert(
+                format!("{p}.attention.output.dense.bias"),
+                rng.tensor(&[hidden], device)?,
+            );
+            layer_norm(&mut ts, &format!("{p}.attention.LayerNorm"))?;
+            layer_norm(&mut ts, &format!("{p}.LayerNorm"))?;
+            ts.insert(
+                format!("{p}.intermediate.dense.weight"),
+                rng.tensor(&[inter, hidden], device)?,
+            );
+            ts.insert(
+                format!("{p}.intermediate.dense.bias"),
+                rng.tensor(&[inter], device)?,
+            );
+            ts.insert(
+                format!("{p}.output.dense.weight"),
+                rng.tensor(&[hidden, inter], device)?,
+            );
+            ts.insert(
+                format!("{p}.output.dense.bias"),
+                rng.tensor(&[hidden], device)?,
+            );
+        }
+
+        let vb = VarBuilder::from_tensors(ts, DType::F32, device);
+        ESM2::load(vb, config)
+    }
+
+    fn max_abs_diff(a: &Tensor, b: &Tensor) -> Result<f32> {
+        let a: Vec<f32> = a.flatten_all()?.to_vec1()?;
+        let b: Vec<f32> = b.flatten_all()?.to_vec1()?;
+        assert_eq!(a.len(), b.len(), "shape mismatch in comparison");
+        Ok(a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| (x - y).abs())
+            .fold(0f32, f32::max))
+    }
+
+    /// Right-pad `tokens` to `to_len` with the pad id, returning the token row
+    /// and its `(1, to_len)` mask (1 = real, 0 = pad).
+    fn pad_row(tokens: &[u32], to_len: usize, pad_id: u32) -> (Vec<u32>, Vec<f32>) {
+        let mut t = tokens.to_vec();
+        t.resize(to_len, pad_id);
+        let mut m = vec![1f32; tokens.len()];
+        m.resize(to_len, 0f32);
+        (t, m)
+    }
+
+    /// The core guarantee: right-padding a sequence and supplying the matching
+    /// mask must not change the embeddings of the real residues.
+    ///
+    /// This fails without the pre-softmax mask — the same test also asserts that
+    /// padding *without* a mask does perturb the result, so the assertion above
+    /// cannot pass vacuously (e.g. if the bias were computed as all zeros).
+    #[test]
+    fn test_right_padding_with_mask_leaves_real_residues_unchanged() -> Result<()> {
+        let device = Device::Cpu;
+        let model = tiny_model(&device)?;
+        let pad_id = 1u32;
+        let real: Vec<u32> = vec![0, 5, 7, 9, 11, 13, 2];
+        let len = real.len();
+
+        let unpadded = Tensor::new(&real[..], &device)?.unsqueeze(0)?;
+        let single = model.embed(&unpadded, None)?;
+
+        let (tokens, mask) = pad_row(&real, len + 5, pad_id);
+        let padded = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
+        let mask = Tensor::new(&mask[..], &device)?.unsqueeze(0)?;
+
+        let masked = model.embed(&padded, Some(&mask))?.narrow(1, 0, len)?;
+        let diff = max_abs_diff(&single, &masked)?;
+        assert!(
+            diff < 1e-5,
+            "padded+masked embeddings drifted from unpadded: max abs diff {diff}"
+        );
+
+        // Sanity: the padding really does matter, so the assertion above is not
+        // trivially satisfied. Without a mask the pad tokens leak into attention.
+        let unmasked = model.embed(&padded, None)?.narrow(1, 0, len)?;
+        let leak = max_abs_diff(&single, &unmasked)?;
+        assert!(
+            leak > 1e-4,
+            "padding without a mask should perturb the real residues, but max abs diff was {leak}"
+        );
+        Ok(())
+    }
+
+    /// An all-ones mask must be numerically identical to passing `None`.
+    #[test]
+    fn test_all_ones_mask_is_a_no_op() -> Result<()> {
+        let device = Device::Cpu;
+        let model = tiny_model(&device)?;
+        let tokens: Vec<u32> = vec![0, 4, 6, 8, 10, 2];
+        let x = Tensor::new(&tokens[..], &device)?.unsqueeze(0)?;
+        let ones = Tensor::ones((1, tokens.len()), DType::F32, &device)?;
+
+        let none = model.embed(&x, None)?;
+        let all_ones = model.embed(&x, Some(&ones))?;
+        let diff = max_abs_diff(&none, &all_ones)?;
+        assert!(diff < 1e-6, "all-ones mask changed the result: {diff}");
+        Ok(())
+    }
+
+    /// Two sequences of *different* lengths in one batch. Each row must match
+    /// the same sequence embedded alone.
+    ///
+    /// This is the ordering test: the attention bias is flattened to
+    /// `(batch*heads, 1, seq)` and must use the same batch-major order
+    /// (`b * num_heads + h`) as the q/k/v reshape. Flattening head-major instead
+    /// would hand row 0's heads row 1's mask, which — because the two rows here
+    /// have different pad lengths — changes the numbers.
+    #[test]
+    fn test_batched_rows_match_single_sequence_embeddings() -> Result<()> {
+        let device = Device::Cpu;
+        let model = tiny_model(&device)?;
+        let pad_id = 1u32;
+        let a: Vec<u32> = vec![0, 5, 7, 9, 11, 13, 15, 2];
+        let b: Vec<u32> = vec![0, 6, 8, 2];
+        let max_len = a.len();
+
+        let (a_tok, a_mask) = pad_row(&a, max_len, pad_id);
+        let (b_tok, b_mask) = pad_row(&b, max_len, pad_id);
+        let mut tok_flat = a_tok;
+        tok_flat.extend_from_slice(&b_tok);
+        let tokens = Tensor::from_vec(tok_flat, (2, max_len), &device)?;
+        let mut mask_flat = a_mask;
+        mask_flat.extend_from_slice(&b_mask);
+        let mask = Tensor::from_vec(mask_flat, (2, max_len), &device)?;
+        let batched = model.embed(&tokens, Some(&mask))?;
+
+        for (row, seq) in [(0usize, &a), (1usize, &b)] {
+            let single = model.embed(&Tensor::new(&seq[..], &device)?.unsqueeze(0)?, None)?;
+            let from_batch = batched.narrow(0, row, 1)?.narrow(1, 0, seq.len())?;
+            let diff = max_abs_diff(&single, &from_batch)?;
+            assert!(
+                diff < 1e-5,
+                "batch row {row} disagrees with its single-sequence embedding: {diff}"
+            );
+        }
+        Ok(())
+    }
+
+    /// The masked-score fill value must stay finite in every supported dtype;
+    /// F16 saturates past ±65504, which would turn the bias into `-inf`.
+    #[test]
+    fn test_attention_mask_fill_value_is_dtype_safe() {
+        for dtype in [DType::F32, DType::F64, DType::BF16, DType::F16] {
+            let v = attention_mask_fill_value(dtype);
+            assert!(
+                v <= -1e4,
+                "fill value {v} for {dtype:?} is not negative enough"
+            );
+        }
+        assert!(
+            attention_mask_fill_value(DType::F16) > -65504.0,
+            "F16 fill value must stay inside the F16 range"
+        );
+    }
+
+    /// The bias itself: zero at real tokens, strongly negative at pads,
+    /// shaped `(batch, 1, 1, seq_len)`.
+    #[test]
+    fn test_padding_attention_bias_shape_and_values() -> Result<()> {
+        let device = Device::Cpu;
+        let mask = Tensor::new(&[[1f32, 1f32, 0f32]], &device)?;
+        let bias = padding_attention_bias(&mask, DType::F32)?;
+        assert_eq!(bias.dims(), &[1, 1, 1, 3]);
+        let v: Vec<f32> = bias.flatten_all()?.to_vec1()?;
+        assert_eq!(v[0], 0.0);
+        assert_eq!(v[1], 0.0);
+        assert!(v[2] <= -1e4, "pad position bias was {}", v[2]);
         Ok(())
     }
 }
