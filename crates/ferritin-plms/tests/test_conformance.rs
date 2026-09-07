@@ -55,7 +55,7 @@ mod support;
 use anyhow::{Result, bail};
 use candle_core::DType;
 use ferritin_plms::plm_runner::PlmRunner;
-use ferritin_plms::registry::{ModelCard, ParityStatus, REGISTRY, TokenizerSpec};
+use ferritin_plms::registry::{ModelCard, ParityStatus, REGISTRY, TokenizerSpec, VocabAlphabet};
 use ferritin_plms::{
     AmplifyModels, AmplifyRunner, ESM2Models, ESM2Runner, ESM3Models, ESM3Runner, ESMCModels,
     ESMCRunner, device,
@@ -92,7 +92,9 @@ const SEQ: &str = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNI
 /// way to run it sequence-only (ferritin-goh.3).
 fn test_sequence(card: &ModelCard) -> String {
     match card.tokenizer {
-        TokenizerSpec::HfVocabTxt => SEQ.chars().flat_map(|c| [c, '#']).collect(),
+        TokenizerSpec::HfVocabTxt(VocabAlphabet::SaProtPairs) => {
+            SEQ.chars().flat_map(|c| [c, '#']).collect()
+        }
         _ => SEQ.to_string(),
     }
 }

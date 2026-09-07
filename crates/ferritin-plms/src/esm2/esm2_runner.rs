@@ -5,7 +5,7 @@ use super::esm2::{ESM2, ESM2Config, ESM2Output};
 use crate::esm2::saprot_tokenizer::SaProtTokenizer;
 use crate::loader::{LoadOptions, WeightSource};
 use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
-use crate::registry::{self, ModelCard, TokenizerSpec};
+use crate::registry::{self, ModelCard, TokenizerSpec, VocabAlphabet};
 use crate::types::PseudoProbability;
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{Device, Tensor};
@@ -216,7 +216,7 @@ impl ESM2Runner {
         // The alphabet follows the card, not the family: SaProt reuses this
         // architecture with a 446-token vocab.txt (ferritin-goh.3).
         let tokenizer = match card.tokenizer {
-            TokenizerSpec::HfVocabTxt => {
+            TokenizerSpec::HfVocabTxt(VocabAlphabet::SaProtPairs) => {
                 let path = source.fetch("vocab.txt")?;
                 let contents = std::fs::read_to_string(path)?;
                 SequenceTokenizer::SaProt(SaProtTokenizer::from_vocab_txt(&contents)?)

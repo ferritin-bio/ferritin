@@ -44,6 +44,8 @@
 //! | `esm3-structure-encoder-v0` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | **not checked** | **unsupported** — the ported VQ-VAE encoder is a different shape from the released checkpoint (ferritin-100.22) |
 //! | `esmfold2-fast` | Esmfold2 | `biohub/ESMFold2-Fast` (safetensors) | **not checked** | **unsupported** — the ported architecture does not match the released checkpoint (ferritin-100.17) |
 //! | `proteinmpnn-v48-020` | Mpnn | `zcpbx/ligandmpnn-weights` (pth) | **not checked** | supported |
+//! | `prot-bert` | Bert | `Rostlab/prot_bert` (pth) | **not checked** | **unsupported** — pytorch_model.bin is a legacy pre-torch-1.6 pickle (ferritin-goh.10) |
+//! | `prot-bert-bfd` | Bert | `Rostlab/prot_bert_bfd` (pth) | **not checked** | **unsupported** — same legacy pickle container as prot-bert (ferritin-goh.10) |
 //! <!-- END SUPPORT MATRIX -->
 
 // The crate deliberately uses the `foo/mod.rs` + inner `mod foo` layout for
@@ -81,11 +83,12 @@ pub mod featurize;
 pub mod ligandmpnn;
 pub mod loader;
 pub mod plm_runner;
+pub mod protbert;
 pub mod registry;
 pub mod types;
 pub mod utils;
 pub use plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
-pub use registry::{Family, ModelCard, ParityStatus, REGISTRY, TokenizerSpec};
+pub use registry::{Family, ModelCard, ParityStatus, REGISTRY, TokenizerSpec, VocabAlphabet};
 
 /// Returns the best available device for computation.
 ///
