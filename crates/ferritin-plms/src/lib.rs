@@ -27,6 +27,8 @@
 //! | `esm2-t33-650m` | Esm2 | `facebook/esm2_t33_650M_UR50D` (safetensors) | **not checked** | supported |
 //! | `esm2-t36-3b` | Esm2 | `facebook/esm2_t36_3B_UR50D` (safetensors) | **not checked** | supported |
 //! | `esm2-t48-15b` | Esm2 | `facebook/esm2_t48_15B_UR50D` (safetensors) | **not checked** | supported |
+//! | `saprot-35m-af2` | Esm2 | `westlake-repl/SaProt_35M_AF2` (pth) | **not checked** | supported |
+//! | `saprot-650m-af2` | Esm2 | `westlake-repl/SaProt_650M_AF2` (pth) | **not checked** | supported |
 //! | `amplify-120m` | Amplify | `chandar-lab/AMPLIFY_120M` (safetensors) | verified (`amplify_parity`) | supported |
 //! | `amplify-350m` | Amplify | `chandar-lab/AMPLIFY_350M` (safetensors) | **not checked** | supported |
 //! | `esmc-300m` | Esmc | `EvolutionaryScale/esmc-300m-2024-12` (pth) | **not checked** | supported |

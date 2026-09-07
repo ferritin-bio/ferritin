@@ -151,6 +151,8 @@ fn test_loadable_embedding_models_are_covered() {
             "esmc-300m",
             "esmc-600m",
             "esmc-6b",
+            "saprot-35m-af2",
+            "saprot-650m-af2",
         ],
         "the set of loadable embedding models changed; add or remove a \
          conformance test to match"
@@ -186,6 +188,8 @@ fn test_uncovered_loadable_models_are_accounted_for() {
             "esm2-t33-650m",
             "esm2-t36-3b",
             "esm2-t48-15b",
+            "saprot-35m-af2",
+            "saprot-650m-af2",
             "amplify-350m",
             "esmc-600m",
             "esmc-6b",
