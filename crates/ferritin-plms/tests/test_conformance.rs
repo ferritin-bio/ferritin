@@ -106,6 +106,12 @@ fn runner_for(card: &ModelCard) -> Result<Box<dyn PlmRunner>> {
     let dev = device(false)?;
     Ok(match card.id {
         "esm2-t6-8m" => Box::new(ESM2Runner::from_pretrained(ESM2Models::T6_8M, dev)?),
+        "esm1v-t33-650m-ur90s-1" => Box::new(ESM2Runner::from_pretrained(ESM2Models::Esm1v1, dev)?),
+        "esm1v-t33-650m-ur90s-2" => Box::new(ESM2Runner::from_pretrained(ESM2Models::Esm1v2, dev)?),
+        "esm1v-t33-650m-ur90s-3" => Box::new(ESM2Runner::from_pretrained(ESM2Models::Esm1v3, dev)?),
+        "esm1v-t33-650m-ur90s-4" => Box::new(ESM2Runner::from_pretrained(ESM2Models::Esm1v4, dev)?),
+        "esm1v-t33-650m-ur90s-5" => Box::new(ESM2Runner::from_pretrained(ESM2Models::Esm1v5, dev)?),
+        "esm1b-t33-650m-ur50s" => Box::new(ESM2Runner::from_pretrained(ESM2Models::Esm1b, dev)?),
         "saprot-35m-af2" => Box::new(ESM2Runner::from_pretrained(ESM2Models::SaProt35M, dev)?),
         "saprot-650m-af2" => Box::new(ESM2Runner::from_pretrained(ESM2Models::SaProt650M, dev)?),
         "esm2-t12-35m" => Box::new(ESM2Runner::from_pretrained(ESM2Models::T12_35M, dev)?),
@@ -286,6 +292,12 @@ fn test_every_loadable_model_can_be_constructed() {
         "esm2-t33-650m",
         "esm2-t36-3b",
         "esm2-t48-15b",
+        "esm1v-t33-650m-ur90s-1",
+        "esm1v-t33-650m-ur90s-2",
+        "esm1v-t33-650m-ur90s-3",
+        "esm1v-t33-650m-ur90s-4",
+        "esm1v-t33-650m-ur90s-5",
+        "esm1b-t33-650m-ur50s",
         "saprot-35m-af2",
         "saprot-650m-af2",
         "amplify-120m",
@@ -397,5 +409,55 @@ fn test_saprot_reads_two_chars_per_residue() -> Result<()> {
         "embed_residues must return one row per residue, not per character"
     );
     assert_eq!(residues.dim(2)?, card.metadata.d_model);
+    Ok(())
+}
+
+/// ESM-1v loads with learned absolute positions and reconstructs its input.
+///
+/// Shape checks alone would not catch a wrong position encoding — the tensors
+/// would be the right size and full of plausible numbers. Masked-LM
+/// reconstruction is the cheap signal that does catch it: if positions were
+/// off, or rotary were applied on top of the learned table, the model's own
+/// argmax would stop agreeing with the input (ferritin-goh.4).
+#[test]
+#[ignore = "downloads facebook/esm1v_t33_650M_UR90S_1 (~2.6 GB)"]
+fn test_esm1v_absolute_positions_reconstruct_input() -> Result<()> {
+    use ferritin_plms::ESM2Runner;
+
+    use ferritin_plms::esm2::esm2::ESM2Output;
+
+    let runner = ESM2Runner::from_pretrained(ESM2Models::Esm1v1, device(false)?)?;
+    let output = runner.run_forward(SEQ)?;
+
+    // Strip the BOS/EOS rows before decoding. decode_logits drops only those
+    // positions whose argmax happens to be a special token, so decoding the
+    // raw (L+2)-row output can return more characters than there are residues.
+    let residue_logits = output.logits.narrow(1, 1, SEQ.len())?;
+    let decoded = runner.decode_logits(ESM2Output {
+        logits: residue_logits,
+    })?;
+
+    assert_eq!(
+        decoded.len(),
+        SEQ.len(),
+        "reconstruction should be the same length as the input"
+    );
+
+    let agree = SEQ
+        .chars()
+        .zip(decoded.chars())
+        .filter(|(a, b)| a == b)
+        .count() as f32
+        / SEQ.len() as f32;
+
+    // The existing ESM-2 smoke test uses 0.7; a wrong position encoding
+    // collapses this far below chance-corrected agreement.
+    assert!(
+        agree > 0.7,
+        "ESM-1v reconstructed only {:.0}% of ubiquitin, which suggests the \
+         absolute position encoding is wrong; got {decoded}",
+        agree * 100.0
+    );
+    println!("esm1v-1 reconstruction agreement: {:.1}%", agree * 100.0);
     Ok(())
 }
