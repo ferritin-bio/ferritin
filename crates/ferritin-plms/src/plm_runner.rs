@@ -120,6 +120,20 @@ pub trait PlmRunner {
     /// Device the model's weights live on.
     fn device(&self) -> &Device;
 
+    /// How many residues `sequence` encodes.
+    ///
+    /// One per byte for the standard amino-acid alphabets, which is the
+    /// default. SaProt is the exception: it tokenizes each residue as an
+    /// (amino acid, 3Di structural state) pair over a 20x20 product alphabet,
+    /// so `"MdAaLp"` is three residues, not six (ferritin-goh.3).
+    ///
+    /// [`embed_residues`][Self::embed_residues] uses this rather than
+    /// `sequence.len()`, so a model whose alphabet is not one byte per residue
+    /// still gets exactly one row per residue.
+    fn residue_count(&self, sequence: &str) -> usize {
+        sequence.len()
+    }
+
     /// Per-residue embeddings with special-token rows removed.
     ///
     /// Shape: `(1, sequence.len(), d_model)` — guaranteed, and therefore
@@ -133,20 +147,20 @@ pub trait PlmRunner {
     fn embed_residues(&self, sequence: &str) -> Result<Tensor> {
         let raw = self.embed(sequence)?;
         let layout = self.special_tokens();
+        let residues = self.residue_count(sequence);
         let rows = raw.dim(1)?;
-        let expected = sequence.len() + layout.total();
+        let expected = residues + layout.total();
         if rows != expected {
             bail!(
-                "{}: embed() returned {rows} rows for a {}-residue sequence, but its \
+                "{}: embed() returned {rows} rows for a {residues}-residue sequence, but its \
                  declared special-token layout ({} leading, {} trailing) implies {expected}. \
                  The runner's SpecialTokenLayout does not match its tokenizer.",
                 self.model_name(),
-                sequence.len(),
                 layout.leading,
                 layout.trailing,
             );
         }
-        Ok(raw.narrow(1, layout.leading, sequence.len())?)
+        Ok(raw.narrow(1, layout.leading, residues)?)
     }
 
     /// Masked-LM logits over the token vocabulary.

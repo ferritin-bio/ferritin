@@ -55,7 +55,7 @@ mod support;
 use anyhow::{Result, bail};
 use candle_core::DType;
 use ferritin_plms::plm_runner::PlmRunner;
-use ferritin_plms::registry::{ModelCard, ParityStatus, REGISTRY};
+use ferritin_plms::registry::{ModelCard, ParityStatus, REGISTRY, TokenizerSpec};
 use ferritin_plms::{
     AmplifyModels, AmplifyRunner, ESM2Models, ESM2Runner, ESM3Models, ESM3Runner, ESMCModels,
     ESMCRunner, device,
@@ -80,6 +80,23 @@ const LOADABLE_IN_CI_MAX_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 /// Ubiquitin (76 aa) — long enough to exercise attention, short enough to be fast.
 const SEQ: &str = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG";
 
+/// The sequence to feed a given model.
+///
+/// Most models take a plain amino-acid string. SaProt takes (amino acid, 3Di
+/// state) pairs, so feeding it [`SEQ`] would read "MQ", "IF", … as residues —
+/// none of which are in its vocabulary, making every position `<unk>`. The
+/// shape assertions would still pass, which is precisely the kind of
+/// meaningless-but-correctly-shaped input this suite exists to catch.
+///
+/// `#` is SaProt's "structure unknown" state, so `M#Q#I#…` is the documented
+/// way to run it sequence-only (ferritin-goh.3).
+fn test_sequence(card: &ModelCard) -> String {
+    match card.tokenizer {
+        TokenizerSpec::HfVocabTxt => SEQ.chars().flat_map(|c| [c, '#']).collect(),
+        _ => SEQ.to_string(),
+    }
+}
+
 /// Build the runner for a registry id.
 ///
 /// A `match` rather than anything clever: the point of the registry is that
@@ -89,6 +106,8 @@ fn runner_for(card: &ModelCard) -> Result<Box<dyn PlmRunner>> {
     let dev = device(false)?;
     Ok(match card.id {
         "esm2-t6-8m" => Box::new(ESM2Runner::from_pretrained(ESM2Models::T6_8M, dev)?),
+        "saprot-35m-af2" => Box::new(ESM2Runner::from_pretrained(ESM2Models::SaProt35M, dev)?),
+        "saprot-650m-af2" => Box::new(ESM2Runner::from_pretrained(ESM2Models::SaProt650M, dev)?),
         "esm2-t12-35m" => Box::new(ESM2Runner::from_pretrained(ESM2Models::T12_35M, dev)?),
         "esm2-t30-150m" => Box::new(ESM2Runner::from_pretrained(ESM2Models::T30_150M, dev)?),
         "esm2-t33-650m" => Box::new(ESM2Runner::from_pretrained(ESM2Models::T33_650M, dev)?),
@@ -128,19 +147,31 @@ fn conform(card: &ModelCard) -> Result<()> {
     );
 
     // ── 3. residue alignment — the contract downstream code depends on ──
-    let residues = runner.embed_residues(SEQ)?;
+    //
+    // Note this uses runner.residue_count rather than seq.len(): SaProt reads
+    // two characters per residue, and hardcoding the byte length here would
+    // re-introduce the very assumption residue_count exists to break.
+    let seq = test_sequence(card);
+    let residues_expected = runner.residue_count(&seq);
+    assert_eq!(
+        residues_expected,
+        SEQ.len(),
+        "{id}: the test sequence should encode the same 76 residues for every model"
+    );
+
+    let residues = runner.embed_residues(&seq)?;
     assert_eq!(
         residues.dim(1)?,
-        SEQ.len(),
+        residues_expected,
         "{id}: embed_residues must return exactly one row per residue"
     );
     assert_eq!(residues.dim(2)?, card.metadata.d_model, "{id}: width");
 
     // The raw form keeps the special tokens, per the declared layout.
-    let raw = runner.embed(SEQ)?;
+    let raw = runner.embed(&seq)?;
     assert_eq!(
         raw.dim(1)?,
-        SEQ.len() + card.specials.total(),
+        residues_expected + card.specials.total(),
         "{id}: embed must keep the special-token rows"
     );
 
@@ -161,7 +192,7 @@ fn conform(card: &ModelCard) -> Result<()> {
 
     // ── 4. determinism ──
     let again = runner
-        .embed_residues(SEQ)?
+        .embed_residues(&seq)?
         .to_dtype(DType::F32)?
         .flatten_all()?
         .to_vec1::<f32>()?;
@@ -255,6 +286,8 @@ fn test_every_loadable_model_can_be_constructed() {
         "esm2-t33-650m",
         "esm2-t36-3b",
         "esm2-t48-15b",
+        "saprot-35m-af2",
+        "saprot-650m-af2",
         "amplify-120m",
         "amplify-350m",
         "esmc-300m",
@@ -333,4 +366,36 @@ fn test_pr_tier_is_small() {
             card.approx_bytes_f32
         );
     }
+}
+
+/// SaProt loads and reads two characters per residue (ferritin-goh.3).
+///
+/// The residue-count property is the one worth pinning: SaProt is the first
+/// model where `sequence.len()` is not the residue count, and
+/// `embed_residues` would silently return twice as many rows as residues if
+/// `PlmRunner::residue_count` were not overridden.
+#[test]
+#[ignore = "downloads westlake-repl/SaProt_35M_AF2 (~130 MB)"]
+fn test_saprot_reads_two_chars_per_residue() -> Result<()> {
+    use ferritin_plms::registry::lookup;
+
+    let card = lookup("saprot-35m-af2").expect("registered");
+    let runner = runner_for(card)?;
+
+    // Three residues, six characters: (amino acid, 3Di state) pairs.
+    let seq = "MdAaLp";
+    assert_eq!(
+        runner.residue_count(seq),
+        3,
+        "SaProt reads two characters per residue"
+    );
+
+    let residues = runner.embed_residues(seq)?;
+    assert_eq!(
+        residues.dim(1)?,
+        3,
+        "embed_residues must return one row per residue, not per character"
+    );
+    assert_eq!(residues.dim(2)?, card.metadata.d_model);
+    Ok(())
 }

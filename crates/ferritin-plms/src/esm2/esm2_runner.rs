@@ -2,9 +2,10 @@
 //!
 //! Class for loading and running the ESM2 models
 use super::esm2::{ESM2, ESM2Config, ESM2Output};
+use crate::esm2::saprot_tokenizer::SaProtTokenizer;
 use crate::loader::{LoadOptions, WeightSource};
 use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
-use crate::registry::{self, ModelCard};
+use crate::registry::{self, ModelCard, TokenizerSpec};
 use crate::types::PseudoProbability;
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{Device, Tensor};
@@ -43,6 +44,10 @@ pub enum ESM2Models {
     T33_650M,
     T36_3B,
     T48_15B,
+    /// SaProt 35M — ESM-2 architecture, structure-aware alphabet (ferritin-goh.3).
+    SaProt35M,
+    /// SaProt 650M — the variant most people use.
+    SaProt650M,
 }
 impl ESM2Models {
     /// This variant's registry id.
@@ -54,6 +59,8 @@ impl ESM2Models {
             Self::T33_650M => "esm2-t33-650m",
             Self::T36_3B => "esm2-t36-3b",
             Self::T48_15B => "esm2-t48-15b",
+            Self::SaProt35M => "saprot-35m-af2",
+            Self::SaProt650M => "saprot-650m-af2",
         }
     }
 
@@ -77,6 +84,8 @@ impl ESM2Models {
             Self::T33_650M => ESM2Config::t33_650m(),
             Self::T36_3B => ESM2Config::t36_3b(),
             Self::T48_15B => ESM2Config::t48_15b(),
+            Self::SaProt35M => ESM2Config::saprot_35m(),
+            Self::SaProt650M => ESM2Config::saprot_650m(),
         };
         (self.card().source, config)
     }
@@ -88,9 +97,59 @@ impl ESM2Models {
     }
 }
 
+/// Which tokenizer an ESM-2-family model uses.
+///
+/// The architecture is shared, the alphabet is not: stock ESM-2 has a 33-token
+/// `tokenizer.json` compiled into the crate, while SaProt ships a bare 446-line
+/// `vocab.txt` and reads two characters per residue (ferritin-goh.3).
+enum SequenceTokenizer {
+    /// The embedded HuggingFace tokenizer, one byte per residue.
+    Esm(Box<Tokenizer>),
+    /// SaProt's (amino acid, 3Di) product alphabet, two bytes per residue.
+    SaProt(SaProtTokenizer),
+}
+
+impl SequenceTokenizer {
+    fn token_to_id(&self, token: &str) -> Option<u32> {
+        match self {
+            Self::Esm(t) => t.token_to_id(token),
+            Self::SaProt(t) => t.token_to_id(token),
+        }
+    }
+
+    fn encode(&self, sequence: &str) -> Result<Vec<u32>> {
+        Ok(match self {
+            Self::Esm(t) => t
+                .encode(sequence.to_string(), false)
+                .map_err(E::msg)?
+                .get_ids()
+                .to_vec(),
+            Self::SaProt(t) => t.encode(sequence),
+        })
+    }
+
+    fn residue_count(&self, sequence: &str) -> usize {
+        match self {
+            Self::Esm(_) => sequence.len(),
+            Self::SaProt(t) => t.residue_count(sequence),
+        }
+    }
+
+    /// Decode ids back to a sequence, dropping special tokens.
+    fn decode(&self, ids: &[u32]) -> Result<String> {
+        Ok(match self {
+            Self::Esm(t) => t
+                .decode(ids, true)
+                .map_err(|e| anyhow!("Failed to decode tokens: {e}"))?
+                .replace(' ', ""),
+            Self::SaProt(t) => t.decode(ids),
+        })
+    }
+}
+
 pub struct ESM2Runner {
     model: ESM2,
-    tokenizer: Tokenizer,
+    tokenizer: SequenceTokenizer,
     /// Retained so `PlmRunner::metadata` can report dimensions without
     /// hardcoding them per variant.
     config: ESM2Config,
@@ -126,9 +185,20 @@ impl ESM2Runner {
     pub fn from_pretrained_with(modeltype: ESM2Models, opts: &LoadOptions) -> Result<ESM2Runner> {
         let (source, fallback_config) = modeltype.model_info();
         let config = Self::resolve_config(&source, fallback_config)?;
-        let vb = source.var_builder("model.safetensors", opts)?;
+        let card = modeltype.card();
+        let vb = source.var_builder(card.file, opts)?;
         let model = ESM2::load(vb, config.clone())?;
-        let tokenizer = ESM2::load_tokenizer()?;
+
+        // The alphabet follows the card, not the family: SaProt reuses this
+        // architecture with a 446-token vocab.txt (ferritin-goh.3).
+        let tokenizer = match card.tokenizer {
+            TokenizerSpec::HfVocabTxt => {
+                let path = source.fetch("vocab.txt")?;
+                let contents = std::fs::read_to_string(path)?;
+                SequenceTokenizer::SaProt(SaProtTokenizer::from_vocab_txt(&contents)?)
+            }
+            _ => SequenceTokenizer::Esm(Box::new(ESM2::load_tokenizer()?)),
+        };
         Ok(ESM2Runner {
             model,
             tokenizer,
@@ -189,13 +259,10 @@ impl ESM2Runner {
             .tokenizer
             .token_to_id("<eos>")
             .ok_or_else(|| anyhow!("ESM2 tokenizer missing <eos> token"))?;
-        let inner = self
-            .tokenizer
-            .encode(sequence.to_string(), false)
-            .map_err(E::msg)?;
-        let mut ids = Vec::with_capacity(inner.get_ids().len() + 2);
+        let inner = self.tokenizer.encode(sequence)?;
+        let mut ids = Vec::with_capacity(inner.len() + 2);
         ids.push(bos);
-        ids.extend_from_slice(inner.get_ids());
+        ids.extend_from_slice(&inner);
         ids.push(eos);
         Ok(ids)
     }
@@ -231,12 +298,7 @@ impl ESM2Runner {
             predicted_token_ids
         };
         let token_ids: Vec<u32> = predicted_token_ids.to_vec1::<u32>()?;
-        let decoded_sequence = self
-            .tokenizer
-            .decode(&token_ids, true) // set skip_special_tokens to true
-            .map_err(|e| anyhow!("Failed to decode tokens: {}", e))?
-            .replace(" ", "");
-        Ok(decoded_sequence)
+        self.tokenizer.decode(&token_ids)
     }
 
     /// Run ESM2 and return per-residue pseudo-probabilities for the 20 standard amino acids.
@@ -301,6 +363,11 @@ impl PlmRunner for ESM2Runner {
 
     fn device(&self) -> &Device {
         self.model.get_device()
+    }
+
+    /// SaProt reads two characters per residue; stock ESM-2 reads one.
+    fn residue_count(&self, sequence: &str) -> usize {
+        self.tokenizer.residue_count(sequence)
     }
 
     /// Masked-LM logits `(1, L + 2, vocab_size)`.

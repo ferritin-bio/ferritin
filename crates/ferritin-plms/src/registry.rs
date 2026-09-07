@@ -68,6 +68,9 @@ pub enum TokenizerSpec {
     Embedded(&'static str),
     /// A hand-written vocabulary table in Rust, named by its module path.
     BuiltinVocab(&'static str),
+    /// A bare `vocab.txt` from the model's repo — one token per line, the line
+    /// number being the id. SaProt ships this instead of a `tokenizer.json`.
+    HfVocabTxt,
     /// No tokenizer: the model consumes structure, not sequence.
     None,
 }
@@ -271,6 +274,43 @@ pub const REGISTRY: &[ModelCard] = &[
             max_positions: Some(1026),
         },
         approx_bytes_f32: 60 * GB,
+        parity: ParityStatus::Unverified,
+        unsupported: None,
+    },
+    // ── SaProt: ESM-2 architecture over a structure-aware alphabet ───────────
+    ModelCard {
+        id: "saprot-35m-af2",
+        family: Family::Esm2,
+        source: WeightSource::pth("westlake-repl/SaProt_35M_AF2", None),
+        // No safetensors in this repo; weights are a PyTorch pickle.
+        file: "pytorch_model.bin",
+        tokenizer: TokenizerSpec::HfVocabTxt,
+        specials: SpecialTokenLayout::BOS_EOS,
+        metadata: ModelMetadata {
+            d_model: 480,
+            n_layers: 12,
+            // 20x20 (amino acid, 3Di) pairs plus specials.
+            vocab_size: 446,
+            max_positions: Some(1026),
+        },
+        approx_bytes_f32: 140 * MB,
+        parity: ParityStatus::Unverified,
+        unsupported: None,
+    },
+    ModelCard {
+        id: "saprot-650m-af2",
+        family: Family::Esm2,
+        source: WeightSource::pth("westlake-repl/SaProt_650M_AF2", None),
+        file: "pytorch_model.bin",
+        tokenizer: TokenizerSpec::HfVocabTxt,
+        specials: SpecialTokenLayout::BOS_EOS,
+        metadata: ModelMetadata {
+            d_model: 1280,
+            n_layers: 33,
+            vocab_size: 446,
+            max_positions: Some(1026),
+        },
+        approx_bytes_f32: 2 * GB + 600 * MB,
         parity: ParityStatus::Unverified,
         unsupported: None,
     },

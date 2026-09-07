@@ -135,6 +135,36 @@ impl ESM2Config {
         }
     }
 
+    /// SaProt 35M — the ESM-2 architecture over a 446-token structure-aware
+    /// alphabet (ferritin-goh.3).
+    ///
+    /// Only a fallback: the hub config.json parses since ferritin-goh.9, so
+    /// this is used only when that download fails.
+    pub fn saprot_35m() -> Self {
+        Self {
+            num_attention_heads: 20,
+            hidden_size: 480,
+            intermediate_size: 1920,
+            num_hidden_layers: 12,
+            vocab_size: 446,
+            mask_token_id: 4,
+            ..Self::base_config()
+        }
+    }
+
+    /// SaProt 650M — same alphabet, ESM-2 650M dimensions.
+    pub fn saprot_650m() -> Self {
+        Self {
+            num_attention_heads: 20,
+            hidden_size: 1280,
+            intermediate_size: 5120,
+            num_hidden_layers: 33,
+            vocab_size: 446,
+            mask_token_id: 4,
+            ..Self::base_config()
+        }
+    }
+
     pub fn t6_8m() -> Self {
         Self {
             num_attention_heads: 20,
@@ -614,7 +644,12 @@ pub struct ESM2 {
     layers: Vec<ESM2Layer>,
     layer_norm_after: LayerNorm,
     lm_head: ESM2LMHead,
-    contact_head: ESM2ContactHead,
+    /// Absent when the checkpoint ships no contact head.
+    ///
+    /// It is only needed by `predict_contacts`, and real checkpoints differ:
+    /// SaProt-35M ships one, SaProt-650M does not (ferritin-goh.3). Loading it
+    /// eagerly made a model that embeds perfectly well fail to load at all.
+    contact_head: Option<ESM2ContactHead>,
 }
 
 impl ESM2 {
@@ -623,7 +658,12 @@ impl ESM2 {
         let layers = (0..config.num_hidden_layers)
             .map(|i| ESM2Layer::load(vb.pp(format!("esm.encoder.layer.{}", i)), &config))
             .collect::<Result<Vec<_>>>()?;
-        let contact_head = ESM2ContactHead::load(vb.pp("esm.contact_head"), &config)?;
+        // Probe rather than assume: see the field's documentation.
+        let contact_head = if vb.contains_tensor("esm.contact_head.regression.weight") {
+            Some(ESM2ContactHead::load(vb.pp("esm.contact_head"), &config)?)
+        } else {
+            None
+        };
         let layer_norm_after = candle_nn::layer_norm(
             config.hidden_size,
             config.layer_norm_eps as f64,
@@ -740,7 +780,14 @@ impl ESM2 {
             let _ = attentions.broadcast_mul(&m1)?.broadcast_mul(&m2)?;
         }
 
-        self.contact_head.forward(tokens, &attentions)
+        let head = self.contact_head.as_ref().ok_or_else(|| {
+            candle_core::Error::Msg(
+                "this checkpoint ships no contact head, so contacts cannot be predicted \
+                 from it (ferritin-goh.3)"
+                    .to_string(),
+            )
+        })?;
+        head.forward(tokens, &attentions)
     }
 }
 
