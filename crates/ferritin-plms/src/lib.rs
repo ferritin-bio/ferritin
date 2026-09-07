@@ -44,7 +44,7 @@
 //! | `esmc-600m` | Esmc | `EvolutionaryScale/esmc-600m-2024-12` (pth) | **not checked** | supported |
 //! | `esmc-6b` | Esmc | `EvolutionaryScale/esmc-6b-2024-12` (safetensors) | **not checked** | supported |
 //! | `esm3-sm-open-v1` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | **not checked** | supported |
-//! | `esm3-structure-encoder-v0` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | **not checked** | **unsupported** — the ported VQ-VAE encoder is a different shape from the released checkpoint (ferritin-100.22) |
+//! | `esm3-structure-encoder-v0` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | **not checked** | supported |
 //! | `esmfold2-fast` | Esmfold2 | `biohub/ESMFold2-Fast` (safetensors) | **not checked** | **unsupported** — the ported architecture does not match the released checkpoint (ferritin-100.17) |
 //! | `proteinmpnn-v48-020` | Mpnn | `zcpbx/ligandmpnn-weights` (pth) | **not checked** | supported |
 //! <!-- END SUPPORT MATRIX -->

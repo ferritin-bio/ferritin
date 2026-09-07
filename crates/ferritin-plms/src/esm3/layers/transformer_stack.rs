@@ -8,7 +8,8 @@ use candle_nn::{self as nn, VarBuilder};
 
 pub struct TransformerStack {
     blocks: Vec<UnifiedTransformerBlock>,
-    norm: nn::LayerNorm,
+    /// `None` for the structure encoder, which ends without a final norm.
+    norm: Option<nn::LayerNorm>,
 }
 
 impl TransformerStack {
@@ -24,9 +25,26 @@ impl TransformerStack {
 
         // Final LayerNorm: weight only, no bias.
         let norm_weight = vb.pp("norm").get((config.d_model,), "weight")?;
-        let norm = nn::LayerNorm::new_no_bias(norm_weight, 1e-5);
+        let norm = Some(nn::LayerNorm::new_no_bias(norm_weight, 1e-5));
 
         Ok(Self { blocks, norm })
+    }
+
+    /// The stack used by the ESM3 structure encoder.
+    ///
+    /// Two differences from [`load`][Self::load], both read off the released
+    /// checkpoint rather than assumed: every block is geometric-only (there
+    /// are no `attn.*` tensors), and there is no trailing `norm.weight` —
+    /// the encoder's final normalization is the identity.
+    pub fn load_geometric_encoder(vb: VarBuilder, config: &ESM3Config) -> Result<Self> {
+        let mut blocks = Vec::with_capacity(config.n_layers);
+        for i in 0..config.n_layers {
+            blocks.push(UnifiedTransformerBlock::load_geometric(
+                vb.pp(format!("blocks.{}", i)),
+                config,
+            )?);
+        }
+        Ok(Self { blocks, norm: None })
     }
 
     /// Forward pass through the full ESM3 transformer stack.
@@ -52,7 +70,11 @@ impl TransformerStack {
             x = block.forward(&x, sequence_id, affine, affine_mask, chain_id)?;
         }
 
-        let post_norm = self.norm.forward(&x)?;
+        // The structure encoder has no final norm, so this is the identity.
+        let post_norm = match &self.norm {
+            Some(norm) => norm.forward(&x)?,
+            None => x.clone(),
+        };
         Ok((post_norm, x))
     }
 }

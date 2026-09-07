@@ -28,12 +28,12 @@
 //! | `codebook.embeddings`   | `codebook.*`       |
 
 use crate::esm3::models::esm3::{ESM3, ESM3Config};
-use crate::esm3::models::vqvae::StructureTokenEncoder;
+use crate::esm3::models::vqvae::{StructureTokenEncoder, VqVaeConfig};
 use crate::esm3::tokenization::sequence::tokenize_sequence;
 use crate::loader::{LoadOptions, WeightSource};
 use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
 use crate::registry::{self, ModelCard};
-use anyhow::{Result, bail};
+use anyhow::Result;
 use candle_core::{Device, Tensor};
 
 // ── ESM3Models enum ───────────────────────────────────────────────────────────
@@ -46,21 +46,6 @@ pub enum ESM3Models {
 
 /// The structure encoder's registry id.
 pub const STRUCTURE_ENCODER_ID: &str = "esm3-structure-encoder-v0";
-
-/// Why [`StructureEncoderRunner::from_pretrained`] refuses to load.
-///
-/// The main ESM3 model loads correctly (ferritin-100.21), but the VQ-VAE
-/// structure encoder is a different shape from the one ported here. Its
-/// [`ModelCard`] carries the same fact in machine-readable form.
-pub const STRUCTURE_ENCODER_MISMATCH: &str = "\
-ESM3 structure-encoder weights cannot be loaded: the ported VQ-VAE encoder does not match \
-data/weights/esm3_structure_encoder_v0.pth. The checkpoint roots its stack at 'transformer', \
-not 'encoder'; its two blocks contain only geom_attn and ffn, with no multi-head 'attn' \
-sub-module and no per-stack final 'norm.weight'; it carries a \
-relative_positional_embedding.embedding.weight that this port does not model; and its \
-pre_vq_proj has a bias that the port loads without. Loading is refused rather than patched, \
-because resolving the paths without porting the real encoder would emit structure tokens that \
-look plausible and are wrong (ferritin-100.22). ESM3Runner itself is unaffected and works.";
 
 impl ESM3Models {
     /// This variant's registry id.
@@ -219,26 +204,28 @@ pub struct StructureEncoderRunner {
 }
 
 impl StructureEncoderRunner {
-    /// Loading the structure encoder is **not supported** — this always
-    /// returns an error (ferritin-100.22).
+    /// Load the VQ-VAE structure encoder (ferritin-100.22).
     ///
-    /// The ported VQ-VAE encoder does not match
-    /// `data/weights/esm3_structure_encoder_v0.pth`. See
-    /// [`STRUCTURE_ENCODER_MISMATCH`].
+    /// This used to refuse: the port targeted a network the released
+    /// checkpoint does not contain. All of those differences are now modelled
+    /// — the stack roots at `transformer`, its blocks are geometric-only with
+    /// no `attn` and no trailing `norm`, `pre_vq_proj` carries its bias, and
+    /// the relative position embedding is loaded and used as the encoder's
+    /// initial hidden state.
     pub fn from_pretrained(device: Device) -> Result<Self> {
         Self::from_pretrained_with(&LoadOptions::new(device))
     }
 
-    /// Loading the structure encoder is **not supported** — this always
-    /// returns an error (ferritin-100.22).
-    pub fn from_pretrained_with(_opts: &LoadOptions) -> Result<Self> {
-        // The registry records the same refusal, so the two cannot drift:
-        // test_structure_encoder_refusal_matches_registry pins them together.
-        debug_assert!(
-            registry::lookup(STRUCTURE_ENCODER_ID).is_some_and(|c| !c.is_loadable()),
-            "the registry should agree that the structure encoder is unsupported"
-        );
-        bail!("{STRUCTURE_ENCODER_MISMATCH}");
+    /// Load with an explicit device and dtype.
+    pub fn from_pretrained_with(opts: &LoadOptions) -> Result<Self> {
+        let card = registry::lookup(STRUCTURE_ENCODER_ID)
+            .expect("the structure encoder must have a registry entry");
+        let vb = card.source.var_builder(card.file, opts)?;
+        let encoder = StructureTokenEncoder::load(vb, VqVaeConfig::default())?;
+        Ok(Self {
+            encoder,
+            device: opts.device.clone(),
+        })
     }
 
     /// Encode backbone coordinates to structure tokens.
@@ -247,6 +234,6 @@ impl StructureEncoderRunner {
     ///
     /// Returns `(B, L)` u32 structure token indices.
     pub fn encode(&self, coords: &Tensor) -> Result<Tensor> {
-        self.encoder.encode(coords, None, None).map_err(Into::into)
+        self.encoder.encode(coords, None).map_err(Into::into)
     }
 }
