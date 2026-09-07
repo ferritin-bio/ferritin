@@ -60,6 +60,16 @@ pub enum ESM2Models {
     SaProt35M,
     /// SaProt 650M — the variant most people use.
     SaProt650M,
+    /// FastESM2 650M — ESM-2 650M republished as safetensors (ferritin-goh.12).
+    FastEsm2_650,
+    /// PepMLM 650M — ESM-2 650M fine-tuned for peptide binder design.
+    PepMlm650M,
+    /// DPLM 650M — a discrete diffusion model on ESM-2's architecture.
+    ///
+    /// Its hidden states are ordinary embeddings; its `lm_head` denoises
+    /// rather than scoring masked tokens, so do not read its logits as
+    /// masked-LM scores.
+    Dplm650M,
 }
 impl ESM2Models {
     /// This variant's registry id.
@@ -79,6 +89,9 @@ impl ESM2Models {
             Self::Esm1b => "esm1b-t33-650m-ur50s",
             Self::SaProt35M => "saprot-35m-af2",
             Self::SaProt650M => "saprot-650m-af2",
+            Self::FastEsm2_650 => "fastesm2-650",
+            Self::PepMlm650M => "pepmlm-650m",
+            Self::Dplm650M => "dplm-650m",
         }
     }
 
@@ -110,6 +123,12 @@ impl ESM2Models {
             Self::Esm1b => ESM2Config::esm1b_t33_650m(),
             Self::SaProt35M => ESM2Config::saprot_35m(),
             Self::SaProt650M => ESM2Config::saprot_650m(),
+            // All three are ESM-2 650M's shape exactly — same hidden size,
+            // depth, head count, vocabulary and rotary positions — so they
+            // share its fallback config rather than duplicating it. This is
+            // only reached when the hub's config.json is unreachable; the
+            // published files were checked against these values (goh.12).
+            Self::FastEsm2_650 | Self::PepMlm650M | Self::Dplm650M => ESM2Config::t33_650m(),
         };
         (self.card().source, config)
     }

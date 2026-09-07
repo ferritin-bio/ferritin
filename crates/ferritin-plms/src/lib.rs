@@ -35,6 +35,9 @@
 //! | `esm1b-t33-650m-ur50s` | Esm2 | `facebook/esm1b_t33_650M_UR50S` (pth) | **not checked** | supported |
 //! | `saprot-35m-af2` | Esm2 | `westlake-repl/SaProt_35M_AF2` (pth) | **not checked** | supported |
 //! | `saprot-650m-af2` | Esm2 | `westlake-repl/SaProt_650M_AF2` (pth) | **not checked** | supported |
+//! | `fastesm2-650` | Esm2 | `Synthyra/FastESM2_650` (safetensors) | **not checked** | supported |
+//! | `pepmlm-650m` | Esm2 | `ChatterjeeLab/PepMLM-650M` (pth) | **not checked** | supported |
+//! | `dplm-650m` | Esm2 | `airkingbd/dplm_650m` (pth) | **not checked** | supported |
 //! | `amplify-120m` | Amplify | `chandar-lab/AMPLIFY_120M` (safetensors) | verified (`amplify_parity`) | supported |
 //! | `amplify-350m` | Amplify | `chandar-lab/AMPLIFY_350M` (safetensors) | **not checked** | supported |
 //! | `esmc-300m` | Esmc | `EvolutionaryScale/esmc-300m-2024-12` (pth) | **not checked** | supported |

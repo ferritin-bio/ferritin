@@ -114,6 +114,9 @@ fn runner_for(card: &ModelCard) -> Result<Box<dyn PlmRunner>> {
         "esm1b-t33-650m-ur50s" => Box::new(ESM2Runner::from_pretrained(ESM2Models::Esm1b, dev)?),
         "saprot-35m-af2" => Box::new(ESM2Runner::from_pretrained(ESM2Models::SaProt35M, dev)?),
         "saprot-650m-af2" => Box::new(ESM2Runner::from_pretrained(ESM2Models::SaProt650M, dev)?),
+        "fastesm2-650" => Box::new(ESM2Runner::from_pretrained(ESM2Models::FastEsm2_650, dev)?),
+        "pepmlm-650m" => Box::new(ESM2Runner::from_pretrained(ESM2Models::PepMlm650M, dev)?),
+        "dplm-650m" => Box::new(ESM2Runner::from_pretrained(ESM2Models::Dplm650M, dev)?),
         "esm2-t12-35m" => Box::new(ESM2Runner::from_pretrained(ESM2Models::T12_35M, dev)?),
         "esm2-t30-150m" => Box::new(ESM2Runner::from_pretrained(ESM2Models::T30_150M, dev)?),
         "esm2-t33-650m" => Box::new(ESM2Runner::from_pretrained(ESM2Models::T33_650M, dev)?),
@@ -300,6 +303,9 @@ fn test_every_loadable_model_can_be_constructed() {
         "esm1b-t33-650m-ur50s",
         "saprot-35m-af2",
         "saprot-650m-af2",
+        "fastesm2-650",
+        "pepmlm-650m",
+        "dplm-650m",
         "amplify-120m",
         "amplify-350m",
         "esmc-300m",
@@ -409,6 +415,40 @@ fn test_saprot_reads_two_chars_per_residue() -> Result<()> {
         "embed_residues must return one row per residue, not per character"
     );
     assert_eq!(residues.dim(2)?, card.metadata.d_model);
+    Ok(())
+}
+
+/// FastESM2-650 ships no contact head, and asking for contacts says so
+/// (ferritin-goh.12).
+///
+/// The absence is the point. `ESM2::load` probes for
+/// `esm.contact_head.regression.weight` and stores `Option<ESM2ContactHead>`;
+/// this checkpoint is the second model to exercise the `None` arm after
+/// SaProt-650M. Verified against the real weights: the header lists 570
+/// tensors and none of them is a contact head. Without the probe the load
+/// itself would fail, so this test covers the load and the graceful refusal
+/// together rather than assuming either.
+#[test]
+#[ignore = "downloads Synthyra/FastESM2_650 (~2.6 GB)"]
+fn test_fastesm2_has_no_contact_head() -> Result<()> {
+    use ferritin_plms::registry::lookup;
+
+    let card = lookup("fastesm2-650").expect("registered");
+    let runner = ESM2Runner::from_pretrained(ESM2Models::FastEsm2_650, device(false)?)?;
+
+    // It still embeds: the missing head costs contacts, not representations.
+    let residues = runner.embed_residues(SEQ)?;
+    assert_eq!(residues.dim(1)?, SEQ.len(), "one row per residue");
+    assert_eq!(residues.dim(2)?, card.metadata.d_model);
+
+    let err = runner
+        .predict_contacts(SEQ)
+        .map(|_| ())
+        .expect_err("this checkpoint ships no contact head");
+    assert!(
+        err.to_string().contains("no contact head"),
+        "the refusal should name the cause; got: {err}"
+    );
     Ok(())
 }
 

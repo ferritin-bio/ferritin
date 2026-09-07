@@ -431,6 +431,73 @@ pub const REGISTRY: &[ModelCard] = &[
         parity: ParityStatus::Unverified,
         unsupported: None,
     },
+    // ── Modern checkpoints on ESM-2's exact schema (ferritin-goh.12) ─────────
+    //
+    // These three publish a config.json byte-identical in shape to
+    // facebook/esm2_t33_650M_UR50D, and their tensor names are ESM-2's, so
+    // they need no new architecture code. Layouts were verified by reading
+    // each checkpoint's header remotely rather than by downloading 2.6 GB
+    // apiece — see ferritin-goh.12 for the method.
+    ModelCard {
+        id: "fastesm2-650",
+        family: Family::Esm2,
+        // The only safetensors ESM-2-family 650M checkpoint found, which makes
+        // it the cheapest way to exercise the safetensors path at this size.
+        source: WeightSource::safetensors("Synthyra/FastESM2_650"),
+        file: "model.safetensors",
+        tokenizer: TokenizerSpec::Embedded("esm2/tokenizer.json"),
+        specials: SpecialTokenLayout::BOS_EOS,
+        metadata: ModelMetadata {
+            d_model: 1280,
+            n_layers: 33,
+            vocab_size: 33,
+            max_positions: Some(1026),
+        },
+        approx_bytes_f32: 2 * GB + 600 * MB,
+        parity: ParityStatus::Unverified,
+        unsupported: None,
+    },
+    ModelCard {
+        id: "pepmlm-650m",
+        family: Family::Esm2,
+        // Fine-tuned from ESM-2 650M for peptide binder design; its
+        // config.json still records _name_or_path facebook/esm2_t33_650M_UR50D.
+        source: WeightSource::pth("ChatterjeeLab/PepMLM-650M", None),
+        file: "pytorch_model.bin",
+        tokenizer: TokenizerSpec::Embedded("esm2/tokenizer.json"),
+        specials: SpecialTokenLayout::BOS_EOS,
+        metadata: ModelMetadata {
+            d_model: 1280,
+            n_layers: 33,
+            vocab_size: 33,
+            max_positions: Some(1026),
+        },
+        approx_bytes_f32: 2 * GB + 600 * MB,
+        parity: ParityStatus::Unverified,
+        unsupported: None,
+    },
+    ModelCard {
+        id: "dplm-650m",
+        family: Family::Esm2,
+        // DPLM is a discrete DIFFUSION model initialised from ESM-2 650M. Its
+        // hidden states are ordinary embeddings and are what this crate
+        // exposes; its lm_head denoises rather than scoring masked tokens, so
+        // reading its logits as masked-LM scores would be wrong. See the
+        // `logits` note on ESM2Runner.
+        source: WeightSource::pth("airkingbd/dplm_650m", None),
+        file: "pytorch_model.bin",
+        tokenizer: TokenizerSpec::Embedded("esm2/tokenizer.json"),
+        specials: SpecialTokenLayout::BOS_EOS,
+        metadata: ModelMetadata {
+            d_model: 1280,
+            n_layers: 33,
+            vocab_size: 33,
+            max_positions: Some(1026),
+        },
+        approx_bytes_f32: 2 * GB + 600 * MB,
+        parity: ParityStatus::Unverified,
+        unsupported: None,
+    },
     // ── AMPLIFY ──────────────────────────────────────────────────────────────
     ModelCard {
         id: "amplify-120m",
