@@ -96,9 +96,9 @@ pub struct ModelMetadata {
 
 /// Trait implemented by all PLM runner types.
 ///
-/// Structure-prediction and inverse-folding runners (`ESMFold2Runner`,
-/// `ProteinMPNNRunner`) deliberately stay outside this trait — they are not
-/// embedding models.
+/// Structure and inverse-folding runners (`ProteinMPNNRunner`,
+/// `StructureEncoderRunner`) deliberately stay outside this trait — they
+/// consume or emit structure, not sequence embeddings.
 pub trait PlmRunner {
     /// Run a forward pass on `sequence` and return raw per-residue embeddings.
     ///
@@ -141,9 +141,8 @@ pub trait PlmRunner {
     ///
     /// Provided in terms of [`embed`][Self::embed] and
     /// [`special_tokens`][Self::special_tokens], so an implementor declares
-    /// its layout rather than reimplementing the strip. This is what
-    /// `ESMFold2Runner::fold_protein` used to hand-roll as
-    /// `.narrow(1, 1, l)` against ESMC specifically.
+    /// its layout rather than reimplementing the strip — which callers used to
+    /// hand-roll as `.narrow(1, 1, l)` against one model's layout specifically.
     fn embed_residues(&self, sequence: &str) -> Result<Tensor> {
         let raw = self.embed(sequence)?;
         let layout = self.special_tokens();

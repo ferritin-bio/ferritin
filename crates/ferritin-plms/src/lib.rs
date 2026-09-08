@@ -45,7 +45,6 @@
 //! | `esmc-6b` | Esmc | `EvolutionaryScale/esmc-6b-2024-12` (safetensors) | **not checked** | supported |
 //! | `esm3-sm-open-v1` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | **not checked** | supported |
 //! | `esm3-structure-encoder-v0` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | **not checked** | supported |
-//! | `esmfold2-fast` | Esmfold2 | `biohub/ESMFold2-Fast` (safetensors) | **not checked** | **unsupported** — the ported architecture does not match the released checkpoint (ferritin-100.17) |
 //! | `proteinmpnn-v48-020` | Mpnn | `zcpbx/ligandmpnn-weights` (pth) | **not checked** | supported |
 //! <!-- END SUPPORT MATRIX -->
 
@@ -64,12 +63,6 @@ pub use esm3::models::esm3::ESM3Config;
 pub use esm3::pretrained::{ESM3Models, ESM3Runner};
 pub use esmc::models::esmc::{ESMC, ESMCConfig, ESMCOutput, LogitsConfig, LogitsOutput};
 pub use esmc::pretrained::{ESMCModels, ESMCRunner};
-pub use esmfold2::config::ESMFold2Config;
-pub use esmfold2::output::ESMFold2Output;
-pub use esmfold2::pretrained::{ESMFold2Models, ESMFold2Runner};
-pub use esmfold2::{
-    ChainInput, DNAInput, LigandInput, Modification, ProteinInput, StructurePredictionInput,
-};
 pub use featurize::StructureFeatures;
 pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
@@ -79,7 +72,6 @@ pub mod amplify;
 pub mod esm2;
 pub mod esm3;
 pub mod esmc;
-pub mod esmfold2;
 pub mod featurize;
 pub mod ligandmpnn;
 pub mod loader;

@@ -47,8 +47,6 @@ pub enum Family {
     Esmc,
     /// ESM3, the multi-track model.
     Esm3,
-    /// ESMFold2 — structure prediction, not an embedding model.
-    Esmfold2,
     /// ProteinMPNN / LigandMPNN — inverse folding, not an embedding model.
     Mpnn,
 }
@@ -157,7 +155,6 @@ impl ModelCard {
             Family::Amplify => "amplify",
             Family::Esmc => "esmc",
             Family::Esm3 => "esm3",
-            Family::Esmfold2 => "esmfold2",
             Family::Mpnn => "proteinmpnn",
         }
     }
@@ -630,29 +627,6 @@ pub const REGISTRY: &[ModelCard] = &[
         unsupported: None,
     },
     // ── ESMFold2 ─────────────────────────────────────────────────────────────
-    ModelCard {
-        id: "esmfold2-fast",
-        family: Family::Esmfold2,
-        source: WeightSource::safetensors("biohub/ESMFold2-Fast"),
-        file: "model.safetensors",
-        // Consumes ESMC-6B hidden states, not tokens of its own.
-        tokenizer: TokenizerSpec::None,
-        specials: SpecialTokenLayout::NONE,
-        metadata: ModelMetadata {
-            // d_single, the single-representation width.
-            d_model: 384,
-            n_layers: 24,
-            // Structure output, no token vocabulary.
-            vocab_size: 0,
-            max_positions: None,
-        },
-        approx_bytes_f32: 755 * MB,
-        parity: ParityStatus::Unverified,
-        unsupported: Some(
-            "the ported architecture does not match the released checkpoint: none of its 1032 \
-             tensors resolve to a model parameter (ferritin-100.17)",
-        ),
-    },
     // ── ProteinMPNN ──────────────────────────────────────────────────────────
     ModelCard {
         id: "proteinmpnn-v48-020",
@@ -845,7 +819,6 @@ mod tests {
             Family::Amplify,
             Family::Esmc,
             Family::Esm3,
-            Family::Esmfold2,
             Family::Mpnn,
         ] {
             assert!(
@@ -866,7 +839,13 @@ mod tests {
             .map(|c| c.id)
             .collect();
         unsupported.sort_unstable();
-        assert_eq!(unsupported, ["esmfold2-fast"]);
+        // Empty since ferritin-100.17 deleted the ESMFold2 port: a row that
+        // can never load is a promise the crate cannot keep, so the model is
+        // absent from the registry rather than listed as broken.
+        assert!(
+            unsupported.is_empty(),
+            "every registered model should load; got {unsupported:?}"
+        );
 
         for card in REGISTRY.iter().filter(|c| !c.is_loadable()) {
             let reason = card.unsupported.unwrap();
@@ -909,7 +888,11 @@ mod tests {
     #[test]
     fn test_loadable_excludes_unsupported() {
         assert!(loadable().all(|c| c.unsupported.is_none()));
-        assert!(!loadable().any(|c| c.id == "esmfold2-fast"));
+        assert_eq!(
+            loadable().count(),
+            REGISTRY.len(),
+            "no model is currently unsupported, so loadable() should be every row"
+        );
     }
 }
 
