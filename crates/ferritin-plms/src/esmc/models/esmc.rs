@@ -276,9 +276,25 @@ impl ESMC {
     /// (shape `(L+2,)` including BOS/EOS), suitable for batching or direct
     /// use as the `sequence_tokens` argument to `forward()`.
     pub fn encode(&self, sequence: &str) -> Result<Tensor> {
-        let token_ids = self.tokenizer.tokenize_sequence(sequence, true);
+        let token_ids = self.tokenize(sequence);
         let len = token_ids.len();
         Tensor::from_vec(token_ids, len, &self.device)
+    }
+
+    /// Token ids for `sequence`, wrapped in BOS and EOS — the same tokens
+    /// [`encode`][Self::encode] produces, before they become a tensor.
+    ///
+    /// Batching needs the raw rows so it can right-pad them to a common
+    /// length; going through `encode` would give one tensor per sequence and
+    /// no way to pad them together.
+    pub fn tokenize(&self, sequence: &str) -> Vec<u32> {
+        self.tokenizer.tokenize_sequence(sequence, true)
+    }
+
+    /// The tokenizer's `<pad>` id — what a batch must be right-padded with.
+    pub fn pad_token_id(&self) -> u32 {
+        use crate::esmc::tokenization::sequence_tokenizer::EsmTokenizerBase;
+        self.tokenizer.pad_token_id()
     }
 
     /// Device the model's weights live on.

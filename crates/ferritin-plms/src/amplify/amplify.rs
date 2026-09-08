@@ -33,6 +33,18 @@ pub struct AMPLIFY {
     config: AMPLIFYConfig,
 }
 impl AMPLIFY {
+    /// Broadcast a `(batch, seq_len)` **additive** mask to `(batch, heads, seq, seq)`.
+    ///
+    /// The convention here is additive, not 0/1: the result is added to the
+    /// attention scores before softmax, so a real key contributes `0` and a
+    /// padded key a large negative number. This differs from
+    /// [`ESM2::forward`][crate::esm2::esm2::ESM2::forward], whose mask is
+    /// `1 = real token` — build AMPLIFY's with
+    /// [`additive_padding_mask`][crate::plm_runner::additive_padding_mask]
+    /// (which produces exactly this form) rather than by hand.
+    ///
+    /// The trailing axis indexes **keys**: dimension 2 is broadcast across
+    /// queries, matching upstream's `repeat(1, heads, L, 1)`.
     fn process_attention_mask(&self, pad_mask: Option<&Tensor>) -> Result<Option<Tensor>> {
         match pad_mask {
             None => Ok(None),
@@ -48,6 +60,20 @@ impl AMPLIFY {
             }
         }
     }
+    /// The dtype the model's weights (and therefore its attention scores) use.
+    ///
+    /// An additive `pad_mask` must match it, or `scores.add(mask)` fails.
+    pub(crate) fn dtype(&self) -> candle_core::DType {
+        self.freqs_cis.dtype()
+    }
+
+    /// Run a forward pass.
+    ///
+    /// `pad_mask` is an **additive** `(batch, seq_len)` mask — `0` at a real
+    /// token, a large negative value at padding — in the model's dtype, built
+    /// with [`additive_padding_mask`][crate::plm_runner::additive_padding_mask].
+    /// `process_attention_mask` broadcasts it over heads and queries. Pass
+    /// `None` for single-sequence inference, where there is no padding.
     pub fn forward(
         &self,
         src: &Tensor,
@@ -645,6 +671,227 @@ mod tests {
             expected,
             "contact map dim 1 should be seq_len-2"
         );
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Right-padding and the additive pad mask (ferritin-100.12)
+    // -----------------------------------------------------------------------
+
+    /// A tiny AMPLIFY with deterministic pseudo-random weights, so the padding
+    /// tests need no download. Mirrors the ESM-2 `tiny_model` helper.
+    fn tiny_amplify(device: &Device) -> Result<AMPLIFY> {
+        use candle_core::DType;
+        use std::collections::HashMap;
+
+        let config = AMPLIFYConfig {
+            hidden_size: 8,
+            num_hidden_layers: 2,
+            num_attention_heads: 2,
+            intermediate_size: 12,
+            vocab_size: 27,
+            max_length: 64,
+            ..AMPLIFYConfig::amp_120m()
+        };
+        // Same reduction AMPLIFY's loader applies: 2/3, rounded up to a
+        // multiple of 8.
+        let inter = {
+            let i = (config.intermediate_size * 2) / 3;
+            8 * i.div_ceil(8)
+        };
+
+        // A tiny LCG: reproducible across platforms, unlike a real RNG crate.
+        let mut state = 0x2545_F491_4F6C_DD1Du64;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((state >> 33) as f32 / (1u64 << 31) as f32) - 0.5
+        };
+        let mut rand = |dims: &[usize], device: &Device| -> Result<Tensor> {
+            let n: usize = dims.iter().product();
+            let v: Vec<f32> = (0..n).map(|_| next()).collect();
+            Tensor::from_vec(v, dims, device)
+        };
+
+        let mut ts: HashMap<String, Tensor> = HashMap::new();
+        ts.insert(
+            "encoder.weight".into(),
+            rand(&[config.vocab_size, config.hidden_size], device)?,
+        );
+        ts.insert(
+            "layer_norm_2.weight".into(),
+            Tensor::ones(config.hidden_size, DType::F32, device)?,
+        );
+        ts.insert(
+            "decoder.weight".into(),
+            rand(&[config.vocab_size, config.hidden_size], device)?,
+        );
+        ts.insert("decoder.bias".into(), rand(&[config.vocab_size], device)?);
+        for i in 0..config.num_hidden_layers {
+            let p = format!("transformer_encoder.{i}");
+            for proj in ["q", "k", "v", "wo"] {
+                ts.insert(
+                    format!("{p}.{proj}.weight"),
+                    rand(&[config.hidden_size, config.hidden_size], device)?,
+                );
+            }
+            ts.insert(
+                format!("{p}.ffn.w12.weight"),
+                rand(&[inter * 2, config.hidden_size], device)?,
+            );
+            ts.insert(
+                format!("{p}.ffn.w3.weight"),
+                rand(&[config.hidden_size, inter], device)?,
+            );
+            for norm in ["ffn_norm", "attention_norm"] {
+                ts.insert(
+                    format!("{p}.{norm}.weight"),
+                    Tensor::ones(config.hidden_size, DType::F32, device)?,
+                );
+            }
+        }
+
+        let vb = VarBuilder::from_tensors(ts, DType::F32, device);
+        AMPLIFY::load(vb, &config)
+    }
+
+    fn last_hidden(model: &AMPLIFY, tokens: &Tensor, mask: Option<&Tensor>) -> Result<Tensor> {
+        let out = model.forward(tokens, mask, true, false)?;
+        Ok(out
+            .hidden_states
+            .expect("asked for hidden states")
+            .pop()
+            .expect("non-empty"))
+    }
+
+    fn max_abs_diff(a: &Tensor, b: &Tensor) -> Result<f32> {
+        let a: Vec<f32> = a.flatten_all()?.to_vec1()?;
+        let b: Vec<f32> = b.flatten_all()?.to_vec1()?;
+        assert_eq!(a.len(), b.len(), "shape mismatch in comparison");
+        Ok(a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| (x - y).abs())
+            .fold(0f32, f32::max))
+    }
+
+    /// Build the additive mask the way `AmplifyRunner::embed_batch` does.
+    fn additive_mask(rows: &[Vec<u32>], padded: usize, device: &Device) -> Result<Tensor> {
+        let mut v = Vec::with_capacity(rows.len() * padded);
+        for r in rows {
+            v.extend(std::iter::repeat_n(1f32, r.len()));
+            v.extend(std::iter::repeat_n(0f32, padded - r.len()));
+        }
+        let mask = Tensor::from_vec(v, (rows.len(), padded), device)?;
+        crate::plm_runner::additive_padding_mask(&mask, candle_core::DType::F32)
+            .map_err(|e| candle_core::Error::Msg(e.to_string()))
+    }
+
+    fn padded_ids(
+        rows: &[Vec<u32>],
+        padded: usize,
+        pad_id: u32,
+        device: &Device,
+    ) -> Result<Tensor> {
+        let mut v = Vec::with_capacity(rows.len() * padded);
+        for r in rows {
+            v.extend_from_slice(r);
+            v.resize(v.len() + padded - r.len(), pad_id);
+        }
+        Tensor::from_vec(v, (rows.len(), padded), device)
+    }
+
+    /// The core guarantee: right-padding a sequence and supplying the matching
+    /// additive mask must not change the real residues' hidden states.
+    ///
+    /// The same test asserts that padding *without* a mask does perturb them,
+    /// so the first assertion cannot pass vacuously.
+    #[test]
+    fn test_right_padding_with_mask_leaves_real_residues_unchanged() -> Result<()> {
+        let device = Device::Cpu;
+        let model = tiny_amplify(&device)?;
+        let real: Vec<u32> = vec![3, 6, 8, 10, 12, 4];
+        let len = real.len();
+        let padded_len = len + 5;
+
+        let single = last_hidden(
+            &model,
+            &padded_ids(std::slice::from_ref(&real), len, 0, &device)?,
+            None,
+        )?;
+
+        let ids = padded_ids(std::slice::from_ref(&real), padded_len, 0, &device)?;
+        let mask = additive_mask(std::slice::from_ref(&real), padded_len, &device)?;
+        let masked = last_hidden(&model, &ids, Some(&mask))?.narrow(1, 0, len)?;
+        let diff = max_abs_diff(&single, &masked)?;
+        assert!(
+            diff < 1e-5,
+            "padded+masked hidden states drifted from unpadded: max abs diff {diff}"
+        );
+
+        let unmasked = last_hidden(&model, &ids, None)?.narrow(1, 0, len)?;
+        let leak = max_abs_diff(&single, &unmasked)?;
+        assert!(
+            leak > 1e-4,
+            "padding without a mask should perturb the real residues, but max abs diff was {leak}"
+        );
+        Ok(())
+    }
+
+    /// An all-real additive mask is all zeros, so it must be a no-op — the
+    /// batched path must not perturb a batch that happens to need no padding.
+    ///
+    /// Note this test alone cannot catch the additive-vs-0/1 confusion:
+    /// softmax is shift-invariant, so a uniform all-ones mask is *also* a
+    /// no-op here. The tests with ragged rows are the ones that discriminate,
+    /// and they do — a 0/1 mask fails both.
+    #[test]
+    fn test_all_real_additive_mask_is_a_no_op() -> Result<()> {
+        let device = Device::Cpu;
+        let model = tiny_amplify(&device)?;
+        let real: Vec<u32> = vec![3, 6, 8, 10, 4];
+        let len = real.len();
+        let ids = padded_ids(std::slice::from_ref(&real), len, 0, &device)?;
+        let mask = additive_mask(&[real], len, &device)?;
+
+        let none = last_hidden(&model, &ids, None)?;
+        let zeros = last_hidden(&model, &ids, Some(&mask))?;
+        let diff = max_abs_diff(&none, &zeros)?;
+        assert!(
+            diff < 1e-6,
+            "an all-zero additive mask changed the result: {diff}"
+        );
+        Ok(())
+    }
+
+    /// Two sequences of different lengths in one batch: each row must match the
+    /// same sequence run alone.
+    #[test]
+    fn test_batched_rows_match_single_sequence_hidden_states() -> Result<()> {
+        let device = Device::Cpu;
+        let model = tiny_amplify(&device)?;
+        let a: Vec<u32> = vec![3, 6, 8, 10, 12, 14, 4];
+        let b: Vec<u32> = vec![3, 7, 9, 4];
+        let rows = vec![a.clone(), b.clone()];
+        let padded_len = a.len();
+
+        let ids = padded_ids(&rows, padded_len, 0, &device)?;
+        let mask = additive_mask(&rows, padded_len, &device)?;
+        let batched = last_hidden(&model, &ids, Some(&mask))?;
+
+        for (row, seq) in [(0usize, &a), (1usize, &b)] {
+            let alone = last_hidden(
+                &model,
+                &padded_ids(std::slice::from_ref(seq), seq.len(), 0, &device)?,
+                None,
+            )?;
+            let from_batch = batched.narrow(0, row, 1)?.narrow(1, 0, seq.len())?;
+            let diff = max_abs_diff(&alone, &from_batch)?;
+            assert!(
+                diff < 1e-5,
+                "batch row {row} disagrees with its single-sequence hidden states: {diff}"
+            );
+        }
         Ok(())
     }
 }

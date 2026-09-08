@@ -32,7 +32,9 @@
 
 use crate::esmc::models::esmc::{ESMC, ESMCConfig, LogitsConfig};
 use crate::loader::{LoadOptions, WeightSource, optional_prefix};
-use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
+use crate::plm_runner::{
+    ModelMetadata, PlmRunner, SpecialTokenLayout, pad_token_batch, zero_padded_rows,
+};
 use crate::registry::{self, ModelCard};
 use anyhow::{Result, bail};
 use candle_core::{Device, Tensor};
@@ -189,5 +191,22 @@ impl PlmRunner for ESMCRunner {
         )?;
         out.sequence_logits
             .ok_or_else(|| anyhow::anyhow!("ESMC logits() returned no sequence logits"))
+    }
+
+    /// One batched forward pass over right-padded sequences (ferritin-100.12).
+    ///
+    /// ESM-C's `sequence_id` is a `where_cond` predicate — `1` keeps a key,
+    /// `0` replaces its score with `-inf` — so the `U8` mask goes in as-is.
+    /// It is passed explicitly rather than relying on `ESMC::forward`'s
+    /// fallback (`tokens.ne(pad_id)`), which would happen to agree here but
+    /// ties correctness to the padding id rather than to the batch itself.
+    fn embed_batch(&self, sequences: &[&str]) -> Result<Tensor> {
+        let rows: Vec<Vec<u32>> = sequences.iter().map(|s| self.model.tokenize(s)).collect();
+        let batch = pad_token_batch(&rows, self.model.pad_token_id(), self.model.device())?;
+        let output = self.model.forward(&batch.ids, Some(&batch.mask), false)?;
+        let embeddings = output
+            .embeddings
+            .ok_or_else(|| anyhow::anyhow!("ESMC forward() returned no embeddings"))?;
+        zero_padded_rows(&embeddings, &batch.mask)
     }
 }

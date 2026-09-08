@@ -30,8 +30,11 @@
 use crate::esm3::models::esm3::{ESM3, ESM3Config};
 use crate::esm3::models::vqvae::{StructureTokenEncoder, VqVaeConfig};
 use crate::esm3::tokenization::sequence::tokenize_sequence;
+use crate::esm3::utils::constants::SEQUENCE_PAD_TOKEN;
 use crate::loader::{LoadOptions, WeightSource};
-use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
+use crate::plm_runner::{
+    ModelMetadata, PlmRunner, SpecialTokenLayout, pad_token_batch, zero_padded_rows,
+};
 use crate::registry::{self, ModelCard};
 use anyhow::Result;
 use candle_core::{Device, Tensor};
@@ -188,6 +191,39 @@ impl PlmRunner for ESM3Runner {
         output
             .sequence_logits
             .ok_or_else(|| anyhow::anyhow!("ESM3 forward() returned no sequence logits"))
+    }
+
+    /// One batched forward pass over right-padded sequences (ferritin-100.12).
+    ///
+    /// ESM-3 reuses ESM-C's `MultiHeadAttention`, so `sequence_id` is the same
+    /// `where_cond` predicate (`1` keeps a key). Unlike ESM-C, `ESM3::forward`
+    /// has no fallback that derives one from the tokens: passing `None` — which
+    /// is what every single-sequence path here does — means no masking at all,
+    /// so a batch *must* supply it or the padding silently changes the real
+    /// residues' embeddings.
+    fn embed_batch(&self, sequences: &[&str]) -> Result<Tensor> {
+        let rows: Vec<Vec<u32>> = sequences
+            .iter()
+            .map(|s| tokenize_sequence(s, true))
+            .collect();
+        let batch = pad_token_batch(&rows, SEQUENCE_PAD_TOKEN, &self.device)?;
+        let output = self.model.forward(
+            Some(&batch.ids),  // sequence_tokens
+            None,              // structure_tokens
+            None,              // ss8_tokens
+            None,              // sasa_tokens
+            None,              // function_tokens
+            None,              // residue_annotation_tokens
+            None,              // average_plddt
+            None,              // per_res_plddt
+            Some(&batch.mask), // sequence_id
+            None,              // structure_coords
+            None,              // chain_id
+        )?;
+        let embeddings = output
+            .embeddings
+            .ok_or_else(|| anyhow::anyhow!("ESM3 forward() returned no embeddings"))?;
+        zero_padded_rows(&embeddings, &batch.mask)
     }
 }
 

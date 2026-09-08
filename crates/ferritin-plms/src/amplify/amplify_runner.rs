@@ -6,7 +6,10 @@ use super::super::types::{ContactMap, PseudoProbability};
 use super::amplify::{AMPLIFY, AmplifyOutput};
 use super::config::AMPLIFYConfig;
 use crate::loader::{LoadOptions, WeightSource};
-use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
+use crate::plm_runner::{
+    ModelMetadata, PlmRunner, SpecialTokenLayout, additive_padding_mask, pad_token_batch,
+    zero_padded_rows,
+};
 use crate::registry::{self, ModelCard};
 use anyhow::{Error as E, Result, anyhow};
 use candle_core::{D, Device, Tensor};
@@ -266,5 +269,46 @@ impl PlmRunner for AmplifyRunner {
     /// Masked-LM logits `(1, L + 2, vocab_size)`.
     fn logits(&self, sequence: &str) -> Result<Tensor> {
         Ok(self.run_forward(sequence)?.logits)
+    }
+
+    /// One batched forward pass over right-padded sequences (ferritin-100.12).
+    ///
+    /// AMPLIFY's `pad_mask` is **additive**, not `1 = real` — it is added to
+    /// the attention scores — so the `(batch, seq_len)` mask goes through
+    /// `additive_padding_mask` in the model's dtype before it is passed in.
+    /// Handing `forward` a 0/1 mask instead raises no error and masks nothing:
+    /// real keys would get `+1.0` and pads `+0.0`, so an unpadded row shifts
+    /// uniformly and cancels in softmax, while a padded row leaves its pad
+    /// keys with the *highest* bias of all.
+    fn embed_batch(&self, sequences: &[&str]) -> Result<Tensor> {
+        let device = self.model.get_device();
+        let pad_id = self
+            .tokenizer
+            .token_to_id("<pad>")
+            .ok_or_else(|| anyhow!("AMPLIFY tokenizer has no <pad> token"))?;
+        let rows = sequences
+            .iter()
+            .map(|s| {
+                Ok(self
+                    .tokenizer
+                    .encode(s.to_string(), true)
+                    .map_err(E::msg)?
+                    .get_ids()
+                    .to_vec())
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let batch = pad_token_batch(&rows, pad_id, device)?;
+        let dtype = self.model.dtype();
+        let pad_mask = additive_padding_mask(&batch.mask, dtype)?;
+
+        let output = self
+            .model
+            .forward(&batch.ids, Some(&pad_mask), true, false)?;
+        let hidden = output
+            .hidden_states
+            .ok_or_else(|| anyhow!("AMPLIFY forward() returned no hidden states"))?
+            .pop()
+            .ok_or_else(|| anyhow!("AMPLIFY returned empty hidden states list"))?;
+        zero_padded_rows(&hidden, &batch.mask)
     }
 }
