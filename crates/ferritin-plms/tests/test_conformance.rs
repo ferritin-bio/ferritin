@@ -58,7 +58,7 @@ use ferritin_plms::plm_runner::PlmRunner;
 use ferritin_plms::registry::{ModelCard, ParityStatus, REGISTRY, TokenizerSpec};
 use ferritin_plms::{
     AmplifyModels, AmplifyRunner, ESM2Models, ESM2Runner, ESM3Models, ESM3Runner, ESMCModels,
-    ESMCRunner, ProtT5Models, ProtT5Runner, device,
+    ESMCRunner, T5Models, T5Runner, device,
 };
 use support::parity::{ParityFixture, fixture_path, hf_tests_enabled};
 
@@ -128,10 +128,12 @@ fn runner_for(card: &ModelCard) -> Result<Box<dyn PlmRunner>> {
         "esmc-600m" => Box::new(ESMCRunner::from_pretrained(ESMCModels::ESMC600M, dev)?),
         "esmc-6b" => Box::new(ESMCRunner::from_pretrained(ESMCModels::ESMC6B, dev)?),
         "esm3-sm-open-v1" => Box::new(ESM3Runner::from_pretrained(ESM3Models::SmOpen, dev)?),
-        "prott5-xl-half-uniref50-enc" => Box::new(ProtT5Runner::from_pretrained(
-            ProtT5Models::XlHalfUniref50Enc,
+        "prott5-xl-half-uniref50-enc" => Box::new(T5Runner::from_pretrained(
+            T5Models::ProtT5XlHalfUniref50Enc,
             dev,
         )?),
+        "ankh-base" => Box::new(T5Runner::from_pretrained(T5Models::AnkhBase, dev)?),
+        "ankh-large" => Box::new(T5Runner::from_pretrained(T5Models::AnkhLarge, dev)?),
         other => bail!(
             "{other} is a loadable embedding model with no arm in runner_for; \
              add one so it inherits conformance coverage"
@@ -317,6 +319,8 @@ fn test_every_loadable_model_can_be_constructed() {
         "esmc-6b",
         "esm3-sm-open-v1",
         "prott5-xl-half-uniref50-enc",
+        "ankh-base",
+        "ankh-large",
     ];
     for card in REGISTRY
         .iter()

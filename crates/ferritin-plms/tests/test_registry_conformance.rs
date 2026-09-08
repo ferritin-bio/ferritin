@@ -20,8 +20,8 @@ use anyhow::Result;
 use ferritin_plms::plm_runner::PlmRunner;
 use ferritin_plms::registry::{Family, REGISTRY, lookup};
 use ferritin_plms::{
-    AmplifyModels, AmplifyRunner, ESM2Models, ESM2Runner, ESMCModels, ESMCRunner, ProtT5Models,
-    ProtT5Runner, device,
+    AmplifyModels, AmplifyRunner, ESM2Models, ESM2Runner, ESMCModels, ESMCRunner, T5Models,
+    T5Runner, device,
 };
 
 /// Every enum variant resolves to a registry row, and the row's source is what
@@ -86,11 +86,22 @@ fn test_esmc_loaded_dims_match_card() -> Result<()> {
 /// ProtT5 is the one row whose `specials` is not `BOS_EOS`, so this check —
 /// which compares the card's layout against the loaded runner's — is doing
 /// more work here than for the ESM-family rows (ferritin-goh.5).
+/// Ankh shares ProtT5's runner but not its FFN — `feed_forward_proj` is
+/// `"gated-gelu"`, so this also checks that the gated path loads against a real
+/// checkpoint rather than only parsing (ferritin-goh.6).
+#[test]
+#[ignore = "requires downloading ElnaggarLab/ankh-base (2.9 GB)"]
+fn test_ankh_base_loaded_dims_match_card() -> Result<()> {
+    let card = lookup("ankh-base").expect("registered");
+    let runner = T5Runner::from_pretrained(T5Models::AnkhBase, device(false)?)?;
+    assert_card_matches(card.id, &runner)
+}
+
 #[test]
 #[ignore = "requires downloading Rostlab/prot_t5_xl_half_uniref50-enc (2.4 GB)"]
 fn test_prott5_loaded_dims_match_card() -> Result<()> {
     let card = lookup("prott5-xl-half-uniref50-enc").expect("registered");
-    let runner = ProtT5Runner::from_pretrained(ProtT5Models::XlHalfUniref50Enc, device(false)?)?;
+    let runner = T5Runner::from_pretrained(T5Models::ProtT5XlHalfUniref50Enc, device(false)?)?;
     assert_card_matches(card.id, &runner)
 }
 
@@ -153,6 +164,8 @@ fn test_loadable_embedding_models_are_covered() {
         [
             "amplify-120m",
             "amplify-350m",
+            "ankh-base",
+            "ankh-large",
             "dplm-650m",
             "esm1b-t33-650m-ur50s",
             "esm1v-t33-650m-ur90s-1",
@@ -193,6 +206,7 @@ fn test_uncovered_loadable_models_are_accounted_for() {
         "amplify-120m",
         "esmc-300m",
         "prott5-xl-half-uniref50-enc",
+        "ankh-base",
     ];
 
     let uncovered: Vec<&str> = REGISTRY
@@ -230,6 +244,9 @@ fn test_uncovered_loadable_models_are_accounted_for() {
             "esmc-600m",
             "esmc-6b",
             "esm3-sm-open-v1",
+            // ankh-large is a 7.5 GB download for the same architecture
+            // ankh-base already covers; only its dimensions differ.
+            "ankh-large",
         ],
         "a model gained or lost conformance coverage; say which and why"
     );

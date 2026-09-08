@@ -1,6 +1,7 @@
-//! ProtT5 loading and contract tests (ferritin-goh.5).
+//! T5-family loading, contract and parity tests: ProtT5 (ferritin-goh.5) and
+//! Ankh (ferritin-goh.6).
 //!
-//! These download a 2.4 GB checkpoint, so they are `#[ignore]`d:
+//! These download multi-gigabyte checkpoints, so they are `#[ignore]`d:
 //!
 //! ```shell
 //! cargo test -p ferritin-plms --test test_plm_prott5 -- --include-ignored
@@ -10,15 +11,15 @@ mod support;
 
 use anyhow::Result;
 use ferritin_plms::plm_runner::{PlmRunner, SpecialTokenLayout};
-use ferritin_plms::prott5::tokenizer;
-use ferritin_plms::{ProtT5Models, ProtT5Runner, device};
+use ferritin_plms::t5::tokenizer;
+use ferritin_plms::{T5Models, T5Runner, device};
 use support::parity::{ParityFixture, assert_embeddings_close};
 
 /// Ubiquitin (76 aa).
 const SEQ: &str = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG";
 
-fn runner() -> Result<ProtT5Runner> {
-    ProtT5Runner::from_pretrained(ProtT5Models::XlHalfUniref50Enc, device(false)?)
+fn runner() -> Result<T5Runner> {
+    T5Runner::from_pretrained(T5Models::ProtT5XlHalfUniref50Enc, device(false)?)
 }
 
 /// It loads at all, and the shapes are what the card declares.
@@ -224,5 +225,57 @@ fn test_prott5_batch_rows_match_single_sequences() -> Result<()> {
     let bare = f32v(&batch.narrow(0, 0, 1)?)?;
     let spaced = f32v(&batch.narrow(0, 1, 1)?)?;
     assert_eq!(bare, spaced, "spacing changed a batched row");
+    Ok(())
+}
+
+// ── Ankh ──────────────────────────────────────────────────────────────────────
+
+/// Ankh against HuggingFace `T5EncoderModel` (ferritin-goh.6).
+///
+/// Two things this pins that ProtT5's test cannot:
+///
+/// * **The gated FFN.** Ankh sets `feed_forward_proj: "gated-gelu"`, so candle
+///   loads a `T5DenseGatedActDense` rather than ProtT5's plain ReLU dense.
+///   Nothing else in the crate exercises that path.
+/// * **The shared tokenizer table.** Ankh ships its own `tokenizer.json` — a
+///   Unigram vocabulary with no SentencePiece boundary marker — and the runner
+///   deliberately does not use it, because its alphabet sits at the same ids as
+///   ProtT5's. The fixture carries HuggingFace's own ids so that reuse is
+///   checked rather than assumed; if the two ever diverged this fails on the
+///   ids before it fails on the embeddings.
+///
+/// Ankh is published at F32 and loaded at F32, so unlike ProtT5 there is no
+/// half-precision rounding in this comparison.
+#[test]
+#[ignore = "requires downloading ElnaggarLab/ankh-base (2.9 GB)"]
+fn test_ankh_parity_against_huggingface() -> Result<()> {
+    let device = device(false)?;
+    let Some(fixture) = ParityFixture::load_or_skip("ankh_parity", &device)? else {
+        return Ok(());
+    };
+    let runner = T5Runner::from_pretrained(T5Models::AnkhBase, device)?;
+    assert_eq!(runner.special_tokens(), SpecialTokenLayout::EOS_ONLY);
+
+    for (name, seq) in [
+        ("ubiquitin_nterm", "MQIFVKTLTGK"),
+        ("glycine_repeat", "GGGGGGG"),
+        ("alt_charged", "KEKEKEK"),
+        ("rare_residues", "MUZOBX"),
+    ] {
+        let expected_ids: Vec<u32> = fixture
+            .tensor(&format!("{name}_input_ids"))?
+            .to_dtype(candle_core::DType::U32)?
+            .to_vec1()?;
+        assert_eq!(
+            tokenizer::encode(seq),
+            expected_ids,
+            "{name}: the shared t5::tokenizer table disagrees with Ankh's own tokenizer.json"
+        );
+
+        let rust = runner.embed_residues(seq)?.squeeze(0)?;
+        let reference = fixture.tensor(&format!("{name}_embeddings"))?;
+        assert_embeddings_close(&rust.to_dtype(candle_core::DType::F32)?, reference, 0.999)
+            .map_err(|e| anyhow::anyhow!("{name}: {e}"))?;
+    }
     Ok(())
 }

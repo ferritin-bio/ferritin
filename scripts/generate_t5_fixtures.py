@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate ProtT5 parity fixtures for the Rust numerical comparison test.
+"""Generate T5-family parity fixtures (ProtT5 and Ankh) for the Rust tests.
 
 Runs `Rostlab/prot_t5_xl_half_uniref50-enc` through HuggingFace `T5EncoderModel`
 and saves the per-residue encoder hidden states as safetensors. The Rust test
@@ -27,6 +27,11 @@ The stored tensors are float32 even though the checkpoint is float16: the
 fixture is the reference, and rounding it to F16 would bake the very error the
 comparison is trying to measure.
 
+Regenerating is not free of churn: the same script under a different torch
+build moves the embeddings by ~1e-6 (ids are unaffected). That is float noise,
+not a change in the reference, so prefer leaving a committed fixture alone
+rather than regenerating it incidentally while adding a new one.
+
 Usage
 -----
     pip install transformers safetensors torch sentencepiece huggingface_hub
@@ -44,6 +49,7 @@ from huggingface_hub import hf_hub_download
 from transformers import T5EncoderModel
 
 MODEL_ID = "Rostlab/prot_t5_xl_half_uniref50-enc"
+ANKH_ID = "ElnaggarLab/ankh-base"
 
 # Short on purpose: the fixture is committed, and d_model is 1024, so a 76-mer
 # would be a 300 KB tensor for no extra signal.
@@ -91,6 +97,47 @@ def embed(model, sp, sequence: str) -> torch.Tensor:
     return out.last_hidden_state[0, : len(sequence), :].float()
 
 
+@torch.no_grad()
+def embed_ankh(model, tok, sequence: str) -> torch.Tensor:
+    """Per-residue Ankh encoder states, shape (L, d_model), EOS stripped.
+
+    Ankh ships a real `tokenizer.json` whose Unigram vocabulary has NO
+    SentencePiece boundary marker, so unlike ProtT5 it takes the bare sequence
+    with no spacing. Its ids are nonetheless the same alphabet at the same
+    positions as ProtT5's, which is why one Rust table serves both — asserted
+    here rather than assumed.
+    """
+    enc = tok(sequence, return_tensors="pt", add_special_tokens=True)
+    ids = enc["input_ids"]
+    assert ids.shape[1] == len(sequence) + 1, (
+        f"expected {len(sequence)} residues + 1 EOS, got {ids.shape[1]} tokens"
+    )
+    assert ids[0, -1].item() == tok.eos_token_id, "last token should be </s>"
+    out = model(input_ids=ids, attention_mask=enc["attention_mask"])
+    return out.last_hidden_state[0, : len(sequence), :].float(), ids[0].to(torch.int32)
+
+
+def generate_ankh(output_dir, model_id: str):
+    from safetensors.torch import save_file
+    from transformers import AutoTokenizer, T5EncoderModel
+
+    print(f"Loading {model_id} ...")
+    tok = AutoTokenizer.from_pretrained(model_id)
+    model = T5EncoderModel.from_pretrained(model_id, dtype=torch.float32)
+    model.eval()
+
+    tensors = {}
+    for name, seq in SEQUENCES.items():
+        emb, ids = embed_ankh(model, tok, seq)
+        tensors[f"{name}_embeddings"] = emb
+        tensors[f"{name}_input_ids"] = ids
+        print(f"  {name!r}: embeddings {tuple(emb.shape)}  ids {ids.tolist()}")
+
+    out_path = output_dir / "ankh_parity.safetensors"
+    save_file(tensors, str(out_path))
+    print(f"Saved {out_path}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate ProtT5 parity fixtures")
     parser.add_argument("--model", default=MODEL_ID, help="HuggingFace model ID")
@@ -127,6 +174,8 @@ def main():
     out_path = output_dir / "prott5_parity.safetensors"
     save_file(tensors, str(out_path))
     print(f"Saved {out_path}")
+
+    generate_ankh(output_dir, ANKH_ID)
 
 
 if __name__ == "__main__":

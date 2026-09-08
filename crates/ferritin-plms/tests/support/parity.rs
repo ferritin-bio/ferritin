@@ -108,7 +108,12 @@ pub const PARITY_COVERAGE: &[ParityCoverage] = &[
     },
     ParityCoverage {
         fixture: "prott5_parity",
-        generator: "prott5",
+        generator: "t5",
+        status: CoverageStatus::Committed,
+    },
+    ParityCoverage {
+        fixture: "ankh_parity",
+        generator: "t5",
         status: CoverageStatus::Committed,
     },
     ParityCoverage {
