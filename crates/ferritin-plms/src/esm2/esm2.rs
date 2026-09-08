@@ -260,38 +260,21 @@ impl ESM2Config {
     }
 }
 
-/// The additive value used for padded key positions, chosen per dtype.
-///
-/// It has to be large enough that `exp(score + fill - max)` underflows to zero
-/// and small enough to stay finite in the tensor's dtype. F16 tops out at
-/// ±65504, so the usual `-1e9` (or `f32::MIN`) would saturate to `-inf` there;
-/// `-1e4` is still ~10^4 below any realistic scaled dot product, so softmax
-/// returns exactly 0 for those positions in every supported dtype.
-fn attention_mask_fill_value(dtype: DType) -> f64 {
-    match dtype {
-        DType::F16 => -1e4,
-        _ => -1e9,
-    }
-}
-
 /// Turn a `(batch, seq_len)` padding mask (1 = real token, 0 = pad) into an
 /// additive attention bias of shape `(batch, 1, 1, seq_len)`.
 ///
-/// The bias is `0` at real tokens and a large negative constant at pads, and is
-/// meant to be added to the attention **scores before softmax**. Multiplying the
-/// probabilities after softmax is not equivalent: it leaves the surviving
-/// probabilities un-renormalised and still lets pad positions steal mass.
+/// The dtype-safe fill value and the 2-D core live in
+/// [`crate::plm_runner::additive_padding_mask`], shared with AMPLIFY; this is
+/// the rank ESM-2's attention wants.
 ///
 /// The trailing axis indexes **keys**, so adding this bias stops every query
 /// from attending to a padded position. Padded *queries* are left alone — their
 /// own output rows are garbage but nothing downstream of attention mixes across
 /// positions, so they cannot contaminate the real residues.
-fn padding_attention_bias(mask: &Tensor, dtype: DType) -> Result<Tensor> {
+pub(crate) fn padding_attention_bias(mask: &Tensor, dtype: DType) -> Result<Tensor> {
     let (batch, seq_len) = mask.dims2()?;
-    let mask = mask.to_dtype(dtype)?;
-    let ones = Tensor::ones((batch, seq_len), dtype, mask.device())?;
-    // (1 - mask) * fill → 0 where real, `fill` where pad.
-    let bias = (ones - &mask)?.affine(attention_mask_fill_value(dtype), 0.0)?;
+    let bias = crate::plm_runner::additive_padding_mask(mask, dtype)
+        .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
     bias.reshape((batch, 1, 1, seq_len))
 }
 
@@ -1574,23 +1557,6 @@ mod tests {
             );
         }
         Ok(())
-    }
-
-    /// The masked-score fill value must stay finite in every supported dtype;
-    /// F16 saturates past ±65504, which would turn the bias into `-inf`.
-    #[test]
-    fn test_attention_mask_fill_value_is_dtype_safe() {
-        for dtype in [DType::F32, DType::F64, DType::BF16, DType::F16] {
-            let v = attention_mask_fill_value(dtype);
-            assert!(
-                v <= -1e4,
-                "fill value {v} for {dtype:?} is not negative enough"
-            );
-        }
-        assert!(
-            attention_mask_fill_value(DType::F16) > -65504.0,
-            "F16 fill value must stay inside the F16 range"
-        );
     }
 
     /// The bias itself: zero at real tokens, strongly negative at pads,

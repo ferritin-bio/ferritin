@@ -4,11 +4,13 @@
 use super::esm2::{ESM2, ESM2Config, ESM2Output};
 use crate::esm2::saprot_tokenizer::SaProtTokenizer;
 use crate::loader::{LoadOptions, WeightSource};
-use crate::plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
+use crate::plm_runner::{
+    ModelMetadata, PlmRunner, SpecialTokenLayout, pad_token_batch, zero_padded_rows,
+};
 use crate::registry::{self, ModelCard, TokenizerSpec};
 use crate::types::PseudoProbability;
 use anyhow::{Error as E, Result, anyhow};
-use candle_core::{Device, Tensor};
+use candle_core::{DType, Device, Tensor};
 use candle_nn::ops::softmax;
 use serde_json;
 use tokenizers::Tokenizer;
@@ -416,5 +418,26 @@ impl PlmRunner for ESM2Runner {
     /// Masked-LM logits `(1, L + 2, vocab_size)`.
     fn logits(&self, sequence: &str) -> Result<Tensor> {
         Ok(self.run_forward(sequence)?.logits)
+    }
+
+    /// One batched forward pass over right-padded sequences (ferritin-100.12).
+    ///
+    /// Padding is `config.pad_token_id`, which matters twice over: ESM-1b and
+    /// ESM-1v number their absolute positions by counting non-pad tokens, and
+    /// the `(batch, seq_len)` mask handed to `ESM2::embed` both keeps padded
+    /// keys out of self-attention and supplies the per-row sequence length that
+    /// token-dropout compensation divides by.
+    fn embed_batch(&self, sequences: &[&str]) -> Result<Tensor> {
+        let device = self.model.get_device();
+        let rows = sequences
+            .iter()
+            .map(|s| self.encode_with_special(s))
+            .collect::<Result<Vec<_>>>()?;
+        let batch = pad_token_batch(&rows, self.config.pad_token_id as u32, device)?;
+        // F32 rather than the model dtype: the mask is summed to get per-row
+        // lengths, and F16 cannot count past 65504 exactly.
+        let mask = batch.mask_as(DType::F32)?;
+        let embeddings = self.model.embed(&batch.ids, Some(&mask))?;
+        zero_padded_rows(&embeddings, &batch.mask)
     }
 }
