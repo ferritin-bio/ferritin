@@ -165,3 +165,64 @@ fn test_prott5_parity_against_huggingface() -> Result<()> {
     }
     Ok(())
 }
+
+// ── Batching (ferritin-100.12 meeting ferritin-goh.5) ─────────────────────────
+
+/// ProtT5 inherits the default `embed_batch`, which loops `embed` and
+/// zero-pads. Two things make it worth checking here rather than assuming:
+///
+/// * ProtT5 is the only `EOS_ONLY` model, so this is the only runner where
+///   `embed_residues_batch` strips from column 0 instead of skipping a BOS row.
+/// * `residue_count` skips whitespace, so a spaced sequence is *longer as a
+///   string* than a bare one of the same length. Padding driven by
+///   `sequence.len()` rather than `residue_count` would put the two rows at
+///   different widths — which is exactly the mistake the spacing convention
+///   invites.
+#[test]
+#[ignore = "requires downloading Rostlab/prot_t5_xl_half_uniref50-enc (2.4 GB)"]
+fn test_prott5_batch_rows_match_single_sequences() -> Result<()> {
+    let runner = runner()?;
+    // Same three residues written two ways, plus a longer sequence to force
+    // padding on the first two.
+    let seqs = ["MKT", "M K T", "MQIFVKTLTGK"];
+    let counts: Vec<usize> = seqs.iter().map(|s| runner.residue_count(s)).collect();
+    assert_eq!(counts, vec![3, 3, 11], "whitespace is not a residue");
+
+    let batch = runner.embed_residues_batch(&seqs)?;
+    assert_eq!(
+        batch.dims(),
+        &[3, 11, 1024],
+        "padding must follow residue_count, not string length"
+    );
+
+    let f32v = |t: &candle_core::Tensor| -> Result<Vec<f32>> {
+        Ok(t.flatten_all()?
+            .to_dtype(candle_core::DType::F32)?
+            .to_vec1()?)
+    };
+    for (i, seq) in seqs.iter().enumerate() {
+        let single = f32v(&runner.embed_residues(seq)?)?;
+        let row = f32v(&batch.narrow(0, i, 1)?.narrow(1, 0, counts[i])?)?;
+        assert_eq!(single, row, "batch row {i} disagrees with embed_residues()");
+
+        // Everything past this sequence is the documented zero padding.
+        if counts[i] < 11 {
+            let tail = f32v(
+                &batch
+                    .narrow(0, i, 1)?
+                    .narrow(1, counts[i], 11 - counts[i])?,
+            )?;
+            assert!(
+                tail.iter().all(|&v| v == 0.0),
+                "row {i} has non-zero padding"
+            );
+        }
+    }
+
+    // The spaced and bare forms are the same input, so they must batch to
+    // identical rows.
+    let bare = f32v(&batch.narrow(0, 0, 1)?)?;
+    let spaced = f32v(&batch.narrow(0, 1, 1)?)?;
+    assert_eq!(bare, spaced, "spacing changed a batched row");
+    Ok(())
+}

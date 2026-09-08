@@ -648,6 +648,34 @@ mod tests {
         );
     }
 
+    /// `EOS_ONLY` has `leading = 0`, so the strip starts at column 0 rather
+    /// than skipping a BOS row. ProtT5 is the only model with that layout, and
+    /// before it every batching path was exercised at `leading = 1` only — an
+    /// off-by-one that happened to be invisible while every runner was
+    /// `BOS_EOS` (ferritin-goh.5 meeting ferritin-100.12).
+    #[test]
+    fn test_embed_residues_batch_handles_a_leading_free_layout() {
+        let runner = MockRunner::new(SpecialTokenLayout::EOS_ONLY);
+        let t = runner.embed_residues_batch(&["ACDEFG", "AC"]).unwrap();
+        assert_eq!(t.dims(), &[2, 6, 16]);
+
+        // Row 1 is "AC": two real residues, then zeros — and crucially the
+        // first row must be residue 0, not a stripped special token.
+        let short = t.narrow(0, 1, 1).unwrap();
+        assert!(
+            values(&short.narrow(1, 0, 2).unwrap())
+                .iter()
+                .all(|&v| v == 2.0),
+            "with leading = 0 the strip must start at column 0"
+        );
+        assert!(
+            values(&short.narrow(1, 2, 4).unwrap())
+                .iter()
+                .all(|&v| v == 0.0),
+            "columns past the sequence should be zero, not the EOS row"
+        );
+    }
+
     /// A batch of one is the same thing `embed` returns.
     #[test]
     fn test_embed_batch_of_one_matches_embed() {
