@@ -49,6 +49,8 @@ pub enum Family {
     Esm3,
     /// ProteinMPNN / LigandMPNN — inverse folding, not an embedding model.
     Mpnn,
+    /// ProtT5 and the rest of the T5 encoder family.
+    T5,
 }
 
 // ── TokenizerSpec ─────────────────────────────────────────────────────────────
@@ -156,6 +158,7 @@ impl ModelCard {
             Family::Esmc => "esmc",
             Family::Esm3 => "esm3",
             Family::Mpnn => "proteinmpnn",
+            Family::T5 => "prott5",
         }
     }
 }
@@ -627,6 +630,39 @@ pub const REGISTRY: &[ModelCard] = &[
         unsupported: None,
     },
     // ── ESMFold2 ─────────────────────────────────────────────────────────────
+    // ── ProtT5: a T5 encoder, architecturally independent of ESM (goh.5) ─────
+    ModelCard {
+        id: "prott5-xl-half-uniref50-enc",
+        family: Family::T5,
+        // No safetensors in this repo — the only weight file is a zip-pickle
+        // `pytorch_model.bin`, with the tensors at the root.
+        source: WeightSource::pth("Rostlab/prot_t5_xl_half_uniref50-enc", None).at_revision("main"),
+        file: "pytorch_model.bin",
+        // No `tokenizer.json` either; the repo ships a SentencePiece
+        // `spiece.model` whose reachable vocabulary is 28 pieces, transcribed
+        // into `prott5::tokenizer`.
+        tokenizer: TokenizerSpec::BuiltinVocab("prott5::tokenizer"),
+        // T5 appends `</s>` and prepends nothing — the only non-BOS_EOS
+        // embedding model in the registry.
+        specials: SpecialTokenLayout::EOS_ONLY,
+        metadata: ModelMetadata {
+            d_model: 1024,
+            n_layers: 24,
+            // `shared.weight` is [128, 1024]; ids 28..=127 are T5's unused
+            // `<extra_id_*>` sentinels.
+            vocab_size: 128,
+            // Relative position buckets, so no hard cap.
+            max_positions: None,
+        },
+        // 1.2B encoder parameters. Published as float16 (2.4 GB on disk), and
+        // `ProtT5Runner::from_pretrained` loads it at F16 rather than doubling
+        // it to reach F32.
+        approx_bytes_f32: 4800 * MB,
+        parity: ParityStatus::Verified {
+            fixture: "prott5_parity",
+        },
+        unsupported: None,
+    },
     // ── ProteinMPNN ──────────────────────────────────────────────────────────
     ModelCard {
         id: "proteinmpnn-v48-020",
@@ -858,7 +894,7 @@ mod tests {
     }
 
     /// Parity claims must name a fixture that the test suite actually has.
-    /// Only ESM2-8M and AMPLIFY-120M are verified today.
+    /// Three models are verified today: ESM2-8M, AMPLIFY-120M and ProtT5-XL.
     #[test]
     fn test_verified_models_name_a_real_fixture() {
         let mut verified: Vec<(&str, &str)> = REGISTRY
@@ -874,6 +910,7 @@ mod tests {
             [
                 ("amplify-120m", "amplify_parity"),
                 ("esm2-t6-8m", "esm2_parity"),
+                ("prott5-xl-half-uniref50-enc", "prott5_parity"),
             ],
             "the set of parity-verified models changed; that is a deliberate act"
         );

@@ -83,6 +83,15 @@ impl SpecialTokenLayout {
         trailing: 1,
     };
 
+    /// One trailing EOS and no BOS — T5's layout, which ProtT5 uses.
+    ///
+    /// Distinct from [`BOS_EOS`][Self::BOS_EOS] by one leading row, which is
+    /// exactly enough to misalign every residue if assumed rather than read.
+    pub const EOS_ONLY: Self = Self {
+        leading: 0,
+        trailing: 1,
+    };
+
     /// Total number of non-residue rows.
     pub const fn total(&self) -> usize {
         self.leading + self.trailing
@@ -636,6 +645,34 @@ mod tests {
                 .iter()
                 .all(|&v| v == 0.0),
             "columns past a sequence's length should be zero, not its EOS row"
+        );
+    }
+
+    /// `EOS_ONLY` has `leading = 0`, so the strip starts at column 0 rather
+    /// than skipping a BOS row. ProtT5 is the only model with that layout, and
+    /// before it every batching path was exercised at `leading = 1` only — an
+    /// off-by-one that happened to be invisible while every runner was
+    /// `BOS_EOS` (ferritin-goh.5 meeting ferritin-100.12).
+    #[test]
+    fn test_embed_residues_batch_handles_a_leading_free_layout() {
+        let runner = MockRunner::new(SpecialTokenLayout::EOS_ONLY);
+        let t = runner.embed_residues_batch(&["ACDEFG", "AC"]).unwrap();
+        assert_eq!(t.dims(), &[2, 6, 16]);
+
+        // Row 1 is "AC": two real residues, then zeros — and crucially the
+        // first row must be residue 0, not a stripped special token.
+        let short = t.narrow(0, 1, 1).unwrap();
+        assert!(
+            values(&short.narrow(1, 0, 2).unwrap())
+                .iter()
+                .all(|&v| v == 2.0),
+            "with leading = 0 the strip must start at column 0"
+        );
+        assert!(
+            values(&short.narrow(1, 2, 4).unwrap())
+                .iter()
+                .all(|&v| v == 0.0),
+            "columns past the sequence should be zero, not the EOS row"
         );
     }
 

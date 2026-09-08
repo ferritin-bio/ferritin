@@ -20,7 +20,8 @@ use anyhow::Result;
 use ferritin_plms::plm_runner::PlmRunner;
 use ferritin_plms::registry::{Family, REGISTRY, lookup};
 use ferritin_plms::{
-    AmplifyModels, AmplifyRunner, ESM2Models, ESM2Runner, ESMCModels, ESMCRunner, device,
+    AmplifyModels, AmplifyRunner, ESM2Models, ESM2Runner, ESMCModels, ESMCRunner, ProtT5Models,
+    ProtT5Runner, device,
 };
 
 /// Every enum variant resolves to a registry row, and the row's source is what
@@ -79,6 +80,17 @@ fn test_amplify_loaded_dims_match_card() -> Result<()> {
 fn test_esmc_loaded_dims_match_card() -> Result<()> {
     let card = lookup("esmc-300m").expect("registered");
     let runner = ESMCRunner::from_pretrained(ESMCModels::ESMC300M, device(false)?)?;
+    assert_card_matches(card.id, &runner)
+}
+
+/// ProtT5 is the one row whose `specials` is not `BOS_EOS`, so this check —
+/// which compares the card's layout against the loaded runner's — is doing
+/// more work here than for the ESM-family rows (ferritin-goh.5).
+#[test]
+#[ignore = "requires downloading Rostlab/prot_t5_xl_half_uniref50-enc (2.4 GB)"]
+fn test_prott5_loaded_dims_match_card() -> Result<()> {
+    let card = lookup("prott5-xl-half-uniref50-enc").expect("registered");
+    let runner = ProtT5Runner::from_pretrained(ProtT5Models::XlHalfUniref50Enc, device(false)?)?;
     assert_card_matches(card.id, &runner)
 }
 
@@ -160,6 +172,7 @@ fn test_loadable_embedding_models_are_covered() {
             "esmc-6b",
             "fastesm2-650",
             "pepmlm-650m",
+            "prott5-xl-half-uniref50-enc",
             "saprot-35m-af2",
             "saprot-650m-af2",
         ],
@@ -175,7 +188,12 @@ fn test_loadable_embedding_models_are_covered() {
 /// would not be caught.
 #[test]
 fn test_uncovered_loadable_models_are_accounted_for() {
-    let covered = ["esm2-t6-8m", "amplify-120m", "esmc-300m"];
+    let covered = [
+        "esm2-t6-8m",
+        "amplify-120m",
+        "esmc-300m",
+        "prott5-xl-half-uniref50-enc",
+    ];
 
     let uncovered: Vec<&str> = REGISTRY
         .iter()

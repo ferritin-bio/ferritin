@@ -12,3 +12,7 @@
 *.safetensors
 !esm2_parity.safetensors
 !amplify_parity.safetensors
+# 125 KB: ProtT5's d_model is 1024, so four short sequences of F32 embeddings
+# cost more than the ESM logit fixtures. Still small enough to commit, and it is
+# the only thing checking a 1.2B-parameter port (ferritin-goh.5).
+!prott5_parity.safetensors
