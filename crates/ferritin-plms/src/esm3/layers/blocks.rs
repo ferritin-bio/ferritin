@@ -21,12 +21,41 @@ impl SwiGLU {
         ((expansion_ratio * d_model as f64 + 255.0) / 256.0).floor() as usize * 256
     }
 
+    /// Load the FFN, taking the bias terms **from the checkpoint** rather than
+    /// assuming they are absent (ferritin-100.27).
+    ///
+    /// The two checkpoints that share this block disagree, and hardcoding
+    /// either answer is silently wrong for the other:
+    ///
+    /// | checkpoint | `ffn.1.bias` / `ffn.3.bias` |
+    /// |---|---|
+    /// | `esm3_sm_open_v1.pth` (the sequence model) | absent |
+    /// | `esm3_structure_encoder_v0.pth` (the VQ-VAE encoder) | **present** |
+    ///
+    /// This used to be `linear_no_bias` unconditionally, which is correct for
+    /// the sequence model and drops two real tensors per block for the
+    /// structure encoder. Nothing caught it: the loader only ever asked for the
+    /// weights, so "every tensor resolves" stayed true while the biases sat
+    /// unread in the file. The cost was ~4% drift in the encoder's latent —
+    /// invisible to any self-consistency check, but enough to move 11 of 93
+    /// residues onto a different codebook entry.
+    ///
+    /// Probed rather than made a config flag because the checkpoint is the
+    /// authority here, and the same probing idiom already resolves ESM-C's
+    /// wrapper prefix in `loader::optional_prefix`.
     pub fn load(vb: VarBuilder, config: &ESM3Config) -> Result<Self> {
         let hidden = Self::hidden_dim(config.expansion_ratio, config.d_model);
+        let linear = |d_in, d_out, vb: VarBuilder| {
+            if vb.contains_tensor("bias") {
+                nn::linear(d_in, d_out, vb)
+            } else {
+                nn::linear_no_bias(d_in, d_out, vb)
+            }
+        };
         Ok(Self {
             layer_norm: nn::layer_norm(config.d_model, 1e-5, vb.pp("0"))?,
-            linear1: nn::linear_no_bias(config.d_model, hidden * 2, vb.pp("1"))?,
-            linear2: nn::linear_no_bias(hidden, config.d_model, vb.pp("3"))?,
+            linear1: linear(config.d_model, hidden * 2, vb.pp("1"))?,
+            linear2: linear(hidden, config.d_model, vb.pp("3"))?,
         })
     }
 }
@@ -151,5 +180,120 @@ fn esmc_config_from_esm3(cfg: &ESM3Config) -> ESMCConfig {
         regression_head_output_dim: 0,
         regression_head_hidden_dim: 0,
         embedding_dim: 0,
+    }
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use candle_core::{DType, Device};
+    use std::collections::HashMap;
+
+    fn cfg(d_model: usize) -> ESM3Config {
+        ESM3Config {
+            d_model,
+            expansion_ratio: 8.0 / 3.0,
+            ..ESM3Config::sm_open()
+        }
+    }
+
+    /// Build the tensors an FFN needs, optionally including the two Linear
+    /// biases the structure encoder ships and the sequence model does not.
+    fn ffn_tensors(d_model: usize, with_bias: bool, device: &Device) -> HashMap<String, Tensor> {
+        let hidden = SwiGLU::hidden_dim(8.0 / 3.0, d_model);
+        let mut ts = HashMap::new();
+        let ones = |dims: (usize, usize)| Tensor::ones(dims, DType::F32, device).unwrap();
+        ts.insert(
+            "0.weight".into(),
+            Tensor::ones(d_model, DType::F32, device).unwrap(),
+        );
+        ts.insert(
+            "0.bias".into(),
+            Tensor::zeros(d_model, DType::F32, device).unwrap(),
+        );
+        ts.insert("1.weight".into(), ones((hidden * 2, d_model)));
+        ts.insert("3.weight".into(), ones((d_model, hidden)));
+        if with_bias {
+            ts.insert(
+                "1.bias".into(),
+                Tensor::ones(hidden * 2, DType::F32, device).unwrap(),
+            );
+            ts.insert(
+                "3.bias".into(),
+                Tensor::ones(d_model, DType::F32, device).unwrap(),
+            );
+        }
+        ts
+    }
+
+    /// The two checkpoints sharing this block disagree about the FFN biases:
+    /// `esm3_sm_open_v1.pth` has none, `esm3_structure_encoder_v0.pth` has both.
+    /// Loading must follow the checkpoint, not a hardcoded choice
+    /// (ferritin-100.27).
+    ///
+    /// This is the regression guard for a bug that cost ~4% drift in the
+    /// structure encoder's latent and moved 11 of 93 residues onto a different
+    /// codebook entry — while every self-consistency check stayed green,
+    /// because the loader simply never asked for the tensors it was dropping.
+    #[test]
+    fn test_ffn_bias_follows_the_checkpoint() -> Result<()> {
+        let device = Device::Cpu;
+        let d_model = 16usize;
+
+        for with_bias in [false, true] {
+            let vb = VarBuilder::from_tensors(
+                ffn_tensors(d_model, with_bias, &device),
+                DType::F32,
+                &device,
+            );
+            let ffn = SwiGLU::load(vb, &cfg(d_model))?;
+            assert_eq!(
+                ffn.linear1.bias().is_some(),
+                with_bias,
+                "linear1 bias presence should follow the checkpoint (with_bias = {with_bias})"
+            );
+            assert_eq!(
+                ffn.linear2.bias().is_some(),
+                with_bias,
+                "linear2 bias presence should follow the checkpoint (with_bias = {with_bias})"
+            );
+        }
+        Ok(())
+    }
+
+    /// A checkpoint carrying biases must actually *use* them: the old
+    /// `linear_no_bias` loaded without error and silently ignored them, so
+    /// "it loads" was never evidence that it was right.
+    #[test]
+    fn test_ffn_biases_change_the_output() -> Result<()> {
+        let device = Device::Cpu;
+        let d_model = 16usize;
+        let x = Tensor::ones((1, 4, d_model), DType::F32, &device)?;
+
+        let plain = SwiGLU::load(
+            VarBuilder::from_tensors(ffn_tensors(d_model, false, &device), DType::F32, &device),
+            &cfg(d_model),
+        )?
+        .forward(&x)?;
+        let biased = SwiGLU::load(
+            VarBuilder::from_tensors(ffn_tensors(d_model, true, &device), DType::F32, &device),
+            &cfg(d_model),
+        )?
+        .forward(&x)?;
+
+        let a: Vec<f32> = plain.flatten_all()?.to_vec1()?;
+        let b: Vec<f32> = biased.flatten_all()?.to_vec1()?;
+        let diff = a
+            .iter()
+            .zip(&b)
+            .map(|(x, y)| (x - y).abs())
+            .fold(0f32, f32::max);
+        assert!(
+            diff > 1e-3,
+            "the biases should change the output; max diff {diff}"
+        );
+        Ok(())
     }
 }

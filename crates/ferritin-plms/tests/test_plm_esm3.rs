@@ -285,10 +285,11 @@ fn test_esm3_parity_vs_python_reference() -> Result<()> {
 /// contain. Every one of those differences is now modelled, so the refusal is
 /// gone and this pins the behaviour that replaced it (ferritin-100.22).
 ///
-/// What this does and does not establish: it proves all 34 tensors resolve and
-/// that the encoder emits in-range, deterministic tokens. It does **not**
-/// establish numerical parity — no Python reference has been run against it,
-/// so a subtly wrong geometry would still pass here.
+/// What this does and does not establish: it proves the encoder loads and emits
+/// in-range, deterministic tokens. It does **not** establish numerical parity —
+/// a subtly wrong geometry passes here, which is not hypothetical: it did, until
+/// `test_esm3_structure_tokens_match_python_reference` caught two dropped FFN
+/// bias tensors (ferritin-100.27). That test is the one that pins the numbers.
 #[test]
 #[ignore = "downloads esm3_structure_encoder_v0.pth (~60 MB)"]
 fn test_esm3_structure_encoder_loads_and_encodes() -> anyhow::Result<()> {
@@ -331,5 +332,74 @@ fn test_esm3_structure_encoder_loads_and_encodes() -> anyhow::Result<()> {
 
     let again = runner.encode(&coords)?.flatten_all()?.to_vec1::<u32>()?;
     assert_eq!(ids, again, "encoding must be deterministic");
+    Ok(())
+}
+
+/// Structure token parity against the reference `StructureTokenEncoder`
+/// (ferritin-100.27).
+///
+/// The port merged in PR #201 had no numerical check at all — every test was
+/// self-consistency (tensors resolve, tokens in range, encoding deterministic,
+/// a helix reuses tokens), and a subtly wrong geometry passes all of it. The
+/// defects that would survive were specific: a transposed rotation convention
+/// in the gathered frames, an off-by-one in the relative-position bin shift,
+/// the wrong neighbour taken as the query node, or the distance and rotation
+/// per-head scales applied in the wrong order.
+///
+/// Structure tokens are discrete codebook indices, so this asserts **exact
+/// equality** rather than a tolerance. Any of the above changes which codebook
+/// entry a residue lands on; none of them produce "nearly the right id".
+///
+/// The backbone coordinates come from the fixture rather than being rebuilt
+/// here, so the two sides cannot disagree about the *input*. It is a real
+/// 93-residue protein (1BC8 chain C) rather than the ideal alpha-helix the
+/// neighbouring test uses: a helix is locally periodic and exercises a narrow,
+/// forgiving slice of the codebook.
+#[test]
+#[ignore = "downloads esm3_structure_encoder_v0.pth (~60 MB)"]
+fn test_esm3_structure_tokens_match_python_reference() -> anyhow::Result<()> {
+    use ferritin_plms::esm3::pretrained::StructureEncoderRunner;
+    use support::parity::ParityFixture;
+
+    let device = Device::Cpu;
+    let Some(fixture) = ParityFixture::load_or_skip("esm3_structure_parity", &device)? else {
+        return Ok(());
+    };
+
+    let coords = fixture.tensor("backbone_coords")?; // (L, 3, 3)
+    let expected: Vec<u32> = fixture
+        .tensor("structure_tokens")?
+        .to_dtype(candle_core::DType::U32)?
+        .to_vec1()?;
+
+    let runner = StructureEncoderRunner::from_pretrained(device.clone())?;
+    let tokens = runner.encode(&coords.unsqueeze(0)?)?;
+    assert_eq!(
+        tokens.dims(),
+        &[1, expected.len()],
+        "one structure token per residue"
+    );
+    let actual: Vec<u32> = tokens.flatten_all()?.to_vec1()?;
+
+    if actual != expected {
+        let disagreements: Vec<String> = actual
+            .iter()
+            .zip(expected.iter())
+            .enumerate()
+            .filter(|(_, (a, e))| a != e)
+            .take(8)
+            .map(|(i, (a, e))| format!("residue {i}: got {a}, reference {e}"))
+            .collect();
+        anyhow::bail!(
+            "{} of {} structure tokens disagree with the reference encoder:\n  {}",
+            actual
+                .iter()
+                .zip(expected.iter())
+                .filter(|(a, e)| a != e)
+                .count(),
+            expected.len(),
+            disagreements.join("\n  ")
+        );
+    }
     Ok(())
 }

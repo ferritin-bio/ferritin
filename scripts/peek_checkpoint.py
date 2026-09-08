@@ -83,10 +83,21 @@ def rebuild(storage, storage_offset, size, stride, *rest):
     dtype = storage[1] if isinstance(storage, tuple) else "?"
     return {"shape": list(size), "dtype": dtype}
 
+
+def rebuild_from_type_v2(func, new_type, args, state):
+    """Unwrap `torch._tensor._rebuild_from_type_v2`.
+
+    Checkpoints saved from a tensor subclass (ESM-C's are) wrap every entry in
+    this, so without unwrapping every shape prints as the raw pickle call.
+    """
+    return func(*args) if callable(func) else {"shape": None, "dtype": "?"}
+
 class Unp(pickle.Unpickler):
     def find_class(self, mod, name):
         if name == "_rebuild_tensor_v2":
             return rebuild
+        if name == "_rebuild_from_type_v2":
+            return rebuild_from_type_v2
         if name == "OrderedDict":
             return ODict
         return Stub(f"{mod}.{name}")

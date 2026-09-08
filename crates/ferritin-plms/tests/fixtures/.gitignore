@@ -16,3 +16,6 @@
 # cost more than the ESM logit fixtures. Still small enough to commit, and it is
 # the only thing checking a 1.2B-parameter port (ferritin-goh.5).
 !prott5_parity.safetensors
+# 4 KB: a 93-residue backbone plus its 93 structure token ids. The only thing
+# checking the VQ-VAE structure encoder's numbers (ferritin-100.27).
+!esm3_structure_parity.safetensors
