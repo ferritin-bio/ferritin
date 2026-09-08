@@ -45,6 +45,7 @@
 //! | `esmc-6b` | Esmc | `EvolutionaryScale/esmc-6b-2024-12` (safetensors) | **not checked** | supported |
 //! | `esm3-sm-open-v1` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | **not checked** | supported |
 //! | `esm3-structure-encoder-v0` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | **not checked** | supported |
+//! | `prott5-xl-half-uniref50-enc` | T5 | `Rostlab/prot_t5_xl_half_uniref50-enc` (pth) | verified (`prott5_parity`) | supported |
 //! | `proteinmpnn-v48-020` | Mpnn | `zcpbx/ligandmpnn-weights` (pth) | **not checked** | supported |
 //! <!-- END SUPPORT MATRIX -->
 
@@ -67,6 +68,7 @@ pub use featurize::StructureFeatures;
 pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
 pub use ligandmpnn::pmpnn_runner::{ProteinMPNNModels, ProteinMPNNRunner};
+pub use prott5::prott5_runner::{ProtT5Models, ProtT5Runner};
 
 pub mod amplify;
 pub mod esm2;
@@ -76,6 +78,7 @@ pub mod featurize;
 pub mod ligandmpnn;
 pub mod loader;
 pub mod plm_runner;
+pub mod prott5;
 pub mod registry;
 pub mod types;
 pub mod utils;

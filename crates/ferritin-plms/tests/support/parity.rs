@@ -107,6 +107,11 @@ pub const PARITY_COVERAGE: &[ParityCoverage] = &[
         },
     },
     ParityCoverage {
+        fixture: "prott5_parity",
+        generator: "prott5",
+        status: CoverageStatus::Committed,
+    },
+    ParityCoverage {
         fixture: "1BC8_log_probs",
         generator: "proteinmpnn",
         status: CoverageStatus::NotGenerated {

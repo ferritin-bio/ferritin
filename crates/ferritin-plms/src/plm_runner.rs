@@ -83,6 +83,15 @@ impl SpecialTokenLayout {
         trailing: 1,
     };
 
+    /// One trailing EOS and no BOS — T5's layout, which ProtT5 uses.
+    ///
+    /// Distinct from [`BOS_EOS`][Self::BOS_EOS] by one leading row, which is
+    /// exactly enough to misalign every residue if assumed rather than read.
+    pub const EOS_ONLY: Self = Self {
+        leading: 0,
+        trailing: 1,
+    };
+
     /// Total number of non-residue rows.
     pub const fn total(&self) -> usize {
         self.leading + self.trailing
