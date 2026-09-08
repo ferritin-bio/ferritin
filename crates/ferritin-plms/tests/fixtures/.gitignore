@@ -19,3 +19,7 @@
 # 4 KB: a 93-residue backbone plus its 93 structure token ids. The only thing
 # checking the VQ-VAE structure encoder's numbers (ferritin-100.27).
 !esm3_structure_parity.safetensors
+# 60 KB: Ankh's d_model is 768, so four short sequences are smaller than the
+# ProtT5 fixture. Also pins that Ankh's ids match the shared t5::tokenizer
+# table (ferritin-goh.6).
+!ankh_parity.safetensors

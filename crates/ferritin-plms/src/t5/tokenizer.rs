@@ -1,4 +1,16 @@
-//! ProtT5's tokenizer, as a built-in table.
+//! The T5 family's tokenizer, as a built-in table.
+//!
+//! Shared by ProtT5 and Ankh. They arrive in different containers — ProtT5 in
+//! a SentencePiece `spiece.model`, Ankh in a `tokenizer.json` Unigram model —
+//! but the alphabet underneath is the *same letters at the same ids*, so one
+//! table serves both. Ankh's pieces carry no word-boundary marker, which is
+//! invisible here because this maps characters directly.
+//!
+//! That equivalence is verified rather than assumed: both parity fixtures
+//! carry HuggingFace's own token ids (see `scripts/generate_t5_fixtures.py`),
+//! and the Rust tests compare against them before comparing embeddings, so a
+//! divergence fails on the ids rather than showing up as mysteriously wrong
+//! numbers.
 //!
 //! # Why this is hand-written rather than loaded
 //!

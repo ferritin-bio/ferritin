@@ -158,7 +158,7 @@ impl ModelCard {
             Family::Esmc => "esmc",
             Family::Esm3 => "esm3",
             Family::Mpnn => "proteinmpnn",
-            Family::T5 => "prott5",
+            Family::T5 => "t5",
         }
     }
 }
@@ -642,8 +642,8 @@ pub const REGISTRY: &[ModelCard] = &[
         file: "pytorch_model.bin",
         // No `tokenizer.json` either; the repo ships a SentencePiece
         // `spiece.model` whose reachable vocabulary is 28 pieces, transcribed
-        // into `prott5::tokenizer`.
-        tokenizer: TokenizerSpec::BuiltinVocab("prott5::tokenizer"),
+        // into `t5::tokenizer`.
+        tokenizer: TokenizerSpec::BuiltinVocab("t5::tokenizer"),
         // T5 appends `</s>` and prepends nothing — the only non-BOS_EOS
         // embedding model in the registry.
         specials: SpecialTokenLayout::EOS_ONLY,
@@ -657,12 +657,64 @@ pub const REGISTRY: &[ModelCard] = &[
             max_positions: None,
         },
         // 1.2B encoder parameters. Published as float16 (2.4 GB on disk), and
-        // `ProtT5Runner::from_pretrained` loads it at F16 rather than doubling
+        // `T5Runner::from_pretrained` loads it at F16 rather than doubling
         // it to reach F32.
         approx_bytes_f32: 4800 * MB,
         parity: ParityStatus::Verified {
             fixture: "prott5_parity",
         },
+        unsupported: None,
+    },
+    // ── Ankh: a T5 encoder with a gated FFN (ferritin-goh.6) ─────────────────
+    //
+    // Same residue alphabet and ids as ProtT5 (A=3 .. Z=27, frequency-ordered)
+    // and the same EOS-only layout, so `t5::tokenizer` serves both. The
+    // difference is the FFN: `feed_forward_proj: "gated-gelu"`, which candle
+    // loads as a gated `T5DenseGatedActDense` rather than ProtT5's plain ReLU
+    // dense. Both models therefore share one runner.
+    ModelCard {
+        id: "ankh-base",
+        family: Family::T5,
+        // Ships a full encoder-decoder; only the encoder is loaded.
+        source: WeightSource::pth("ElnaggarLab/ankh-base", None).at_revision("main"),
+        file: "pytorch_model.bin",
+        // The repo ships a real tokenizer.json, but its Unigram vocabulary is
+        // the same alphabet at the same ids as ProtT5's SentencePiece one, so
+        // the built-in table is used for both. The parity fixture carries the
+        // reference token ids, so a divergence fails there rather than being
+        // assumed away.
+        tokenizer: TokenizerSpec::BuiltinVocab("t5::tokenizer"),
+        specials: SpecialTokenLayout::EOS_ONLY,
+        metadata: ModelMetadata {
+            d_model: 768,
+            // Encoder layers. The checkpoint also carries 24 decoder layers,
+            // which the embedding path never loads.
+            n_layers: 48,
+            vocab_size: 144,
+            // Relative position buckets, so no hard cap.
+            max_positions: None,
+        },
+        approx_bytes_f32: 2950 * MB,
+        parity: ParityStatus::Verified {
+            fixture: "ankh_parity",
+        },
+        unsupported: None,
+    },
+    ModelCard {
+        id: "ankh-large",
+        family: Family::T5,
+        source: WeightSource::pth("ElnaggarLab/ankh-large", None).at_revision("main"),
+        file: "pytorch_model.bin",
+        tokenizer: TokenizerSpec::BuiltinVocab("t5::tokenizer"),
+        specials: SpecialTokenLayout::EOS_ONLY,
+        metadata: ModelMetadata {
+            d_model: 1536,
+            n_layers: 48,
+            vocab_size: 144,
+            max_positions: None,
+        },
+        approx_bytes_f32: 7520 * MB,
+        parity: ParityStatus::Unverified,
         unsupported: None,
     },
     // ── ProteinMPNN ──────────────────────────────────────────────────────────
@@ -896,8 +948,8 @@ mod tests {
     }
 
     /// Parity claims must name a fixture that the test suite actually has.
-    /// Four models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL and the
-    /// ESM3 VQ-VAE structure encoder.
+    /// Five models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL,
+    /// Ankh-base and the ESM3 VQ-VAE structure encoder.
     #[test]
     fn test_verified_models_name_a_real_fixture() {
         let mut verified: Vec<(&str, &str)> = REGISTRY
@@ -912,6 +964,7 @@ mod tests {
             verified,
             [
                 ("amplify-120m", "amplify_parity"),
+                ("ankh-base", "ankh_parity"),
                 ("esm2-t6-8m", "esm2_parity"),
                 ("esm3-structure-encoder-v0", "esm3_structure_parity"),
                 ("prott5-xl-half-uniref50-enc", "prott5_parity"),
