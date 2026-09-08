@@ -340,9 +340,10 @@ fn test_every_family_has_a_fixture_generator() {
         .expect("scripts/ should exist");
 
     for card in REGISTRY {
-        // ESMFold2 has no generator yet and is unsupported anyway; it would be
-        // dishonest to imply a fixture could be produced for a port that does
-        // not load (ferritin-100.17).
+        // Every row currently loads — the one that did not, ESMFold2, was
+        // deleted rather than left in place (ferritin-100.17). The guard stays
+        // so a future unsupported row is not asked for a fixture it cannot
+        // produce.
         if !card.is_loadable() {
             continue;
         }

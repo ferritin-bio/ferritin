@@ -217,21 +217,16 @@ fn test_uncovered_loadable_models_are_accounted_for() {
     );
 }
 
-/// The two structure families stay outside PlmRunner, so no conformance test
-/// above applies to them. Recorded rather than implied.
+/// The structure models stay outside PlmRunner, so no conformance test above
+/// applies to them. Recorded rather than implied.
 #[test]
 fn test_structure_models_are_not_embedding_models() {
-    for id in [
-        "esmfold2-fast",
-        "proteinmpnn-v48-020",
-        "esm3-structure-encoder-v0",
-    ] {
+    for id in ["proteinmpnn-v48-020", "esm3-structure-encoder-v0"] {
         let card = lookup(id).expect("registered");
         assert!(
             !card.is_embedding_model(),
             "{id} should not be treated as an embedding model"
         );
     }
-    assert_eq!(lookup("esmfold2-fast").unwrap().family, Family::Esmfold2);
     assert_eq!(lookup("proteinmpnn-v48-020").unwrap().family, Family::Mpnn);
 }

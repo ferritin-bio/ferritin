@@ -1,6 +1,11 @@
 # ESMFold2-Fast checkpoint tensor inventory
 
 Ground truth read from `biohub/ESMFold2-Fast` `model.safetensors` on 2026-09-05.
+
+> **Kept deliberately.** The ESMFold2 port was deleted on 2026-09-07
+> (ferritin-100.17) because it implemented a different network. This inventory
+> survives it: it is the specification a from-first-principles port must be
+> written against, and it costs nothing to keep.
 Numeric path segments are collapsed to `{i}`. See [esmfold2-port-mismatch.md](./esmfold2-port-mismatch.md).
 
 Total tensors: 1032

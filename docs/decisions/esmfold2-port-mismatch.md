@@ -1,7 +1,18 @@
 # ESMFold2: the ported architecture does not match the released checkpoint
 
-**Status:** accepted — `ESMFold2Runner::from_pretrained*` refuses to load (ferritin-100.16)
-**Date:** 2026-09-05
+**Status:** superseded — the port was **deleted** on 2026-09-07 (ferritin-100.17).
+Originally accepted 2026-09-05, when `ESMFold2Runner::from_pretrained*` was made
+to refuse rather than half-load (ferritin-100.16).
+**Date:** 2026-09-05, superseded 2026-09-07
+
+> **This document is history.** `crates/ferritin-plms/src/esmfold2/` no longer
+> exists. Refusing to load kept 3305 lines of a different network in the tree
+> where no test could reach them, so the module and its registry row were
+> removed. The analysis below is retained because it is the evidence for that
+> decision, and because a future port needs to know what the released
+> checkpoint actually contains — see
+> [esmfold2-checkpoint-tensors.md](./esmfold2-checkpoint-tensors.md) for the
+> full tensor inventory.
 
 ## Summary
 
