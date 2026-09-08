@@ -626,7 +626,9 @@ pub const REGISTRY: &[ModelCard] = &[
             max_positions: None,
         },
         approx_bytes_f32: 30 * MB,
-        parity: ParityStatus::Unverified,
+        parity: ParityStatus::Verified {
+            fixture: "esm3_structure_parity",
+        },
         unsupported: None,
     },
     // ── ESMFold2 ─────────────────────────────────────────────────────────────
@@ -894,7 +896,8 @@ mod tests {
     }
 
     /// Parity claims must name a fixture that the test suite actually has.
-    /// Three models are verified today: ESM2-8M, AMPLIFY-120M and ProtT5-XL.
+    /// Four models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL and the
+    /// ESM3 VQ-VAE structure encoder.
     #[test]
     fn test_verified_models_name_a_real_fixture() {
         let mut verified: Vec<(&str, &str)> = REGISTRY
@@ -910,6 +913,7 @@ mod tests {
             [
                 ("amplify-120m", "amplify_parity"),
                 ("esm2-t6-8m", "esm2_parity"),
+                ("esm3-structure-encoder-v0", "esm3_structure_parity"),
                 ("prott5-xl-half-uniref50-enc", "prott5_parity"),
             ],
             "the set of parity-verified models changed; that is a deliberate act"
