@@ -177,6 +177,29 @@ impl ProstT5Translator {
 
         decode_generated(&generated, direction)
     }
+
+    /// Translate `sequence` and weave the result back into SaProt's input form
+    /// (ferritin-goh.13).
+    ///
+    /// This is the pair that removes the Foldseek C++ dependency from the
+    /// structure-aware path: ProstT5 predicts the 3Di states that SaProt would
+    /// otherwise need Foldseek to compute from a real structure.
+    ///
+    /// ```text
+    /// "MQIFVKTLTGK"  ->  3Di "dvvvvcvvvvd"  ->  "MdQvIvFvVvKcTvLvTvGvKd"
+    /// ```
+    ///
+    /// Note what this is and is not: the 3Di states are *predicted from
+    /// sequence*, not measured from a structure. That is the point — it works
+    /// without a structure at all — but a SaProt embedding built this way is
+    /// not interchangeable with one built from an experimental backbone.
+    ///
+    /// Residues outside SaProt's 20 become `#`; see
+    /// [`interleave`][crate::esm2::saprot_tokenizer::interleave].
+    pub fn to_saprot_input(&self, sequence: &str) -> Result<String> {
+        let structure = self.translate(sequence, Direction::AaToFold)?;
+        crate::esm2::saprot_tokenizer::interleave(sequence, &structure)
+    }
 }
 
 /// Greedy pick, with `</s>` masked out.

@@ -367,3 +367,41 @@ fn test_repeated_translation_is_deterministic() -> Result<()> {
     );
     Ok(())
 }
+
+/// The full ProstT5 -> SaProt path, end to end (ferritin-goh.13).
+///
+/// The intermediate 3Di string is already pinned exactly by
+/// `test_prostt5_translation_matches_huggingface`, and every pair the join can
+/// emit is checked against SaProt's real vocabulary in
+/// `test_saprot_bridge.rs`. What is left for this test is that the two
+/// actually compose: that the woven sequence is what SaProt reads as one
+/// residue per input residue, with no unknown tokens.
+#[test]
+#[ignore = "requires downloading Rostlab/ProstT5_fp16 (5.6 GB)"]
+fn test_prostt5_output_feeds_saprot() -> Result<()> {
+    use ferritin_plms::esm2::saprot_tokenizer::SaProtTokenizer;
+    use ferritin_plms::{ProstT5Models, ProstT5Translator};
+
+    let translator = ProstT5Translator::from_pretrained(ProstT5Models::XlFp16, device(false)?)?;
+    let seq = "MQIFVKTLTGK";
+    let bridged = translator.to_saprot_input(seq)?;
+
+    assert_eq!(
+        bridged.len(),
+        seq.len() * 2,
+        "SaProt's alphabet is two characters per residue"
+    );
+    // Residues survive in place; the odd positions are the predicted states.
+    let residues: String = bridged.chars().step_by(2).collect();
+    assert_eq!(residues, seq, "the residues should pass through unchanged");
+
+    let tokenizer = SaProtTokenizer::from_vocab_txt(include_str!("fixtures/saprot_vocab.txt"))?;
+    let unk = tokenizer.token_to_id("<unk>").unwrap();
+    let ids = tokenizer.encode(&bridged);
+    assert_eq!(ids.len(), seq.len(), "one token per residue");
+    assert!(
+        !ids.contains(&unk),
+        "every predicted pair should be a real SaProt token: {bridged}"
+    );
+    Ok(())
+}
