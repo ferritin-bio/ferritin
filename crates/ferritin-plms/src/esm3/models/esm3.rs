@@ -4,7 +4,13 @@ use crate::esm3::layers::encode_inputs::EncodeInputs;
 use crate::esm3::layers::output_heads::{ESM3Output, OutputHeads};
 use crate::esm3::layers::transformer_stack::TransformerStack;
 use crate::esm3::utils::affine3d::Affine3D;
-use candle_core::Result;
+use crate::esm3::utils::constants::{
+    INTERPRO_PAD_TOKEN, RESIDUE_PAD_TOKEN, SASA_PAD_TOKEN, SEQUENCE_BOS_TOKEN,
+    SEQUENCE_CHAINBREAK_TOKEN, SEQUENCE_EOS_TOKEN, SEQUENCE_MASK_TOKEN, SEQUENCE_PAD_TOKEN,
+    SS8_PAD_TOKEN, STRUCTURE_BOS_TOKEN, STRUCTURE_CHAINBREAK_TOKEN, STRUCTURE_EOS_TOKEN,
+    STRUCTURE_MASK_TOKEN, STRUCTURE_PAD_TOKEN,
+};
+use candle_core::{Result, Tensor};
 use candle_nn::VarBuilder;
 
 // ── ESM3Config ────────────────────────────────────────────────────────────────
@@ -108,10 +114,119 @@ impl ESM3 {
         })
     }
 
+    /// Every input track, with absent ones filled in the way upstream
+    /// `ESM3.forward` fills them.
+    ///
+    /// This is the whole of ferritin-100.31. The port previously *skipped* an
+    /// absent track — `if let Some(t) = track { add(embed(t)) }` — on the
+    /// reasonable-sounding assumption that "no data" means "no contribution".
+    /// Upstream instead materialises a full pad/mask tensor for every missing
+    /// track and embeds it, so a sequence-only forward still sums eight
+    /// contributions, not one. Six of them are constant across positions, but
+    /// the structure track is not: it carries its own BOS/EOS tokens, distinct
+    /// from mask.
+    ///
+    /// Measured against `esm3_parity.safetensors`, skipping the tracks put
+    /// per-residue cosine similarity at 0.80-0.89 and left the BOS/EOS rows
+    /// with roughly 15x the reference norm. Filling them takes every position
+    /// to 1.000000.
+    #[allow(clippy::too_many_arguments)]
+    fn default_tracks(
+        sequence_tokens: Option<&Tensor>,
+        structure_tokens: Option<&Tensor>,
+        ss8_tokens: Option<&Tensor>,
+        sasa_tokens: Option<&Tensor>,
+        function_tokens: Option<&Tensor>,
+        residue_annotation_tokens: Option<&Tensor>,
+        average_plddt: Option<&Tensor>,
+        per_res_plddt: Option<&Tensor>,
+    ) -> Result<DefaultTracks> {
+        // Shape comes from whichever track the caller did supply; upstream
+        // takes the first non-None the same way.
+        let reference = [sequence_tokens, structure_tokens, ss8_tokens, sasa_tokens]
+            .into_iter()
+            .flatten()
+            .next()
+            .ok_or_else(|| {
+                candle_core::Error::Msg(
+                    "ESM3::forward: at least one of the token tracks must be supplied".into(),
+                )
+            })?;
+        let (batch, seq_len) = reference.dims2()?;
+        let device = reference.device();
+
+        let filled =
+            |token: u32| -> Result<Tensor> { Tensor::full(token, (batch, seq_len), device) };
+        let filled_3d = |token: u32, width: usize| -> Result<Tensor> {
+            Tensor::full(token, (batch, seq_len, width), device)
+        };
+        let filled_f32 =
+            |value: f32| -> Result<Tensor> { Tensor::full(value, (batch, seq_len), device) };
+
+        let sequence_tokens = match sequence_tokens {
+            Some(t) => t.clone(),
+            None => filled(SEQUENCE_MASK_TOKEN)?,
+        };
+
+        // The structure track is the one that is not position-constant: start
+        // from mask everywhere, then let the sequence track's special tokens
+        // dictate the structure special tokens at those positions. Dropping
+        // this is what wrecked the BOS/EOS rows.
+        let structure_tokens = match structure_tokens {
+            Some(t) => t.clone(),
+            None => filled(STRUCTURE_MASK_TOKEN)?,
+        };
+        let structure_tokens = replace_where(
+            &structure_tokens,
+            &sequence_tokens,
+            &[
+                (SEQUENCE_BOS_TOKEN, STRUCTURE_BOS_TOKEN),
+                (SEQUENCE_PAD_TOKEN, STRUCTURE_PAD_TOKEN),
+                (SEQUENCE_EOS_TOKEN, STRUCTURE_EOS_TOKEN),
+                (SEQUENCE_CHAINBREAK_TOKEN, STRUCTURE_CHAINBREAK_TOKEN),
+            ],
+        )?;
+
+        Ok(DefaultTracks {
+            sequence_tokens,
+            structure_tokens,
+            ss8_tokens: match ss8_tokens {
+                Some(t) => t.clone(),
+                None => filled(SS8_PAD_TOKEN)?,
+            },
+            sasa_tokens: match sasa_tokens {
+                Some(t) => t.clone(),
+                None => filled(SASA_PAD_TOKEN)?,
+            },
+            function_tokens: match function_tokens {
+                Some(t) => t.clone(),
+                None => filled_3d(INTERPRO_PAD_TOKEN, 8)?,
+            },
+            residue_annotation_tokens: match residue_annotation_tokens {
+                Some(t) => t.clone(),
+                None => filled_3d(RESIDUE_PAD_TOKEN, 16)?,
+            },
+            // Upstream's defaults are `average_plddt = 1`, `per_res_plddt = 0`
+            // — not the same value, and not both zero.
+            average_plddt: match average_plddt {
+                Some(t) => t.clone(),
+                None => filled_f32(1.0)?,
+            },
+            per_res_plddt: match per_res_plddt {
+                Some(t) => t.clone(),
+                None => filled_f32(0.0)?,
+            },
+        })
+    }
+
     /// Forward pass through the full ESM3 model.
     ///
-    /// All input tracks are optional; omitted tracks contribute zero to the
-    /// initial embedding. At least `sequence_tokens` should be provided.
+    /// All input tracks are optional, but an omitted track does **not**
+    /// contribute zero: it is filled with its pad/mask token and embedded, the
+    /// same way `ESM3.forward` does upstream. See [`Self::default_tracks`] —
+    /// getting this wrong is not a small error (ferritin-100.31).
+    ///
+    /// At least `sequence_tokens` should be provided.
     ///
     /// - `structure_coords`: `(B, L, 3, 3)` backbone `(N, CA, C)` coordinates — used to
     ///   build per-residue affine frames for geometric attention.
@@ -132,8 +247,7 @@ impl ESM3 {
         structure_coords: Option<&candle_core::Tensor>,
         chain_id: Option<&candle_core::Tensor>,
     ) -> Result<ESM3Output> {
-        // Embed all input tracks → (B, L, d_model)
-        let x = self.encode_inputs.forward(
+        let tracks = Self::default_tracks(
             sequence_tokens,
             structure_tokens,
             ss8_tokens,
@@ -142,6 +256,18 @@ impl ESM3 {
             residue_annotation_tokens,
             average_plddt,
             per_res_plddt,
+        )?;
+
+        // Embed all input tracks → (B, L, d_model)
+        let x = self.encode_inputs.forward(
+            Some(&tracks.sequence_tokens),
+            Some(&tracks.structure_tokens),
+            Some(&tracks.ss8_tokens),
+            Some(&tracks.sasa_tokens),
+            Some(&tracks.function_tokens),
+            Some(&tracks.residue_annotation_tokens),
+            Some(&tracks.average_plddt),
+            Some(&tracks.per_res_plddt),
         )?;
 
         // Build per-residue affine frames from backbone coordinates (if provided)
@@ -169,4 +295,33 @@ impl ESM3 {
         output.embeddings = Some(pre_norm);
         Ok(output)
     }
+}
+
+/// Every input track ESM3's encoder consumes, none of them optional.
+///
+/// Built by [`ESM3::default_tracks`]; exists so `forward` cannot accidentally
+/// pass `None` for a track again.
+struct DefaultTracks {
+    sequence_tokens: Tensor,
+    structure_tokens: Tensor,
+    ss8_tokens: Tensor,
+    sasa_tokens: Tensor,
+    function_tokens: Tensor,
+    residue_annotation_tokens: Tensor,
+    average_plddt: Tensor,
+    per_res_plddt: Tensor,
+}
+
+/// `tokens` with each `(when, then)` applied where `key` equals `when`.
+///
+/// candle has no `masked_fill`, so this is the `where_cond` spelling of
+/// torch's chained `.masked_fill(key == when, then)`.
+fn replace_where(tokens: &Tensor, key: &Tensor, rules: &[(u32, u32)]) -> Result<Tensor> {
+    let mut out = tokens.clone();
+    for &(when, then) in rules {
+        let hit = key.eq(when)?;
+        let replacement = Tensor::full(then, out.shape(), out.device())?.to_dtype(out.dtype())?;
+        out = hit.where_cond(&replacement, &out)?;
+    }
+    Ok(out)
 }

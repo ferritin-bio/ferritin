@@ -104,9 +104,15 @@ impl EncodeInputs {
 
         let sequence_embed = nn::embedding(config.d_sequence_vocab, d, vb.pp("sequence_embed"))?;
 
-        let plddt_projection = nn::linear_no_bias(n_rbf, d, vb.pp("plddt_projection"))?;
+        // Both plddt projections are `nn.Linear(16, d_model)` upstream — with
+        // bias. Loading them `no_bias` silently dropped two tensors that are
+        // present in the checkpoint (ferritin-100.31), the same defect
+        // ferritin-100.27 found in the structure encoder's FFN. It hid here
+        // because nothing ever called these projections: the plddt tracks were
+        // only ever `None`, and an absent track was skipped entirely.
+        let plddt_projection = nn::linear(n_rbf, d, vb.pp("plddt_projection"))?;
         let structure_per_res_plddt_projection =
-            nn::linear_no_bias(n_rbf, d, vb.pp("structure_per_res_plddt_projection"))?;
+            nn::linear(n_rbf, d, vb.pp("structure_per_res_plddt_projection"))?;
 
         // Structure vocab: 4096 codes + 5 special tokens
         let structure_tokens_embed = nn::embedding(
@@ -205,13 +211,20 @@ impl EncodeInputs {
             add(self.sasa_embed.forward(sasa)?)?;
         }
 
+        // The plddt tracks are the only float inputs, so they are the only ones
+        // that can arrive in a dtype the weights do not share. Casting here is
+        // what keeps a half-precision ESM3 working: the upstream SDK omits this
+        // and dies with "expected m1 and m2 to have the same dtype" on a BF16
+        // checkpoint (ferritin-100.29).
         if let Some(plddt) = average_plddt {
-            let enc = rbf(plddt, 0.0, 1.0, n_rbf)?;
+            let enc =
+                rbf(plddt, 0.0, 1.0, n_rbf)?.to_dtype(self.plddt_projection.weight().dtype())?;
             add(self.plddt_projection.forward(&enc)?)?;
         }
 
         if let Some(per_res) = per_res_plddt {
-            let enc = rbf(per_res, 0.0, 1.0, n_rbf)?;
+            let enc = rbf(per_res, 0.0, 1.0, n_rbf)?
+                .to_dtype(self.structure_per_res_plddt_projection.weight().dtype())?;
             add(self.structure_per_res_plddt_projection.forward(&enc)?)?;
         }
 

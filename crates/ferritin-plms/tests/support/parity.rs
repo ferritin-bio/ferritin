@@ -102,9 +102,7 @@ pub const PARITY_COVERAGE: &[ParityCoverage] = &[
     ParityCoverage {
         fixture: "esm3_parity",
         generator: "esm3",
-        status: CoverageStatus::NotGenerated {
-            reason: "needs the `esm` SDK and gated EvolutionaryScale weights (HF_TOKEN)",
-        },
+        status: CoverageStatus::Committed,
     },
     ParityCoverage {
         fixture: "prott5_parity",

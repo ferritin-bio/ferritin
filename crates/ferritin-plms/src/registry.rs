@@ -607,7 +607,9 @@ pub const REGISTRY: &[ModelCard] = &[
             max_positions: None,
         },
         approx_bytes_f32: 5 * GB + 600 * MB,
-        parity: ParityStatus::Unverified,
+        parity: ParityStatus::Verified {
+            fixture: "esm3_parity",
+        },
         unsupported: None,
     },
     ModelCard {
@@ -998,6 +1000,7 @@ mod tests {
                 ("amplify-120m", "amplify_parity"),
                 ("ankh-base", "ankh_parity"),
                 ("esm2-t6-8m", "esm2_parity"),
+                ("esm3-sm-open-v1", "esm3_parity"),
                 ("esm3-structure-encoder-v0", "esm3_structure_parity"),
                 ("prostt5-fp16", "prostt5_parity"),
                 ("prott5-xl-half-uniref50-enc", "prott5_parity"),

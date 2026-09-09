@@ -70,8 +70,23 @@ def get_embeddings(sequence: str) -> torch.Tensor:
     from esm.models.esm3 import ESM3
     from esm.sdk.api import ESMProtein, SamplingConfig
 
+    # Upcast to float32 before running (ferritin-100.29).
+    #
+    # The checkpoint is BFloat16, but ESM3.forward synthesises float32
+    # auxiliary tensors when the caller supplies no structure — the plddt
+    # values feeding `EncodeInputs.plddt_projection`, and the identity frames
+    # feeding geometric attention. In esm 3.4.0 / torch 2.11 each meets a
+    # BFloat16 weight and raises "expected m1 and m2 to have the same dtype".
+    # Both are upstream SDK bugs, not ferritin's.
+    #
+    # Upcasting fixes the class rather than the two instances, and it is also
+    # the reference we actually want: the Rust side loads these same weights at
+    # F32, so a BFloat16 reference would fold BFloat16 rounding into the thing
+    # parity is measured against. bf16 -> f32 is lossless, so no checkpoint
+    # information is invented by doing this.
     client = ESM3.from_pretrained("esm3_sm_open_v1")
     client.eval()
+    client = client.to(torch.float32)
 
     protein = ESMProtein(sequence=sequence)
     tensor = client.encode(protein)
@@ -161,11 +176,8 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # The two fixtures are generated independently: they exercise different
-    # checkpoints and different SDK entry points, and the sequence path is
-    # currently broken by an esm/torch dtype mismatch inside the SDK itself
-    # (`plddt_projection` receives Float against BFloat16 weights). Letting
-    # that failure abort the run would also lose the structure fixture, which
-    # is unrelated to it and does work.
+    # checkpoints and different SDK entry points, so a failure in one should
+    # not cost the other. Both currently generate.
     failures = []
 
     try:
