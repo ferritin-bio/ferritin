@@ -1,4 +1,4 @@
-//! The T5 encoder family: ProtT5 and Ankh (ferritin-goh.5, ferritin-goh.6).
+//! The T5 family: ProtT5, Ankh and ProstT5 (ferritin-goh.5, ferritin-goh.6).
 //!
 //! ProtT5 embeddings remain one of the most widely used protein
 //! representations, and they give the crate a second, architecturally
@@ -6,9 +6,16 @@
 //! relative position buckets rather than a BERT-style stack with rotary or
 //! learned absolute positions. Ankh is a third, arriving essentially for free.
 //!
-//! # One runner for both
+//! ProstT5 is the odd one out and lives in [`translator`]: it is an
+//! encoder-**decoder** whose useful output is generated tokens — a Foldseek 3Di
+//! structural string — rather than an embedding, so it stays outside
+//! `PlmRunner` instead of being contorted to fit it. Its vocabulary is still
+//! this family's: [`tokenizer`] holds the amino-acid table *and* the 3Di states
+//! that sit 125 ids above it.
 //!
-//! ProtT5 and Ankh differ in nothing this module cares about. Their residue
+//! # One runner for the two encoders
+//!
+//! ProtT5 and Ankh differ in nothing [`runner`] cares about. Their residue
 //! alphabets are the *same letters at the same ids* — `A` = 3, `L` = 4, …
 //! `Z` = 27, frequency-ordered — and both wrap a sequence in a trailing `</s>`
 //! and no BOS. So [`tokenizer`] serves both, and the differences that remain
@@ -55,3 +62,4 @@
 
 pub mod runner;
 pub mod tokenizer;
+pub mod translator;

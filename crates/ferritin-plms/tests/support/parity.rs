@@ -117,6 +117,11 @@ pub const PARITY_COVERAGE: &[ParityCoverage] = &[
         status: CoverageStatus::Committed,
     },
     ParityCoverage {
+        fixture: "prostt5_parity",
+        generator: "t5",
+        status: CoverageStatus::Committed,
+    },
+    ParityCoverage {
         fixture: "esm3_structure_parity",
         generator: "esm3",
         status: CoverageStatus::Committed,

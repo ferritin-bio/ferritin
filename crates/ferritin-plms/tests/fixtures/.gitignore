@@ -23,3 +23,6 @@
 # ProtT5 fixture. Also pins that Ankh's ids match the shared t5::tokenizer
 # table (ferritin-goh.6).
 !ankh_parity.safetensors
+# ~1 KB: token ids only, no embeddings — ProstT5's output is discrete 3Di
+# states, so the reference is the translation itself (ferritin-goh.6).
+!prostt5_parity.safetensors
