@@ -279,3 +279,91 @@ fn test_ankh_parity_against_huggingface() -> Result<()> {
     }
     Ok(())
 }
+
+// ── ProstT5 ───────────────────────────────────────────────────────────────────
+
+/// ProstT5's AA->3Di translation against HuggingFace (ferritin-goh.6).
+///
+/// The output is discrete structural states, so this asserts **exact string
+/// equality** — a tolerance would be meaningless, and a near-miss 3Di string is
+/// simply a wrong structure.
+///
+/// The fixture also carries the reference *input* ids, checked first: ProstT5's
+/// vocabulary is the shared `t5::tokenizer` table plus 20 lowercase 3Di states
+/// derived by an offset, plus a direction prefix. Any of those going wrong
+/// yields a fluent, wrong translation rather than an error, so the ids are
+/// worth pinning separately from the output.
+#[test]
+#[ignore = "requires downloading Rostlab/ProstT5_fp16 (5.6 GB)"]
+fn test_prostt5_translation_matches_huggingface() -> Result<()> {
+    use ferritin_plms::t5::tokenizer::Direction;
+    use ferritin_plms::{ProstT5Models, ProstT5Translator};
+
+    let device = device(false)?;
+    let Some(fixture) = ParityFixture::load_or_skip("prostt5_parity", &device)? else {
+        return Ok(());
+    };
+    let translator = ProstT5Translator::from_pretrained(ProstT5Models::XlFp16, device)?;
+
+    for (name, seq) in [
+        ("ubiquitin_nterm", "MQIFVKTLTGK"),
+        ("glycine_repeat", "GGGGGGG"),
+        ("alt_charged", "KEKEKEK"),
+    ] {
+        let expected_input: Vec<u32> = fixture
+            .tensor(&format!("{name}_input_ids"))?
+            .to_dtype(candle_core::DType::U32)?
+            .to_vec1()?;
+        assert_eq!(
+            tokenizer::encode_for_translation(seq, Direction::AaToFold),
+            expected_input,
+            "{name}: translation input ids disagree with the reference"
+        );
+
+        let expected: String = fixture
+            .tensor(&format!("{name}_3di_ids"))?
+            .to_dtype(candle_core::DType::U32)?
+            .to_vec1::<u32>()?
+            .into_iter()
+            .map(|id| {
+                tokenizer::three_di_char(id)
+                    .unwrap_or_else(|| panic!("{name}: reference token {id} is not a 3Di state"))
+            })
+            .collect();
+
+        let got = translator.translate(seq, Direction::AaToFold)?;
+        assert_eq!(got, expected, "{name}: 3Di translation of {seq}");
+        assert_eq!(
+            got.len(),
+            seq.len(),
+            "{name}: translation is length-preserving"
+        );
+    }
+    Ok(())
+}
+
+/// The decoder's KV cache must be cleared between translations.
+///
+/// Unlike the encoder-only path, where `use_cache` is dead, every `decode` step
+/// here appends to a per-layer cache. A stale one is *concatenated onto*, not
+/// overwritten, so a second translation would silently attend to the first
+/// sequence's keys and return a fluent, wrong answer. This is the tripwire.
+#[test]
+#[ignore = "requires downloading Rostlab/ProstT5_fp16 (5.6 GB)"]
+fn test_repeated_translation_is_deterministic() -> Result<()> {
+    use ferritin_plms::t5::tokenizer::Direction;
+    use ferritin_plms::{ProstT5Models, ProstT5Translator};
+
+    let translator = ProstT5Translator::from_pretrained(ProstT5Models::XlFp16, device(false)?)?;
+    let seq = "MQIFVKTLTGK";
+    let first = translator.translate(seq, Direction::AaToFold)?;
+    // A different, shorter sequence in between: a leftover cache would change
+    // both its length and the next result.
+    let _ = translator.translate("GGGGGGG", Direction::AaToFold)?;
+    let third = translator.translate(seq, Direction::AaToFold)?;
+    assert_eq!(
+        first, third,
+        "repeated translation drifted — the decoder is carrying KV state across calls"
+    );
+    Ok(())
+}

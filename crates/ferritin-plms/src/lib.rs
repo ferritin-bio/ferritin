@@ -48,6 +48,7 @@
 //! | `prott5-xl-half-uniref50-enc` | T5 | `Rostlab/prot_t5_xl_half_uniref50-enc` (pth) | verified (`prott5_parity`) | supported |
 //! | `ankh-base` | T5 | `ElnaggarLab/ankh-base` (pth) | verified (`ankh_parity`) | supported |
 //! | `ankh-large` | T5 | `ElnaggarLab/ankh-large` (pth) | **not checked** | supported |
+//! | `prostt5-fp16` | T5 | `Rostlab/ProstT5_fp16` (pth) | verified (`prostt5_parity`) | supported |
 //! | `proteinmpnn-v48-020` | Mpnn | `zcpbx/ligandmpnn-weights` (pth) | **not checked** | supported |
 //! <!-- END SUPPORT MATRIX -->
 
@@ -71,6 +72,7 @@ pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
 pub use ligandmpnn::pmpnn_runner::{ProteinMPNNModels, ProteinMPNNRunner};
 pub use t5::runner::{T5Models, T5Runner};
+pub use t5::translator::{ProstT5Models, ProstT5Translator};
 
 pub mod amplify;
 pub mod esm2;

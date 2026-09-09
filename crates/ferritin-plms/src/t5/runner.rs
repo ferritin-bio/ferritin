@@ -204,16 +204,38 @@ impl T5Runner {
     }
 }
 
+/// Parse a HuggingFace T5 `config.json` into candle's `Config`.
+///
+/// Strips keys whose value is `null` before deserializing. That is not
+/// cosmetic: candle marks optional fields `#[serde(default = "...")]`, and
+/// serde's `default` fills in a **missing** key, not a present-but-null one. So
+/// `"tie_word_embeddings": null` — which is exactly what
+/// `Rostlab/ProstT5_fp16` ships — fails with *"invalid type: null, expected a
+/// boolean"* and drops the whole config on the floor.
+///
+/// For ProstT5 that would be quietly serious rather than merely noisy:
+/// `tie_word_embeddings` decides whether `decode` scales the hidden state by
+/// `sqrt(d_model)` and projects through the shared embedding, and the
+/// checkpoint has no `lm_head` to fall back on.
+///
+/// Treating an explicit null as absent is what HuggingFace itself means by it.
+pub(crate) fn parse_t5_config(json: &str) -> Result<T5Config> {
+    let mut value: serde_json::Value = serde_json::from_str(json)?;
+    if let Some(map) = value.as_object_mut() {
+        map.retain(|_, v| !v.is_null());
+    }
+    Ok(serde_json::from_value(value)?)
+}
+
 /// Load `config.json` from the hub, falling back to the built-in config.
 ///
 /// candle's `t5::Config` derives `Deserialize` over the same field names
-/// HuggingFace writes, so the published file parses directly; the extra keys
-/// ProtT5 carries (`architectures`, `n_positions`, `torch_dtype`, …) are
-/// ignored.
+/// HuggingFace writes, so the published file parses directly once nulls are
+/// stripped; the extra keys these repos carry (`architectures`, `n_positions`,
+/// `torch_dtype`, …) are ignored.
 ///
-/// `use_cache` is forced off afterwards regardless of what the file says —
-/// ProtT5's `config.json` sets it to `true`, which is meaningful for the
-/// decoder this checkpoint does not contain. See [`T5Runner`].
+/// `use_cache` is forced off afterwards regardless of what the file says — it
+/// is meaningful for a decoder, and this loads an encoder. See [`T5Runner`].
 ///
 /// The fallback is loud, matching `ESM2Runner::resolve_config`: a config the
 /// struct cannot represent silently becoming a different model's config is the
@@ -230,7 +252,7 @@ fn load_config(source: &WeightSource, fallback: T5Config) -> T5Config {
         }
         Some(path) => match std::fs::read_to_string(&path)
             .map_err(|e| e.to_string())
-            .and_then(|s| serde_json::from_str::<T5Config>(&s).map_err(|e| e.to_string()))
+            .and_then(|s| parse_t5_config(&s).map_err(|e| e.to_string()))
         {
             Ok(config) => config,
             Err(e) => {
@@ -367,6 +389,40 @@ mod tests {
                 model.registry_id()
             );
         }
+    }
+
+    /// `Rostlab/ProstT5_fp16` ships `"tie_word_embeddings": null`, which
+    /// candle's `#[serde(default)]` does *not* absorb — serde's `default`
+    /// covers a missing key, not a present-but-null one.
+    ///
+    /// Without the null-stripping in [`parse_t5_config`] this config is
+    /// rejected wholesale and the loader silently falls back to a built-in one.
+    /// For ProstT5 that flips `tie_word_embeddings`, which decides whether
+    /// `decode` scales by `sqrt(d_model)` and projects through the shared
+    /// embedding — and that checkpoint has no `lm_head` to fall back on.
+    #[test]
+    fn test_null_valued_config_keys_are_treated_as_absent() {
+        let json = r#"{
+            "vocab_size": 150, "d_model": 1024, "d_kv": 128, "d_ff": 16384,
+            "num_layers": 24, "num_decoder_layers": 24, "num_heads": 32,
+            "relative_attention_num_buckets": 32, "dropout_rate": 0.1,
+            "layer_norm_epsilon": 1e-06, "initializer_factor": 1.0,
+            "feed_forward_proj": "relu", "is_encoder_decoder": true,
+            "tie_word_embeddings": null,
+            "pad_token_id": 0, "eos_token_id": 1, "decoder_start_token_id": 0
+        }"#;
+        assert!(
+            serde_json::from_str::<T5Config>(json).is_err(),
+            "candle rejects an explicit null — if this ever starts passing, \
+             the strip in parse_t5_config is no longer needed"
+        );
+        let config = parse_t5_config(json).expect("nulls should be stripped");
+        assert_eq!(config.d_model, 1024);
+        assert!(
+            config.tie_word_embeddings,
+            "with the key treated as absent, candle's default (true) applies — \
+             which is what HuggingFace means by writing null"
+        );
     }
 
     /// The published precisions differ, and defaulting either to the other

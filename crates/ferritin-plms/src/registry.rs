@@ -717,6 +717,38 @@ pub const REGISTRY: &[ModelCard] = &[
         parity: ParityStatus::Unverified,
         unsupported: None,
     },
+    // ── ProstT5: the only encoder-decoder here (ferritin-goh.6) ──────────────
+    //
+    // Translates between amino acids and Foldseek's 3Di structural alphabet in
+    // both directions. Its useful output is generated tokens, not an
+    // embedding, so it is driven by `ProstT5Translator` rather than PlmRunner —
+    // `is_embedding_model()` is false for it, like the structure models.
+    ModelCard {
+        id: "prostt5-fp16",
+        family: Family::T5,
+        // The F32 `Rostlab/ProstT5` is the same weights at 11.3 GB.
+        source: WeightSource::pth("Rostlab/ProstT5_fp16", None).at_revision("main"),
+        file: "pytorch_model.bin",
+        // No tokenizer here: ProstT5 consumes and produces two alphabets at
+        // once and is not a sequence-embedding model, so the special-token
+        // contract PlmRunner enforces does not apply. Its vocabulary lives in
+        // `t5::tokenizer` alongside the rest of the family.
+        tokenizer: TokenizerSpec::None,
+        specials: SpecialTokenLayout::NONE,
+        metadata: ModelMetadata {
+            d_model: 1024,
+            n_layers: 24,
+            // 128 ProtT5 ids + 20 lowercase 3Di states + the two direction
+            // tokens <fold2AA> (148) and <AA2fold> (149).
+            vocab_size: 150,
+            max_positions: None,
+        },
+        approx_bytes_f32: 11280 * MB,
+        parity: ParityStatus::Verified {
+            fixture: "prostt5_parity",
+        },
+        unsupported: None,
+    },
     // ── ProteinMPNN ──────────────────────────────────────────────────────────
     ModelCard {
         id: "proteinmpnn-v48-020",
@@ -948,8 +980,8 @@ mod tests {
     }
 
     /// Parity claims must name a fixture that the test suite actually has.
-    /// Five models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL,
-    /// Ankh-base and the ESM3 VQ-VAE structure encoder.
+    /// Six models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL,
+    /// Ankh-base, ProstT5 and the ESM3 VQ-VAE structure encoder.
     #[test]
     fn test_verified_models_name_a_real_fixture() {
         let mut verified: Vec<(&str, &str)> = REGISTRY
@@ -967,6 +999,7 @@ mod tests {
                 ("ankh-base", "ankh_parity"),
                 ("esm2-t6-8m", "esm2_parity"),
                 ("esm3-structure-encoder-v0", "esm3_structure_parity"),
+                ("prostt5-fp16", "prostt5_parity"),
                 ("prott5-xl-half-uniref50-enc", "prott5_parity"),
             ],
             "the set of parity-verified models changed; that is a deliberate act"

@@ -13,12 +13,21 @@ Two things this script pins down that are easy to get wrong (ferritin-goh.5):
   skips whitespace and so accepts either form. If the two disagreed, every
   residue would shift by one.
 
-Tokenization goes through `sentencepiece` directly rather than through
-`transformers.T5Tokenizer`. transformers 5.x cannot load this repo's
-`spiece.model` at all — its slow-to-fast converter misidentifies the file as a
-tiktoken vocabulary and dies in `load_tiktoken_bpe`. Reading `spiece.model` with
-the library that wrote it is both a working path and a stronger reference: it
-depends on the checkpoint rather than on a transformers version.
+ProtT5's tokenization goes through `sentencepiece` directly rather than through
+`transformers.T5Tokenizer`, because loading these SentencePiece files through
+transformers is version- and dependency-sensitive:
+
+* transformers **5.x** cannot load them at all — its slow-to-fast converter
+  misidentifies `spiece.model` as a tiktoken vocabulary and dies in
+  `load_tiktoken_bpe`.
+* transformers **4.x** loads them, but only with `protobuf` installed, and
+  fails with a bare ImportError otherwise.
+
+Reading `spiece.model` with the library that wrote it sidesteps both. ProstT5
+does use `T5Tokenizer` (it needs `added_tokens.json` for the 3Di states, which
+live outside `spiece.model`), so generating that fixture needs transformers 4.x
+and protobuf; the assertion on token count will catch it if the tokenizer ever
+returns something unexpected.
 * **Special tokens.** T5 appends `</s>` and prepends nothing. The saved
   tensors have that row stripped, so row `i` is residue `i` — matching
   `PlmRunner::embed_residues` rather than `embed`.
@@ -50,6 +59,7 @@ from transformers import T5EncoderModel
 
 MODEL_ID = "Rostlab/prot_t5_xl_half_uniref50-enc"
 ANKH_ID = "ElnaggarLab/ankh-base"
+PROSTT5_ID = "Rostlab/ProstT5_fp16"
 
 # Short on purpose: the fixture is committed, and d_model is 1024, so a 76-mer
 # would be a 300 KB tensor for no extra signal.
@@ -138,6 +148,76 @@ def generate_ankh(output_dir, model_id: str):
     print(f"Saved {out_path}")
 
 
+@torch.no_grad()
+def generate_prostt5(output_dir, model_id: str):
+    """Reference AA->3Di translations, plus the exact input ids they came from.
+
+    ProstT5 shares ProtT5's SentencePiece container, so tokenization goes
+    through `sentencepiece` directly for the same reason (see the module
+    docstring) — but the 3Di states and the two direction tokens live in
+    `added_tokens.json`, outside spiece.model, so they are added here.
+
+    Greedy decoding with no sampling, matching Rostlab's own usage: the mapping
+    is close to deterministic and sampling would only add noise to a structural
+    annotation.
+    """
+    import json
+
+    from huggingface_hub import hf_hub_download
+    from safetensors.torch import save_file
+    from transformers import T5ForConditionalGeneration, T5Tokenizer
+
+    # ProstT5's own tokenizer, not a reconstruction of it. This needs
+    # `protobuf` installed (transformers converts spiece.model through it) and
+    # transformers 4.x — the 5.x converter misidentifies these SentencePiece
+    # files as tiktoken and dies in load_tiktoken_bpe.
+    tok = T5Tokenizer.from_pretrained(model_id, legacy=False)
+    with open(hf_hub_download(model_id, "added_tokens.json")) as fh:
+        added = json.load(fh)
+    by_id = {v: k for k, v in added.items()}
+
+    model = T5ForConditionalGeneration.from_pretrained(model_id, dtype=torch.float32)
+    model.eval()
+
+    tensors = {}
+    for name, seq in SEQUENCES.items():
+        if set(seq) - set("ACDEFGHIKLMNPQRSTVWY"):
+            # ProstT5 translates the 20 standard residues; the rare-residue
+            # probe is a ProtT5/Ankh tokenizer case, not a structural one.
+            continue
+        # The direction prefix, then the spaced residues — Rostlab's own
+        # recipe. Spacing matters: every SentencePiece piece carries a word
+        # boundary, so an unspaced sequence reads as one unknown word.
+        prompt = "<AA2fold> " + " ".join(list(seq))
+        ids = tok(prompt, add_special_tokens=True)["input_ids"]
+        assert len(ids) == len(seq) + 2, (
+            f"{name}: expected prefix + {len(seq)} residues + EOS, got {ids}"
+        )
+        input_ids = torch.tensor([ids], dtype=torch.long)
+        out = model.generate(
+            input_ids,
+            attention_mask=torch.ones_like(input_ids),
+            max_new_tokens=len(seq),
+            min_new_tokens=len(seq),
+            do_sample=False,
+            num_beams=1,
+        )
+        # generate() re-emits decoder_start_token_id first; drop it.
+        gen = [int(t) for t in out[0].tolist()[1:]][: len(seq)]
+        # 3Di states live in added_tokens.json, outside spiece.model, so decode
+        # them through that map.
+        text = "".join(by_id.get(t, "?") for t in gen)
+        assert len(text) == len(seq), f"{name}: {len(text)} states for {len(seq)} residues"
+        assert "?" not in text, f"{name}: non-3Di token in {gen}"
+        tensors[f"{name}_input_ids"] = torch.tensor(ids, dtype=torch.int32)
+        tensors[f"{name}_3di_ids"] = torch.tensor(gen, dtype=torch.int32)
+        print(f"  {name!r}: {seq} -> {text}")
+
+    out_path = output_dir / "prostt5_parity.safetensors"
+    save_file(tensors, str(out_path))
+    print(f"Saved {out_path}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate ProtT5 parity fixtures")
     parser.add_argument("--model", default=MODEL_ID, help="HuggingFace model ID")
@@ -176,6 +256,8 @@ def main():
     print(f"Saved {out_path}")
 
     generate_ankh(output_dir, ANKH_ID)
+    print(f"Loading {PROSTT5_ID} ...")
+    generate_prostt5(output_dir, PROSTT5_ID)
 
 
 if __name__ == "__main__":

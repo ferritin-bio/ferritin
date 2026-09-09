@@ -252,16 +252,44 @@ fn test_uncovered_loadable_models_are_accounted_for() {
     );
 }
 
-/// The structure models stay outside PlmRunner, so no conformance test above
-/// applies to them. Recorded rather than implied.
+/// Every row that stays outside `PlmRunner`, and why. Recorded rather than
+/// implied, because no conformance test above applies to them.
+///
+/// There are now two distinct reasons a model is not an embedding model, and
+/// conflating them would be a mistake: the structure models *consume* structure
+/// instead of sequence, while ProstT5 *emits* generated tokens instead of an
+/// embedding (ferritin-goh.6). Neither fits a trait about per-residue vectors.
 #[test]
-fn test_structure_models_are_not_embedding_models() {
-    for id in ["proteinmpnn-v48-020", "esm3-structure-encoder-v0"] {
+fn test_non_embedding_models_are_accounted_for() {
+    for (id, reason) in [
+        ("proteinmpnn-v48-020", "consumes backbone coordinates"),
+        ("esm3-structure-encoder-v0", "consumes backbone coordinates"),
+        (
+            "prostt5-fp16",
+            "emits generated tokens, driven by ProstT5Translator",
+        ),
+    ] {
         let card = lookup(id).expect("registered");
         assert!(
             !card.is_embedding_model(),
-            "{id} should not be treated as an embedding model"
+            "{id} should not be treated as an embedding model ({reason})"
         );
     }
     assert_eq!(lookup("proteinmpnn-v48-020").unwrap().family, Family::Mpnn);
+
+    // And the converse: nothing else has quietly fallen out of PlmRunner.
+    let outside: Vec<&str> = REGISTRY
+        .iter()
+        .filter(|c| !c.is_embedding_model())
+        .map(|c| c.id)
+        .collect();
+    assert_eq!(
+        outside,
+        [
+            "esm3-structure-encoder-v0",
+            "prostt5-fp16",
+            "proteinmpnn-v48-020",
+        ],
+        "the set of non-embedding models changed; say which and why"
+    );
 }
