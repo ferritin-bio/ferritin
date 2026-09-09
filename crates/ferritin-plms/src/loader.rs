@@ -86,6 +86,14 @@ impl LoadOptions {
     /// partway through loading or on the first forward pass with a bare
     /// "unsupported dtype BF16 for op matmul". Catching it here says what to do
     /// instead (ferritin-100.9).
+    ///
+    /// The refusal is scoped to the CPU backend rather than to the dtype
+    /// because Metal does run BF16: ferritin-100.19 loaded and ran both ESM2
+    /// and AMPLIFY there at BF16 without changing a single top-1 prediction.
+    /// See `tests/test_plm_dtype_parity.rs` for the divergence and throughput
+    /// tables that establish it. CUDA is assumed to behave like Metal here
+    /// and remains unmeasured — the tests cover whatever accelerator the build
+    /// actually has, so running them on a CUDA box is what closes that gap.
     pub fn validate(&self) -> Result<()> {
         if self.dtype == DType::BF16 && self.device.is_cpu() {
             bail!(
