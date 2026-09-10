@@ -55,7 +55,7 @@ mod support;
 use anyhow::{Result, bail};
 use candle_core::DType;
 use ferritin_plms::plm_runner::PlmRunner;
-use ferritin_plms::registry::{ModelCard, ParityStatus, REGISTRY, TokenizerSpec};
+use ferritin_plms::registry::{ModelCard, ParityStatus, REGISTRY, TokenizerSpec, VocabAlphabet};
 use ferritin_plms::{
     AmplifyModels, AmplifyRunner, ESM2Models, ESM2Runner, ESM3Models, ESM3Runner, ESMCModels,
     ESMCRunner, T5Models, T5Runner, device,
@@ -90,9 +90,16 @@ const SEQ: &str = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNI
 ///
 /// `#` is SaProt's "structure unknown" state, so `M#Q#I#…` is the documented
 /// way to run it sequence-only (ferritin-goh.3).
+///
+/// The `vocab.txt` arm matches on the card's [`VocabAlphabet`] rather than on
+/// the file format: a second `vocab.txt` model over a one-character alphabet
+/// must get plain [`SEQ`], not SaProt's pairs (ferritin-goh.11).
 fn test_sequence(card: &ModelCard) -> String {
     match card.tokenizer {
-        TokenizerSpec::HfVocabTxt => SEQ.chars().flat_map(|c| [c, '#']).collect(),
+        TokenizerSpec::HfVocabTxt(alphabet) => match alphabet {
+            VocabAlphabet::SaProtPairs => SEQ.chars().flat_map(|c| [c, '#']).collect(),
+            VocabAlphabet::SingleResidue => SEQ.to_string(),
+        },
         _ => SEQ.to_string(),
     }
 }

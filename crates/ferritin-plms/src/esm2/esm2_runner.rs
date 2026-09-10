@@ -7,9 +7,9 @@ use crate::loader::{LoadOptions, WeightSource};
 use crate::plm_runner::{
     ModelMetadata, PlmRunner, SpecialTokenLayout, pad_token_batch, zero_padded_rows,
 };
-use crate::registry::{self, ModelCard, TokenizerSpec};
+use crate::registry::{self, ModelCard, TokenizerSpec, VocabAlphabet};
 use crate::types::PseudoProbability;
-use anyhow::{Error as E, Result, anyhow};
+use anyhow::{Error as E, Result, anyhow, bail};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::ops::softmax;
 use serde_json;
@@ -235,13 +235,26 @@ impl ESM2Runner {
         let model = ESM2::load(vb, config.clone())?;
 
         // The alphabet follows the card, not the family: SaProt reuses this
-        // architecture with a 446-token vocab.txt (ferritin-goh.3).
+        // architecture with a 446-token vocab.txt (ferritin-goh.3). The match
+        // on `VocabAlphabet` is exhaustive on purpose — a new alphabet must
+        // say what this runner should do with it rather than falling through
+        // to ESM-2's own tokenizer (ferritin-goh.11).
         let tokenizer = match card.tokenizer {
-            TokenizerSpec::HfVocabTxt => {
-                let path = source.fetch("vocab.txt")?;
-                let contents = std::fs::read_to_string(path)?;
-                SequenceTokenizer::SaProt(SaProtTokenizer::from_vocab_txt(&contents)?)
-            }
+            TokenizerSpec::HfVocabTxt(alphabet) => match alphabet {
+                VocabAlphabet::SaProtPairs => {
+                    let path = source.fetch("vocab.txt")?;
+                    let contents = std::fs::read_to_string(path)?;
+                    SequenceTokenizer::SaProt(SaProtTokenizer::from_vocab_txt(&contents)?)
+                }
+                VocabAlphabet::SingleResidue => {
+                    bail!(
+                        "{}: a single-residue vocab.txt alphabet has no tokenizer in the \
+                         ESM-2 runner; only SaProt's (amino acid, 3Di) pair alphabet is wired \
+                         here (ferritin-goh.11)",
+                        card.id
+                    )
+                }
+            },
             _ => SequenceTokenizer::Esm(Box::new(ESM2::load_tokenizer()?)),
         };
         Ok(ESM2Runner {
