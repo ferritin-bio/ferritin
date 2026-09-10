@@ -11,7 +11,7 @@ fn test_model_port_registry_tracks_current_families() {
     let families: Vec<_> = MODEL_PORT_CASES.iter().map(|case| case.family).collect();
     assert!(families.contains(&"amplify"));
     assert!(families.contains(&"esm2"));
-    assert!(families.contains(&"proteinmpnn"));
+    assert!(families.contains(&"mpnn"));
     assert!(families.contains(&"esmc"));
 }
 

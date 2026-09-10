@@ -179,7 +179,9 @@ impl ModelCard {
             Family::Amplify => "amplify",
             Family::Esmc => "esmc",
             Family::Esm3 => "esm3",
-            Family::Mpnn => "proteinmpnn",
+            // One generator covers the whole family — ProteinMPNN,
+            // LigandMPNN and SolubleMPNN share `model_utils.py`.
+            Family::Mpnn => "mpnn",
             Family::T5 => "t5",
         }
     }
