@@ -191,8 +191,16 @@ pub fn compute_nearest_neighbors(
 }
 
 // https://github.com/huggingface/candle/pull/2375/files#diff-e4d52a71060a80ac8c549f2daffcee77f9bf4de8252ad067c47b1c383c3ac828R957
+//
+// NOTE the ascending sort. This is the k SMALLEST values, matching
+// `torch.topk(.., largest=False)` — which is what every caller here wants,
+// since the values being ranked are distances. It used to pass `false`
+// (descending) to `arg_sort_last_dim`, so `compute_nearest_neighbors` returned
+// each residue's k FARTHEST neighbours: on 1BC8 only 2% of the resulting
+// `E_idx` entries matched the reference, and residue 0's neighbour list did not
+// even contain residue 0, whose self-distance is zero (ferritin-100.11).
 pub fn topk_last_dim(xs: &Tensor, topk: usize) -> Result<(Tensor, Tensor)> {
-    let sorted_indices = xs.arg_sort_last_dim(false)?.to_dtype(DType::U32)?;
+    let sorted_indices = xs.arg_sort_last_dim(true)?.to_dtype(DType::U32)?;
     let topk_indices = sorted_indices.narrow(D::Minus1, 0, topk)?.contiguous()?;
     let gathered = xs.gather(&topk_indices, D::Minus1)?;
     Ok((gathered, topk_indices))
@@ -647,19 +655,41 @@ mod tests {
         let mask = Tensor::ones((2, 3), test_dtype, &device).unwrap();
 
         // Get 2 nearest neighbors for each point
-        let (distances, indices) = compute_nearest_neighbors(&coords, &mask, 2, 1e-6).unwrap();
+        let eps = 1e-6f32;
+        let (distances, indices) = compute_nearest_neighbors(&coords, &mask, 2, eps).unwrap();
 
         // Check shapes
         assert_eq!(distances.dims(), &[2, 3, 2]); // [batch, seq_len, k]
         assert_eq!(indices.dims(), &[2, 3, 2]); // [batch, seq_len, k]
 
-        // For first sequence, point [1,0,0] should have [0,0,0] and [2,0,0] as nearest neighbors
+        // A point's own index comes FIRST: its self-distance is zero, and
+        // `torch.topk(.., largest=False)` puts the smallest first.
+        //
+        // This assertion used to read `vec![0, 2]` — the two points at distance
+        // 1 — which is what you get from the k LARGEST distances. It passed
+        // because `topk_last_dim` sorted descending, so the test pinned the bug
+        // rather than the behaviour: `compute_nearest_neighbors` was returning
+        // each residue's farthest neighbours (ferritin-100.11).
         let point_neighbors: Vec<u32> = indices.i((0, 1, ..)).unwrap().to_vec1().unwrap();
-        assert_eq!(point_neighbors, vec![0, 2]);
+        assert_eq!(
+            point_neighbors[0], 1,
+            "a point's nearest neighbour is itself, at distance 0"
+        );
+        assert!(
+            point_neighbors[1] == 0 || point_neighbors[1] == 2,
+            "the second neighbour is one of the two points at distance 1, got {}",
+            point_neighbors[1]
+        );
 
         // Check distances are correct
         let point_distances: Vec<f32> = distances.i((0, 1, ..)).unwrap().to_vec1().unwrap();
-        assert!((point_distances[0] - 1.0).abs() < 1e-5);
+        // sqrt(0 + eps), not 0: eps sits inside the square root.
+        assert!(
+            (point_distances[0] - eps.sqrt()).abs() < 1e-5,
+            "self-distance should be sqrt(eps) = {}, got {}",
+            eps.sqrt(),
+            point_distances[0]
+        );
         assert!((point_distances[1] - 1.0).abs() < 1e-5);
     }
 }

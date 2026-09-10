@@ -196,7 +196,7 @@ fn test_uncovered_ports_are_the_known_set() {
 
     assert_eq!(
         uncovered,
-        ["1BC8_log_probs", "esmc_parity"],
+        ["esmc_parity"],
         "the set of ports without parity coverage changed; update this test and \
          ferritin-100.20 deliberately rather than letting it drift"
     );

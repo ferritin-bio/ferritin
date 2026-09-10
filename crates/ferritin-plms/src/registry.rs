@@ -792,7 +792,9 @@ pub const REGISTRY: &[ModelCard] = &[
             max_positions: None,
         },
         approx_bytes_f32: 7 * MB,
-        parity: ParityStatus::Unverified,
+        parity: ParityStatus::Verified {
+            fixture: "proteinmpnn_parity",
+        },
         unsupported: None,
     },
 ];
@@ -1004,8 +1006,9 @@ mod tests {
     }
 
     /// Parity claims must name a fixture that the test suite actually has.
-    /// Six models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL,
-    /// Ankh-base, ProstT5 and the ESM3 VQ-VAE structure encoder.
+    /// Eight models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL,
+    /// Ankh-base, ProstT5, ESM3, the ESM3 VQ-VAE structure encoder, and
+    /// ProteinMPNN-v48-020.
     #[test]
     fn test_verified_models_name_a_real_fixture() {
         let mut verified: Vec<(&str, &str)> = REGISTRY
@@ -1025,6 +1028,7 @@ mod tests {
                 ("esm3-sm-open-v1", "esm3_parity"),
                 ("esm3-structure-encoder-v0", "esm3_structure_parity"),
                 ("prostt5-fp16", "prostt5_parity"),
+                ("proteinmpnn-v48-020", "proteinmpnn_parity"),
                 ("prott5-xl-half-uniref50-enc", "prott5_parity"),
             ],
             "the set of parity-verified models changed; that is a deliberate act"

@@ -125,11 +125,14 @@ pub const PARITY_COVERAGE: &[ParityCoverage] = &[
         status: CoverageStatus::Committed,
     },
     ParityCoverage {
-        fixture: "1BC8_log_probs",
-        generator: "proteinmpnn",
-        status: CoverageStatus::NotGenerated {
-            reason: "needs the dauparas/ProteinMPNN Python package checked out and installed",
-        },
+        fixture: "proteinmpnn_parity",
+        generator: "mpnn",
+        status: CoverageStatus::Committed,
+    },
+    ParityCoverage {
+        fixture: "ligandmpnn_parity",
+        generator: "mpnn",
+        status: CoverageStatus::Committed,
     },
 ];
 

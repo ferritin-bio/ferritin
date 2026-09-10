@@ -170,8 +170,17 @@ impl PositionWiseFeedForward {
 }
 
 impl Module for PositionWiseFeedForward {
+    /// `gelu_erf`, not `gelu`.
+    ///
+    /// candle's `Tensor::gelu` is the tanh approximation; `torch.nn.GELU()`
+    /// defaults to `approximate="none"`, the exact erf form. Every activation
+    /// in this module used the approximation, which left ~1e-3 of drift per
+    /// layer against the reference (ferritin-100.11).
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
-        self.w1.forward(x)?.gelu().and_then(|x| self.w2.forward(&x))
+        self.w1
+            .forward(x)?
+            .gelu_erf()
+            .and_then(|x| self.w2.forward(&x))
     }
 }
 
@@ -200,7 +209,7 @@ impl EncLayer {
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig, layer: i32) -> Result<Self> {
         let vb = vb.pp(layer); // handle the layer number here.
         let num_hidden = config.hidden_dim as usize;
-        let augment_eps = config.augment_eps as f64;
+        let augment_eps = 1e-5f64;
         let num_in = (config.hidden_dim * 2) as usize;
         let dropout_ratio = config.dropout_ratio;
 
@@ -258,9 +267,9 @@ impl EncLayer {
         let h_message = self
             .w1
             .forward(&h_ev)?
-            .gelu()?
+            .gelu_erf()?
             .apply(&self.w2)?
-            .gelu()?
+            .gelu_erf()?
             .apply(&self.w3)?;
 
         let h_message = mask_attend
@@ -287,9 +296,9 @@ impl EncLayer {
         let h_message = self
             .w11
             .forward(&h_ev)?
-            .gelu()?
+            .gelu_erf()?
             .apply(&self.w12)?
-            .gelu()?
+            .gelu_erf()?
             .apply(&self.w13)?;
 
         let h_e = apply_dropout_and_norm(h_e, &h_message, &self.dropout3, &self.norm3, training)?;
@@ -317,7 +326,7 @@ impl DecLayer {
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig, layer: i32) -> Result<Self> {
         let vb = vb.pp(layer); // handle the layer number here.
         let num_hidden = config.hidden_dim as usize;
-        let augment_eps = config.augment_eps as f64;
+        let augment_eps = 1e-5f64;
         let num_in = (config.hidden_dim * 3) as usize;
         let dropout_ratio = config.dropout_ratio;
 
@@ -370,9 +379,9 @@ impl DecLayer {
         let h_message = self
             .w1
             .forward(&h_ev)?
-            .gelu()?
+            .gelu_erf()?
             .apply(&self.w2)?
-            .gelu()?
+            .gelu_erf()?
             .apply(&self.w3)?;
 
         let h_message = self.dropout1.forward(&h_message, training_bool)?;

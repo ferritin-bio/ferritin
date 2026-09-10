@@ -240,7 +240,7 @@ impl ProteinMPNNConfig {
             dropout_ratio: 0.1,
             edge_features: 128,
             hidden_dim: 128,
-            k_neighbors: 24,
+            k_neighbors: 48,
             ligand_mpnn_use_side_chain_context: false,
             model_type: ModelTypes::ProteinMPNN,
             node_features: 128,
@@ -248,7 +248,7 @@ impl ProteinMPNNConfig {
             num_encoder_layers: 3,
             num_letters: 21,
             num_rbf: 16,
-            scale_factor: 1.0,
+            scale_factor: 30.0,
             vocab: 21,
         }
     }

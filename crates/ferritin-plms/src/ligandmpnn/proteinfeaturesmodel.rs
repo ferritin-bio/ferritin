@@ -9,8 +9,15 @@ use candle_nn::{LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, line
 
 const RBF_MIN_DISTANCE: f32 = 2.0;
 const RBF_MAX_DISTANCE: f32 = 22.0;
-#[allow(dead_code)]
-const NUMERICAL_STABILITY_EPSILON: f32 = 1e-6;
+/// Added inside every `sqrt` of a squared distance, matching the reference.
+const DIST_EPSILON: f32 = 1e-6;
+
+// atom37 slot indices. Slot 3 is CB — the backbone oxygen is slot 4, not 3.
+// See `ferritin_core::info::atom37::ATOM37_NAMES`.
+const ATOM37_N: usize = 0;
+const ATOM37_CA: usize = 1;
+const ATOM37_C: usize = 2;
+const ATOM37_O: usize = 4;
 
 #[derive(Clone, Debug)]
 /// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L669
@@ -92,10 +99,7 @@ impl ProteinFeaturesModel {
         let d_sigma_tensor =
             Tensor::new(&[d_sigma], device)?.broadcast_as(d_expanded_broadcast.shape())?;
         let diff = ((d_expanded_broadcast - d_mu_broadcast)? / d_sigma_tensor)?;
-        let rbf = diff.powf(2.0)?.neg()?.exp()?;
-        println!("rbf dtype: {:?}, device: {:?}", rbf.dtype(), rbf.device());
-
-        Ok(rbf)
+        diff.powf(2.0)?.neg()?.exp()
     }
 
     /// Computes RBF features for pairs of points specified by edge indices
@@ -164,29 +168,43 @@ impl ProteinFeaturesModel {
         } else {
             Ok(x.clone())
         }?;
-        let b = (&x.narrow(2, 1, 1)? - &x.narrow(2, 0, 1)?)?
+        let b = (&x.narrow(2, ATOM37_CA, 1)? - &x.narrow(2, ATOM37_N, 1)?)?
             .squeeze(2)?
             .contiguous()?;
-        let c = (&x.narrow(2, 2, 1)? - &x.narrow(2, 1, 1)?)?
+        let c = (&x.narrow(2, ATOM37_C, 1)? - &x.narrow(2, ATOM37_CA, 1)?)?
             .squeeze(2)?
             .contiguous()?;
         let a = cross_product(&b, &c)?;
+        // Cb = -0.58273431*a + 0.56802827*b - 0.54067466*c + Ca.
+        //
+        // The `c` coefficient used to be written negative AND subtracted, which
+        // is a double negation: the virtual Cb landed on the wrong side of the
+        // backbone, and five of the twenty-five RBF blocks that feed every edge
+        // are Cb distances (ferritin-100.11).
         let cb = {
-            let a_term = &a * -0.58273431;
-            let b_term = &b * 0.56802827;
-            let c_term = &c * -0.54067466;
-            let x_term = x.narrow(2, 1, 1)?.squeeze(2)?;
-            (&a_term? + &b_term? - &c_term? + &x_term)?
+            let a_term = (&a * -0.58273431)?;
+            let b_term = (&b * 0.56802827)?;
+            let c_term = (&c * -0.54067466)?;
+            let ca_term = x.narrow(2, ATOM37_CA, 1)?.squeeze(2)?;
+            ((a_term + b_term)? + c_term)?.add(&ca_term)?
         }
         .contiguous()?;
 
-        // N/CA/C/O
-        let n = x.narrow(2, 0, 1)?.squeeze(2)?.contiguous()?;
-        let ca = x.narrow(2, 1, 1)?.squeeze(2)?.contiguous()?;
-        let c = x.narrow(2, 2, 1)?.squeeze(2)?.contiguous()?;
-        let o = x.narrow(2, 3, 1)?.squeeze(2)?.contiguous()?;
+        // N/CA/C/O, by atom37 SLOT — and atom37 slot 3 is CB, not O.
+        //
+        // These four used to be slots 0..=3, so every O in the featurizer was
+        // really the Cβ position: eight of the twenty-five RBF blocks per edge
+        // are O distances, and on 1BC8 the backbone tensor differed from the
+        // reference by up to 18.9 Å (ferritin-100.11).
+        let n = x.narrow(2, ATOM37_N, 1)?.squeeze(2)?.contiguous()?;
+        let ca = x.narrow(2, ATOM37_CA, 1)?.squeeze(2)?.contiguous()?;
+        let c = x.narrow(2, ATOM37_C, 1)?.squeeze(2)?.contiguous()?;
+        let o = x.narrow(2, ATOM37_O, 1)?.squeeze(2)?.contiguous()?;
 
-        let (d_neighbors, e_idx) = self._dist(&ca, mask, self.augment_eps)?;
+        // Python's `_dist` takes eps=1e-6 inside the sqrt. `augment_eps` is the
+        // training-time coordinate noise — a different quantity that happens to
+        // sit in the same struct (ferritin-100.11).
+        let (d_neighbors, e_idx) = self._dist(&ca, mask, DIST_EPSILON)?;
         // A long, fixed list of RBF pairwise features; the explicit pushes read
         // more clearly (one atom-pair per line) than a 25-element vec! literal.
         let mut rbf_all = Vec::new();
