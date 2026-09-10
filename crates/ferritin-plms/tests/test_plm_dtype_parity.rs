@@ -385,8 +385,11 @@ const BENCH_SEQUENCE: &str = concat!(
     "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG",
 );
 
-/// Forward passes to time, after discarding warmups.
+/// Forward passes averaged within one timing round.
 const BENCH_ITERATIONS: usize = 10;
+
+/// Timing rounds; the fastest one is reported. See [`time_forwards`].
+const BENCH_ROUNDS: usize = 5;
 
 /// Warmup passes, which pay for lazy Metal pipeline compilation and first-touch
 /// buffer allocation. Timing these instead of discarding them is most of how a
@@ -403,20 +406,30 @@ const BENCH_WARMUPS: usize = 3;
 /// Measured on an M1 (8 GPU cores), release build, 228 residues, ms per
 /// forward:
 ///
+/// **Read these as order-of-magnitude, not as figures.** Repeated runs of this
+/// test on one idle M1 moved ESM2-on-Metal over a 30x range while AMPLIFY
+/// stayed within ~20%: the faster a configuration is, the more the number is
+/// machine state rather than the backend. Taking the minimum over rounds (see
+/// [`time_forwards`]) narrowed that but did not close it. So what follows is
+/// what survived across runs, and nothing finer:
+///
 /// | device | model | F32 | F16 | BF16 |
 /// |---|---|---|---|---|
-/// | CPU | ESM2 t6_8M | 70.4 | 74.8 | — |
-/// | Metal | ESM2 t6_8M | **1.35** | **0.80** | 1.00 |
-/// | CPU | AMPLIFY 120M | 724 | 406 | — |
-/// | Metal | AMPLIFY 120M | 159 | 149 | 159 |
+/// | CPU | ESM2 t6_8M | 70-90 | 75-90 | — |
+/// | Metal | ESM2 t6_8M | 1.4-7 | 0.8-25 | 1.0-13 |
+/// | CPU | AMPLIFY 120M | 560-930 | 345-410 | — |
+/// | Metal | AMPLIFY 120M | 110-120 | 100-105 | 105-115 |
 ///
-/// Two things to take from it. **F16 on CPU is a memory optimisation, not a
-/// speed one** — ESM2 got slower (70.4 → 74.8 ms), because candle converts to
-/// F32 to multiply and the conversions cost more than the narrower loads save.
-/// On Metal it is a real 1.7x. And **ESM2 accelerates 52x while AMPLIFY
-/// manages 4.6x**, despite AMPLIFY being only ~15x the parameters; something
-/// in AMPLIFY's forward is serialising against the GPU rather than the
-/// arithmetic being the limit (ferritin-100.30).
+/// The one robust reading: **Metal is worth it, and it is worth much more for
+/// ESM2 than for AMPLIFY** — roughly one to two orders of magnitude against
+/// roughly five-fold. AMPLIFY's weaker showing is not a mystery any more; see
+/// [`apply_rotary_emb`][crate::amplify::amplify::apply_rotary_emb], where
+/// ferritin-100.30 found that per-op dispatch cost, not arithmetic, sets the
+/// price of a Metal forward at these shapes. Fixing rotary alone took AMPLIFY
+/// from ~159 to ~110-120 ms.
+///
+/// No claim is made here about F16 versus F32 speed on CPU: it came out both
+/// ways across runs, which means this test cannot tell.
 ///
 /// Run it in release; a debug build measures candle's un-inlined CPU loops and
 /// says nothing useful about either backend.
@@ -445,15 +458,27 @@ fn test_half_precision_throughput() -> Result<()> {
     Ok(())
 }
 
-/// Mean milliseconds per call over [`BENCH_ITERATIONS`], after
-/// [`BENCH_WARMUPS`] discarded calls.
+/// Best observed milliseconds per call: the fastest of [`BENCH_ROUNDS`] rounds,
+/// each averaging [`BENCH_ITERATIONS`] calls, after [`BENCH_WARMUPS`] discards.
+///
+/// The minimum, not the mean, because everything that perturbs a round on a
+/// laptop — another test's process, a thermal cap, memory pressure from the
+/// previous model still resident — makes it slower and nothing makes it
+/// faster. A mean reports how loaded the machine was; the minimum reports what
+/// the backend can do. Measured with the mean, ESM2-on-Metal ranged over 30x
+/// between runs of this very test, which is how this got noticed.
 fn time_forwards(mut forward: impl FnMut() -> Result<()>) -> Result<f64> {
     for _ in 0..BENCH_WARMUPS {
         forward()?;
     }
-    let started = Instant::now();
-    for _ in 0..BENCH_ITERATIONS {
-        forward()?;
+    let mut best = f64::INFINITY;
+    for _ in 0..BENCH_ROUNDS {
+        let started = Instant::now();
+        for _ in 0..BENCH_ITERATIONS {
+            forward()?;
+        }
+        let per_call = started.elapsed().as_secs_f64() * 1e3 / BENCH_ITERATIONS as f64;
+        best = best.min(per_call);
     }
-    Ok(started.elapsed().as_secs_f64() * 1e3 / BENCH_ITERATIONS as f64)
+    Ok(best)
 }
