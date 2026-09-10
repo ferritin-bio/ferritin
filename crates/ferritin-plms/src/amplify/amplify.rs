@@ -182,32 +182,68 @@ pub fn precompute_freqs_cis(head_dim: usize, seq_len: usize) -> Result<Tensor> {
     Tensor::stack(&[freqs_cos, freqs_sin], D::Minus1)
 }
 
+/// Apply rotary position embeddings to `xq` and `xk`, both `(b, seq, h, headdim)`.
+///
+/// `freqs_cis` is the `(max_seq, headdim/2, 2)` cos/sin table from
+/// [`precompute_freqs_cis`]; only its first `seq` rows are used.
+///
+/// Written to issue as few kernels as possible rather than to read like the
+/// complex-multiply it is (ferritin-100.30). At AMPLIFY 120M's shapes a single
+/// elementwise op on Metal costs ~0.15 ms whether it touches 70k elements or
+/// one — the dispatch dominates — so an implementation's cost here is
+/// essentially its op count. The obvious spelling
+///
+/// ```text
+/// new_real = real*cos - imag*sin
+/// new_imag = real*sin + imag*cos
+/// ```
+///
+/// needs four multiplies, an add, a sub and a stack, on strided `real`/`imag`
+/// views that cost double again. That made rotary the largest single term in a
+/// Metal forward — larger than attention and FFN combined, and slower than
+/// running the same rotary on the CPU.
+///
+/// Instead the identity is rearranged into one multiply against the full-width
+/// input, one against a swapped copy, and one add:
+///
+/// ```text
+/// out = x * [c, c] + swap(x) * [-s, s]
+///     = [r*c, i*c] + [i*-s, r*s]
+///     = [r*c - i*s, i*c + r*s]
+/// ```
+///
+/// Folding the rotation's sign into `sin` is what lets `swap` be a plain
+/// interleave rather than a negate-then-interleave. Both big multiplies then
+/// read contiguous memory. Measured 2.1x faster than the direct spelling.
 pub fn apply_rotary_emb(xq: &Tensor, xk: &Tensor, freqs_cis: &Tensor) -> Result<(Tensor, Tensor)> {
     let (b_sz, seq_len, h, headdim) = xq.dims4()?;
     let half_headdim = headdim / 2;
-    let xq = xq.reshape((b_sz, seq_len, h, half_headdim, 2))?;
-    let xk = xk.reshape((b_sz, seq_len, h, half_headdim, 2))?;
-    let freqs_cis = freqs_cis.narrow(0, 0, seq_len)?;
-    let freqs_cis = freqs_cis
-        .reshape((seq_len, half_headdim, 2))?
-        .unsqueeze(0)?
-        .unsqueeze(2)?
-        .expand((b_sz, seq_len, h, half_headdim, 2))?;
-    let complex_mul = |x: &Tensor| -> Result<Tensor> {
-        let real = x.narrow(4, 0, 1)?.squeeze(4)?;
-        let imag = x.narrow(4, 1, 1)?.squeeze(4)?;
-        let freqs_cos = freqs_cis.narrow(4, 0, 1)?.squeeze(4)?;
-        let freqs_sin = freqs_cis.narrow(4, 1, 1)?.squeeze(4)?;
-        // Complex rotation: (real + i*imag) * (cos + i*sin)
-        // new_real = real*cos - imag*sin
-        // new_imag = real*sin + imag*cos  (must use original `real`, not new_real)
-        let new_real = real.mul(&freqs_cos)?.sub(&imag.mul(&freqs_sin)?)?;
-        let new_imag = real.mul(&freqs_sin)?.add(&imag.mul(&freqs_cos)?)?;
-        Tensor::stack(&[new_real, new_imag], 4)
+
+    let table = freqs_cis
+        .narrow(0, 0, seq_len)?
+        .reshape((seq_len, half_headdim, 2))?;
+    let cos = table.narrow(D::Minus1, 0, 1)?;
+    let sin = table.narrow(D::Minus1, 1, 1)?;
+
+    // Both factors widened to headdim so they multiply the interleaved input
+    // directly, and shaped (1, seq, 1, headdim) to broadcast over batch and
+    // heads. These are (seq, headdim) tensors — small enough that building them
+    // per call costs ~0.02 ms, well under what caching them would save.
+    let broadcastable =
+        |t: Tensor| -> Result<Tensor> { t.contiguous()?.reshape((1, seq_len, 1, headdim)) };
+    let cos_full = broadcastable(cos.broadcast_as((seq_len, half_headdim, 2))?)?;
+    let sin_signed = broadcastable(Tensor::cat(&[sin.neg()?, sin], D::Minus1)?)?;
+
+    let rotate = |x: &Tensor| -> Result<Tensor> {
+        let pairs = x.reshape((b_sz, seq_len, h, half_headdim, 2))?;
+        let real = pairs.narrow(D::Minus1, 0, 1)?;
+        let imag = pairs.narrow(D::Minus1, 1, 1)?;
+        let swapped =
+            Tensor::cat(&[imag, real], D::Minus1)?.reshape((b_sz, seq_len, h, headdim))?;
+        x.broadcast_mul(&cos_full)?
+            .add(&swapped.broadcast_mul(&sin_signed)?)
     };
-    let xq_out = complex_mul(&xq)?.reshape((b_sz, seq_len, h, headdim))?;
-    let xk_out = complex_mul(&xk)?.reshape((b_sz, seq_len, h, headdim))?;
-    Ok((xq_out, xk_out))
+    Ok((rotate(xq)?, rotate(xk)?))
 }
 
 /// An encoder block in the AMPLIFY transformer architecture.
@@ -267,6 +303,21 @@ impl EncoderBlock {
         let hidden = chunks[0].silu()?.mul(&chunks[1])?;
         self.w3.forward(&hidden)
     }
+    /// Returns the attended values and, when `output_attentions`, the softmax
+    /// weights that produced them.
+    ///
+    /// The weights are *returned from here* rather than recomputed by the
+    /// caller. They used to be recomputed, and the copy silently dropped
+    /// `attn_mask` — so `output_attentions` handed back weights in which
+    /// padding competed for softmax mass while the hidden states were masked
+    /// correctly (ferritin-100.28). Returning the tensor that was actually used
+    /// makes the two impossible to disagree, and drops a redundant QK^T.
+    ///
+    /// Reported pre-dropout, which is both what the recomputed path did and
+    /// what callers want: dropout is inference-irrelevant noise on a map.
+    // Mirrors torch.nn.functional.scaled_dot_product_attention's signature on
+    // purpose, so the correspondence with upstream AMPLIFY stays readable.
+    #[allow(clippy::too_many_arguments)]
     fn scaled_dot_product_attention(
         &self,
         query: &Tensor,
@@ -275,19 +326,21 @@ impl EncoderBlock {
         attn_mask: Option<&Tensor>,
         dropout_p: f64,
         _is_causal: bool,
-    ) -> Result<Tensor> {
+        output_attentions: bool,
+    ) -> Result<(Tensor, Option<Tensor>)> {
         // Calculate scaled attention scores (B, H, L, S)
         // (B, H, L, S) = (batch, heads, query_length, key_length)
         let scale = 1.0 / (key.dim(D::Minus1)? as f64).sqrt();
         let scores = (query.matmul(&key.transpose(D::Minus2, D::Minus1)?)? * scale)?;
         let masked_scores = attn_mask.map_or(Ok(scores.clone()), |mask| scores.add(mask))?;
         let attn_weights = softmax_last_dim(&masked_scores)?;
+        let reported = output_attentions.then(|| attn_weights.clone());
         let attn_probs = if dropout_p > 0.0 {
             candle_nn::ops::dropout(&attn_weights, dropout_p as f32)
         } else {
             Ok(attn_weights)
         }?;
-        attn_probs.matmul(value)
+        Ok((attn_probs.matmul(value)?, reported))
     }
     fn attention_block(
         &self,
@@ -307,32 +360,22 @@ impl EncoderBlock {
         let xv = xv.reshape(shape)?;
         let (xq, xk) = apply_rotary_emb(&xq, &xk, freqs_cis)?;
         // pad_mask arrives pre-expanded to (batch, heads, seq, seq) from process_attention_mask
-        let attn = self.scaled_dot_product_attention(
+        let (attn, attn_weights) = self.scaled_dot_product_attention(
             &xq.permute((0, 2, 1, 3))?.contiguous()?,
             &xk.permute((0, 2, 1, 3))?.contiguous()?,
             &xv.permute((0, 2, 1, 3))?.contiguous()?,
             pad_mask,
             self.dropout_prob,
             false,
+            output_attentions,
         )?;
         // `[batch, num_heads, seq_len, head_dim]` → `[batch, seq_len, num_heads, head_dim]`
         let attn = attn.permute((0, 2, 1, 3))?;
-        let _attn = if output_attentions {
-            let xq_t = xq.permute((0, 2, 1, 3))?.contiguous()?;
-            let xk_t = xk.permute((0, 2, 3, 1))?.contiguous()?;
-            let mut attn_weights = xq_t.matmul(&xk_t)?;
-            let scale = (xq.dim(D::Minus1)? as f64).sqrt();
-            attn_weights = (attn_weights / scale)?;
-            // attn_weights = attn_weights.add(pad_mask)?;  <- Todo. Revisit
-            Some(softmax_last_dim(&attn_weights)?)
-        } else {
-            None
-        };
         // Final projection and dropout
         let output = attn.reshape((batch_size, seq_len, self.num_heads * self.d_head))?;
         let output01 = self.wo.forward(&output)?;
         let output02 = self.resid_dropout.forward(&output01, false)?;
-        Ok((output02, _attn))
+        Ok((output02, attn_weights))
     }
     /// Load Weights from a Model
     pub fn load(vb: VarBuilder, config: &AMPLIFYConfig, layer: i32) -> Result<Self> {
@@ -613,6 +656,106 @@ mod tests {
             &[batch, cfg.num_attention_heads, seq, seq],
             "mask must expand to (batch, num_attention_heads, seq, seq)"
         );
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // output_attentions honours the pad mask
+    // -----------------------------------------------------------------------
+
+    /// Attention weights returned by `output_attentions` must give padding no
+    /// softmax mass (ferritin-100.28).
+    ///
+    /// They used to be recomputed from Q and K in a branch that never applied
+    /// `pad_mask` — the line was present but commented out — so the hidden
+    /// states were masked correctly while the weights feeding
+    /// `AmplifyOutput::get_contact_map` were computed as if every position were
+    /// a real residue. Harmless while contact maps were single-sequence only;
+    /// reachable once `AmplifyRunner::embed_batch` made padded batches a real
+    /// input.
+    #[test]
+    fn test_output_attentions_respects_pad_mask() -> Result<()> {
+        use crate::plm_runner::additive_padding_mask;
+        use candle_nn::{VarBuilder, VarMap};
+
+        let device = Device::Cpu;
+        let cfg = AMPLIFYConfig {
+            num_hidden_layers: 2,
+            hidden_size: 64,
+            num_attention_heads: 4,
+            intermediate_size: 256,
+            vocab_size: 27,
+            max_length: 32,
+            ..AMPLIFYConfig::amp_120m()
+        };
+        let varmap = VarMap::new();
+        let vb = VarBuilder::from_varmap(&varmap, candle_core::DType::F32, &device);
+        let model = AMPLIFY::load(vb, &cfg)?;
+
+        // A two-row batch where row 0 is padded and row 1 is full, so the test
+        // covers both the masked and unmasked case in one forward.
+        let (batch, seq, real) = (2usize, 8usize, 5usize);
+        let src = Tensor::ones((batch, seq), candle_core::DType::U32, &device)?;
+        let keep: Vec<f32> = (0..batch)
+            .flat_map(|b| (0..seq).map(move |i| f32::from(b == 1 || i < real)))
+            .collect();
+        // `additive_padding_mask` is the same helper the batch runners use, so
+        // this exercises the real mask shape; it reports `anyhow`, hence the
+        // hand conversion into this module's candle `Result`.
+        let pad_mask = additive_padding_mask(
+            &Tensor::from_vec(keep, (batch, seq), &device)?,
+            model.dtype(),
+        )
+        .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+
+        let out = model.forward(&src, Some(&pad_mask), false, true)?;
+        let attentions = out.attentions.as_ref().expect("expected attentions");
+        assert_eq!(attentions.len(), cfg.num_hidden_layers);
+
+        for (layer, attn) in attentions.iter().enumerate() {
+            assert_eq!(attn.dims(), &[batch, cfg.num_attention_heads, seq, seq]);
+
+            // Row 0 is padded past `real`: those key columns must be empty.
+            let pad_mass = attn
+                .narrow(0, 0, 1)?
+                .narrow(3, real, seq - real)?
+                .sum_all()?
+                .to_scalar::<f32>()?;
+            assert!(
+                pad_mass < 1e-5,
+                "layer {layer}: padding holds {pad_mass:.3e} of the attention mass; \
+                 the returned weights ignored pad_mask"
+            );
+
+            // And the mass is not merely gone — it was redistributed, so every
+            // query row still sums to 1 over the real keys. A test that only
+            // checked the first assertion would pass on all-zero weights.
+            let real_mass = attn
+                .narrow(0, 0, 1)?
+                .narrow(3, 0, real)?
+                .sum(D::Minus1)?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            for (i, mass) in real_mass.iter().enumerate() {
+                assert!(
+                    (mass - 1.0).abs() < 1e-4,
+                    "layer {layer}, query {i}: real keys hold {mass:.6}, expected 1.0"
+                );
+            }
+
+            // Row 1 has no padding, so nothing should have been suppressed.
+            let unpadded_mass = attn
+                .narrow(0, 1, 1)?
+                .sum(D::Minus1)?
+                .flatten_all()?
+                .to_vec1::<f32>()?;
+            for (i, mass) in unpadded_mass.iter().enumerate() {
+                assert!(
+                    (mass - 1.0).abs() < 1e-4,
+                    "layer {layer}, unpadded query {i}: mass {mass:.6}, expected 1.0"
+                );
+            }
+        }
         Ok(())
     }
 
