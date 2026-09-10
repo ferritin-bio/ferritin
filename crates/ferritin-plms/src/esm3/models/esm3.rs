@@ -223,8 +223,9 @@ impl ESM3 {
     ///
     /// All input tracks are optional, but an omitted track does **not**
     /// contribute zero: it is filled with its pad/mask token and embedded, the
-    /// same way `ESM3.forward` does upstream. See [`Self::default_tracks`] —
-    /// getting this wrong is not a small error (ferritin-100.31).
+    /// same way `ESM3.forward` does upstream. See `Self::default_tracks` (a
+    /// private helper, so not linkable from here) — getting this wrong is not
+    /// a small error (ferritin-100.31).
     ///
     /// At least `sequence_tokens` should be provided.
     ///

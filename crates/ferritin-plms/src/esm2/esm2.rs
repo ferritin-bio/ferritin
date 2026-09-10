@@ -347,7 +347,7 @@ pub struct ESM2Embeddings {
     /// Whether to apply ESM-2 token dropout compensation (always true for ESM-2 checkpoints).
     /// Masked token positions are zeroed in the embedding; all embeddings are scaled by
     /// (1 - mask_ratio_train) / (1 - mask_ratio_observed) to compensate.
-    /// See: https://github.com/huggingface/transformers/blob/main/src/transformers/models/esm/modeling_esm.py
+    /// See <https://github.com/huggingface/transformers/blob/main/src/transformers/models/esm/modeling_esm.py>.
     token_dropout: bool,
     mask_token_id: u32,
     /// Learned absolute position embeddings, for the ESM-1 generation.

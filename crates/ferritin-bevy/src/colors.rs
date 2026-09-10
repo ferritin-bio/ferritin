@@ -428,7 +428,7 @@ fn named_color_to_bevy(name: &ColorNamesT) -> Color {
     Color::srgb(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0)
 }
 
-/// CSS named color RGB values (W3C spec, https://www.w3.org/TR/css-color-3/).
+/// CSS named color RGB values (W3C spec, <https://www.w3.org/TR/css-color-3/>).
 #[rustfmt::skip]
 pub fn css_named_color(name: &ColorNamesT) -> (u8, u8, u8) {
     match name {

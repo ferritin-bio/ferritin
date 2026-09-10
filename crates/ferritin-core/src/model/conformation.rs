@@ -28,7 +28,7 @@ pub struct AtomicConformation {
     /// Occupancy for each atom (0.0–1.0), or `None` if not recorded.
     pub occupancy: Option<Vec<f32>>,
     /// Isotropic B-factor (temperature factor) for each atom, or `None`.
-    /// For predicted structures use [`confidence`] instead to avoid semantic ambiguity.
+    /// For predicted structures use [`Self::confidence`] instead to avoid semantic ambiguity.
     pub b_iso: Option<Vec<f32>>,
     /// Per-atom confidence score (e.g. pLDDT from AlphaFold / ESM3), or `None`.
     ///

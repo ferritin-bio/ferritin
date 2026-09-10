@@ -166,7 +166,7 @@ impl StructureFeatures for AtomCollection {
             .collect()
     }
 
-    /// create numeric Tensor of shape [1, <sequence-length>, 4, 3] where the 4 is N/CA/C/O
+    /// create numeric Tensor of shape `[1, sequence_length, 4, 3]` where the 4 is N/CA/C/O
     fn to_numeric_backbone_atoms(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut backbone_data = Vec::with_capacity(res_count * 4 * 3);
@@ -184,7 +184,7 @@ impl StructureFeatures for AtomCollection {
         Tensor::from_vec(backbone_data, (1, res_count, 4, 3), device)
     }
 
-    /// create numeric Tensor of shape [1, <sequence-length>, 37, 3]
+    /// create numeric Tensor of shape `[1, sequence_length, 37, 3]`
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor> {
         let res_count = self.iter_residues_aminoacid().count();
         let mut atom37_data = vec![0.0; res_count * 37 * 3];

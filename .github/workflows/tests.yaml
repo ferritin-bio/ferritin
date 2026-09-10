@@ -42,6 +42,14 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # The rendered docs carry the model support matrix, so they are something
+      # users read. Warning noise there makes a real regression easy to miss
+      # (ferritin-100.26).
+      - name: Rustdoc
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
       - name: Check rerun-gated code
         run: cargo check -p ferritin-bevy --features rerun
 

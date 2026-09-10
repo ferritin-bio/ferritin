@@ -167,8 +167,8 @@ impl EncodeInputs {
     /// - `sasa_tokens`:               `(B, L)` u32 SASA-bin tokens.
     /// - `function_tokens`:           `(B, L, n_tracks)` u32 function annotation tokens.
     /// - `residue_annotation_tokens`: `(B, L, K)` u32 InterPro annotation IDs.
-    /// - `average_plddt`:             `(B, L)` f32 average per-structure pLDDT in [0,1].
-    /// - `per_res_plddt`:             `(B, L)` f32 per-residue pLDDT in [0,1].
+    /// - `average_plddt`:             `(B, L)` f32 average per-structure pLDDT in `[0,1]`.
+    /// - `per_res_plddt`:             `(B, L)` f32 per-residue pLDDT in `[0,1]`.
     ///
     /// Returns `(B, L, d_model)`.
     #[allow(clippy::too_many_arguments)] // one arg per ESM3 input track
