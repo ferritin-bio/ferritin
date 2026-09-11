@@ -179,7 +179,9 @@ impl ModelCard {
             Family::Amplify => "amplify",
             Family::Esmc => "esmc",
             Family::Esm3 => "esm3",
-            Family::Mpnn => "proteinmpnn",
+            // One generator covers the whole family — ProteinMPNN,
+            // LigandMPNN and SolubleMPNN share `model_utils.py`.
+            Family::Mpnn => "mpnn",
             Family::T5 => "t5",
         }
     }
@@ -792,7 +794,32 @@ pub const REGISTRY: &[ModelCard] = &[
             max_positions: None,
         },
         approx_bytes_f32: 7 * MB,
-        parity: ParityStatus::Unverified,
+        parity: ParityStatus::Verified {
+            fixture: "proteinmpnn_parity",
+        },
+        unsupported: None,
+    },
+    ModelCard {
+        id: "ligandmpnn-v32-020-25",
+        family: Family::Mpnn,
+        source: WeightSource::pth("zcpbx/ligandmpnn-weights", Some("model_state_dict"))
+            .at_revision("main"),
+        file: "model_params/ligandmpnn_v_32_020_25.pt",
+        // Consumes structure and ligand atoms; no sequence tokenizer.
+        tokenizer: TokenizerSpec::None,
+        specials: SpecialTokenLayout::NONE,
+        metadata: ModelMetadata {
+            d_model: 128,
+            // 3 encoder + 3 decoder, plus 2 context and 2 ligand-graph
+            // rounds that ProteinMPNN does not have.
+            n_layers: 10,
+            vocab_size: 21,
+            max_positions: None,
+        },
+        approx_bytes_f32: 11 * MB,
+        parity: ParityStatus::Verified {
+            fixture: "ligandmpnn_parity",
+        },
         unsupported: None,
     },
 ];
@@ -1004,8 +1031,9 @@ mod tests {
     }
 
     /// Parity claims must name a fixture that the test suite actually has.
-    /// Six models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL,
-    /// Ankh-base, ProstT5 and the ESM3 VQ-VAE structure encoder.
+    /// Nine models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL,
+    /// Ankh-base, ProstT5, ESM3, the ESM3 VQ-VAE structure encoder,
+    /// ProteinMPNN-v48-020 and LigandMPNN-v32-020-25.
     #[test]
     fn test_verified_models_name_a_real_fixture() {
         let mut verified: Vec<(&str, &str)> = REGISTRY
@@ -1024,7 +1052,9 @@ mod tests {
                 ("esm2-t6-8m", "esm2_parity"),
                 ("esm3-sm-open-v1", "esm3_parity"),
                 ("esm3-structure-encoder-v0", "esm3_structure_parity"),
+                ("ligandmpnn-v32-020-25", "ligandmpnn_parity"),
                 ("prostt5-fp16", "prostt5_parity"),
+                ("proteinmpnn-v48-020", "proteinmpnn_parity"),
                 ("prott5-xl-half-uniref50-enc", "prott5_parity"),
             ],
             "the set of parity-verified models changed; that is a deliberate act"

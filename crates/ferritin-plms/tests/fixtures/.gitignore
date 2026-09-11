@@ -26,3 +26,10 @@
 # ~1 KB: token ids only, no embeddings — ProstT5's output is discrete 3Di
 # states, so the reference is the translation itself (ferritin-goh.6).
 !prostt5_parity.safetensors
+# ~80 KB each: (93, 21) log-probs and logits, plus the (93, 128) encoder node
+# embeddings and the (93, K) neighbour list, so a regression can be localised to
+# the featurizer, the encoder, or the decoder rather than only showing up as a
+# different distribution. `enc_h_E` is deliberately NOT saved — at (93, K, 128)
+# it is 2.3 MB (ferritin-100.11).
+!proteinmpnn_parity.safetensors
+!ligandmpnn_parity.safetensors

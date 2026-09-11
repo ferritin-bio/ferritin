@@ -1,5 +1,6 @@
 use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
 use candle_nn::encoding::one_hot;
+use candle_nn::{Linear, Module};
 
 // Core biochemistry constants live in ferritin-core; re-export so existing
 // callers (`use crate::featurize::utilities::AAAtom`, etc.) still compile.
@@ -68,6 +69,24 @@ define_residues! {
     UNK: "UNK", 'X', 20, [0.0, 0.0], [AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown, AAAtom::Unknown],
 }
 
+/// Per-residue ligand atom context: the `number_of_ligand_atoms` ligand atoms
+/// nearest each residue's Cβ.
+///
+/// Port of `data_utils.get_nearest_neighbours`. Given `L` residues and `M`
+/// ligand atoms it returns `(Y, Y_t, Y_m, D_closest)` shaped
+/// `(L, N, 3)`, `(L, N)`, `(L, N)` and `(L,)`, where `N` is
+/// `number_of_ligand_atoms`.
+///
+/// Masked-out pairs are pushed to a distance of 1000 so they sort last, and
+/// when a structure has fewer than `N` ligand atoms the remaining slots are
+/// zero-filled — including `Y_m`, so the padding contributes nothing.
+///
+/// # Arguments
+/// * `cb` — virtual Cβ per residue, `(L, 3)` or `(1, L, 3)`.
+/// * `mask` — per-residue validity, `(L,)` or `(1, L)`.
+/// * `y` — ligand atom coordinates, `(M, 3)`.
+/// * `y_t` — ligand atomic numbers, `(M,)`.
+/// * `y_m` — ligand atom validity, `(M,)`.
 pub fn get_nearest_neighbours(
     cb: &Tensor,
     mask: &Tensor,
@@ -76,61 +95,110 @@ pub fn get_nearest_neighbours(
     y_m: &Tensor,
     number_of_ligand_atoms: i64,
 ) -> Result<(Tensor, Tensor, Tensor, Tensor)> {
-    // First, remove batch dimension if present using squeeze(0)
-    let cb = cb.squeeze(0)?;
-    let mask = mask.squeeze(0)?;
-    let y_m = if y_m.dims().len() > 1 {
-        y_m.sum_keepdim(1)?.squeeze(1)? // or .any(1)? depending on your needs
+    let cb = if cb.dims().len() == 3 {
+        cb.squeeze(0)?
     } else {
-        y_m.clone()
+        cb.clone()
     };
+    let mask = if mask.dims().len() == 2 {
+        mask.squeeze(0)?
+    } else {
+        mask.clone()
+    };
+    let device = cb.device();
     let num_residues = cb.dim(0)?;
-    let mask_cby = mask.unsqueeze(1)?.matmul(&y_m.unsqueeze(0)?)?;
-    let cb_flat = cb.reshape((cb.dim(0)?, 1, 3))?; // [154, 1, 3]
-    let y_flat = y.reshape((1, y.dim(0)?, 3))?; // [1, 54, 3]
-    // Try broadcasting manually if needed
-    let cb_broadcast = cb_flat.broadcast_as((cb.dim(0)?, y.dim(0)?, 3))?; // [154, 54, 3]
-    let y_broadcast = y_flat.broadcast_as((cb.dim(0)?, y.dim(0)?, 3))?; // [154, 54, 3]
-    let diff = cb_broadcast.sub(&y_broadcast)?;
-    let l2_ab = diff.powf(2.0)?.sum(D::Minus1)?;
-    let complement_mask = (mask_cby.neg()? + 1.0)?;
-    let padding_value = Tensor::full(1000.0_f32, mask_cby.dims(), cb.device())?;
-    let masked_distances = l2_ab.mul(&mask_cby)?;
-    let padding_contribution = complement_mask.mul(&padding_value)?;
-    let l2_ab = masked_distances.add(&padding_contribution)?;
+    let num_ligand_atoms = y.dim(0)?;
+    let context = number_of_ligand_atoms as usize;
 
-    // Get nearest neighbors
+    let mask = mask.to_dtype(DType::F32)?;
+    let y_m_f32 = y_m.to_dtype(DType::F32)?;
+
+    // mask_CBY = mask[:, None] * Y_m[None, :]
+    let mask_cby = mask.unsqueeze(1)?.broadcast_mul(&y_m_f32.unsqueeze(0)?)?;
+
+    // L2_AB = sum((CB[:, None, :] - Y[None, :, :]) ** 2, -1)
+    let l2_ab = cb
+        .unsqueeze(1)?
+        .broadcast_sub(&y.unsqueeze(0)?)?
+        .powf(2.0)?
+        .sum(D::Minus1)?;
+
+    // L2_AB = L2_AB * mask_CBY + (1 - mask_CBY) * 1000.0
+    let l2_ab = ((l2_ab * &mask_cby)? + ((1.0 - &mask_cby)? * 1000.0)?)?;
+
+    // ASCENDING: `torch.argsort` defaults to ascending, and these are
+    // distances. Sorting descending here selected each residue's FARTHEST
+    // ligand atoms as its context (ferritin-100.11).
+    let take = context.min(num_ligand_atoms);
     let nn_idx = l2_ab
-        .arg_sort_last_dim(false)?
-        .narrow(1, 0, number_of_ligand_atoms as usize)?
+        .contiguous()?
+        .arg_sort_last_dim(true)?
+        .narrow(1, 0, take)?
         .contiguous()?;
+
     let l2_ab_nn = l2_ab.contiguous()?.gather(&nn_idx, 1)?;
     let d_ab_closest = l2_ab_nn.i((.., 0))?.sqrt()?;
-    let y_new = y
+
+    let y_sel = y
         .unsqueeze(0)?
-        .expand((num_residues, y.dim(0)?, 3))?
+        .broadcast_as((num_residues, num_ligand_atoms, 3))?
         .contiguous()?
         .gather(
             &nn_idx
                 .unsqueeze(2)?
-                .expand((num_residues, number_of_ligand_atoms as usize, 3))?
+                .broadcast_as((num_residues, take, 3))?
                 .contiguous()?,
             1,
         )?;
-
-    let y_t_new = y_t
+    let y_t_sel = y_t
         .unsqueeze(0)?
-        .expand((num_residues, y_t.dim(0)?))?
+        .broadcast_as((num_residues, num_ligand_atoms))?
+        .contiguous()?
+        .gather(&nn_idx, 1)?;
+    let y_m_sel = y_m
+        .unsqueeze(0)?
+        .broadcast_as((num_residues, num_ligand_atoms))?
         .contiguous()?
         .gather(&nn_idx, 1)?;
 
-    let y_m_new = y_m
-        .unsqueeze(0)?
-        .expand((num_residues, y_m.dim(0)?))?
-        .contiguous()?
-        .gather(&nn_idx, 1)?;
+    // Fewer ligand atoms than the model's context width: zero-fill the rest,
+    // Y_m included, so the padding slots contribute nothing.
+    if take == context {
+        return Ok((y_sel, y_t_sel, y_m_sel, d_ab_closest));
+    }
+    let pad = context - take;
+    let pad_y = Tensor::zeros((num_residues, pad, 3), y_sel.dtype(), device)?;
+    let pad_t = Tensor::zeros((num_residues, pad), y_t_sel.dtype(), device)?;
+    let pad_m = Tensor::zeros((num_residues, pad), y_m_sel.dtype(), device)?;
+    Ok((
+        Tensor::cat(&[&y_sel, &pad_y], 1)?,
+        Tensor::cat(&[&y_t_sel, &pad_t], 1)?,
+        Tensor::cat(&[&y_m_sel, &pad_m], 1)?,
+        d_ab_closest,
+    ))
+}
 
-    Ok((y_new, y_t_new, y_m_new, d_ab_closest))
+/// Apply a [`Linear`] across the last dimension of a tensor of any rank.
+///
+/// candle's `Linear::forward` matmuls directly, which caps the input at rank 3
+/// — beyond that it fails with `shape mismatch in matmul`. LigandMPNN's ligand
+/// graph is rank 5 (`(B, L, M, M, C)`: one M x M edge matrix per residue), so
+/// `y_edges` and every projection inside `DecLayerJ` needs this
+/// (ferritin-100.11).
+///
+/// Flattens the leading axes, applies the layer, and restores the shape with
+/// the new feature width.
+pub fn linear_last_dim(layer: &Linear, xs: &Tensor) -> Result<Tensor> {
+    let dims = xs.dims();
+    if dims.len() <= 3 {
+        return layer.forward(xs);
+    }
+    let features = dims[dims.len() - 1];
+    let rows: usize = dims[..dims.len() - 1].iter().product();
+    let out = layer.forward(&xs.reshape((rows, features))?.contiguous()?)?;
+    let mut shape = dims[..dims.len() - 1].to_vec();
+    shape.push(out.dim(D::Minus1)?);
+    out.reshape(shape.as_slice())
 }
 
 pub fn cat_neighbors_nodes(
@@ -191,8 +259,16 @@ pub fn compute_nearest_neighbors(
 }
 
 // https://github.com/huggingface/candle/pull/2375/files#diff-e4d52a71060a80ac8c549f2daffcee77f9bf4de8252ad067c47b1c383c3ac828R957
+//
+// NOTE the ascending sort. This is the k SMALLEST values, matching
+// `torch.topk(.., largest=False)` — which is what every caller here wants,
+// since the values being ranked are distances. It used to pass `false`
+// (descending) to `arg_sort_last_dim`, so `compute_nearest_neighbors` returned
+// each residue's k FARTHEST neighbours: on 1BC8 only 2% of the resulting
+// `E_idx` entries matched the reference, and residue 0's neighbour list did not
+// even contain residue 0, whose self-distance is zero (ferritin-100.11).
 pub fn topk_last_dim(xs: &Tensor, topk: usize) -> Result<(Tensor, Tensor)> {
-    let sorted_indices = xs.arg_sort_last_dim(false)?.to_dtype(DType::U32)?;
+    let sorted_indices = xs.arg_sort_last_dim(true)?.to_dtype(DType::U32)?;
     let topk_indices = sorted_indices.narrow(D::Minus1, 0, topk)?.contiguous()?;
     let gathered = xs.gather(&topk_indices, D::Minus1)?;
     Ok((gathered, topk_indices))
@@ -573,42 +649,49 @@ mod tests {
         let device = Device::Cpu;
         let (pdb_file, _temp) = TestFile::protein_01().create_temp()?;
         let ac = load_structure(pdb_file)?;
-        let (ligand_coords, ligand_elements, _) =
+        let (ligand_coords, ligand_elements, ligand_mask) =
             ac.to_numeric_ligand_atoms(&device).expect("REASON");
-        // 154 residues; 54 other atoms.
-        assert_eq!(ligand_coords.dims(), &[1, 154, 54, 3]);
-        // Check my residue coords in the Tensor
+
+        // 54 ligand heavy atoms, as RAW per-atom tensors. This used to assert
+        // [1, 154, 54, 3] — one copy per residue — because the per-residue
+        // context selection happened here. It now happens in the LigandMPNN
+        // featurizer, which is where `atom_context_num` is known
+        // (ferritin-100.11).
+        assert_eq!(ligand_coords.dims(), &[1, 54, 3]);
+        assert_eq!(ligand_elements.dims(), &[1, 54]);
+        assert_eq!(ligand_mask.dims(), &[1, 54]);
+
+        // Every real atom is valid — one flag per ATOM, so all ones rather
+        // than the 3.0 a (M, 3) mask used to collapse to.
+        let mask: Vec<f32> = ligand_mask.i((0, ..))?.to_vec1()?;
+        assert!(mask.iter().all(|&m| m == 1.0), "every ligand atom is valid");
+
+        // Check the first sulfate's coords against the mmCIF:
         //
-        // HETATM 1222 S  S   . SO4 B 2 .   ? 30.746 18.706  28.896  1.00 47.98  ? 157 SO4 A S   1
-        // HETATM 1223 O  O1  . SO4 B 2 .   ? 30.697 20.077  28.620  1.00 48.06  ? 157 SO4 A O1  1
-        // HETATM 1224 O  O2  . SO4 B 2 .   ? 31.104 18.021  27.725  1.00 47.52  ? 157 SO4 A O2  1
-        // HETATM 1225 O  O3  . SO4 B 2 .   ? 29.468 18.179  29.331  1.00 47.79  ? 157 SO4 A O3  1
-        // HETATM 1226 O  O4  . SO4 B 2 .   ? 31.722 18.578  29.881  1.00 47.85  ? 157 SO4 A O4  1
-        let allatom_coords = [
-            ("S", (0, 0, 0, ..), vec![30.746, 18.706, 28.896]),
-            ("O1", (0, 0, 1, ..), vec![30.697, 20.077, 28.620]),
-            ("O2", (0, 0, 2, ..), vec![31.104, 18.021, 27.725]),
-            ("O3", (0, 0, 3, ..), vec![29.468, 18.179, 29.331]),
-            ("O4", (0, 0, 4, ..), vec![31.722, 18.578, 29.881]),
+        // HETATM 1222 S  S   . SO4 B 2 .   ? 30.746 18.706  28.896 ...
+        // HETATM 1223 O  O1  . SO4 B 2 .   ? 30.697 20.077  28.620 ...
+        // HETATM 1224 O  O2  . SO4 B 2 .   ? 31.104 18.021  27.725 ...
+        // HETATM 1225 O  O3  . SO4 B 2 .   ? 29.468 18.179  29.331 ...
+        // HETATM 1226 O  O4  . SO4 B 2 .   ? 31.722 18.578  29.881 ...
+        let expected = [
+            ("S", vec![30.746, 18.706, 28.896]),
+            ("O1", vec![30.697, 20.077, 28.620]),
+            ("O2", vec![31.104, 18.021, 27.725]),
+            ("O3", vec![29.468, 18.179, 29.331]),
+            ("O4", vec![31.722, 18.578, 29.881]),
         ];
-        for (atom_name, (b, l, i, _j), expected) in allatom_coords {
-            let actual: Vec<f32> = ligand_coords.i((b, l, i, ..))?.to_vec1()?;
-            assert_eq!(actual, expected, "Mismatch for atom {}", atom_name);
+        for (i, (atom_name, coords)) in expected.iter().enumerate() {
+            let actual: Vec<f32> = ligand_coords.i((0, i, ..))?.to_vec1()?;
+            assert_eq!(&actual, coords, "Mismatch for atom {atom_name}");
         }
 
-        // Now check the elements
         let elements: Vec<&str> = ligand_elements
-            .i((0, 0, ..))?
+            .i((0, ..))?
             .to_vec1::<i64>()?
             .into_iter()
             .map(|elem| Element::new(elem as usize).unwrap().symbol())
             .collect();
-
-        assert_eq!(elements[0], "S");
-        assert_eq!(elements[1], "O");
-        assert_eq!(elements[2], "O");
-        assert_eq!(elements[3], "O");
-
+        assert_eq!(&elements[..5], &["S", "O", "O", "O", "O"]);
         Ok(())
     }
 
@@ -647,19 +730,41 @@ mod tests {
         let mask = Tensor::ones((2, 3), test_dtype, &device).unwrap();
 
         // Get 2 nearest neighbors for each point
-        let (distances, indices) = compute_nearest_neighbors(&coords, &mask, 2, 1e-6).unwrap();
+        let eps = 1e-6f32;
+        let (distances, indices) = compute_nearest_neighbors(&coords, &mask, 2, eps).unwrap();
 
         // Check shapes
         assert_eq!(distances.dims(), &[2, 3, 2]); // [batch, seq_len, k]
         assert_eq!(indices.dims(), &[2, 3, 2]); // [batch, seq_len, k]
 
-        // For first sequence, point [1,0,0] should have [0,0,0] and [2,0,0] as nearest neighbors
+        // A point's own index comes FIRST: its self-distance is zero, and
+        // `torch.topk(.., largest=False)` puts the smallest first.
+        //
+        // This assertion used to read `vec![0, 2]` — the two points at distance
+        // 1 — which is what you get from the k LARGEST distances. It passed
+        // because `topk_last_dim` sorted descending, so the test pinned the bug
+        // rather than the behaviour: `compute_nearest_neighbors` was returning
+        // each residue's farthest neighbours (ferritin-100.11).
         let point_neighbors: Vec<u32> = indices.i((0, 1, ..)).unwrap().to_vec1().unwrap();
-        assert_eq!(point_neighbors, vec![0, 2]);
+        assert_eq!(
+            point_neighbors[0], 1,
+            "a point's nearest neighbour is itself, at distance 0"
+        );
+        assert!(
+            point_neighbors[1] == 0 || point_neighbors[1] == 2,
+            "the second neighbour is one of the two points at distance 1, got {}",
+            point_neighbors[1]
+        );
 
         // Check distances are correct
         let point_distances: Vec<f32> = distances.i((0, 1, ..)).unwrap().to_vec1().unwrap();
-        assert!((point_distances[0] - 1.0).abs() < 1e-5);
+        // sqrt(0 + eps), not 0: eps sits inside the square root.
+        assert!(
+            (point_distances[0] - eps.sqrt()).abs() < 1e-5,
+            "self-distance should be sqrt(eps) = {}, got {}",
+            eps.sqrt(),
+            point_distances[0]
+        );
         assert!((point_distances[1] - 1.0).abs() < 1e-5);
     }
 }

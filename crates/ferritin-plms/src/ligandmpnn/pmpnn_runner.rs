@@ -19,6 +19,11 @@ const PMPNN_FORMAT: Format = Format::Pth {
 pub enum ProteinMPNNModels {
     /// proteinmpnn_v_48_020: k_neighbors=48, dropout=0.2
     V48_020,
+    /// ligandmpnn_v_32_020_25: k_neighbors=32, 25 ligand context atoms.
+    ///
+    /// Same `ProteinMPNN` struct, a different featurizer and an extra context
+    /// path — see `ModelTypes::LigandMPNN` (ferritin-100.11).
+    LigandV32_020_25,
 }
 
 impl ProteinMPNNModels {
@@ -26,6 +31,20 @@ impl ProteinMPNNModels {
     pub const fn registry_id(&self) -> &'static str {
         match self {
             Self::V48_020 => "proteinmpnn-v48-020",
+            Self::LigandV32_020_25 => "ligandmpnn-v32-020-25",
+        }
+    }
+
+    /// The architecture config this checkpoint expects.
+    ///
+    /// `k_neighbors` and `atom_context_num` differ between the two and are
+    /// NOT recoverable from the tensor shapes — they live in the `.pt` as
+    /// plain Python ints, which candle's pickle reader does not surface — so
+    /// picking the wrong one loads cleanly and computes the wrong thing.
+    pub fn config(&self) -> ProteinMPNNConfig {
+        match self {
+            Self::V48_020 => ProteinMPNNConfig::proteinmpnn(),
+            Self::LigandV32_020_25 => ProteinMPNNConfig::ligandmpnn(),
         }
     }
 
@@ -76,21 +95,34 @@ impl ProteinMPNNRunner {
     pub fn from_pretrained_with(modeltype: ProteinMPNNModels, opts: &LoadOptions) -> Result<Self> {
         let (source, filename) = modeltype.model_info();
         let weights_path = source.fetch(filename)?;
-        Self::from_path_with(&weights_path, opts)
+        Self::from_path_as(&weights_path, &modeltype.config(), opts)
     }
 
     /// Load from a local .pt file (e.g. from ferritin-test-data or a cached download).
+    ///
+    /// Assumes a ProteinMPNN checkpoint. For LigandMPNN use
+    /// [`from_path_as`][Self::from_path_as] — the two need different configs
+    /// and a LigandMPNN checkpoint loaded as ProteinMPNN silently ignores its
+    /// nine ligand tensors.
     pub fn from_path(path: impl AsRef<Path>, device: Device) -> Result<Self> {
         Self::from_path_with(path, &LoadOptions::new(device))
     }
 
     /// Load from a local file with an explicit device and dtype.
     pub fn from_path_with(path: impl AsRef<Path>, opts: &LoadOptions) -> Result<Self> {
+        Self::from_path_as(path, &ProteinMPNNConfig::proteinmpnn(), opts)
+    }
+
+    /// Load from a local file against an explicit architecture config.
+    pub fn from_path_as(
+        path: impl AsRef<Path>,
+        config: &ProteinMPNNConfig,
+        opts: &LoadOptions,
+    ) -> Result<Self> {
         let path = path.as_ref();
         let vb = var_builder_from_path(path, PMPNN_FORMAT, opts)?;
-        let config = ProteinMPNNConfig::proteinmpnn();
-        let model = ProteinMPNN::load(vb, &config)
-            .map_err(|e| anyhow!("Failed to load ProteinMPNN weights: {e}"))?;
+        let model = ProteinMPNN::load(vb, config)
+            .map_err(|e| anyhow!("Failed to load MPNN weights from {}: {e}", path.display()))?;
         Ok(Self { model })
     }
 

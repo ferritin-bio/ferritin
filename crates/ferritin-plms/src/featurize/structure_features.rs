@@ -1,13 +1,11 @@
 //!  Protein->Tensor utilities useful for Machine Learning
-use super::utilities::{AAAtom, aa1to_int, aa3to1, get_nearest_neighbours, int_to_aa1};
+use super::utilities::{AAAtom, aa1to_int, aa3to1, int_to_aa1};
 use crate::ligandmpnn::proteinfeatures::ProteinFeatures;
 use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
 use ferritin_core::info::elements::Element;
 use ferritin_core::{AtomCollection, Model};
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
-
-const LIGAND_CUTOFF_SCORE: f32 = 5.;
 
 // Helper Fns --------------------------------------
 fn is_heavy_atom(element: &Element) -> bool {
@@ -37,7 +35,17 @@ pub trait StructureFeatures {
     /// Extract all atom coordinates in standard ordering
     fn to_numeric_atom37(&self, device: &Device) -> Result<Tensor>;
 
-    /// Extract ligand atom coordinates and properties
+    /// Every ligand (non-amino-acid, non-water) heavy atom in the structure.
+    ///
+    /// Returns `(Y, Y_t, Y_m)`: coordinates `(1, M, 3)`, atomic numbers
+    /// `(1, M)`, and validity `(1, M)`, for `M` ligand atoms across the whole
+    /// structure.
+    ///
+    /// These are the **raw** atoms, not a per-residue context window. Which
+    /// ones a given residue sees depends on `atom_context_num`, a property of
+    /// the model checkpoint rather than of the structure, so that selection
+    /// belongs to the model's featurizer — see
+    /// [`get_nearest_neighbours`][crate::featurize::utilities::get_nearest_neighbours].
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)>;
 }
 
@@ -200,14 +208,11 @@ impl StructureFeatures for AtomCollection {
         Tensor::from_vec(atom37_data, (1, res_count, 37, 3), device)
     }
 
-    // The purpose of this function it to create 3 output tensors that relate
-    // key information about a protein sequence and ligands it interacts with.
-    //
-    // The outputs are:
-    //  - y: 4D tensor of dimensions (<batch=1>, <num_residues>, <number_of_ligand_atoms>, <coords=3>)
-    //  - y_t: 1D tensor of dimension = <num_residues>
-    //  - y_m: 3D tensor of dimensions: (<batch=1>, <num_residues>, <number_of_ligand_atoms>))
-    //
+    /// Every ligand heavy atom in the structure, as raw per-atom tensors.
+    ///
+    /// Waters are excluded, matching the reference featurizer: for 1BC8 this
+    /// yields the 18-nucleotide DNA duplex plus two zinc ions — 406 atoms —
+    /// and not the 161 crystallographic waters.
     fn to_numeric_ligand_atoms(&self, device: &Device) -> Result<(Tensor, Tensor, Tensor)> {
         let mut coords = Vec::new();
         let mut elements = Vec::new();
@@ -216,52 +221,40 @@ impl StructureFeatures for AtomCollection {
             if residue.is_amino_acid() || res_name == "HOH" || res_name == "WAT" {
                 continue;
             }
-            let atoms: Vec<_> = residue
+            for atom in residue
                 .iter_atoms()
                 .filter(|atom| is_heavy_atom(atom.element()))
-                .collect();
-            for atom in atoms {
+            {
                 coords.push(*atom.coords());
                 elements.push(*atom.element());
             }
         }
 
-        // When there are no ligand atoms, backends like Metal cannot allocate zero-size
-        // buffers. Return a single dummy ligand slot with a zeroed mask so it has no
-        // effect on the model output.
+        // A structure with no ligand still has to produce a tensor: Metal
+        // cannot allocate a zero-size buffer. One slot with a zeroed mask has
+        // no effect on the model output.
         if coords.is_empty() {
-            let cb = self.create_cb(device)?;
-            let (batch, res_num, _) = cb.dims3()?;
-            let y = Tensor::zeros((batch, res_num, 1, 3), DType::F32, device)?;
-            let y_t = Tensor::zeros((batch, res_num, 1), DType::I64, device)?;
-            let y_m = Tensor::zeros((batch, res_num, 1), DType::F32, device)?;
-            return Ok((y, y_t, y_m));
+            return Ok((
+                Tensor::zeros((1, 1, 3), DType::F32, device)?,
+                Tensor::zeros((1, 1), DType::I64, device)?,
+                Tensor::zeros((1, 1), DType::F32, device)?,
+            ));
         }
 
-        // raw starting tensors
-        let y = Tensor::from_slice(&coords.concat(), (coords.len(), 3), device)?;
-        let y_m = Tensor::ones_like(&y)?;
-        let y_t = Tensor::from_slice(
-            &elements
+        let num_atoms = coords.len();
+        let y = Tensor::from_slice(&coords.concat(), (1, num_atoms, 3), device)?;
+        let y_t = Tensor::from_vec(
+            elements
                 .iter()
-                .map(|e| e.atomic_number() as f32)
+                .map(|e| e.atomic_number() as i64)
                 .collect::<Vec<_>>(),
-            (elements.len(),),
+            (1, num_atoms),
             device,
         )?;
-        let cb = self.create_cb(device)?;
-        let (batch, res_num, _coords) = cb.dims3()?;
-        let (number_of_ligand_atoms, _coords) = y.dims2()?;
-        let mask = Tensor::zeros((batch, res_num), DType::F32, device)?;
-        let (y, y_t, y_m, d_xy) =
-            get_nearest_neighbours(&cb, &mask, &y, &y_t, &y_m, number_of_ligand_atoms as i64)?;
-        let distance_mask = d_xy.lt(LIGAND_CUTOFF_SCORE)?.to_dtype(DType::F32)?;
-        let y_m_first = y_m.i((.., 0))?;
-        let mask = mask.squeeze(0)?;
-        let _mask_xy = distance_mask.mul(&mask)?.mul(&y_m_first)?;
-        let y = y.unsqueeze(0)?;
-        let y_t = y_t.to_dtype(DType::I64)?.unsqueeze(0)?;
-        let y_m = y_m.unsqueeze(0)?;
+        // Ones, shaped (1, M) — one flag per ATOM. This used to be
+        // `ones_like(y)`, i.e. (M, 3), which a downstream `sum` then turned
+        // into a mask of 3.0 rather than 1.0 (ferritin-100.11).
+        let y_m = Tensor::ones((1, num_atoms), DType::F32, device)?;
         Ok((y, y_t, y_m))
     }
 }

@@ -304,6 +304,10 @@ fn test_uncovered_loadable_models_are_accounted_for() {
 fn test_non_embedding_models_are_accounted_for() {
     for (id, reason) in [
         ("proteinmpnn-v48-020", "consumes backbone coordinates"),
+        (
+            "ligandmpnn-v32-020-25",
+            "consumes backbone coordinates and ligand atoms",
+        ),
         ("esm3-structure-encoder-v0", "consumes backbone coordinates"),
         (
             "prostt5-fp16",
@@ -330,6 +334,7 @@ fn test_non_embedding_models_are_accounted_for() {
             "esm3-structure-encoder-v0",
             "prostt5-fp16",
             "proteinmpnn-v48-020",
+            "ligandmpnn-v32-020-25",
         ],
         "the set of non-embedding models changed; say which and why"
     );

@@ -94,7 +94,7 @@ pub const MODEL_PORT_CASES: &[ModelPortCase] = &[
         notes: "Higher-capacity ESM2 variant used for integration validation.",
     },
     ModelPortCase {
-        family: "proteinmpnn",
+        family: "mpnn",
         registry_id: "proteinmpnn-v48-020",
         variant: "v48_020",
         source_artifact: "embedded pytorch checkpoint",

@@ -5,6 +5,7 @@
 //!
 // mod commands;
 pub mod configs;
+mod ligandfeaturesmodel;
 pub mod model;
 pub mod pmpnn_runner;
 pub mod proteinfeatures;
