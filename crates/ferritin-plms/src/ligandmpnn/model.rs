@@ -9,9 +9,10 @@
 #![allow(clippy::manual_try_fold)]
 
 use super::configs::{ModelTypes, ProteinMPNNConfig};
+use super::ligandfeaturesmodel::ProteinFeaturesLigand;
 use super::proteinfeatures::ProteinFeatures;
 use super::proteinfeaturesmodel::ProteinFeaturesModel;
-use crate::featurize::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1};
+use crate::featurize::utilities::{cat_neighbors_nodes, gather_nodes, int_to_aa1, linear_last_dim};
 use crate::types::PseudoProbability;
 use candle_core::safetensors;
 use candle_core::{D, DType, Device, IndexOp, Module, Result, Tensor};
@@ -169,6 +170,17 @@ impl PositionWiseFeedForward {
     }
 }
 
+impl PositionWiseFeedForward {
+    /// [`Module::forward`] for inputs above rank 3.
+    ///
+    /// `DecLayerJ` feeds this `(B, L, M, C)`, which `Linear::forward` cannot
+    /// matmul directly (ferritin-100.11).
+    fn forward_any_rank(&self, x: &Tensor) -> Result<Tensor> {
+        let h = linear_last_dim(&self.w1, x)?.gelu_erf()?;
+        linear_last_dim(&self.w2, &h)
+    }
+}
+
 impl Module for PositionWiseFeedForward {
     /// `gelu_erf`, not `gelu`.
     ///
@@ -323,11 +335,26 @@ pub struct DecLayer {
 }
 
 impl DecLayer {
+    /// The main decoder stack: `num_in = 3 * hidden_dim`.
     pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig, layer: i32) -> Result<Self> {
+        Self::load_with_num_in(vb, config, layer, (config.hidden_dim * 3) as usize)
+    }
+
+    /// `num_in` explicitly, for LigandMPNN's `context_encoder_layers`.
+    ///
+    /// Those are `DecLayer(hidden_dim, hidden_dim * 2)` in the reference — the
+    /// message is `[h_V_C, h_E_context, Y_nodes]` rather than the decoder's
+    /// three hidden-width blocks — so their `W1` is `(128, 384)` where the
+    /// decoder's is `(128, 512)` (ferritin-100.11).
+    pub fn load_with_num_in(
+        vb: VarBuilder,
+        config: &ProteinMPNNConfig,
+        layer: i32,
+        num_in: usize,
+    ) -> Result<Self> {
         let vb = vb.pp(layer); // handle the layer number here.
         let num_hidden = config.hidden_dim as usize;
         let augment_eps = 1e-5f64;
-        let num_in = (config.hidden_dim * 3) as usize;
         let dropout_ratio = config.dropout_ratio;
 
         let norm1 = layer_norm::layer_norm(num_hidden, augment_eps, vb.pp("norm1"))?;
@@ -407,6 +434,92 @@ impl DecLayer {
     }
 }
 
+/// How many context-encoder rounds LigandMPNN runs.
+///
+/// Fixed at 2 in the reference — `range(2)` for both `context_encoder_layers`
+/// and `y_context_encoder_layers` — not derived from any config field, and
+/// every published checkpoint has exactly two of each.
+const LIGAND_CONTEXT_LAYERS: i32 = 2;
+
+/// [`DecLayer`] applied one dimension deeper, over LigandMPNN's ligand graph.
+///
+/// Port of `DecLayerJ`
+/// ([model_utils.py](https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L1582)).
+/// Structurally identical to [`DecLayer`] — same weight names, same
+/// `W3(act(W2(act(W1))))` message and same two residual norms — and the
+/// reference comments the single difference as "the only difference": the node
+/// expansion.
+///
+/// [`DecLayer`] carries `h_V` as `(B, L, C)` and broadcasts it over `K`
+/// neighbours. Here `h_V` is `Y_nodes`, already `(B, L, M, C)` — one node per
+/// (residue, ligand atom) pair — and it broadcasts over the ligand graph's own
+/// `M` edges to `(B, L, M, M, C)`.
+#[derive(Clone, Debug)]
+pub struct DecLayerJ {
+    scale: f64,
+    norm1: LayerNorm,
+    norm2: LayerNorm,
+    w1: Linear,
+    w2: Linear,
+    w3: Linear,
+    dense: PositionWiseFeedForward,
+}
+
+impl DecLayerJ {
+    pub fn load(vb: VarBuilder, config: &ProteinMPNNConfig, layer: i32) -> Result<Self> {
+        let vb = vb.pp(layer);
+        let num_hidden = config.hidden_dim as usize;
+        // `DecLayerJ(hidden_dim, hidden_dim)`: the message is [Y_nodes,
+        // Y_edges], two hidden-width blocks, so W1 is (128, 256).
+        let num_in = num_hidden;
+        let eps = 1e-5f64;
+
+        Ok(Self {
+            scale: config.scale_factor,
+            norm1: layer_norm::layer_norm(num_hidden, eps, vb.pp("norm1"))?,
+            norm2: layer_norm::layer_norm(num_hidden, eps, vb.pp("norm2"))?,
+            w1: linear::linear(num_hidden + num_in, num_hidden, vb.pp("W1"))?,
+            w2: linear::linear(num_hidden, num_hidden, vb.pp("W2"))?,
+            w3: linear::linear(num_hidden, num_hidden, vb.pp("W3"))?,
+            dense: PositionWiseFeedForward::new(vb.pp("dense"), num_hidden, num_hidden * 4)?,
+        })
+    }
+
+    /// `h_v` is `(B, L, M, C)`; `h_e` is `(B, L, M, M, C)`.
+    pub fn forward(
+        &self,
+        h_v: &Tensor,
+        h_e: &Tensor,
+        mask_v: Option<&Tensor>,
+        mask_attend: Option<&Tensor>,
+    ) -> Result<Tensor> {
+        let (b, l, m, _, _) = h_e.dims5()?;
+        let c = h_v.dim(D::Minus1)?;
+        let h_v_expand = h_v.unsqueeze(D::Minus2)?.broadcast_as((b, l, m, m, c))?;
+        let h_ev = Tensor::cat(&[&h_v_expand, h_e], D::Minus1)?.contiguous()?;
+
+        // Rank 5 throughout: `Linear::forward` matmuls directly and caps at
+        // rank 3, so every projection here goes through `linear_last_dim`.
+        let h_message = linear_last_dim(&self.w1, &h_ev)?.gelu_erf()?;
+        let h_message = linear_last_dim(&self.w2, &h_message)?.gelu_erf()?;
+        let h_message = linear_last_dim(&self.w3, &h_message)?;
+        let h_message = mask_attend
+            .map(|mask| mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_message))
+            .transpose()?
+            .unwrap_or(h_message);
+
+        let dh = (h_message.sum(D::Minus2)? / self.scale)?;
+        let h_v = self.norm1.forward(&(h_v + dh)?)?;
+        let dh = self.dense.forward_any_rank(&h_v)?;
+        let h_v = self.norm2.forward(&(h_v + dh)?)?;
+
+        mask_v
+            .map(|mask| mask.unsqueeze(D::Minus1)?.broadcast_mul(&h_v))
+            .transpose()?
+            .map_or(Ok(h_v), Ok)
+    }
+}
+
 /// ProteinMPNN Model
 /// - [link](https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L10C7-L10C18)
 pub struct ProteinMPNN {
@@ -414,10 +527,33 @@ pub struct ProteinMPNN {
     pub(crate) decoder_layers: Vec<DecLayer>,
     pub(crate) device: Device,
     pub(crate) encoder_layers: Vec<EncLayer>,
-    pub(crate) features: ProteinFeaturesModel,
+    /// The protein-only featurizer, for `ModelTypes::ProteinMPNN`.
+    pub(crate) features: Option<ProteinFeaturesModel>,
+    /// Everything only `ModelTypes::LigandMPNN` has.
+    pub(crate) ligand: Option<LigandModules>,
     pub(crate) w_e: Linear,
     pub(crate) w_out: Linear,
     pub(crate) w_s: Embedding,
+}
+
+/// The modules LigandMPNN adds on top of the shared ProteinMPNN stack.
+///
+/// Grouped rather than scattered as eight `Option` fields so that "this is a
+/// LigandMPNN" is one check, and so a ProteinMPNN cannot be half-constructed
+/// with some of them present.
+pub(crate) struct LigandModules {
+    features: ProteinFeaturesLigand,
+    /// Projects the ligand node features `V` into the context message.
+    w_v: Linear,
+    /// Projects `h_V` into the context path before the context encoder runs.
+    w_c: Linear,
+    w_nodes_y: Linear,
+    w_edges_y: Linear,
+    /// Final projection of the context path, added back onto `h_V`.
+    v_c: Linear,
+    v_c_norm: LayerNorm,
+    context_encoder_layers: Vec<DecLayer>,
+    y_context_encoder_layers: Vec<DecLayerJ>,
 }
 
 impl ProteinMPNN {
@@ -425,6 +561,7 @@ impl ProteinMPNN {
         let hidden_dim = config.hidden_dim as usize;
         let edge_features = config.edge_features as usize;
         let num_letters = config.num_letters as usize;
+        let node_features = config.node_features as usize;
         let vocab_size = config.vocab as usize;
 
         // Create encoder and decoder layers using iterators
@@ -440,8 +577,50 @@ impl ProteinMPNN {
         let w_e = linear::linear(edge_features, hidden_dim, vb.pp("W_e"))?;
         let w_out = linear::linear(hidden_dim, num_letters, vb.pp("W_out"))?;
         let w_s = embedding(vocab_size, hidden_dim, vb.pp("W_s"))?;
-        // Features
-        let features = ProteinFeaturesModel::load(vb.pp("features"), config.clone())?;
+
+        // The two model types use DIFFERENT featurizers under the same
+        // `features.` prefix: ProteinFeatures for ProteinMPNN,
+        // ProteinFeaturesLigand for LigandMPNN. The latter is a superset —
+        // same `embeddings`/`edge_embedding`/`norm_edges`, plus the ligand
+        // node and graph projections — so loading the wrong one against a
+        // LigandMPNN checkpoint silently ignores nine tensors rather than
+        // failing.
+        let (features, ligand) = match config.model_type {
+            ModelTypes::ProteinMPNN => (
+                Some(ProteinFeaturesModel::load(
+                    vb.pp("features"),
+                    config.clone(),
+                )?),
+                None,
+            ),
+            ModelTypes::LigandMPNN => (
+                None,
+                Some(LigandModules {
+                    features: ProteinFeaturesLigand::load(vb.pp("features"), config)?,
+                    w_v: linear::linear(node_features, hidden_dim, vb.pp("W_v"))?,
+                    w_c: linear::linear(hidden_dim, hidden_dim, vb.pp("W_c"))?,
+                    w_nodes_y: linear::linear(hidden_dim, hidden_dim, vb.pp("W_nodes_y"))?,
+                    w_edges_y: linear::linear(hidden_dim, hidden_dim, vb.pp("W_edges_y"))?,
+                    v_c: linear::linear_no_bias(hidden_dim, hidden_dim, vb.pp("V_C"))?,
+                    v_c_norm: layer_norm::layer_norm(hidden_dim, 1e-5f64, vb.pp("V_C_norm"))?,
+                    // DecLayer(hidden, hidden * 2), not the decoder's
+                    // hidden * 3: the message is [h_V_C, h_E_context, Y_nodes].
+                    context_encoder_layers: (0..LIGAND_CONTEXT_LAYERS)
+                        .map(|i| {
+                            DecLayer::load_with_num_in(
+                                vb.pp("context_encoder_layers"),
+                                config,
+                                i,
+                                hidden_dim * 2,
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?,
+                    y_context_encoder_layers: (0..LIGAND_CONTEXT_LAYERS)
+                        .map(|i| DecLayerJ::load(vb.pp("y_context_encoder_layers"), config, i))
+                        .collect::<Result<Vec<_>>>()?,
+                }),
+            ),
+        };
 
         Ok(Self {
             config: config.clone(),
@@ -449,103 +628,143 @@ impl ProteinMPNN {
             device: vb.device().clone(),
             encoder_layers,
             features,
+            ligand,
             w_e,
             w_out,
             w_s,
         })
     }
+    /// Encode the structure into node and edge embeddings.
+    ///
+    /// Both model types run the same three [`EncLayer`]s over the same protein
+    /// neighbour graph. LigandMPNN then folds in a ligand context path before
+    /// returning — `Self::encode_ligand_context`, a private helper, so not
+    /// linkable from here.
     pub fn encode(&self, features: &ProteinFeatures) -> Result<(Tensor, Tensor, Tensor)> {
-        let s_true = features.get_sequence();
-        let base_dtype = DType::F32;
-        let mask = match features.get_sequence_mask() {
-            Some(m) => m,
-            None => &Tensor::ones_like(s_true)?,
+        let mask = self.sequence_mask(features)?;
+
+        let (v, e, e_idx, ligand_graph) = match (&self.features, &self.ligand) {
+            (Some(protein), None) => {
+                let (e, e_idx) = protein.forward(features, &self.device)?;
+                (None, e, e_idx, None)
+            }
+            (None, Some(ligand)) => {
+                let f = ligand.features.forward(features)?;
+                (Some(f.v), f.e, f.e_idx, Some((f.y_nodes, f.y_edges, f.y_m)))
+            }
+            // `load` builds exactly one of the two, keyed on model_type.
+            _ => candle_core::bail!(
+                "{:?}: built with no featurizer, or with both",
+                self.config.model_type
+            ),
         };
-        match self.config.model_type {
-            ModelTypes::ProteinMPNN => {
-                let (e, e_idx) = self.features.forward(features, &self.device)?;
-                let h_v = Tensor::zeros(
-                    (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
-                    base_dtype,
-                    &self.device,
-                )?;
-                let h_e = self.w_e.forward(&e)?;
-                let mask_attend = if let Some(seq_mask) = features.get_sequence_mask() {
-                    let mask_expanded = seq_mask.unsqueeze(D::Minus1)?; // [B, L, 1]
-                    let mask_gathered = gather_nodes(&mask_expanded, &e_idx)?.squeeze(D::Minus1)?;
-                    let mask_unsqueezed = mask.unsqueeze(D::Minus1)?; // [B, L, 1]
-                    mask_unsqueezed
-                        .expand((
-                            mask_gathered.dim(0)?, // batch
-                            mask_gathered.dim(1)?, // sequence length
-                            mask_gathered.dim(2)?, // number of neighbors
-                        ))?
-                        .mul(&mask_gathered)?
-                } else {
-                    let (b, l) = mask.dims2()?;
-                    Tensor::ones((b, l, e_idx.dim(2)?), DType::F32, &self.device)?
-                };
-                println!("Beginning the Encoding...");
-                // todo: dtype handling not ideal
-                let mask_f32 = mask.to_dtype(base_dtype)?;
-                let mask_attend_f32 = mask_attend.to_dtype(base_dtype)?;
 
-                // Process through all encoder layers
-                let (h_v, h_e) =
-                    self.encoder_layers
-                        .iter()
-                        .fold(Ok((h_v, h_e)), |acc, layer| {
-                            let (h_v, h_e) = acc?;
-                            layer.forward(
-                                &h_v,
-                                &h_e,
-                                &e_idx,
-                                Some(&mask_f32),
-                                Some(&mask_attend_f32),
-                                Some(false),
-                            )
-                        })?;
+        let h_v = Tensor::zeros(
+            (e.dim(0)?, e.dim(1)?, e.dim(D::Minus1)?),
+            DType::F32,
+            &self.device,
+        )?;
+        let h_e = self.w_e.forward(&e)?;
 
-                Ok((h_v, h_e, e_idx))
-            }
-            ModelTypes::LigandMPNN => {
-                candle_core::bail!(
-                    "LigandMPNN encode not yet implemented; only ProteinMPNN encode is functional"
+        // mask_attend = mask[..., None] * gather_nodes(mask[..., None], E_idx)
+        let mask_gathered =
+            gather_nodes(&mask.unsqueeze(D::Minus1)?, &e_idx)?.squeeze(D::Minus1)?;
+        let mask_attend = mask.unsqueeze(D::Minus1)?.broadcast_mul(&mask_gathered)?;
+
+        let (h_v, h_e) = self
+            .encoder_layers
+            .iter()
+            .try_fold((h_v, h_e), |(h_v, h_e), layer| {
+                layer.forward(
+                    &h_v,
+                    &h_e,
+                    &e_idx,
+                    Some(&mask),
+                    Some(&mask_attend),
+                    Some(false),
                 )
-                //     let (v, e, e_idx, y_nodes, y_edges, y_m) = self.features.forward(feature_dict)?;
-                //     let mut h_v = Tensor::zeros((e.dim(0)?, e.dim(1)?, e.dim(-1)?), device)?;
-                //     let mut h_e = self.w_e.forward(&e)?;
-                //     let h_e_context = self.w_v.forward(&v)?;
-                //     let mask_attend = gather_nodes(&mask.unsqueeze(-1)?, &e_idx)?.squeeze(-1)?;
-                //     let mask_attend = mask.unsqueeze(-1)? * &mask_attend;
-                //
-                //     for layer in &self.encoder_layers {
-                //         let (new_h_v, new_h_e) =
-                //             layer.forward(&h_v, &h_e, &e_idx, &mask, &mask_attend)?;
-                //         h_v = new_h_v;
-                //         h_e = new_h_e;
-                //     }
-                //
-                //     let mut h_v_c = self.w_c.forward(&h_v)?;
-                //     let y_m_edges = &y_m.unsqueeze(-1)? * &y_m.unsqueeze(-2)?;
-                //     let mut y_nodes = self.w_nodes_y.forward(&y_nodes)?;
-                //     let y_edges = self.w_edges_y.forward(&y_edges)?;
-                //
-                //     for (y_layer, c_layer) in self
-                //         .y_context_encoder_layers
-                //         .iter()
-                //         .zip(&self.context_encoder_layers)
-                //     {
-                //         y_nodes = y_layer.forward(&y_nodes, &y_edges, &y_m, &y_m_edges)?;
-                //         let h_e_context_cat = Tensor::cat(&[&h_e_context, &y_nodes], -1)?;
-                //         h_v_c = c_layer.forward(&h_v_c, &h_e_context_cat, &mask, &y_m)?;
-                //     }
-                //     h_v_c = self.v_c.forward(&h_v_c)?;
-                //     h_v = &h_v + &self.v_c_norm.forward(&self.dropout.forward(&h_v_c)?)?;
-                //     Ok((h_v, h_e, e_idx))
+            })?;
+
+        let h_v = match (&self.ligand, v, ligand_graph) {
+            (Some(ligand), Some(v), Some((y_nodes, y_edges, y_m))) => {
+                self.encode_ligand_context(ligand, &h_v, &v, &y_nodes, &y_edges, &y_m, &mask)?
             }
+            _ => h_v,
+        };
+
+        Ok((h_v, h_e, e_idx))
+    }
+
+    /// Per-residue validity as F32, defaulting to all-valid.
+    fn sequence_mask(&self, features: &ProteinFeatures) -> Result<Tensor> {
+        match features.get_sequence_mask() {
+            Some(m) => m.to_dtype(DType::F32),
+            None => Tensor::ones_like(features.get_sequence())?.to_dtype(DType::F32),
         }
     }
+
+    /// LigandMPNN's ligand context path.
+    ///
+    /// Two interleaved message-passing rounds, then one residual back onto the
+    /// protein node embeddings:
+    ///
+    /// 1. `Y_nodes` exchange messages over the ligand graph's own edges
+    ///    ([`DecLayerJ`], one dimension deeper than the protein layers).
+    /// 2. The updated `Y_nodes` are concatenated onto the projected ligand
+    ///    node features and passed to a [`DecLayer`], updating a per-residue
+    ///    context vector `h_V_C`.
+    /// 3. `h_V = h_V + V_C_norm(V_C(h_V_C))`.
+    ///
+    /// Note both loops read `y_context_encoder_layers[i]` and
+    /// `context_encoder_layers[i]` in the same iteration — the ligand graph is
+    /// updated first, and the context layer sees that round's output, not the
+    /// previous one's.
+    #[allow(clippy::too_many_arguments)] // one call site; naming a struct for it adds nothing
+    fn encode_ligand_context(
+        &self,
+        ligand: &LigandModules,
+        h_v: &Tensor,
+        v: &Tensor,
+        y_nodes: &Tensor,
+        y_edges: &Tensor,
+        y_m: &Tensor,
+        mask: &Tensor,
+    ) -> Result<Tensor> {
+        // Rank 4 (B, L, M, C).
+        let h_e_context = linear_last_dim(&ligand.w_v, v)?;
+        let mut h_v_c = ligand.w_c.forward(h_v)?;
+
+        let y_m = y_m.to_dtype(DType::F32)?;
+        // Y_m_edges = Y_m[:, :, :, None] * Y_m[:, :, None, :]
+        let y_m_edges = y_m
+            .unsqueeze(D::Minus1)?
+            .broadcast_mul(&y_m.unsqueeze(D::Minus2)?)?;
+
+        // Rank 4 (B, L, M, C).
+        let mut y_nodes = linear_last_dim(&ligand.w_nodes_y, y_nodes)?;
+        // Rank 5 (B, L, M, M, C).
+        let y_edges = linear_last_dim(&ligand.w_edges_y, y_edges)?;
+
+        for (y_layer, context_layer) in ligand
+            .y_context_encoder_layers
+            .iter()
+            .zip(&ligand.context_encoder_layers)
+        {
+            y_nodes = y_layer.forward(&y_nodes, &y_edges, Some(&y_m), Some(&y_m_edges))?;
+            let h_e_context_cat = Tensor::cat(&[&h_e_context, &y_nodes], D::Minus1)?;
+            h_v_c = context_layer.forward(
+                &h_v_c,
+                &h_e_context_cat,
+                Some(mask),
+                Some(&y_m),
+                Some(false),
+            )?;
+        }
+
+        let h_v_c = ligand.v_c.forward(&h_v_c)?;
+        h_v + ligand.v_c_norm.forward(&h_v_c)?
+    }
+
     // Removed unused decode methods
     pub fn simple_decode(&self, features: &ProteinFeatures) -> Result<ScoreOutput> {
         // Create a batch size of 1 for simple decoding
@@ -619,9 +838,13 @@ impl ProteinMPNN {
         let chain_mask = x_mask.as_ref().unwrap().to_dtype(sample_dtype)?;
         let (h_v, h_e, e_idx) = self.encode(features)?;
         let rand_tensor = Tensor::randn(0f32, 0.25f32, (b, l), device)?.to_dtype(sample_dtype)?;
+        // Ascending, matching `torch.argsort`, whose default is ascending.
+        // Positions with chain_mask == 0 are fixed, so their product is ~1e-4
+        // and they must be decoded FIRST; sorting descending put them last and
+        // inverted the intent (ferritin-100.11).
         let decoding_order = (&chain_mask + 0.0001)?
             .mul(&rand_tensor.abs()?)?
-            .arg_sort_last_dim(false)?;
+            .arg_sort_last_dim(true)?;
         // TodoL add  bias
         // # [B,L,21] - amino acid bias per position
         let bias = Tensor::ones((b, l, 21), sample_dtype, device)?;
@@ -892,9 +1115,10 @@ impl ProteinMPNN {
         let (h_v, h_e, e_idx) = self.encode(features)?;
         let rand_tensor = Tensor::randn(0f32, 1f32, (b, l), device)?.to_dtype(sample_dtype)?;
         // Compute decoding order
+        // Ascending: see the note in `sample` (ferritin-100.11).
         let decoding_order = (chain_mask + 0.001)?
             .mul(&rand_tensor.abs()?)?
-            .arg_sort_last_dim(false)?;
+            .arg_sort_last_dim(true)?;
 
         let symmetry_residues: Option<Vec<i32>> = None;
 

@@ -7,17 +7,35 @@ use candle_core::{D, DType, Device, Module, Result, Tensor};
 use candle_nn::encoding::one_hot;
 use candle_nn::{LayerNorm, LayerNormConfig, Linear, VarBuilder, layer_norm, linear};
 
-const RBF_MIN_DISTANCE: f32 = 2.0;
-const RBF_MAX_DISTANCE: f32 = 22.0;
+pub(super) const RBF_MIN_DISTANCE: f32 = 2.0;
+pub(super) const RBF_MAX_DISTANCE: f32 = 22.0;
 /// Added inside every `sqrt` of a squared distance, matching the reference.
-const DIST_EPSILON: f32 = 1e-6;
+pub(super) const DIST_EPSILON: f32 = 1e-6;
 
 // atom37 slot indices. Slot 3 is CB — the backbone oxygen is slot 4, not 3.
 // See `ferritin_core::info::atom37::ATOM37_NAMES`.
-const ATOM37_N: usize = 0;
-const ATOM37_CA: usize = 1;
-const ATOM37_C: usize = 2;
-const ATOM37_O: usize = 4;
+pub(super) const ATOM37_N: usize = 0;
+pub(super) const ATOM37_CA: usize = 1;
+pub(super) const ATOM37_C: usize = 2;
+pub(super) const ATOM37_O: usize = 4;
+
+/// The virtual Cβ, placed from the backbone N, CA and C.
+///
+/// `Cb = -0.58273431*a + 0.56802827*b - 0.54067466*c + Ca`, where `b = CA - N`,
+/// `c = C - CA` and `a = b x c`. Shared by both MPNN featurizers, because the
+/// Cβ feeds five of the twenty-five RBF blocks on every protein edge AND the
+/// ligand-context selection.
+///
+/// The `c` coefficient used to be written negative and then SUBTRACTED — a
+/// double negation that put the Cβ on the wrong side of the backbone
+/// (ferritin-100.11).
+pub(super) fn virtual_cb(n: &Tensor, ca: &Tensor, c: &Tensor) -> Result<Tensor> {
+    let b = (ca - n)?;
+    let c_vec = (c - ca)?;
+    let a = cross_product(&b, &c_vec)?;
+    let cb = (((&a * -0.58273431)? + (&b * 0.56802827)?)? + (&c_vec * -0.54067466)?)?;
+    (cb + ca)?.contiguous()
+}
 
 #[derive(Clone, Debug)]
 /// https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L669
@@ -168,28 +186,6 @@ impl ProteinFeaturesModel {
         } else {
             Ok(x.clone())
         }?;
-        let b = (&x.narrow(2, ATOM37_CA, 1)? - &x.narrow(2, ATOM37_N, 1)?)?
-            .squeeze(2)?
-            .contiguous()?;
-        let c = (&x.narrow(2, ATOM37_C, 1)? - &x.narrow(2, ATOM37_CA, 1)?)?
-            .squeeze(2)?
-            .contiguous()?;
-        let a = cross_product(&b, &c)?;
-        // Cb = -0.58273431*a + 0.56802827*b - 0.54067466*c + Ca.
-        //
-        // The `c` coefficient used to be written negative AND subtracted, which
-        // is a double negation: the virtual Cb landed on the wrong side of the
-        // backbone, and five of the twenty-five RBF blocks that feed every edge
-        // are Cb distances (ferritin-100.11).
-        let cb = {
-            let a_term = (&a * -0.58273431)?;
-            let b_term = (&b * 0.56802827)?;
-            let c_term = (&c * -0.54067466)?;
-            let ca_term = x.narrow(2, ATOM37_CA, 1)?.squeeze(2)?;
-            ((a_term + b_term)? + c_term)?.add(&ca_term)?
-        }
-        .contiguous()?;
-
         // N/CA/C/O, by atom37 SLOT — and atom37 slot 3 is CB, not O.
         //
         // These four used to be slots 0..=3, so every O in the featurizer was
@@ -200,6 +196,7 @@ impl ProteinFeaturesModel {
         let ca = x.narrow(2, ATOM37_CA, 1)?.squeeze(2)?.contiguous()?;
         let c = x.narrow(2, ATOM37_C, 1)?.squeeze(2)?.contiguous()?;
         let o = x.narrow(2, ATOM37_O, 1)?.squeeze(2)?.contiguous()?;
+        let cb = virtual_cb(&n, &ca, &c)?;
 
         // Python's `_dist` takes eps=1e-6 inside the sqrt. `augment_eps` is the
         // training-time coordinate noise — a different quantity that happens to
@@ -286,7 +283,7 @@ impl PositionalEncodings {
         })
     }
     /// - [pytorch](https://github.com/dauparas/LigandMPNN/blob/main/model_utils.py#L1645)
-    fn forward(&self, offset: &Tensor, mask: &Tensor) -> Result<Tensor> {
+    pub(super) fn forward(&self, offset: &Tensor, mask: &Tensor) -> Result<Tensor> {
         let max_rel = self.max_relative_feature as f64;
         let offset = offset.to_dtype(DType::F32)?;
         let mask = mask.to_dtype(DType::F32)?;

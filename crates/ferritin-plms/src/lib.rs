@@ -50,6 +50,7 @@
 //! | `ankh-large` | T5 | `ElnaggarLab/ankh-large` (pth) | **not checked** | supported |
 //! | `prostt5-fp16` | T5 | `Rostlab/ProstT5_fp16` (pth) | verified (`prostt5_parity`) | supported |
 //! | `proteinmpnn-v48-020` | Mpnn | `zcpbx/ligandmpnn-weights` (pth) | verified (`proteinmpnn_parity`) | supported |
+//! | `ligandmpnn-v32-020-25` | Mpnn | `zcpbx/ligandmpnn-weights` (pth) | verified (`ligandmpnn_parity`) | supported |
 //! <!-- END SUPPORT MATRIX -->
 
 // The crate deliberately uses the `foo/mod.rs` + inner `mod foo` layout for

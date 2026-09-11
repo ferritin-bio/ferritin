@@ -17,7 +17,7 @@ use super::model::ProteinMPNN;
 use super::pmpnn_runner::{ProteinMPNNModels, ProteinMPNNRunner};
 use super::proteinfeatures::ProteinFeatures;
 use crate::StructureFeatures;
-use anyhow::{Error, anyhow};
+use anyhow::Error;
 use candle_core::{DType, Device, Tensor};
 use clap::ValueEnum;
 use ferritin_core::load_structure;
@@ -67,19 +67,11 @@ impl MPNNExecConfig {
     /// 37 MB `ferritin-test-data` crate a runtime dependency of every
     /// downstream consumer (ferritin-100.10).
     pub fn load_model(&self, model_type: ModelTypes) -> Result<ProteinMPNN, Error> {
-        match model_type {
-            ModelTypes::ProteinMPNN => Ok(ProteinMPNNRunner::from_pretrained(
-                ProteinMPNNModels::V48_020,
-                self.device.clone(),
-            )?
-            .into_model()),
-            // Reachable from `--model-type ligand_mpnn` on the CLI, so this
-            // must be an error rather than a panic (ferritin-100.11).
-            ModelTypes::LigandMPNN => Err(anyhow!(
-                "LigandMPNN weight loading is not implemented; only --model-type protein_mpnn \
-                 is supported (ferritin-100.11)"
-            )),
-        }
+        let variant = match model_type {
+            ModelTypes::ProteinMPNN => ProteinMPNNModels::V48_020,
+            ModelTypes::LigandMPNN => ProteinMPNNModels::LigandV32_020_25,
+        };
+        Ok(ProteinMPNNRunner::from_pretrained(variant, self.device.clone())?.into_model())
     }
     pub fn generate_protein_features(&self) -> Result<ProteinFeatures, Error> {
         let device = self.device.clone();
@@ -252,6 +244,22 @@ impl ProteinMPNNConfig {
             vocab: 21,
         }
     }
+
+    /// `ligandmpnn_v_32_020_25`: 32 neighbours, 25 ligand context atoms.
+    ///
+    /// `k_neighbors` and `atom_context_num` are checkpoint facts — the `.pt`
+    /// carries them as `num_edges` and `atom_context_num` — but they are plain
+    /// Python ints rather than tensors, so candle's pickle reader does not
+    /// surface them and they are declared here instead. Verified against the
+    /// four checkpoints in `ferritin-test-data` (ferritin-100.11).
+    pub fn ligandmpnn() -> Self {
+        Self {
+            atom_context_num: 25,
+            k_neighbors: 32,
+            model_type: ModelTypes::LigandMPNN,
+            ..Self::proteinmpnn()
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -310,19 +318,41 @@ mod tests {
         .expect("MPNNExecConfig::new should not fail")
     }
 
-    /// `--model-type ligand_mpnn` is reachable from the CLI, so the unsupported
-    /// variant must return an error rather than aborting the process
-    /// (ferritin-100.11).
+    /// Both CLI model types map to a real checkpoint.
+    ///
+    /// `--model-type ligand_mpnn` used to `panic!("not implented!")`, then
+    /// returned an "unimplemented" error, and now loads
+    /// `ligandmpnn_v_32_020_25`. Asserted on the mapping rather than on a
+    /// download so the test stays offline; the weights themselves are covered
+    /// by `test_ligandmpnn_parity_vs_python_reference` (ferritin-100.11).
     #[test]
-    fn test_load_model_ligandmpnn_errors_not_panics() {
-        let err = exec_config()
-            .load_model(ModelTypes::LigandMPNN)
-            .map(|_| ())
-            .expect_err("LigandMPNN is unsupported and must return an error");
-        assert!(
-            err.to_string().contains("not implemented"),
-            "error should say LigandMPNN is unimplemented; got: {err}"
-        );
+    fn test_every_cli_model_type_maps_to_a_registry_row() {
+        for (model_type, expected) in [
+            (ModelTypes::ProteinMPNN, "proteinmpnn-v48-020"),
+            (ModelTypes::LigandMPNN, "ligandmpnn-v32-020-25"),
+        ] {
+            let variant = match model_type {
+                ModelTypes::ProteinMPNN => ProteinMPNNModels::V48_020,
+                ModelTypes::LigandMPNN => ProteinMPNNModels::LigandV32_020_25,
+            };
+            assert_eq!(variant.registry_id(), expected, "{model_type:?}");
+            assert!(
+                crate::registry::lookup(expected).is_some(),
+                "{expected} must be a registry row"
+            );
+        }
+    }
+
+    /// The two checkpoints need different architecture configs, and nothing in
+    /// the tensor shapes would catch a mix-up.
+    #[test]
+    fn test_model_types_carry_distinct_configs() {
+        let protein = ProteinMPNNModels::V48_020.config();
+        let ligand = ProteinMPNNModels::LigandV32_020_25.config();
+        assert_eq!(protein.k_neighbors, 48);
+        assert_eq!(protein.atom_context_num, 0);
+        assert_eq!(ligand.k_neighbors, 32);
+        assert_eq!(ligand.atom_context_num, 25);
     }
 
     /// The ProteinMPNN branch loads from HuggingFace rather than extracting the
