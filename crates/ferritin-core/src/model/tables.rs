@@ -27,7 +27,8 @@ pub enum ResidueGroup {
     NonPolymer,
 }
 
-/// Per-atom topology data (not coordinates — those live in [`AtomicConformation`]).
+/// Per-atom topology data (not coordinates — those live in
+/// [`AtomicConformation`][crate::model::AtomicConformation]).
 ///
 /// Each field is a parallel array indexed by atom index.
 #[derive(Clone, Debug)]

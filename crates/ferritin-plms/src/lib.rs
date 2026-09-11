@@ -87,7 +87,7 @@ pub mod t5;
 pub mod types;
 pub mod utils;
 pub use plm_runner::{ModelMetadata, PlmRunner, SpecialTokenLayout};
-pub use registry::{Family, ModelCard, ParityStatus, REGISTRY, TokenizerSpec};
+pub use registry::{Family, ModelCard, ParityStatus, REGISTRY, TokenizerSpec, VocabAlphabet};
 
 /// Returns the best available device for computation.
 ///

@@ -6,7 +6,7 @@
 //! download or empty selector never aborts the whole scene.
 //!
 //! # Entry point
-//! Send a [`LoadMvsEvent`] message; [`execute_mvs_on_load`] (registered by
+//! Send a [`LoadMvsEvent`] message; the `execute_mvs_on_load` system (registered by
 //! [`MvsPlugin`]) parses the state, clears any previously spawned [`MvsEntity`]
 //! entities, and rebuilds the scene.
 //!
@@ -58,7 +58,7 @@ struct MvsRetiredEntity {
 }
 
 /// A MVS `label` node, spawned at the centroid of its component's atoms.
-/// [`update_mvs_label_billboards`] projects this world-space anchor to screen
+/// The `update_mvs_label_billboards` system projects this world-space anchor to screen
 /// space each frame and keeps a companion UI [`Text`] entity positioned there.
 #[derive(Component)]
 pub struct MvsLabel(pub String);

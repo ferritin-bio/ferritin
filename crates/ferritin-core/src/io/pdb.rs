@@ -1,6 +1,6 @@
 //! Low-level PDB file parsing and writing.
 //!
-//! Adapted from: https://github.com/biotite-dev/fastpdb/tree/main
+//! Adapted from <https://github.com/biotite-dev/fastpdb/tree/main>.
 //! Converted to use native Rust structures instead of Python/NumPy bindings.
 //!
 use crate::info::elements::Element;

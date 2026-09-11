@@ -18,7 +18,7 @@
 
 use anyhow::Result;
 use ferritin_plms::plm_runner::PlmRunner;
-use ferritin_plms::registry::{Family, REGISTRY, lookup};
+use ferritin_plms::registry::{Family, REGISTRY, TokenizerSpec, VocabAlphabet, lookup};
 use ferritin_plms::{
     AmplifyModels, AmplifyRunner, ESM2Models, ESM2Runner, ESMCModels, ESMCRunner, T5Models,
     T5Runner, device,
@@ -56,6 +56,47 @@ fn test_enums_delegate_to_registry() {
         source.repo_id,
         lookup("amplify-120m").unwrap().source.repo_id
     );
+}
+
+/// Every `vocab.txt` row states how a sequence is read from that file.
+///
+/// `TokenizerSpec::HfVocabTxt` used to be a bare variant that both the ESM-2
+/// runner and the conformance suite treated as "SaProt": two characters per
+/// residue over a 20x20 (amino acid, 3Di) alphabet. A second `vocab.txt`
+/// model over a one-character alphabet would have been fed `M#Q#I#…`, made
+/// every position `<unk>`, and still satisfied every shape assertion
+/// (ferritin-goh.11).
+///
+/// Carrying [`VocabAlphabet`] in the variant makes that a compile error rather
+/// than a silent wrong answer; this test pins the alphabet each current row
+/// actually declares, so a row cannot be flipped to the wrong one by accident.
+#[test]
+fn test_vocab_txt_rows_declare_their_alphabet() {
+    let vocab_txt_rows: Vec<_> = REGISTRY
+        .iter()
+        .filter_map(|card| match card.tokenizer {
+            TokenizerSpec::HfVocabTxt(alphabet) => Some((card.id, alphabet)),
+            _ => None,
+        })
+        .collect();
+
+    assert!(
+        !vocab_txt_rows.is_empty(),
+        "no vocab.txt rows left in the registry; delete this test or the variant"
+    );
+
+    for (id, alphabet) in vocab_txt_rows {
+        let expected = if id.starts_with("saprot") {
+            VocabAlphabet::SaProtPairs
+        } else {
+            VocabAlphabet::SingleResidue
+        };
+        assert_eq!(
+            alphabet, expected,
+            "{id}: vocab.txt alphabet is {alphabet:?}, expected {expected:?}. \
+             SaProt reads (amino acid, 3Di) pairs; nothing else in the registry does."
+        );
+    }
 }
 
 /// Loading ESM2-8M must produce exactly the dimensions its card declares.
