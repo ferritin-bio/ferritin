@@ -95,9 +95,7 @@ pub const PARITY_COVERAGE: &[ParityCoverage] = &[
     ParityCoverage {
         fixture: "esmc_parity",
         generator: "esmc",
-        status: CoverageStatus::NotGenerated {
-            reason: "needs the `esm` SDK and an ESMC-300M download to generate",
-        },
+        status: CoverageStatus::Committed,
     },
     ParityCoverage {
         fixture: "esm3_parity",

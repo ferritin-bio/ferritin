@@ -518,3 +518,49 @@ fn test_esm1v_absolute_positions_reconstruct_input() -> Result<()> {
     println!("esm1v-1 reconstruction agreement: {:.1}%", agree * 100.0);
     Ok(())
 }
+
+/// Every family with a loadable row has at least one `Verified` member.
+///
+/// This is the guard that ProteinMPNN's failure argues for. A `Unverified` row
+/// whose family already contains a verified sibling shares an exercised code
+/// path and differs mainly in weights, so the blast radius of a defect is
+/// small. A family with *no* verified member is an entire architecture that
+/// nothing has ever compared against its reference — and that is precisely the
+/// state ProteinMPNN was in while it disagreed with the reference on 91 of 93
+/// positions, through every release up to v0.3.3 (ferritin-100.33).
+///
+/// `Family::Esmc` was the last family in that state; it held three rows and no
+/// fixture, even though `scripts/generate_esmc_fixtures.py` needed only a
+/// `pip install esm` to run. Nobody had run it. This test exists so that gap
+/// cannot reopen silently: adding a new family now requires verifying at least
+/// one of its members, rather than leaving the whole architecture unchecked and
+/// reading as merely "not checked" in the support matrix.
+#[test]
+fn test_every_family_has_a_verified_member() {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let mut verified: BTreeSet<String> = BTreeSet::new();
+    let mut by_family: BTreeMap<String, Vec<&str>> = BTreeMap::new();
+
+    for card in REGISTRY.iter().filter(|c| c.is_loadable()) {
+        let family = format!("{:?}", card.family);
+        by_family.entry(family.clone()).or_default().push(card.id);
+        if matches!(card.parity, ParityStatus::Verified { .. }) {
+            verified.insert(family);
+        }
+    }
+
+    let gaps: Vec<String> = by_family
+        .iter()
+        .filter(|(family, _)| !verified.contains(*family))
+        .map(|(family, ids)| format!("{family} ({})", ids.join(", ")))
+        .collect();
+
+    assert!(
+        gaps.is_empty(),
+        "these families have no Verified member, so an entire architecture is \
+         unchecked — generate a fixture for one row in each via \
+         scripts/generate_<family>_fixtures.py: {}",
+        gaps.join("; ")
+    );
+}

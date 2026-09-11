@@ -183,6 +183,18 @@ fn test_no_undeclared_fixtures_on_disk() {
 /// Deliberately an assertion on the exact set rather than a `println!`: the gap
 /// is a reviewed fact, so closing one (or opening a new one) has to be a
 /// conscious edit here. Shrinking this list is the goal.
+///
+/// The list is now empty, which it has never been before (ferritin-100.33).
+/// `esmc_parity` was the last entry and it had sat `NotGenerated` with the
+/// reason "needs the `esm` SDK and an ESMC-300M download" — but the SDK is a
+/// plain `pip install esm` and `scripts/generate_esmc_fixtures.py` ran first
+/// try. The blocker was that nobody had run it, not that it was hard, which is
+/// worth remembering before writing the next `NotGenerated` reason: a stated
+/// reason is a claim about cost, and this one was never checked.
+///
+/// An empty set is not the end state. Every *fixture* now has coverage, but 20
+/// registry rows are still `ParityStatus::Unverified` — they inherit trust from
+/// a verified sibling in the same family rather than being checked themselves.
 #[test]
 fn test_uncovered_ports_are_the_known_set() {
     use support::parity::{CoverageStatus, PARITY_COVERAGE};
@@ -194,9 +206,9 @@ fn test_uncovered_ports_are_the_known_set() {
         .collect();
     uncovered.sort_unstable();
 
+    let expected: [&str; 0] = [];
     assert_eq!(
-        uncovered,
-        ["esmc_parity"],
+        uncovered, expected,
         "the set of ports without parity coverage changed; update this test and \
          ferritin-100.20 deliberately rather than letting it drift"
     );

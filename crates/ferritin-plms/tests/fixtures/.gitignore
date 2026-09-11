@@ -33,3 +33,10 @@
 # it is 2.3 MB (ferritin-100.11).
 !proteinmpnn_parity.safetensors
 !ligandmpnn_parity.safetensors
+# 293 KB: (78, 960) F32 embeddings for one 76-residue sequence, BOS/EOS rows
+# kept so a mismatch in special-token placement surfaces at position 0 or L+1
+# rather than passing silently. Larger than the other embedding fixtures only
+# because ESMC's d_model is 960 and no rows are stripped. This is the fixture
+# that closed the last whole-family parity gap: Family::Esmc held three rows and
+# nothing checked any of them (ferritin-100.33).
+!esmc_parity.safetensors

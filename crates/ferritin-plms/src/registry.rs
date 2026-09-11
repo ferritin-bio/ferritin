@@ -101,10 +101,24 @@ pub enum VocabAlphabet {
 
 /// Whether this model's numerics have been checked against a Python reference.
 ///
-/// `Unverified` is the honest default and covers most rows. It is not a
-/// statement that a model is wrong — only that nothing proves it right, which
-/// is worth being able to read off the registry rather than inferring from
-/// which fixtures happen to exist.
+/// `Unverified` is the honest default and covers most rows. Read it as "this
+/// model's output could be anything", not as "this model is probably fine".
+///
+/// That wording used to be softer — it said `Unverified` was not a statement
+/// that a model is wrong, only that nothing proved it right. ProteinMPNN then
+/// demonstrated the difference is not academic: it sat at `Unverified` through
+/// every release up to v0.3.3 while agreeing with the reference on 2 of 93
+/// positions, where chance alone over a 21-token vocabulary is about 4. The
+/// output was not approximately right, it was unrelated to what the model
+/// computes, and the registry said only "unchecked" the whole time
+/// (ferritin-100.33).
+///
+/// The lesson is about which rows are dangerous. A row whose family already has
+/// a `Verified` sibling shares a proven code path and differs mainly in
+/// weights. A row whose family has *no* verified member has an entire
+/// architecture that nothing has ever checked — that is the position
+/// ProteinMPNN was in. Prefer closing whole-family gaps over adding a second
+/// fixture to a family that already has one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParityStatus {
     /// A committed fixture pins this model's output against the reference
@@ -114,6 +128,9 @@ pub enum ParityStatus {
         fixture: &'static str,
     },
     /// No parity fixture exists, so nothing checks this model's numerics.
+    ///
+    /// Not a weaker form of `Verified` — an absence of evidence that has
+    /// already, once, been concealing a model that was flatly wrong.
     Unverified,
 }
 
@@ -577,7 +594,9 @@ pub const REGISTRY: &[ModelCard] = &[
             max_positions: None,
         },
         approx_bytes_f32: GB + 200 * MB,
-        parity: ParityStatus::Unverified,
+        parity: ParityStatus::Verified {
+            fixture: "esmc_parity",
+        },
         unsupported: None,
     },
     ModelCard {
@@ -1031,9 +1050,12 @@ mod tests {
     }
 
     /// Parity claims must name a fixture that the test suite actually has.
-    /// Nine models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL,
+    /// Ten models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL,
     /// Ankh-base, ProstT5, ESM3, the ESM3 VQ-VAE structure encoder,
-    /// ProteinMPNN-v48-020 and LigandMPNN-v32-020-25.
+    /// ProteinMPNN-v48-020, LigandMPNN-v32-020-25 and ESMC-300M.
+    ///
+    /// ESMC-300M is the newest and closed the last whole-family gap: before it,
+    /// `Family::Esmc` held three rows and no fixture at all (ferritin-100.33).
     #[test]
     fn test_verified_models_name_a_real_fixture() {
         let mut verified: Vec<(&str, &str)> = REGISTRY
@@ -1052,6 +1074,7 @@ mod tests {
                 ("esm2-t6-8m", "esm2_parity"),
                 ("esm3-sm-open-v1", "esm3_parity"),
                 ("esm3-structure-encoder-v0", "esm3_structure_parity"),
+                ("esmc-300m", "esmc_parity"),
                 ("ligandmpnn-v32-020-25", "ligandmpnn_parity"),
                 ("prostt5-fp16", "prostt5_parity"),
                 ("proteinmpnn-v48-020", "proteinmpnn_parity"),
