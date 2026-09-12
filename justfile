@@ -46,8 +46,9 @@ amplify-example-01:
     MAFSAEDVLKEYDRRRRMEALLLSLYYPNDRKLLDYKEWSPPRVQVECPKAPVEWNNPPSEKGLIVGHFSGIKYKGEKAQASEVDVNKMCCWVSKFKDAMRRYQGIQTCKIPGKVLSDLDAKIKAYNLTVEGVEGFVRYSRVTKQHVAAFLKELRHSKQYENVNLIHYILTDKRVDIQHLEKDLVKDFKALVESAHRMRQGHMINVKYILYQLLKKHGHGPDGPDILTVKTGSKGVLYDDSFRKIYTDLGWKFTPL
 
 
-# ferritin-ligandmpnn was folded into ferritin-plms, and the CLI test this
-# recipe used to name has been commented out since 2024-12 (ferritin-100.14).
+# ferritin-ligandmpnn was folded into ferritin-plms. The CLI test this recipe
+# used to name was commented out from 2024-12 and deleted in ferritin-100.32;
+# see src/ligandmpnn/Readme.md if it is ever wanted back.
 # ProteinMPNN/LigandMPNN tests, including the ignored (weight-downloading) ones
 test-ligandmpnn:
     cargo test -p ferritin-plms --test test_plm_ligandmpnn --test test_ligand_mpnn_loading \
