@@ -72,3 +72,41 @@ bd close <id>         # Complete work
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
+
+## Beads Durability (ferritin-d2v)
+
+**`git push` does NOT push beads data.** The two are entirely separate transports,
+and nothing warns you when only one of them runs.
+
+Issue state lives in a local Dolt DB whose only shared copy is `refs/dolt/data` on
+the git remote. `.beads/.gitignore` excludes `embeddeddolt/` and `export.auto` is
+`false`, so there is no JSONL fallback committed to the repo either. The installed
+`.git/hooks/pre-push` runs `bd hooks run pre-push`, which does exactly two things —
+backup and auto-export — and **both log `skipping — running as git hook` and exit 0**.
+So a `git push` pushes no Dolt data, and reports success either way. That is how two
+days of issue work once lived on one laptop only.
+
+**Therefore, step 4 of Session Completion above is incomplete on its own.** Whenever a
+session has touched beads at all (`bd create`, `bd update`, `bd close`, `bd note`,
+`bd remember`), it must also run:
+
+```bash
+bd dolt push
+```
+
+It must print `Push complete.` and exit 0. It is idempotent and takes ~3s, so run it
+even when unsure. A session that pushed code but not Dolt has stranded its issue work
+exactly as invisibly as before.
+
+To check at session START whether a previous session stranded anything, read the
+remote ref and see whether its date matches the last known beads activity:
+
+```bash
+git ls-remote origin refs/dolt/data
+```
+
+Two known display quirks, neither of them a fault: `bd dolt show` reports
+`Remotes: (none)` while `bd dolt remote list` correctly reports `origin` — the two
+views disagree, and `remote list` is the accurate one. And `sync.remote` in
+`.beads/config.yaml` is a `git+https://` URL while `origin` is SSH; this is
+deliberate (see the comment there) and does not impede the push.

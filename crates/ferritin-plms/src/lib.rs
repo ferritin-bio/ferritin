@@ -15,8 +15,22 @@
 //! The column to read first is **Parity**. "It compiles" and even "it loads"
 //! are not what you need before trusting a number — you need to know whether
 //! anyone has compared this port's output against the reference
-//! implementation. Two models have. The rest are unverified: not known to be
-//! wrong, but nothing proves them right.
+//! implementation.
+//!
+//! Read **not checked** as "this output could be anything". It is not a
+//! milder form of verified. ProteinMPNN sat in that column through every
+//! release up to v0.3.3 while agreeing with the reference on 2 of 93
+//! positions — worse than the ~4 you would expect from chance over a 21-token
+//! vocabulary. Its output was not approximately right, it was unrelated to
+//! what the model computes, and nothing in this table said so
+//! (ferritin-100.33).
+//!
+//! Weigh an unchecked row by whether its **family** has a verified member. A
+//! `not checked` row sitting beside a verified sibling shares an exercised
+//! code path and differs mainly in weights. A row whose family has no
+//! verified member anywhere is an entire architecture nobody has ever
+//! compared — the position ProteinMPNN was in. Every family in this table now
+//! has at least one verified member.
 //!
 //! <!-- BEGIN SUPPORT MATRIX -->
 //! | Model | Family | Weights | Parity | Status |
@@ -40,7 +54,7 @@
 //! | `dplm-650m` | Esm2 | `airkingbd/dplm_650m` (pth) | **not checked** | supported |
 //! | `amplify-120m` | Amplify | `chandar-lab/AMPLIFY_120M` (safetensors) | verified (`amplify_parity`) | supported |
 //! | `amplify-350m` | Amplify | `chandar-lab/AMPLIFY_350M` (safetensors) | **not checked** | supported |
-//! | `esmc-300m` | Esmc | `EvolutionaryScale/esmc-300m-2024-12` (pth) | **not checked** | supported |
+//! | `esmc-300m` | Esmc | `EvolutionaryScale/esmc-300m-2024-12` (pth) | verified (`esmc_parity`) | supported |
 //! | `esmc-600m` | Esmc | `EvolutionaryScale/esmc-600m-2024-12` (pth) | **not checked** | supported |
 //! | `esmc-6b` | Esmc | `EvolutionaryScale/esmc-6b-2024-12` (safetensors) | **not checked** | supported |
 //! | `esm3-sm-open-v1` | Esm3 | `EvolutionaryScale/esm3-sm-open-v1` (pth) | verified (`esm3_parity`) | supported |
