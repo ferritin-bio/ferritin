@@ -50,9 +50,21 @@ variant in `ProteinMPNNConfig::proteinmpnn()` / `::ligandmpnn()` and covered by
 
 ## Status of the CLI
 
-The CLI equivalent was abandoned in December 2024 and its test suite is
-commented out — see ferritin-100.32. The library API (`ProteinMPNNRunner`) is
-the supported surface.
+The CLI equivalent was abandoned in December 2024. The library API
+(`ProteinMPNNRunner`) is the supported surface.
+
+Its test suite — `tests/test_cli_ligandmpnn.rs`, 33 tests transcribed from
+upstream's [`run_examples.sh`](https://github.com/dauparas/LigandMPNN/blob/main/run_examples.sh)
+— was deleted in ferritin-100.32. It had been 806 lines with every one of them
+line-commented since 2024-12-16, so it compiled to zero tests while reading
+from the outside like real coverage; ferritin-100.11 cited it as "33 tests, all
+ignored". It could not have run in any case: `ferritin-plms` declares no
+`[[bin]]` for `Command::cargo_bin` to find, and neither `assert_cmd` nor
+`tempfile` is a dev-dependency, so the file would not even compile if
+uncommented.
+
+To resurrect it, take the upstream `run_examples.sh` as the source of truth
+rather than the deleted file, and add the CLI and dev-dependencies it assumed.
 
 ## Resources
 
