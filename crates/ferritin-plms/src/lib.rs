@@ -31,18 +31,22 @@
 //! Every family in this table now has at least one verified member.
 //!
 //! But a shared **Family** tag is a claim about the backbone, not about the
-//! whole path. `saprot-35m-af2` carries `Esm2` and runs the same
-//! `EsmForMaskedLM` backbone as `esm2-t6-8m`, yet reads *two* characters per
+//! whole path, so four `Esm2` rows are verified in their own right rather than
+//! by inheritance (ferritin-100.34). `saprot-35m-af2` runs the same
+//! `EsmForMaskedLM` backbone as `esm2-t6-8m` yet reads *two* characters per
 //! residue over a 446-token (amino acid, 3Di) vocabulary from a bare
-//! `vocab.txt` — a different tokenizer path entirely, and one that produces a
-//! perfectly well-formed tensor when read wrongly. It is verified separately
-//! for that reason (ferritin-100.34). `fastesm2-650`, `pepmlm-650m` and
-//! `dplm-650m` wear the same tag with the same caveat and are still unchecked;
-//! `dplm-650m` is a diffusion model, not a masked LM.
+//! `vocab.txt` — a different tokenizer path, and one that yields a perfectly
+//! well-formed tensor when read wrongly. `pepmlm-650m`, `dplm-650m` and
+//! `fastesm2-650` share the stock alphabet but are all pushed through
+//! `ESM2Config::t33_650m()`, which assumes each is plain ESM-2 650M with
+//! different weights — a real assumption, given `dplm-650m` is a diffusion
+//! model and `fastesm2-650` declares `model_type: fast_esm`. All four agree
+//! with the reference; the point is that they now do so demonstrably.
 //!
-//! The rows that genuinely are "same path, different weights" — the `esm2-t*`
-//! ladder, the five `esm1v` members, `esm1b`, `amplify-350m`, `ankh-large`,
-//! `esmc-600m`, `esmc-6b` — are the ones where inherited trust is reasonable.
+//! The rows still unchecked are the ones genuinely shaped "same path,
+//! different weights" — the `esm2-t*` ladder, the five `esm1v` members,
+//! `esm1b`, `saprot-650m-af2`, `amplify-350m`, `ankh-large`, `esmc-600m` and
+//! `esmc-6b` — where inherited trust is reasonable.
 //!
 //! <!-- BEGIN SUPPORT MATRIX -->
 //! | Model | Family | Weights | Parity | Status |
@@ -61,9 +65,9 @@
 //! | `esm1b-t33-650m-ur50s` | Esm2 | `facebook/esm1b_t33_650M_UR50S` (pth) | **not checked** | supported |
 //! | `saprot-35m-af2` | Esm2 | `westlake-repl/SaProt_35M_AF2` (pth) | verified (`saprot_parity`) | supported |
 //! | `saprot-650m-af2` | Esm2 | `westlake-repl/SaProt_650M_AF2` (pth) | **not checked** | supported |
-//! | `fastesm2-650` | Esm2 | `Synthyra/FastESM2_650` (safetensors) | **not checked** | supported |
-//! | `pepmlm-650m` | Esm2 | `ChatterjeeLab/PepMLM-650M` (pth) | **not checked** | supported |
-//! | `dplm-650m` | Esm2 | `airkingbd/dplm_650m` (pth) | **not checked** | supported |
+//! | `fastesm2-650` | Esm2 | `Synthyra/FastESM2_650` (safetensors) | verified (`fastesm2_parity`) | supported |
+//! | `pepmlm-650m` | Esm2 | `ChatterjeeLab/PepMLM-650M` (pth) | verified (`pepmlm_parity`) | supported |
+//! | `dplm-650m` | Esm2 | `airkingbd/dplm_650m` (pth) | verified (`dplm_parity`) | supported |
 //! | `amplify-120m` | Amplify | `chandar-lab/AMPLIFY_120M` (safetensors) | verified (`amplify_parity`) | supported |
 //! | `amplify-350m` | Amplify | `chandar-lab/AMPLIFY_350M` (safetensors) | **not checked** | supported |
 //! | `esmc-300m` | Esmc | `EvolutionaryScale/esmc-300m-2024-12` (pth) | verified (`esmc_parity`) | supported |

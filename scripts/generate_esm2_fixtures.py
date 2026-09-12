@@ -47,6 +47,16 @@ from transformers import EsmForMaskedLM, EsmTokenizer
 MODEL_ID = "facebook/esm2_t6_8M_UR50D"
 SAPROT_MODEL_ID = "westlake-repl/SaProt_35M_AF2"
 
+# The other three rows carrying Family::Esm2. Each reuses ESM2Config::t33_650m()
+# on the Rust side, i.e. each is assumed to be "ESM-2 650M with different
+# weights". These fixtures are what turns that assumption into a checked claim
+# (ferritin-100.34).
+SIBLING_MODEL_IDS = {
+    "pepmlm": "ChatterjeeLab/PepMLM-650M",
+    "dplm": "airkingbd/dplm_650m",
+    "fastesm2": "Synthyra/FastESM2_650",
+}
+
 SEQUENCES = {
     "ubiquitin_nterm": "MQIFVKTLTGK",
     "glycine_repeat": "GGGGGGGGG",
@@ -94,8 +104,8 @@ def main():
     parser.add_argument(
         "--variant",
         default="esm2",
-        choices=["esm2", "saprot"],
-        help="which alphabet to score over (default: esm2)",
+        choices=["esm2", "saprot", "pepmlm", "dplm", "fastesm2"],
+        help="which model to score (default: esm2)",
     )
     parser.add_argument(
         "--model",
@@ -115,6 +125,14 @@ def main():
         sequences = SAPROT_SEQUENCES
         fixture_name = "saprot_parity.safetensors"
         chars_per_residue = 2
+    elif args.variant in SIBLING_MODEL_IDS:
+        model_id = args.model or SIBLING_MODEL_IDS[args.variant]
+        # Stock ESM-2 alphabet, so the same reference sequences apply — except
+        # the masked one, which needs a <mask> token these checkpoints may
+        # define differently. Kept simple: score the three unmasked sequences.
+        sequences = {k: v for k, v in SEQUENCES.items() if k != "masked_seq"}
+        fixture_name = f"{args.variant}_parity.safetensors"
+        chars_per_residue = 1
     else:
         model_id = args.model or MODEL_ID
         sequences = SEQUENCES

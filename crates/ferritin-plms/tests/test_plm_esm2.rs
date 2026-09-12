@@ -166,3 +166,74 @@ fn test_saprot_parity_vs_python_reference() -> Result<()> {
     }
     Ok(())
 }
+
+/// Numerical parity for the non-stock `Family::Esm2` rows: PepMLM, DPLM and
+/// FastESM2.
+///
+/// Each of these shares the `Esm2` family tag and is run through
+/// `ESM2Config::t33_650m()`, so each inherited `esm2-t6-8m`'s parity coverage by
+/// association. Unlike SaProt the alphabet really is shared — all three use the
+/// stock 33-token vocabulary — so what is being checked here is the other
+/// assumption: that the 650M ESM-2 config is the right config for these
+/// checkpoints at all. DPLM in particular is a *diffusion* model rather than a
+/// masked LM, so "same backbone, different weights" is a claim worth testing
+/// rather than asserting.
+///
+/// One honest caveat on FastESM2: its checkpoint declares `model_type:
+/// fast_esm`, and the reference generator coerces it into `EsmForMaskedLM`
+/// (transformers warns about this, and about a freshly-initialised
+/// `contact_head` that the logits do not depend on). So this test establishes
+/// that ferritin agrees with *that coercion*, which is the same coercion
+/// ferritin itself performs. It does not independently establish that the
+/// coercion matches Synthyra's intended semantics.
+///
+/// Requires the respective weights (~2.6 GB each, cached by HF hub) and the
+/// fixtures from `python scripts/generate_esm2_fixtures.py --variant <name>`.
+///
+/// Run: `FERRITIN_HF_TESTS=1 cargo test -p ferritin-plms test_esm2_sibling_parity`
+#[test]
+fn test_esm2_sibling_parity_vs_python_reference() -> Result<()> {
+    use ferritin_plms::ESM2Runner;
+    use ferritin_plms::device;
+    use support::parity::{
+        ParityFixture, SpecialTokens, align_rows, assert_logits_close, hf_tests_enabled,
+    };
+
+    if !hf_tests_enabled() {
+        eprintln!(
+            "skipping ESM2 sibling parity: set FERRITIN_HF_TESTS=1 to run \
+             (downloads PepMLM, DPLM and FastESM2 weights, ~2.6 GB each)"
+        );
+        return Ok(());
+    }
+
+    let dev = device(false)?;
+
+    // Taken by value rather than iterated from a const table: none of the
+    // `*Models` enums in this crate derive `Copy`, and widening a public enum
+    // for a test's convenience is not this issue's business.
+    let check = |model: ESM2Models, fixture_name: &str, variant: &str| -> Result<()> {
+        let runner = ESM2Runner::from_pretrained(model, dev.clone())?;
+        let args = format!("--variant {variant}");
+        let fixture = ParityFixture::load_with_generator_args(fixture_name, "esm2", &args, &dev)?;
+
+        for (name, sequence) in PARITY_SEQUENCES {
+            // The sibling generators skip the masked sequence: these
+            // checkpoints need not agree with stock ESM-2 about <mask>.
+            if *name == "masked_seq" {
+                continue;
+            }
+            let ref_logits = fixture.tensor(&format!("{name}_logits"))?;
+            let output = runner.run_forward(sequence)?;
+            let rust_logits = align_rows(&output.logits, SpecialTokens::BOS_EOS)?;
+            assert_logits_close(&rust_logits, ref_logits, ESM2_LOGIT_TOLERANCE)?;
+            println!("{variant}/{name}: logit parity OK (tol {ESM2_LOGIT_TOLERANCE:.1e})");
+        }
+        Ok(())
+    };
+
+    check(ESM2Models::PepMlm650M, "pepmlm_parity", "pepmlm")?;
+    check(ESM2Models::Dplm650M, "dplm_parity", "dplm")?;
+    check(ESM2Models::FastEsm2_650, "fastesm2_parity", "fastesm2")?;
+    Ok(())
+}

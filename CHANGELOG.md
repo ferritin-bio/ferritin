@@ -52,24 +52,30 @@ disagree". See `ferritin-100.33`.
   `vocab.txt`. Read that alphabet one character at a time and you still get a
   well-formed tensor, just with twice the rows and every other one `<unk>`,
   which is why it needed its own fixture (`ferritin-100.34`).
-- `scripts/generate_esm2_fixtures.py` grew a `--variant saprot` mode, and now
-  fails loudly if a sequence tokenizes to the wrong residue count or contains
-  `<unk>` — a parity fixture over `<unk>` rows compares two models' opinions
-  about nothing.
+- PepMLM-650M, DPLM-650M and FastESM2-650 are now parity-verified too (logit
+  tolerance 1e-3). All three are pushed through `ESM2Config::t33_650m()`, i.e.
+  treated as "ESM-2 650M with different weights" — a real assumption given DPLM
+  is a diffusion model and FastESM2 declares `model_type: fast_esm`. All three
+  agree with the reference; the point is that they now do so demonstrably.
+  With SaProt that is every `Family::Esm2` row that is not stock ESM-2.
+- `scripts/generate_esm2_fixtures.py` grew `--variant` (`saprot`, `pepmlm`,
+  `dplm`, `fastesm2`), and now fails loudly if a sequence tokenizes to the
+  wrong residue count or contains `<unk>` — a parity fixture over `<unk>` rows
+  compares two models' opinions about nothing.
 
 ### Reading the support matrix
 
 `not checked` now documents itself as "this output could be anything" rather
-than "not known to be wrong". Nineteen registry rows remain `Unverified`.
+than "not known to be wrong". Sixteen registry rows remain `Unverified`, down
+from twenty.
 
 Weigh such a row by how much it really shares with a verified one. A shared
-`Family` tag is a claim about the *backbone*, not the whole path — SaProt proved
-that by needing its own fixture despite sitting in an already-covered family.
-`fastesm2-650`, `pepmlm-650m` and `dplm-650m` wear the `Esm2` tag with the same
-caveat and remain unchecked (`dplm-650m` is a diffusion model, not a masked LM).
-The rows where inherited trust is genuinely reasonable are the same-path ones:
-the `esm2-t*` ladder, the five `esm1v` members, `esm1b`, `amplify-350m`,
-`ankh-large`, `esmc-600m` and `esmc-6b`.
+`Family` tag is a claim about the *backbone*, not the whole path, which is why
+the four `Esm2` rows that are not stock ESM-2 were verified in their own right
+rather than by inheritance. What remains unchecked is now genuinely of the
+"same path, different weights" shape: the `esm2-t*` ladder, the five `esm1v`
+members, `esm1b`, `saprot-650m-af2`, `amplify-350m`, `ankh-large`, `esmc-600m`
+and `esmc-6b`.
 
 ## v0.3.3 and earlier
 

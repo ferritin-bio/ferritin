@@ -497,7 +497,9 @@ pub const REGISTRY: &[ModelCard] = &[
             max_positions: Some(1026),
         },
         approx_bytes_f32: 2 * GB + 600 * MB,
-        parity: ParityStatus::Unverified,
+        parity: ParityStatus::Verified {
+            fixture: "fastesm2_parity",
+        },
         unsupported: None,
     },
     ModelCard {
@@ -516,7 +518,9 @@ pub const REGISTRY: &[ModelCard] = &[
             max_positions: Some(1026),
         },
         approx_bytes_f32: 2 * GB + 600 * MB,
-        parity: ParityStatus::Unverified,
+        parity: ParityStatus::Verified {
+            fixture: "pepmlm_parity",
+        },
         unsupported: None,
     },
     ModelCard {
@@ -538,7 +542,9 @@ pub const REGISTRY: &[ModelCard] = &[
             max_positions: Some(1026),
         },
         approx_bytes_f32: 2 * GB + 600 * MB,
-        parity: ParityStatus::Unverified,
+        parity: ParityStatus::Verified {
+            fixture: "dplm_parity",
+        },
         unsupported: None,
     },
     // ── AMPLIFY ──────────────────────────────────────────────────────────────
@@ -1052,19 +1058,21 @@ mod tests {
     }
 
     /// Parity claims must name a fixture that the test suite actually has.
-    /// Eleven models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL,
-    /// Ankh-base, ProstT5, ESM3, the ESM3 VQ-VAE structure encoder,
-    /// ProteinMPNN-v48-020, LigandMPNN-v32-020-25, ESMC-300M and SaProt-35M.
+    /// Fourteen models are verified today.
     ///
     /// ESMC-300M closed the last whole-family gap: before it, `Family::Esmc`
     /// held three rows and no fixture at all (ferritin-100.33).
     ///
-    /// SaProt-35M is the first row verified for a reason other than its family
-    /// being uncovered. It shares `Family::Esm2` with the verified `esm2-t6-8m`,
-    /// so the family-level guard already counted it as covered — but what it
-    /// does NOT share is the alphabet: two characters per residue over 446
-    /// tokens from a bare `vocab.txt`, against one character over 33 from a
-    /// `tokenizer.json` (ferritin-100.34).
+    /// The four `Family::Esm2` rows that are not stock ESM-2 — SaProt-35M,
+    /// PepMLM-650M, DPLM-650M and FastESM2-650 — were then verified for a
+    /// different reason: not because their family was uncovered, but because
+    /// the family tag is a claim about the BACKBONE and each of them diverges
+    /// somewhere else (ferritin-100.34). SaProt reads two characters per
+    /// residue over 446 tokens from a bare `vocab.txt`; the other three are all
+    /// run through `ESM2Config::t33_650m()` despite DPLM being a diffusion
+    /// model and FastESM2 declaring `model_type: fast_esm`. All four agree with
+    /// the reference, so those assumptions were sound — but they were
+    /// assumptions until checked.
     #[test]
     fn test_verified_models_name_a_real_fixture() {
         let mut verified: Vec<(&str, &str)> = REGISTRY
@@ -1080,11 +1088,14 @@ mod tests {
             [
                 ("amplify-120m", "amplify_parity"),
                 ("ankh-base", "ankh_parity"),
+                ("dplm-650m", "dplm_parity"),
                 ("esm2-t6-8m", "esm2_parity"),
                 ("esm3-sm-open-v1", "esm3_parity"),
                 ("esm3-structure-encoder-v0", "esm3_structure_parity"),
                 ("esmc-300m", "esmc_parity"),
+                ("fastesm2-650", "fastesm2_parity"),
                 ("ligandmpnn-v32-020-25", "ligandmpnn_parity"),
+                ("pepmlm-650m", "pepmlm_parity"),
                 ("prostt5-fp16", "prostt5_parity"),
                 ("proteinmpnn-v48-020", "proteinmpnn_parity"),
                 ("prott5-xl-half-uniref50-enc", "prott5_parity"),

@@ -46,3 +46,12 @@
 # alphabet read from a bare vocab.txt, rather than the shared backbone
 # (ferritin-100.34).
 !saprot_parity.safetensors
+# ~4 KB each: (11, 33) and two (9, 33) F32 logit blocks over the stock ESM-2
+# alphabet. These three carry Family::Esm2 and are all run through
+# ESM2Config::t33_650m(), i.e. the Rust side assumes each is "ESM-2 650M with
+# different weights". DPLM is a diffusion model and FastESM2 declares
+# model_type:fast_esm, so that assumption was worth checking rather than
+# asserting (ferritin-100.34).
+!pepmlm_parity.safetensors
+!dplm_parity.safetensors
+!fastesm2_parity.safetensors
