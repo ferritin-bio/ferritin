@@ -452,7 +452,9 @@ pub const REGISTRY: &[ModelCard] = &[
             max_positions: Some(1026),
         },
         approx_bytes_f32: 140 * MB,
-        parity: ParityStatus::Unverified,
+        parity: ParityStatus::Verified {
+            fixture: "saprot_parity",
+        },
         unsupported: None,
     },
     ModelCard {
@@ -1050,12 +1052,19 @@ mod tests {
     }
 
     /// Parity claims must name a fixture that the test suite actually has.
-    /// Ten models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL,
+    /// Eleven models are verified today: ESM2-8M, AMPLIFY-120M, ProtT5-XL,
     /// Ankh-base, ProstT5, ESM3, the ESM3 VQ-VAE structure encoder,
-    /// ProteinMPNN-v48-020, LigandMPNN-v32-020-25 and ESMC-300M.
+    /// ProteinMPNN-v48-020, LigandMPNN-v32-020-25, ESMC-300M and SaProt-35M.
     ///
-    /// ESMC-300M is the newest and closed the last whole-family gap: before it,
-    /// `Family::Esmc` held three rows and no fixture at all (ferritin-100.33).
+    /// ESMC-300M closed the last whole-family gap: before it, `Family::Esmc`
+    /// held three rows and no fixture at all (ferritin-100.33).
+    ///
+    /// SaProt-35M is the first row verified for a reason other than its family
+    /// being uncovered. It shares `Family::Esm2` with the verified `esm2-t6-8m`,
+    /// so the family-level guard already counted it as covered — but what it
+    /// does NOT share is the alphabet: two characters per residue over 446
+    /// tokens from a bare `vocab.txt`, against one character over 33 from a
+    /// `tokenizer.json` (ferritin-100.34).
     #[test]
     fn test_verified_models_name_a_real_fixture() {
         let mut verified: Vec<(&str, &str)> = REGISTRY
@@ -1079,6 +1088,7 @@ mod tests {
                 ("prostt5-fp16", "prostt5_parity"),
                 ("proteinmpnn-v48-020", "proteinmpnn_parity"),
                 ("prott5-xl-half-uniref50-enc", "prott5_parity"),
+                ("saprot-35m-af2", "saprot_parity"),
             ],
             "the set of parity-verified models changed; that is a deliberate act"
         );

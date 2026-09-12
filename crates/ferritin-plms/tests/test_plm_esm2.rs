@@ -77,3 +77,92 @@ fn test_esm2_parity_vs_python_reference() -> Result<()> {
     }
     Ok(())
 }
+
+/// Max absolute logit difference for SaProt-35M.
+///
+/// Same floor as stock ESM-2: the backbone is identical, so a looser tolerance
+/// here would be hiding a tokenizer or embedding-table problem rather than
+/// accommodating a genuinely harder numerical path.
+const SAPROT_LOGIT_TOLERANCE: f32 = 1e-3;
+
+/// SaProt's reference sequences, as `(residue, 3Di state)` pairs.
+///
+/// Must stay in sync with `SAPROT_SEQUENCES` in
+/// `scripts/generate_esm2_fixtures.py`. The 3Di halves are ProstT5's real
+/// output for these sequences (see `test_saprot_bridge.rs`), so every pair is
+/// one SaProt's 446-token vocabulary actually contains.
+const SAPROT_PARITY_SEQUENCES: &[(&str, &str)] = &[
+    ("ubiquitin_nterm", "MdQvIvFvVvKcTvLvTvGvKd"),
+    ("glycine_repeat", "GdGdGdGdGdGdGdGdGd"),
+    ("alt_charged", "KvEvKvEvKvEvKvEvKv"),
+];
+
+/// Numerical parity: SaProt-35M Rust logits vs the HuggingFace reference.
+///
+/// SaProt carries `Family::Esm2` and runs on the same `EsmForMaskedLM`
+/// backbone as `esm2-t6-8m`, which is why it had inherited that row's parity
+/// coverage by association. That inheritance covered the wrong half. What
+/// differs is the alphabet: SaProt reads **two** characters per residue over a
+/// 446-token (amino acid, 3Di) product vocabulary loaded from a bare
+/// `vocab.txt`, against stock ESM-2's one character over 33 tokens from a
+/// `tokenizer.json`. Those are different code paths in `SequenceTokenizer`, and
+/// nothing was checking the SaProt one numerically (ferritin-100.34).
+///
+/// The failure this actually guards against is quiet: reading the pair
+/// alphabet one character at a time still produces a well-formed tensor, just
+/// with twice the rows and every other one `<unk>`. Comparing full logit rows
+/// against the reference catches that; a shape assertion would not.
+///
+/// Requires:
+///   1. SaProt_35M_AF2 weights (cached by HF hub on first run)
+///   2. Fixture at `tests/fixtures/saprot_parity.safetensors`
+///      from `python scripts/generate_esm2_fixtures.py --variant saprot`
+///
+/// Run: `FERRITIN_HF_TESTS=1 cargo test -p ferritin-plms test_saprot_parity`
+#[test]
+fn test_saprot_parity_vs_python_reference() -> Result<()> {
+    use ferritin_plms::ESM2Runner;
+    use ferritin_plms::device;
+    use support::parity::{
+        ParityFixture, SpecialTokens, align_rows, assert_logits_close, hf_tests_enabled,
+    };
+
+    if !hf_tests_enabled() {
+        eprintln!(
+            "skipping SaProt parity: set FERRITIN_HF_TESTS=1 to run \
+             (downloads SaProt_35M_AF2 weights)"
+        );
+        return Ok(());
+    }
+
+    let dev = device(false)?;
+    let saprot = ESM2Runner::from_pretrained(ESM2Models::SaProt35M, dev.clone())?;
+
+    // The generator strips BOS/EOS and stores only the L residue rows, where L
+    // is the RESIDUE count, not the character count.
+    //
+    // Named explicitly because this fixture comes from the *esm2* generator
+    // under `--variant saprot`; the default inference would suggest a
+    // `generate_saprot_fixtures.py` that does not exist.
+    let fixture =
+        ParityFixture::load_with_generator_args("saprot_parity", "esm2", "--variant saprot", &dev)?;
+
+    for (name, sequence) in SAPROT_PARITY_SEQUENCES {
+        let ref_logits = fixture.tensor(&format!("{name}_logits"))?;
+        let output = saprot.run_forward(sequence)?;
+        let rust_logits = align_rows(&output.logits, SpecialTokens::BOS_EOS)?;
+
+        // Pin the residue count explicitly. If the pair alphabet were ever read
+        // one character at a time this would be 2L and the row-wise comparison
+        // below would fail with a confusing shape error instead of a clear one.
+        assert_eq!(
+            rust_logits.dim(0)?,
+            sequence.len() / 2,
+            "{name}: SaProt reads two characters per residue"
+        );
+
+        assert_logits_close(&rust_logits, ref_logits, SAPROT_LOGIT_TOLERANCE)?;
+        println!("{name}: SaProt logit parity OK (tol {SAPROT_LOGIT_TOLERANCE:.1e})");
+    }
+    Ok(())
+}

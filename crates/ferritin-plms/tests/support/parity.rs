@@ -98,6 +98,11 @@ pub const PARITY_COVERAGE: &[ParityCoverage] = &[
         status: CoverageStatus::Committed,
     },
     ParityCoverage {
+        fixture: "saprot_parity",
+        generator: "esm2",
+        status: CoverageStatus::Committed,
+    },
+    ParityCoverage {
         fixture: "esm3_parity",
         generator: "esm3",
         status: CoverageStatus::Committed,
@@ -165,14 +170,35 @@ impl ParityFixture {
     /// fixtures whose file stem does not match their `generate_<X>_fixtures.py`
     /// script. `generator` is the `<X>` in that filename.
     pub fn load_with_generator(name: &str, generator: &str, device: &Device) -> Result<Self> {
+        Self::load_with_generator_args(name, generator, "", device)
+    }
+
+    /// Like [`load_with_generator`](Self::load_with_generator) but appends extra
+    /// flags to the suggested command, for generators that produce more than one
+    /// fixture and need to be told which.
+    ///
+    /// Worth the extra method: the command in this error message is the one a
+    /// reader will actually run, and `generate_esm2_fixtures.py` without
+    /// `--variant saprot` cheerfully regenerates the *ESM-2* fixture and leaves
+    /// the missing SaProt one missing. ferritin-100.33 was made possible by a
+    /// generator that could not be run as documented, so a command printed here
+    /// should be correct as printed (ferritin-100.34).
+    pub fn load_with_generator_args(
+        name: &str,
+        generator: &str,
+        extra_args: &str,
+        device: &Device,
+    ) -> Result<Self> {
         let path = fixture_path(name);
         if !path.exists() {
             bail!(
                 "Parity fixture not found at {}.\n\
-                 Generate it with: python scripts/generate_{}_fixtures.py \
+                 Generate it with: python scripts/generate_{}_fixtures.py{}{} \
                  --output crates/ferritin-plms/tests/fixtures/",
                 path.display(),
                 generator,
+                if extra_args.is_empty() { "" } else { " " },
+                extra_args,
             );
         }
         let tensors = candle_core::safetensors::load(&path, device)?;

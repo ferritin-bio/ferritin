@@ -45,13 +45,31 @@ disagree". See `ferritin-100.33`.
 - New guard `test_every_family_has_a_verified_member` fails if any family with
   a loadable row has no verified member, so a whole architecture can no longer
   go unchecked while reading as merely "not checked" in the support matrix.
+- SaProt-35M is now parity-verified against the HuggingFace reference (logit
+  tolerance 1e-3). It shares `Family::Esm2` with the verified `esm2-t6-8m`, so
+  the family guard already counted it as covered — but the half it does *not*
+  share is the alphabet: two characters per residue over 446 tokens from a bare
+  `vocab.txt`. Read that alphabet one character at a time and you still get a
+  well-formed tensor, just with twice the rows and every other one `<unk>`,
+  which is why it needed its own fixture (`ferritin-100.34`).
+- `scripts/generate_esm2_fixtures.py` grew a `--variant saprot` mode, and now
+  fails loudly if a sequence tokenizes to the wrong residue count or contains
+  `<unk>` — a parity fixture over `<unk>` rows compares two models' opinions
+  about nothing.
 
 ### Reading the support matrix
 
 `not checked` now documents itself as "this output could be anything" rather
-than "not known to be wrong". Twenty registry rows remain `Unverified`; each
-inherits trust from a verified sibling in its family rather than being checked
-itself. Weigh a row by whether its family has a verified member.
+than "not known to be wrong". Nineteen registry rows remain `Unverified`.
+
+Weigh such a row by how much it really shares with a verified one. A shared
+`Family` tag is a claim about the *backbone*, not the whole path — SaProt proved
+that by needing its own fixture despite sitting in an already-covered family.
+`fastesm2-650`, `pepmlm-650m` and `dplm-650m` wear the `Esm2` tag with the same
+caveat and remain unchecked (`dplm-650m` is a diffusion model, not a masked LM).
+The rows where inherited trust is genuinely reasonable are the same-path ones:
+the `esm2-t*` ladder, the five `esm1v` members, `esm1b`, `amplify-350m`,
+`ankh-large`, `esmc-600m` and `esmc-6b`.
 
 ## v0.3.3 and earlier
 

@@ -40,3 +40,9 @@
 # that closed the last whole-family parity gap: Family::Esmc held three rows and
 # nothing checked any of them (ferritin-100.33).
 !esmc_parity.safetensors
+# 48 KB: (11, 446), (9, 446) and (9, 446) F32 logits. Small despite the 446-token
+# vocabulary because the sequences are short. Checks the half of SaProt that its
+# Family::Esm2 tag does NOT cover — the two-character (amino acid, 3Di) product
+# alphabet read from a bare vocab.txt, rather than the shared backbone
+# (ferritin-100.34).
+!saprot_parity.safetensors
