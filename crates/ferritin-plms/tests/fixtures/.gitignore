@@ -33,6 +33,9 @@
 # it is 2.3 MB (ferritin-100.11).
 !proteinmpnn_parity.safetensors
 !ligandmpnn_parity.safetensors
+# 260 B: three scalar residue log-likelihoods for ProGen2-small. This is the
+# numerical check for the autoregressive scoring port (ferritin-goh.8).
+!progen2_parity.safetensors
 # 293 KB: (78, 960) F32 embeddings for one 76-residue sequence, BOS/EOS rows
 # kept so a mismatch in special-token placement surfaces at position 0 or L+1
 # rather than passing silently. Larger than the other embedding fixtures only

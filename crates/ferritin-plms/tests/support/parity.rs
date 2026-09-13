@@ -152,6 +152,11 @@ pub const PARITY_COVERAGE: &[ParityCoverage] = &[
         generator: "mpnn",
         status: CoverageStatus::Committed,
     },
+    ParityCoverage {
+        fixture: "progen2_parity",
+        generator: "progen2",
+        status: CoverageStatus::Committed,
+    },
 ];
 
 /// Look up a fixture's declared coverage, if it is declared at all.
