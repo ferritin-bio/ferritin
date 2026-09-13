@@ -110,3 +110,19 @@ Two known display quirks, neither of them a fault: `bd dolt show` reports
 views disagree, and `remote list` is the accurate one. And `sync.remote` in
 `.beads/config.yaml` is a `git+https://` URL while `origin` is SSH; this is
 deliberate (see the comment there) and does not impede the push.
+
+### Local safety net: pre-push hook
+
+`.git/hooks` is not version-controlled, so it cannot durably fix this for every
+clone — but as a per-machine backstop, `scripts/install-git-hooks.sh` appends a
+`bd dolt push` step to `.git/hooks/pre-push` (after the beads-managed markers, so
+a `bd` hook reinstall won't silently remove it — though it will need re-running).
+It warns loudly on failure but never blocks the code push. Run it once per clone:
+
+```bash
+sh scripts/install-git-hooks.sh
+```
+
+This does not replace the manual `bd dolt push` in Session Completion above —
+it is a backstop for the case where that step gets forgotten, not a substitute
+for it.
