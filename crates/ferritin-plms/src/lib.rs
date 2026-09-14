@@ -103,7 +103,7 @@ pub use generative::GenerativeModel;
 pub use ligandmpnn::configs::ProteinMPNNConfig;
 pub use ligandmpnn::model::ProteinMPNN;
 pub use ligandmpnn::pmpnn_runner::{ProteinMPNNModels, ProteinMPNNRunner};
-pub use progen::{ProGen2, ProGenConfig, ProGenModels};
+pub use progen::{ProGen2, ProGenConfig, ProGenModels, ProGenSamplingOptions};
 pub use t5::runner::{T5Models, T5Runner};
 pub use t5::translator::{ProstT5Models, ProstT5Translator};
 

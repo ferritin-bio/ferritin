@@ -17,6 +17,7 @@ use candle_nn::{
     Embedding, LayerNorm, Linear, VarBuilder, embedding, layer_norm, linear, linear_no_bias,
 };
 use serde::Deserialize;
+use std::cmp::Ordering;
 use tokenizers::Tokenizer;
 
 const QKV_MODEL_PARALLEL_CHUNKS: usize = 8;
@@ -24,6 +25,132 @@ const START_TOKEN: u32 = 3; // tokenizer token "1"
 const END_TOKEN: u32 = 4; // tokenizer token "2"
 const FIRST_RESIDUE_TOKEN: u32 = 5;
 const LAST_RESIDUE_TOKEN: u32 = 29;
+
+/// Sampling controls for [`ProGen2::sample`].
+#[derive(Debug, Clone, Copy)]
+pub struct ProGenSamplingOptions {
+    /// Maximum number of residues to append to the prefix.
+    pub max_new_tokens: usize,
+    /// Logit temperature. Must be finite and strictly positive.
+    pub temperature: f32,
+    /// Nucleus-sampling mass. Must be in `(0, 1]`.
+    pub top_p: f32,
+    /// Seed for the deterministic sampler.
+    pub seed: u64,
+}
+
+impl Default for ProGenSamplingOptions {
+    fn default() -> Self {
+        Self {
+            max_new_tokens: 128,
+            temperature: 1.0,
+            top_p: 1.0,
+            seed: 0,
+        }
+    }
+}
+
+impl ProGenSamplingOptions {
+    fn validate(self) -> Result<()> {
+        if !self.temperature.is_finite() || self.temperature <= 0.0 {
+            bail!(
+                "ProGen sampling temperature must be finite and > 0, got {}",
+                self.temperature
+            );
+        }
+        if !self.top_p.is_finite() || self.top_p <= 0.0 || self.top_p > 1.0 {
+            bail!(
+                "ProGen sampling top_p must be finite and in (0, 1], got {}",
+                self.top_p
+            );
+        }
+        Ok(())
+    }
+}
+
+/// Small deterministic PRNG used so sampling does not depend on backend or
+/// global framework RNG state.
+#[derive(Debug, Clone, Copy)]
+struct SplitMix64 {
+    state: u64,
+}
+
+impl SplitMix64 {
+    fn new(seed: u64) -> Self {
+        Self { state: seed }
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        self.state = self.state.wrapping_add(0x9e3779b97f4a7c15);
+        let mut z = self.state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
+        z ^ (z >> 31)
+    }
+
+    fn next_unit_f64(&mut self) -> f64 {
+        // Use the high 53 bits, which map exactly into [0, 1).
+        (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64
+    }
+}
+
+fn sample_token_from_logits(
+    logits: &[f32],
+    options: ProGenSamplingOptions,
+    rng: &mut SplitMix64,
+) -> Result<u32> {
+    let mut candidates =
+        Vec::with_capacity((LAST_RESIDUE_TOKEN - FIRST_RESIDUE_TOKEN + 1) as usize + 1);
+    candidates.push(END_TOKEN);
+    candidates.extend(FIRST_RESIDUE_TOKEN..=LAST_RESIDUE_TOKEN);
+
+    let mut ranked = candidates
+        .into_iter()
+        .map(|id| {
+            let logit = logits
+                .get(id as usize)
+                .copied()
+                .ok_or_else(|| anyhow!("ProGen logits do not contain token id {id}"))?;
+            if !logit.is_finite() {
+                bail!("ProGen sampling received a non-finite logit for token id {id}");
+            }
+            Ok((id, logit as f64 / options.temperature as f64))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    ranked.sort_by(|left, right| right.1.partial_cmp(&left.1).unwrap_or(Ordering::Equal));
+
+    let max_logit = ranked[0].1;
+    let weights: Vec<f64> = ranked
+        .iter()
+        .map(|(_, logit)| (logit - max_logit).exp())
+        .collect();
+    let total_weight: f64 = weights.iter().sum();
+    if !total_weight.is_finite() || total_weight <= 0.0 {
+        bail!("ProGen sampling could not normalize the candidate logits");
+    }
+
+    let mut kept = Vec::with_capacity(ranked.len());
+    let mut cumulative = 0.0;
+    for ((id, _), weight) in ranked.iter().zip(weights.iter()) {
+        kept.push((*id, *weight));
+        cumulative += weight / total_weight;
+        if cumulative >= options.top_p as f64 {
+            break;
+        }
+    }
+
+    let kept_total: f64 = kept.iter().map(|(_, weight)| weight).sum();
+    let mut draw = rng.next_unit_f64() * kept_total;
+    for (id, weight) in kept {
+        if draw < weight {
+            return Ok(id);
+        }
+        draw -= weight;
+    }
+
+    // Floating-point roundoff can leave a tiny residual after the final bin.
+    Ok(ranked[0].0)
+}
 
 /// Configuration fields used by the ProGen custom HuggingFace model.
 #[derive(Debug, Clone)]
@@ -483,6 +610,55 @@ impl ProGen2 {
         let input_ids = Tensor::from_vec(ids.clone(), (1, ids.len()), &self.device)?;
         Ok(self.model.forward(&input_ids)?.to_dtype(DType::F32)?)
     }
+
+    /// Sample a bounded continuation from a protein prefix.
+    ///
+    /// The prefix is encoded with ProGen's explicit `"1"` start token. Each
+    /// step samples only residue tokens or the explicit `"2"` terminal token;
+    /// the latter stops generation and is not included in the returned
+    /// sequence. Sampling is deterministic for a fixed prefix and seed.
+    pub fn sample(&self, prefix: &str, options: ProGenSamplingOptions) -> Result<String> {
+        options.validate()?;
+
+        let mut input_ids = if prefix.is_empty() {
+            vec![START_TOKEN]
+        } else {
+            let mut ids = self.token_ids(prefix)?;
+            ids.pop(); // Do not feed the scoring-only terminal token as context.
+            ids
+        };
+
+        if input_ids.len() + options.max_new_tokens > self.config.n_positions {
+            bail!(
+                "ProGen sampling prefix plus max_new_tokens ({}) exceeds the {}-token context window",
+                input_ids.len() + options.max_new_tokens,
+                self.config.n_positions
+            );
+        }
+
+        let mut output = String::from(prefix);
+        let mut rng = SplitMix64::new(options.seed);
+        for _ in 0..options.max_new_tokens {
+            let input = Tensor::from_vec(input_ids.clone(), (1, input_ids.len()), &self.device)?;
+            let logits = self.model.forward(&input)?.to_dtype(DType::F32)?;
+            let next_logits = logits.i((0, input_ids.len() - 1, ..))?.to_vec1::<f32>()?;
+            let next = sample_token_from_logits(&next_logits, options, &mut rng)?;
+            if next == END_TOKEN {
+                break;
+            }
+
+            let token = self
+                .tokenizer
+                .id_to_token(next)
+                .ok_or_else(|| anyhow!("ProGen tokenizer has no token for sampled id {next}"))?;
+            if token.chars().count() != 1 {
+                bail!("ProGen sampled token id {next} decoded to invalid token {token:?}");
+            }
+            output.push_str(&token);
+            input_ids.push(next);
+        }
+        Ok(output)
+    }
 }
 
 impl GenerativeModel for ProGen2 {
@@ -666,6 +842,73 @@ mod tests {
         let mean = runner.mean_log_likelihood("ACD")?;
         assert!(sum.is_finite() && mean.is_finite());
         assert!((sum / 3.0 - mean).abs() < 1e-5);
+        Ok(())
+    }
+
+    #[test]
+    fn test_sampling_is_seeded_and_bounded() -> Result<()> {
+        let runner = tiny_runner()?;
+        let options = ProGenSamplingOptions {
+            max_new_tokens: 4,
+            temperature: 0.9,
+            top_p: 0.8,
+            seed: 42,
+        };
+        let first = runner.sample("ACD", options)?;
+        let second = runner.sample("ACD", options)?;
+        assert_eq!(first, second);
+        assert!(first.starts_with("ACD"));
+        assert!(first.len() <= 7);
+        runner.token_ids(&first)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_sampling_rejects_context_overflow() -> Result<()> {
+        let runner = tiny_runner()?;
+        let prefix = "A".repeat(30);
+        let error = runner
+            .sample(
+                &prefix,
+                ProGenSamplingOptions {
+                    max_new_tokens: 2,
+                    ..Default::default()
+                },
+            )
+            .expect_err("sampling should reject a continuation beyond the context window");
+        assert!(error.to_string().contains("context window"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_sampling_rejects_invalid_controls() -> Result<()> {
+        let runner = tiny_runner()?;
+        for options in [
+            ProGenSamplingOptions {
+                temperature: 0.0,
+                ..Default::default()
+            },
+            ProGenSamplingOptions {
+                top_p: 0.0,
+                ..Default::default()
+            },
+            ProGenSamplingOptions {
+                top_p: 1.1,
+                ..Default::default()
+            },
+        ] {
+            assert!(runner.sample("A", options).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_sampling_can_select_the_explicit_terminal_token() -> Result<()> {
+        let mut logits = vec![0.0; 32];
+        logits[END_TOKEN as usize] = 100.0;
+        let mut rng = SplitMix64::new(7);
+        let next = sample_token_from_logits(&logits, ProGenSamplingOptions::default(), &mut rng)?;
+        assert_eq!(next, END_TOKEN);
         Ok(())
     }
 }
