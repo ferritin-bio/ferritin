@@ -15,6 +15,7 @@ use anyhow::Result;
 use bevy::ecs::hierarchy::ChildSpawnerCommands;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
+use bevy::ui::FocusPolicy;
 use bevy_feathers::{
     FeathersPlugins,
     dark_theme::create_dark_theme,
@@ -48,6 +49,12 @@ enum ButtonAction {
     SetRender(RenderOptions),
     SetColor(ColorScheme),
 }
+
+/// Marks a clickable control. Stands in for `bevy::ui::Button`, which bevy 0.20
+/// deprecated and made unconstructible; spawn it with `Interaction` and
+/// `FocusPolicy::Block`, which `Button` used to require.
+#[derive(Component)]
+struct UiButton;
 
 /// Orbit camera state. The camera always looks at `focus` from a distance of
 /// `radius`, oriented by `yaw` (around Y) and `pitch` (elevation).
@@ -190,7 +197,7 @@ fn rebuild_protein(
 fn handle_button_interactions(
     mut query: Query<
         (&Interaction, &ButtonAction, &mut BackgroundColor),
-        (Changed<Interaction>, With<Button>),
+        (Changed<Interaction>, With<UiButton>),
     >,
     mut state: ResMut<ViewerState>,
 ) {
@@ -347,7 +354,9 @@ fn spawn_control_row(
 
             for (caption, action) in buttons {
                 row.spawn((
-                    Button,
+                    UiButton,
+                    Interaction::default(),
+                    FocusPolicy::Block,
                     action.clone(),
                     Node {
                         padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),

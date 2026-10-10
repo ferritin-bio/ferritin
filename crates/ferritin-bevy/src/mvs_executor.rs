@@ -184,6 +184,7 @@ fn apply_molecular_camera_defaults(
             ScreenSpaceAmbientOcclusion {
                 quality_level: ScreenSpaceAmbientOcclusionQualityLevel::High,
                 constant_object_thickness: 0.25,
+                ..Default::default()
             },
         ));
     }
