@@ -20,12 +20,18 @@
 //! Run with:
 //!   cargo run --example bevy_molviewspec_viewer --features bevy -p ferritin-examples
 
+#![allow(
+    deprecated,
+    reason = "bevy 0.20 deprecated Interaction; migration tracked in ferritin-f3m"
+)]
+
 use anyhow::Result;
 use bevy::ecs::hierarchy::ChildSpawnerCommands;
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
+use bevy::ui::FocusPolicy;
 use bevy_feathers::{
     FeathersPlugins,
     dark_theme::create_dark_theme,
@@ -110,6 +116,12 @@ struct LoadButton;
 
 #[derive(Component)]
 struct PathFieldButton;
+
+/// Marks a clickable node. Stands in for `bevy::ui::Button`, which bevy 0.20
+/// deprecated and made unconstructible; spawn it with `Interaction` and
+/// `FocusPolicy::Block`, which `Button` used to require.
+#[derive(Component)]
+struct UiButton;
 
 #[derive(Component)]
 struct PathText;
@@ -878,7 +890,7 @@ fn spawn_tree_row(
     ));
     // Only nodes with children are interactive (collapse toggle).
     if has_children {
-        row.insert(Button);
+        row.insert((UiButton, Interaction::default(), FocusPolicy::Block));
     }
     row.with_children(|r| {
         r.spawn((Text::new(label), TextColor(TEXT_BRIGHT)));
@@ -920,7 +932,9 @@ fn spawn_top_bar(root: &mut ChildSpawnerCommands) {
 
         // Editable file-path field (click to focus, then type).
         bar.spawn((
-            Button,
+            UiButton,
+            Interaction::default(),
+            FocusPolicy::Block,
             PathFieldButton,
             Node {
                 min_width: Val::Px(360.0),
@@ -1043,7 +1057,9 @@ fn spawn_status_bar(root: &mut ChildSpawnerCommands) {
 fn spawn_text_button<C: Component>(parent: &mut ChildSpawnerCommands, caption: &str, marker: C) {
     parent
         .spawn((
-            Button,
+            UiButton,
+            Interaction::default(),
+            FocusPolicy::Block,
             marker,
             Node {
                 padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
@@ -1066,7 +1082,7 @@ fn button_hover_colors(
         (&Interaction, &mut BackgroundColor),
         (
             Changed<Interaction>,
-            With<Button>,
+            With<UiButton>,
             Without<TreeRow>,
             Without<PathFieldButton>,
         ),

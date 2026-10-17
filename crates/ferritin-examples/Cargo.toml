@@ -25,7 +25,7 @@ candle-metal-kernels = { workspace = true, optional = true }
 candle-nn.workspace = true
 clap.workspace = true
 ferritin-bevy = { path = "../ferritin-bevy" }
-bevy_feathers = "0.19.1"
+bevy_feathers = "0.20.0"
 ferritin-core = { path = "../ferritin-core" }
 ferritin-molviewspec = { path = "../ferritin-molviewspec" }
 ferritin-plms = { path = "../ferritin-plms" }

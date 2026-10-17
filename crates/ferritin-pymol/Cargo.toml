@@ -13,7 +13,7 @@ clap.workspace = true
 pdbtbx = "0.12.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
-bitflags = { workspace = true }
+bitflags = "2.13"
 itertools.workspace = true
 memchr = "2.7.4"
 serde-pickle = "1.2"
