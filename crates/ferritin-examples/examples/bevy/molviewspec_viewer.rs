@@ -20,6 +20,11 @@
 //! Run with:
 //!   cargo run --example bevy_molviewspec_viewer --features bevy -p ferritin-examples
 
+#![allow(
+    deprecated,
+    reason = "bevy 0.20 deprecated Interaction; migration tracked in ferritin-f3m"
+)]
+
 use anyhow::Result;
 use bevy::ecs::hierarchy::ChildSpawnerCommands;
 use bevy::input::ButtonState;
