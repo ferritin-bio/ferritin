@@ -23,6 +23,24 @@ use std::io::Read;
 use urlencoding;
 use validator::Validate;
 
+/// Tolerance used by [`is_rotation_matrix`], matching the Python builder.
+const ROTATION_DET_EPS: f64 = 0.005;
+
+/// Whether `t` is a 3x3 rotation matrix: nine values whose determinant has
+/// magnitude 1 (within [`ROTATION_DET_EPS`]).
+///
+/// Mirrors `_is_rotation_matrix` in the Python mol-view-spec builder, including
+/// its use of `|det|`. The determinant is the same for row- and column-major
+/// order, so either layout is accepted.
+pub fn is_rotation_matrix(t: &[f64]) -> bool {
+    let &[a00, a10, a20, a01, a11, a21, a02, a12, a22] = t else {
+        return false;
+    };
+    let det = a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20)
+        + a02 * (a10 * a21 - a11 * a20);
+    (det.abs() - 1.0).abs() <= ROTATION_DET_EPS
+}
+
 // KindT
 //
 // Enum of node types corresponding to the MolViewSpec Nodes
@@ -313,19 +331,57 @@ impl Node {
             None
         }
     }
-    pub fn label_from_uri() {
-        unimplemented!()
+    /// Add labels loaded from an external annotation file.
+    pub fn label_from_uri(&mut self, params: LabelFromUriParams) -> Option<&mut Node> {
+        self.push_structure_child(KindT::LabelFromUri, NodeParams::LabelFromUriParams(params))
     }
-    pub fn label_from_source() {
-        unimplemented!()
+
+    /// Add labels read from a category of the structure's own source file.
+    pub fn label_from_source(&mut self, params: LabelFromSourceParams) -> Option<&mut Node> {
+        self.push_structure_child(
+            KindT::LabelFromSource,
+            NodeParams::LabelFromSourceParams(params),
+        )
     }
-    pub fn tooltip_from_uri() {
-        unimplemented!()
+
+    /// Add tooltips loaded from an external annotation file.
+    pub fn tooltip_from_uri(&mut self, params: TooltipFromUriParams) -> Option<&mut Node> {
+        self.push_structure_child(
+            KindT::TooltipFromUri,
+            NodeParams::TooltipFromUriParams(params),
+        )
     }
-    pub fn tooltip_from_source() {
-        unimplemented!()
+
+    /// Add tooltips read from a category of the structure's own source file.
+    pub fn tooltip_from_source(&mut self, params: TooltipFromSourceParams) -> Option<&mut Node> {
+        self.push_structure_child(
+            KindT::TooltipFromSource,
+            NodeParams::TooltipFromSourceParams(params),
+        )
     }
+
+    /// Append a child to a structure node; `None` if `self` is not a structure.
+    fn push_structure_child(&mut self, kind: KindT, params: NodeParams) -> Option<&mut Node> {
+        if self.kind != KindT::Structure {
+            return None;
+        }
+        let children = self.children.get_or_insert_with(Vec::new);
+        children.push(Node::new(kind, Some(params)));
+        children.last_mut()
+    }
+
+    /// Add a transform to a structure.
+    ///
+    /// Returns `None` if `self` is not a structure, or if `params.rotation` is
+    /// non-empty and not a 3x3 rotation matrix (see [`is_rotation_matrix`]); the
+    /// Python builder raises `ValueError` in that case.
     pub fn transform(&mut self, params: TransformParams) -> Option<&mut Node> {
+        if let Some(rotation) = &params.rotation
+            && !rotation.is_empty()
+            && !is_rotation_matrix(rotation)
+        {
+            return None;
+        }
         if self.kind == KindT::Structure {
             let transform_node =
                 Node::new(KindT::Transform, Some(NodeParams::TransformParams(params)));
@@ -336,9 +392,6 @@ impl Node {
         } else {
             None
         }
-    }
-    pub fn _is_rotation_matrix() {
-        unimplemented!()
     }
     // Component methods ------------------------------------------------------
 
