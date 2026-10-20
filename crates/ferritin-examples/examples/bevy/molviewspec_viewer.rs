@@ -18,20 +18,17 @@
 //! `ferritin-bevy-feathers-icons-2026-06-30`.
 //!
 //! Run with:
-//!   cargo run --example bevy_molviewspec_viewer --features bevy -p ferritin-examples
-
-#![allow(
-    deprecated,
-    reason = "bevy 0.20 deprecated Interaction; migration tracked in ferritin-f3m"
-)]
+//!   cargo run --example bevy_molviewspec_viewer -p ferritin-examples
 
 use anyhow::Result;
 use bevy::ecs::hierarchy::ChildSpawnerCommands;
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
-use bevy::ui::FocusPolicy;
+use bevy::ui::Pressed;
+use bevy::ui_widgets::{Activate, Button};
 use bevy_feathers::{
     FeathersPlugins,
     dark_theme::create_dark_theme,
@@ -117,12 +114,6 @@ struct LoadButton;
 #[derive(Component)]
 struct PathFieldButton;
 
-/// Marks a clickable node. Stands in for `bevy::ui::Button`, which bevy 0.20
-/// deprecated and made unconstructible; spawn it with `Interaction` and
-/// `FocusPolicy::Block`, which `Button` used to require.
-#[derive(Component)]
-struct UiButton;
-
 #[derive(Component)]
 struct PathText;
 
@@ -155,23 +146,23 @@ fn main() -> Result<()> {
         .insert_resource(TreeCollapse::default())
         .insert_resource(TreeDirty(false))
         .add_systems(Startup, (setup_scene, setup_ui))
+        .add_observer(on_preset_activate)
+        .add_observer(on_load_activate)
+        .add_observer(on_path_field_activate)
+        .add_observer(on_tree_row_activate)
         .add_systems(
             Update,
             (
-                handle_preset_buttons,
-                handle_load_button,
-                handle_path_field_focus,
                 edit_path_field,
                 update_path_text,
                 collect_errors,
                 mark_tree_dirty_on_load,
                 rebuild_tree,
-                handle_tree_rows,
                 render_status,
                 autoframe_on_load,
                 orbit_input,
                 sync_camera,
-                button_hover_colors,
+                button_colors,
             ),
         )
         .run();
@@ -595,59 +586,54 @@ fn tree_has_camera_or_focus(node: &MvsNode) -> bool {
 
 // ---- Button / load handling ----------------------------------------------------
 
-fn handle_preset_buttons(
-    query: Query<(&Interaction, &PresetButton), Changed<Interaction>>,
+/// A preset button loads its MVS state and takes focus away from the path field.
+fn on_preset_activate(
+    activate: On<Activate>,
+    buttons: Query<&PresetButton>,
     presets: Res<Presets>,
     mut loader: MessageWriter<LoadMvsEvent>,
     mut status: ResMut<StatusBar>,
+    mut path_input: ResMut<PathInput>,
 ) {
-    for (interaction, button) in &query {
-        if *interaction == Interaction::Pressed
-            && let Some(preset) = presets.0.get(button.0)
-        {
-            loader.write(LoadMvsEvent::FromString(preset.json.clone()));
-            status.text = format!("Loaded preset: {}", preset.name);
-            status.error = false;
-        }
+    let Ok(button) = buttons.get(activate.entity) else {
+        return;
+    };
+    path_input.focused = false;
+    if let Some(preset) = presets.0.get(button.0) {
+        loader.write(LoadMvsEvent::FromString(preset.json.clone()));
+        status.text = format!("Loaded preset: {}", preset.name);
+        status.error = false;
     }
 }
 
-fn handle_load_button(
-    query: Query<&Interaction, (Changed<Interaction>, With<LoadButton>)>,
+fn on_load_activate(
+    activate: On<Activate>,
+    buttons: Query<(), With<LoadButton>>,
     path_input: Res<PathInput>,
     mut loader: MessageWriter<LoadMvsEvent>,
     mut status: ResMut<StatusBar>,
 ) {
-    for interaction in &query {
-        if *interaction == Interaction::Pressed {
-            let path = path_input.text.trim();
-            if path.is_empty() {
-                status.text = "Enter a .mvsj file path first.".to_string();
-                status.error = true;
-            } else {
-                loader.write(LoadMvsEvent::FromFile(PathBuf::from(path)));
-                status.text = format!("Loading {path} ...");
-                status.error = false;
-            }
-        }
+    if !buttons.contains(activate.entity) {
+        return;
+    }
+    let path = path_input.text.trim();
+    if path.is_empty() {
+        status.text = "Enter a .mvsj file path first.".to_string();
+        status.error = true;
+    } else {
+        loader.write(LoadMvsEvent::FromFile(PathBuf::from(path)));
+        status.text = format!("Loading {path} ...");
+        status.error = false;
     }
 }
 
-fn handle_path_field_focus(
-    query: Query<&Interaction, (Changed<Interaction>, With<PathFieldButton>)>,
-    presets: Query<&Interaction, (Changed<Interaction>, With<PresetButton>)>,
+fn on_path_field_activate(
+    activate: On<Activate>,
+    fields: Query<(), With<PathFieldButton>>,
     mut path_input: ResMut<PathInput>,
 ) {
-    for interaction in &query {
-        if *interaction == Interaction::Pressed {
-            path_input.focused = true;
-        }
-    }
-    // Clicking a preset takes focus away from the text field.
-    for interaction in &presets {
-        if *interaction == Interaction::Pressed {
-            path_input.focused = false;
-        }
+    if fields.contains(activate.entity) {
+        path_input.focused = true;
     }
 }
 
@@ -753,21 +739,20 @@ fn mark_tree_dirty_on_load(state_res: Res<MvsStateResource>, mut dirty: ResMut<T
     }
 }
 
-fn handle_tree_rows(
-    query: Query<(&Interaction, &TreeRow), Changed<Interaction>>,
+/// Clicking an inspector row with children toggles its collapse state.
+fn on_tree_row_activate(
+    activate: On<Activate>,
+    rows: Query<&TreeRow>,
     mut collapse: ResMut<TreeCollapse>,
     mut dirty: ResMut<TreeDirty>,
 ) {
-    for (interaction, row) in &query {
-        if *interaction == Interaction::Pressed {
-            if collapse.0.contains(&row.0) {
-                collapse.0.remove(&row.0);
-            } else {
-                collapse.0.insert(row.0.clone());
-            }
-            dirty.0 = true;
-        }
+    let Ok(row) = rows.get(activate.entity) else {
+        return;
+    };
+    if !collapse.0.remove(&row.0) {
+        collapse.0.insert(row.0.clone());
     }
+    dirty.0 = true;
 }
 
 fn rebuild_tree(
@@ -890,7 +875,7 @@ fn spawn_tree_row(
     ));
     // Only nodes with children are interactive (collapse toggle).
     if has_children {
-        row.insert((UiButton, Interaction::default(), FocusPolicy::Block));
+        row.insert(Button);
     }
     row.with_children(|r| {
         r.spawn((Text::new(label), TextColor(TEXT_BRIGHT)));
@@ -932,9 +917,7 @@ fn spawn_top_bar(root: &mut ChildSpawnerCommands) {
 
         // Editable file-path field (click to focus, then type).
         bar.spawn((
-            UiButton,
-            Interaction::default(),
-            FocusPolicy::Block,
+            Button,
             PathFieldButton,
             Node {
                 min_width: Val::Px(360.0),
@@ -1057,9 +1040,8 @@ fn spawn_status_bar(root: &mut ChildSpawnerCommands) {
 fn spawn_text_button<C: Component>(parent: &mut ChildSpawnerCommands, caption: &str, marker: C) {
     parent
         .spawn((
-            UiButton,
-            Interaction::default(),
-            FocusPolicy::Block,
+            Button,
+            Hovered::default(),
             marker,
             Node {
                 padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
@@ -1075,25 +1057,18 @@ fn spawn_text_button<C: Component>(parent: &mut ChildSpawnerCommands, caption: &
         });
 }
 
-/// Hover/press feedback for the action buttons (not the tree rows or path field).
-#[allow(clippy::type_complexity)] // idiomatic Bevy query type
-fn button_hover_colors(
-    mut query: Query<
-        (&Interaction, &mut BackgroundColor),
-        (
-            Changed<Interaction>,
-            With<UiButton>,
-            Without<TreeRow>,
-            Without<PathFieldButton>,
-        ),
-    >,
-) {
-    for (interaction, mut bg) in &mut query {
-        *bg = match *interaction {
-            Interaction::Pressed => BackgroundColor(BTN_ACTIVE),
-            Interaction::Hovered => BackgroundColor(BTN_HOVER),
-            Interaction::None => BackgroundColor(BTN_NORMAL),
+/// Hover/press feedback for the action buttons. Tree rows and the path field
+/// are spawned without `Hovered`, so they keep their own background.
+fn button_colors(mut query: Query<(&Hovered, Has<Pressed>, &mut BackgroundColor), With<Button>>) {
+    for (hovered, pressed, mut bg) in &mut query {
+        let color = if pressed {
+            BTN_ACTIVE
+        } else if hovered.get() {
+            BTN_HOVER
+        } else {
+            BTN_NORMAL
         };
+        bg.set_if_neq(BackgroundColor(color));
     }
 }
 
