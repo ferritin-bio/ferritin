@@ -77,6 +77,19 @@ rather than by inheritance. What remains unchecked is now genuinely of the
 members, `esm1b`, `saprot-650m-af2`, `amplify-350m`, `ankh-large`, `esmc-600m`
 and `esmc-6b`.
 
+### Columnar WASM/FFI/GPU boundary in ferritin-core
+
+New `ferritin_core::columns` module: a dependency-free contract for handing a
+`Model` to wasm-bindgen, FFI, or GPU consumers. `TopologyColumns` encodes a
+hierarchy once (dictionary-encoded strings, sentinel-encoded optionals, `u32`
+handles with checked navigation) and pins its `Arc`, so pairing a frame with a
+stale snapshot fails with a `StaleTopology` error instead of exporting
+mismatched columns. `FrameColumns` borrows per-frame coordinates zero-copy, and
+`GpuBuffer` describes uploads by scalar type, components, and stride, including
+the 16-byte `Padded4` position layout that storage buffers require. Errors
+carry stable numeric codes. See the module docs for the ownership and
+invalidation table.
+
 ## v0.3.3 and earlier
 
 See the git history. Note the ProteinMPNN correctness notice above, which

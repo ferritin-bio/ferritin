@@ -73,6 +73,11 @@ impl Segmentation {
         Self { offsets }
     }
 
+    /// Raw CSR offsets (`count() + 1` entries, starting at 0).
+    pub fn offsets(&self) -> &[u32] {
+        &self.offsets
+    }
+
     /// Number of segments.
     pub fn count(&self) -> usize {
         self.offsets.len().saturating_sub(1)
