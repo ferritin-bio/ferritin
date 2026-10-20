@@ -24,7 +24,7 @@ use std::path::PathBuf;
 
 use bevy::anti_alias::fxaa::Fxaa;
 use bevy::asset::AssetPlugin;
-use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
 use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::prelude::*;
 use bevy::ui::Node as UiNode;
@@ -186,6 +186,8 @@ fn apply_molecular_camera_defaults(
     for entity in &cameras {
         commands.entity(entity).insert((
             Tonemapping::None,
+            // Dithering only acts during tonemapping; bevy warns when it is left on.
+            DebandDither::Disabled,
             Msaa::Off,
             Fxaa::default(),
             ScreenSpaceAmbientOcclusion {
