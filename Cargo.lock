@@ -5623,7 +5623,7 @@ checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
 name = "ferritin"
-version = "0.4.0-dev"
+version = "0.4.1-dev"
 dependencies = [
  "ferritin-bevy",
  "ferritin-core",
@@ -5632,7 +5632,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-bevy"
-version = "0.4.0-dev"
+version = "0.4.1-dev"
 dependencies = [
  "anyhow",
  "bevy",
@@ -5646,7 +5646,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-cellscape"
-version = "0.4.0-dev"
+version = "0.4.1-dev"
 dependencies = [
  "ferritin-core",
  "ferritin-test-data",
@@ -5656,7 +5656,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-core"
-version = "0.4.0-dev"
+version = "0.4.1-dev"
 dependencies = [
  "anyhow",
  "compact_str 0.10.0",
@@ -5667,7 +5667,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-examples"
-version = "0.4.0-dev"
+version = "0.4.1-dev"
 dependencies = [
  "anyhow",
  "bevy",
@@ -5691,7 +5691,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-molviewspec"
-version = "0.4.0-dev"
+version = "0.4.1-dev"
 dependencies = [
  "chrono",
  "serde",
@@ -5702,7 +5702,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-plms"
-version = "0.4.0-dev"
+version = "0.4.1-dev"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -5721,7 +5721,7 @@ dependencies = [
 
 [[package]]
 name = "ferritin-test-data"
-version = "0.4.0-dev"
+version = "0.4.1-dev"
 dependencies = [
  "tempfile",
 ]

@@ -22,8 +22,9 @@
 
 use std::path::PathBuf;
 
+use bevy::anti_alias::fxaa::Fxaa;
 use bevy::asset::AssetPlugin;
-use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
 use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::prelude::*;
 use bevy::ui::Node as UiNode;
@@ -174,6 +175,10 @@ impl Plugin for MvsPlugin {
 /// Applies MVS viewer camera defaults. Tonemapping is disabled so explicit
 /// molecular colors remain legible (ferritin-ala.8), and SSAO is enabled to add
 /// contact shadows/depth cues for dense all-atom scenes (ferritin-c1k.4).
+///
+/// SSAO only runs with `Msaa::Off` — with bevy's default `Msaa::Sample4` it is
+/// skipped and bevy logs an error every frame — so MSAA is disabled and FXAA
+/// supplies edge anti-aliasing instead.
 fn apply_molecular_camera_defaults(
     mut commands: Commands,
     cameras: Query<Entity, Added<Camera3d>>,
@@ -181,6 +186,10 @@ fn apply_molecular_camera_defaults(
     for entity in &cameras {
         commands.entity(entity).insert((
             Tonemapping::None,
+            // Dithering only acts during tonemapping; bevy warns when it is left on.
+            DebandDither::Disabled,
+            Msaa::Off,
+            Fxaa::default(),
             ScreenSpaceAmbientOcclusion {
                 quality_level: ScreenSpaceAmbientOcclusionQualityLevel::High,
                 constant_object_thickness: 0.25,
@@ -1884,6 +1893,15 @@ mod tests {
             ssao.map(|s| s.quality_level),
             Some(ScreenSpaceAmbientOcclusionQualityLevel::High),
             "Camera3d should have SSAO enabled by MvsPlugin"
+        );
+        assert_eq!(
+            app.world().get::<Msaa>(camera),
+            Some(&Msaa::Off),
+            "SSAO requires Msaa::Off; with MSAA on bevy skips SSAO and logs every frame"
+        );
+        assert!(
+            app.world().get::<Fxaa>(camera).is_some(),
+            "FXAA replaces MSAA edge anti-aliasing"
         );
     }
 
