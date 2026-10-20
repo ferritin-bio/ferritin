@@ -27,7 +27,7 @@ use validator::Validate;
 const ROTATION_DET_EPS: f64 = 0.005;
 
 /// Whether `t` is a 3x3 rotation matrix: nine values whose determinant has
-/// magnitude 1 (within [`ROTATION_DET_EPS`]).
+/// magnitude 1 (within 0.005).
 ///
 /// Mirrors `_is_rotation_matrix` in the Python mol-view-spec builder, including
 /// its use of `|det|`. The determinant is the same for row- and column-major
