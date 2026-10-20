@@ -17,6 +17,7 @@
 
 mod atomcollection;
 mod bonds;
+pub mod columns;
 pub mod data;
 pub mod info;
 mod io;
