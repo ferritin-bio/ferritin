@@ -1,7 +1,8 @@
 //! Interactive protein viewer with representation and color controls.
 //!
-//! Uses bevy_feathers for dark-theme panel styling and standard Bevy UI buttons
-//! for switching representation type and color scheme at runtime.
+//! Uses bevy_feathers for dark-theme panel styling and headless
+//! `bevy::ui_widgets::Button`s for switching representation type and color
+//! scheme at runtime.
 //!
 //! Controls:
 //!   Left-drag   — orbit (rotate around molecule)
@@ -9,18 +10,15 @@
 //!   Scroll      — zoom
 //!
 //! Run with:
-//!   cargo run --example bevy_interactive_viewer --features bevy -p ferritin-examples
-
-#![allow(
-    deprecated,
-    reason = "bevy 0.20 deprecated Interaction; migration tracked in ferritin-f3m"
-)]
+//!   cargo run --example bevy_interactive_viewer -p ferritin-examples
 
 use anyhow::Result;
 use bevy::ecs::hierarchy::ChildSpawnerCommands;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
-use bevy::ui::FocusPolicy;
+use bevy::ui::Pressed;
+use bevy::ui_widgets::{Activate, Button};
 use bevy_feathers::{
     FeathersPlugins,
     dark_theme::create_dark_theme,
@@ -54,12 +52,6 @@ enum ButtonAction {
     SetRender(RenderOptions),
     SetColor(ColorScheme),
 }
-
-/// Marks a clickable control. Stands in for `bevy::ui::Button`, which bevy 0.20
-/// deprecated and made unconstructible; spawn it with `Interaction` and
-/// `FocusPolicy::Block`, which `Button` used to require.
-#[derive(Component)]
-struct UiButton;
 
 /// Orbit camera state. The camera always looks at `focus` from a distance of
 /// `radius`, oriented by `yaw` (around Y) and `pitch` (elevation).
@@ -109,11 +101,12 @@ fn main() -> Result<()> {
         .insert_resource(ProteinData(model))
         // rebuild_protein runs whenever ViewerState changes (including initial insertion).
         .add_systems(Startup, (setup_scene, setup_ui))
+        .add_observer(apply_button_action)
         .add_systems(
             Update,
             (
                 rebuild_protein.run_if(resource_changed::<ViewerState>),
-                handle_button_interactions,
+                button_colors,
                 orbit_camera,
             ),
         )
@@ -197,27 +190,32 @@ fn rebuild_protein(
     ));
 }
 
-/// Update ViewerState when a control button is pressed; update hover colours too.
-#[allow(clippy::type_complexity)] // idiomatic Bevy query type
-fn handle_button_interactions(
-    mut query: Query<
-        (&Interaction, &ButtonAction, &mut BackgroundColor),
-        (Changed<Interaction>, With<UiButton>),
-    >,
+/// Update ViewerState when a control button is activated (clicked).
+fn apply_button_action(
+    activate: On<Activate>,
+    actions: Query<&ButtonAction>,
     mut state: ResMut<ViewerState>,
 ) {
-    for (interaction, action, mut bg) in &mut query {
-        match *interaction {
-            Interaction::Pressed => {
-                *bg = BackgroundColor(BTN_ACTIVE);
-                match action {
-                    ButtonAction::SetRender(rt) => state.render_type = rt.clone(),
-                    ButtonAction::SetColor(cs) => state.color_scheme = cs.clone(),
-                }
-            }
-            Interaction::Hovered => *bg = BackgroundColor(BTN_HOVER),
-            Interaction::None => *bg = BackgroundColor(BTN_NORMAL),
-        }
+    let Ok(action) = actions.get(activate.entity) else {
+        return;
+    };
+    match action {
+        ButtonAction::SetRender(rt) => state.render_type = rt.clone(),
+        ButtonAction::SetColor(cs) => state.color_scheme = cs.clone(),
+    }
+}
+
+/// Hover/press feedback for the control buttons.
+fn button_colors(mut query: Query<(&Hovered, Has<Pressed>, &mut BackgroundColor), With<Button>>) {
+    for (hovered, pressed, mut bg) in &mut query {
+        let color = if pressed {
+            BTN_ACTIVE
+        } else if hovered.get() {
+            BTN_HOVER
+        } else {
+            BTN_NORMAL
+        };
+        bg.set_if_neq(BackgroundColor(color));
     }
 }
 
@@ -359,9 +357,8 @@ fn spawn_control_row(
 
             for (caption, action) in buttons {
                 row.spawn((
-                    UiButton,
-                    Interaction::default(),
-                    FocusPolicy::Block,
+                    Button,
+                    Hovered::default(),
                     action.clone(),
                     Node {
                         padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
