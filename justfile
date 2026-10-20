@@ -3,13 +3,6 @@ build:
     cargo build -p ferritin-core
 
 
-# convert all PSEs to msvj folders
-convert: build
-   for file in docs/examples/*.pse; do \
-        ./target/debug/ferritin-pymol --psefile "$file" --outputdir "${file%.*}"; \
-    done
-
-
 docs: build
     # generate and copy rust docs
     cargo doc --workspace --no-deps

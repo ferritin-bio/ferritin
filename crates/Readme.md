@@ -1,9 +1,5 @@
 # Crates
 
-## [ferritin-pymol](./ferritin-pymol)
-
-PyMOL integration for ferritin.
-
 ## [ferritin-molviewspec](./ferritin-molviewspec)
 
 Molecular viewing specifications for ferritin.

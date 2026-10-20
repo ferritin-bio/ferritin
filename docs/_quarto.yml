@@ -1,7 +1,6 @@
 project:
   type: website
   resources:
-    - "examples/**"
     - "doc/**"
 
 website:

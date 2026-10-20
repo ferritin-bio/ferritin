@@ -90,6 +90,13 @@ the 16-byte `Padded4` position layout that storage buffers require. Errors
 carry stable numeric codes. See the module docs for the ownership and
 invalidation table.
 
+### Removed: PyMOL session support
+
+`ferritin-pymol` (PSE → MolViewSpec conversion) is gone, along with its
+`TestFile::pymol_01` fixture and the PSE example page in the docs. It had been
+out of the workspace and its manifest no longer loaded (ferritin-9jg). It can
+come back from git history if PyMOL compatibility is wanted again.
+
 ## v0.3.3 and earlier
 
 See the git history. Note the ProteinMPNN correctness notice above, which
