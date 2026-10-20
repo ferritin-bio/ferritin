@@ -1264,3 +1264,153 @@ fn test_mvsj_file_two_snapshot_sequence() {
     assert_eq!(story.snapshots[0].linger_duration_ms, Some(3000));
     assert_eq!(story.snapshots[1].transition_duration_ms, Some(800));
 }
+
+fn structure_state() -> State {
+    let mut state = State::new();
+    state
+        .download("https://files.wwpdb.org/download/1cbs.cif")
+        .unwrap()
+        .parse(ParseParams {
+            format: ParseFormatT::Mmcif,
+        })
+        .unwrap()
+        .model_structure(StructureParams::default())
+        .unwrap();
+    state
+}
+
+fn structure_node(state: &mut State) -> &mut Node {
+    state.root.children.as_mut().unwrap()[0]
+        .children
+        .as_mut()
+        .unwrap()[0]
+        .children
+        .as_mut()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+}
+
+#[test]
+fn test_label_and_tooltip_builders_roundtrip() {
+    use ferritin_molviewspec::molviewspec::nodes::{
+        DataFromSourceParams, DataFromUriParams, LabelFromSourceParams, LabelFromUriParams,
+        SchemaFormatT, SchemaT, TooltipFromSourceParams, TooltipFromUriParams,
+    };
+
+    let from_uri = || DataFromUriParams {
+        uri: "https://example.org/annotations.cif".to_string(),
+        format: SchemaFormatT::Cif,
+        category_name: Some("labels".to_string()),
+        field_name: Some("text".to_string()),
+        block_header: None,
+        block_index: None,
+        schema_: SchemaT::Residue,
+    };
+    let from_source = || DataFromSourceParams {
+        category_name: "struct_conf".to_string(),
+        field_name: Some("pdbx_PDB_helix_class".to_string()),
+        block_header: None,
+        block_index: None,
+        schema_: SchemaT::Residue,
+    };
+
+    let mut state = structure_state();
+    let structure = structure_node(&mut state);
+    assert_eq!(structure.kind, KindT::Structure);
+    structure
+        .label_from_uri(LabelFromUriParams { base: from_uri() })
+        .expect("structure accepts label_from_uri");
+    structure
+        .label_from_source(LabelFromSourceParams {
+            base: from_source(),
+        })
+        .expect("structure accepts label_from_source");
+    structure
+        .tooltip_from_uri(TooltipFromUriParams { base: from_uri() })
+        .expect("structure accepts tooltip_from_uri");
+    let tooltip = structure
+        .tooltip_from_source(TooltipFromSourceParams {
+            base: from_source(),
+        })
+        .expect("structure accepts tooltip_from_source");
+
+    // Only structures may own these nodes.
+    assert!(
+        tooltip
+            .label_from_uri(LabelFromUriParams { base: from_uri() })
+            .is_none()
+    );
+
+    let kinds: Vec<KindT> = structure_node(&mut state)
+        .children
+        .as_ref()
+        .unwrap()
+        .iter()
+        .map(|n| n.kind.clone())
+        .collect();
+    assert_eq!(
+        kinds,
+        vec![
+            KindT::LabelFromUri,
+            KindT::LabelFromSource,
+            KindT::TooltipFromUri,
+            KindT::TooltipFromSource
+        ]
+    );
+
+    // The emitted JSON parses back into the same node kinds.
+    let json = serde_json::to_string(&state).unwrap();
+    assert!(json.contains("\"label_from_uri\""), "{json}");
+    let mut reparsed = State::from_str(&json).unwrap();
+    let reparsed_kinds: Vec<KindT> = structure_node(&mut reparsed)
+        .children
+        .as_ref()
+        .unwrap()
+        .iter()
+        .map(|n| n.kind.clone())
+        .collect();
+    assert_eq!(reparsed_kinds, kinds);
+}
+
+#[test]
+fn test_transform_rejects_non_rotation_matrix() {
+    use ferritin_molviewspec::molviewspec::nodes::is_rotation_matrix;
+
+    let identity = vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+    // 90° about z, column-major.
+    let rot_z = vec![0.0, 1.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+    let scaled = vec![2.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+    assert!(is_rotation_matrix(&identity));
+    assert!(is_rotation_matrix(&rot_z));
+    assert!(!is_rotation_matrix(&scaled));
+    assert!(!is_rotation_matrix(&[1.0, 0.0, 0.0]));
+
+    let mut state = structure_state();
+    let structure = structure_node(&mut state);
+    assert!(
+        structure
+            .transform(TransformParams {
+                rotation: Some(scaled),
+                translation: None,
+            })
+            .is_none()
+    );
+    assert!(
+        structure
+            .transform(TransformParams {
+                rotation: Some(rot_z),
+                translation: Some((1.0, 2.0, 3.0)),
+            })
+            .is_some()
+    );
+    // An empty rotation means "no rotation", as in the Python builder.
+    assert!(
+        structure
+            .transform(TransformParams {
+                rotation: Some(vec![]),
+                translation: None,
+            })
+            .is_some()
+    );
+}
