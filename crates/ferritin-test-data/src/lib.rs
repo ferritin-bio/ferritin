@@ -18,7 +18,6 @@ use tempfile::{Builder, NamedTempFile};
 /// // _handle ensures the tempfile remains in scope
 /// use ferritin_test_data::TestFile;
 /// let (prot_file, _temp) = TestFile::protein_01().create_temp().unwrap();
-/// let (pymol_file, _temp) = TestFile::pymol_01().create_temp().unwrap();
 ///
 /// ```
 pub struct TestFile {
@@ -113,12 +112,6 @@ impl TestFile {
         Self {
             filebinary: include_bytes!("../data/structures/1tqn.cif"),
             suffix: "cif",
-        }
-    }
-    pub fn pymol_01() -> Self {
-        Self {
-            filebinary: include_bytes!("../data/pymol/example.pse"),
-            suffix: "pse",
         }
     }
     // Safetensors output of the Amplify Model

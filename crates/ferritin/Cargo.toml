@@ -13,7 +13,6 @@ plms = ["dep:ferritin-plms"]
 # full = ["mesh", "plms", "molviewspec"]
 # molviewspec = ["dep:ferritin-molviewspec"]
 # cellscape = ["dep:ferritin-cellscape"]
-# pymol = ["dep:ferritin-pymol"]
 
 
 [dependencies]
@@ -24,4 +23,3 @@ ferritin-bevy = { path = "../ferritin-bevy", optional = true }
 ferritin-plms = { path = "../ferritin-plms", optional = true }
 # ferritin-molviewspec = { path = "../ferritin-molviewspec", optional = true }
 # ferritin-cellscape = { path = "../ferritin-cellscape", optional = true }
-# ferritin-pymol = { path = "../ferritin-pymol", optional = true }

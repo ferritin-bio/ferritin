@@ -1,7 +1,7 @@
 # Ferritin Build and Development Guide
 
 ## Build Commands
-- Build specific packages: `cargo build -p ferritin-core -p ferritin-pymol -p ferritin-bevy`
+- Build specific packages: `cargo build -p ferritin-core -p ferritin-bevy`
 - Run examples: `cargo run --example <example_name>` (e.g. `cargo run --example amplify`)
 - Build with metal feature: `cargo run --example <example_name> --features metal`
 
@@ -14,7 +14,7 @@
 
 ## Documentation and Utilities
 - Generate docs: `cargo doc --workspace --no-deps`
-- Clean project: `cargo clean -p ferritin-core -p ferritin-pymol -p ferritin-bevy`
+- Clean project: `cargo clean -p ferritin-core -p ferritin-bevy`
 
 ## Code Style Guidelines
 - **Naming**: Use snake_case for functions/variables, PascalCase for types/structs
