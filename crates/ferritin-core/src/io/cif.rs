@@ -12,6 +12,7 @@ use crate::model::{
 };
 use crate::trajectory::ArrayTrajectory;
 use crate::{AtomCollection, Bond};
+use compact_str::CompactString;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
@@ -59,7 +60,7 @@ struct CIFDataBlock {
 struct CIFCategory {
     name: String,
     columns: Vec<String>,
-    data: Vec<Vec<String>>,
+    data: Vec<Vec<CompactString>>,
 }
 
 impl CIFCategory {
@@ -116,8 +117,8 @@ impl CIFFile {
         let mut current_category: Option<CIFCategory> = None;
         let mut in_loop = false;
         let mut loop_columns: Vec<String> = Vec::new();
-        let mut loop_data: Vec<Vec<String>> = Vec::new();
-        let mut current_loop_row: Vec<String> = Vec::new();
+        let mut loop_data: Vec<Vec<CompactString>> = Vec::new();
+        let mut current_loop_row: Vec<CompactString> = Vec::new();
 
         let lines: Vec<&str> = self.raw_content.lines().collect();
         let mut i = 0;
@@ -129,8 +130,8 @@ impl CIFFile {
             if line == "#" {
                 if let Some(mut category) = current_category.take() {
                     if in_loop && !loop_data.is_empty() {
-                        category.columns = loop_columns.clone();
-                        category.data = loop_data.clone();
+                        category.columns = std::mem::take(&mut loop_columns);
+                        category.data = std::mem::take(&mut loop_data);
                     }
                     if let Some(block) = &mut current_data_block {
                         block.categories.insert(category.name.clone(), category);
@@ -171,8 +172,8 @@ impl CIFFile {
                 // Finish previous category if needed
                 if let Some(mut category) = current_category.take() {
                     if in_loop && !loop_data.is_empty() {
-                        category.columns = loop_columns.clone();
-                        category.data = loop_data.clone();
+                        category.columns = std::mem::take(&mut loop_columns);
+                        category.data = std::mem::take(&mut loop_data);
                     }
                     if let Some(block) = &mut current_data_block {
                         block.categories.insert(category.name.clone(), category);
@@ -222,10 +223,10 @@ impl CIFFile {
                             i += 1; // Skip the value line next iteration
                             clean_cif_value(next_line)
                         } else {
-                            "".to_string() // No value
+                            CompactString::default() // No value
                         }
                     } else {
-                        "".to_string() // No value
+                        CompactString::default() // No value
                     };
 
                     // Create or get category
@@ -274,7 +275,7 @@ impl CIFFile {
                         }
 
                         let end = j;
-                        values.push(line[start..end].to_string());
+                        values.push(CompactString::new(&line[start..end]));
                         j += 1; // Skip closing quote
                     } else {
                         // Unquoted value
@@ -292,8 +293,8 @@ impl CIFFile {
 
                 // Check if we have a complete row
                 if current_loop_row.len() >= loop_columns.len() {
-                    loop_data.push(current_loop_row[..loop_columns.len()].to_vec());
-                    current_loop_row = current_loop_row[loop_columns.len()..].to_vec();
+                    let remainder = current_loop_row.split_off(loop_columns.len());
+                    loop_data.push(std::mem::replace(&mut current_loop_row, remainder));
                 }
             }
 
@@ -409,7 +410,7 @@ impl CIFFile {
             atom_ids.push(atom_id);
 
             // Parse chain ID
-            chain_ids.push(row[chain_col].clone());
+            chain_ids.push(row[chain_col].as_str().to_owned());
 
             // Parse residue ID
             let res_id = row[res_id_col].parse::<i32>().map_err(|_| {
@@ -418,10 +419,10 @@ impl CIFFile {
             res_ids.push(res_id);
 
             // Parse residue name
-            res_names.push(row[res_name_col].clone());
+            res_names.push(row[res_name_col].as_str().to_owned());
 
             // Parse atom name
-            atom_names.push(row[atom_name_col].clone());
+            atom_names.push(row[atom_name_col].as_str().to_owned());
 
             // Parse element
             let element_str = &row[element_col];
@@ -552,7 +553,7 @@ impl CIFFile {
         }
 
         // Filter to first model only.
-        let first_model_rows: Vec<&Vec<String>> = atom_category
+        let first_model_rows: Vec<&Vec<CompactString>> = atom_category
             .data
             .iter()
             .filter(|row| {
@@ -621,8 +622,8 @@ impl CIFFile {
             z_vec.push(z);
 
             // Atom name
-            atom_names_vec.push(row[label_atom_col].clone());
-            auth_atom_names_vec.push(row[auth_atom_col].clone());
+            atom_names_vec.push(row[label_atom_col].as_str().to_owned());
+            auth_atom_names_vec.push(row[auth_atom_col].as_str().to_owned());
 
             // Element
             let element_str = &row[element_col];
@@ -696,10 +697,10 @@ impl CIFFile {
             b_iso_vec.push(b_iso);
 
             // Chain and residue keys for grouping
-            let auth_chain = row[chain_col].clone();
+            let auth_chain = row[chain_col].as_str().to_owned();
             let hierarchy_chain = label_asym_col
                 .and_then(|col| row.get(col))
-                .cloned()
+                .map(|value| value.as_str().to_owned())
                 .unwrap_or_else(|| auth_chain.clone());
             let auth_seq_id = row[res_id_col].parse::<i32>().map_err(|_| {
                 CIFError::InvalidFile(format!("Invalid residue ID: {}", row[res_id_col]))
@@ -724,8 +725,8 @@ impl CIFFile {
 
             // Check if this is a new residue
             if last_residue_key.as_ref() != Some(&residue_key) {
-                comp_ids.push(row[label_comp_col].clone());
-                auth_comp_ids.push(row[auth_comp_col].clone());
+                comp_ids.push(row[label_comp_col].as_str().to_owned());
+                auth_comp_ids.push(row[auth_comp_col].as_str().to_owned());
                 let label_seq = if let Some(col) = label_seq_id_col {
                     if col < row.len() {
                         if row[col].is_empty() {
@@ -771,7 +772,7 @@ impl CIFFile {
             if last_chain_key.as_ref() != Some(&hierarchy_chain) {
                 let label_asym = if let Some(col) = label_asym_col {
                     if col < row.len() {
-                        row[col].clone()
+                        row[col].as_str().to_owned()
                     } else {
                         auth_chain.clone()
                     }
@@ -783,7 +784,7 @@ impl CIFFile {
 
                 let entity = if let Some(col) = entity_id_col {
                     if col < row.len() {
-                        row[col].clone()
+                        row[col].as_str().to_owned()
                     } else {
                         "1".to_string()
                     }
@@ -915,7 +916,7 @@ impl CIFFile {
         let formal_charge_col = atom_category.get_column_index("pdbx_formal_charge");
 
         // Group rows by model number
-        let mut model_rows: HashMap<i32, Vec<&Vec<String>>> = HashMap::new();
+        let mut model_rows: HashMap<i32, Vec<&Vec<CompactString>>> = HashMap::new();
         for row in &atom_category.data {
             let model_num = if let Some(col) = model_num_col {
                 let value = row
@@ -1011,8 +1012,8 @@ impl CIFFile {
         let mut last_chain_key: Option<String> = None;
 
         for row in first_model_rows {
-            atom_names_vec.push(row[label_atom_col].clone());
-            auth_atom_names_vec.push(row[auth_atom_col].clone());
+            atom_names_vec.push(row[label_atom_col].as_str().to_owned());
+            auth_atom_names_vec.push(row[auth_atom_col].as_str().to_owned());
             let element_str = &row[element_col];
             let element = Element::from_symbol(element_str).unwrap_or_else(|| {
                 let first_char = element_str.chars().next().unwrap_or('C');
@@ -1053,10 +1054,10 @@ impl CIFFile {
             };
             formal_charge_vec.push(formal_charge);
 
-            let auth_chain = row[chain_col].clone();
+            let auth_chain = row[chain_col].as_str().to_owned();
             let hierarchy_chain = label_asym_col
                 .and_then(|col| row.get(col))
-                .cloned()
+                .map(|value| value.as_str().to_owned())
                 .unwrap_or_else(|| auth_chain.clone());
             let auth_seq_id = row[res_id_col].parse::<i32>().map_err(|_| {
                 CIFError::InvalidFile(format!("Invalid residue ID: {}", row[res_id_col]))
@@ -1080,8 +1081,8 @@ impl CIFFile {
             residue_keys.push(residue_key.clone());
 
             if last_residue_key.as_ref() != Some(&residue_key) {
-                comp_ids.push(row[label_comp_col].clone());
-                auth_comp_ids.push(row[auth_comp_col].clone());
+                comp_ids.push(row[label_comp_col].as_str().to_owned());
+                auth_comp_ids.push(row[auth_comp_col].as_str().to_owned());
                 let label_seq = if let Some(col) = label_seq_id_col {
                     if col < row.len() {
                         if row[col].is_empty() {
@@ -1125,7 +1126,7 @@ impl CIFFile {
             if last_chain_key.as_ref() != Some(&hierarchy_chain) {
                 let label_asym = if let Some(col) = label_asym_col {
                     if col < row.len() {
-                        row[col].clone()
+                        row[col].as_str().to_owned()
                     } else {
                         auth_chain.clone()
                     }
@@ -1137,7 +1138,7 @@ impl CIFFile {
 
                 let entity = if let Some(col) = entity_id_col {
                     if col < row.len() {
-                        row[col].clone()
+                        row[col].as_str().to_owned()
                     } else {
                         "1".to_string()
                     }
@@ -1369,12 +1370,20 @@ fn category_row_count(category: &CIFCategory) -> usize {
 fn category_value(category: &CIFCategory, row: usize, column: usize) -> Option<&str> {
     if is_scalar_category(category) {
         if row == 0 {
-            category.data.get(column)?.first().map(String::as_str)
+            category
+                .data
+                .get(column)?
+                .first()
+                .map(CompactString::as_str)
         } else {
             None
         }
     } else {
-        category.data.get(row)?.get(column).map(String::as_str)
+        category
+            .data
+            .get(row)?
+            .get(column)
+            .map(CompactString::as_str)
     }
 }
 
@@ -1790,22 +1799,22 @@ fn parse_symmetry_data(block: &CIFDataBlock) -> Result<SymmetryData, CIFError> {
 }
 
 /// Clean a CIF value (remove quotes, handle special values)
-fn clean_cif_value(value: &str) -> String {
+fn clean_cif_value(value: &str) -> CompactString {
     let value = value.trim();
 
     // Handle quoted values
     if (value.starts_with('\'') && value.ends_with('\''))
         || (value.starts_with('"') && value.ends_with('"'))
     {
-        return value[1..value.len() - 1].to_string();
+        return CompactString::new(&value[1..value.len() - 1]);
     }
 
     // Handle special values
     if value == "." || value == "?" {
-        return "".to_string();
+        return CompactString::default();
     }
 
-    value.to_string()
+    CompactString::new(value)
 }
 
 #[cfg(test)]

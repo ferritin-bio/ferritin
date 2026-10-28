@@ -1,7 +1,52 @@
 use ferritin_core::trajectory::Trajectory;
-use ferritin_core::{load_structure, load_trajectory};
+use ferritin_core::{AtomCollection, load_structure, load_structure_from_string, load_trajectory};
 use ferritin_test_data::TestFile;
 use std::sync::Arc;
+
+#[test]
+fn test_cif_ingest_preserves_long_names_and_split_rows() {
+    // Exceed inline string capacity, and split a row across physical lines.
+    // Exercise each loop completion path without changing the parsed atoms.
+    let chain = "author_chain_identifier_longer_than_twenty_four_bytes";
+    let atom = "atom_identifier_longer_than_twenty_four_bytes";
+    for ending in [
+        "",
+        "#\n",
+        "loop_\n_audit.id\n_audit.details\n1 'after atoms'\n",
+    ] {
+        let content = format!(
+            "data_long_names\n\
+             loop_\n_entry.id\n_entry.details\n1 'a quoted value longer than twenty four bytes'\n#\n\
+             loop_\n\
+             _atom_site.id\n_atom_site.type_symbol\n_atom_site.label_atom_id\n\
+             _atom_site.label_comp_id\n_atom_site.auth_asym_id\n_atom_site.auth_seq_id\n\
+             _atom_site.Cartn_x\n_atom_site.Cartn_y\n_atom_site.Cartn_z\n\
+             1 C '{atom}' AABCD '{chain}' 7\n1.25 -2.5 3.75\n\
+             2 O OXT HOH B 19 -4.0 5.5 6.25\n{ending}"
+        );
+        let ac = load_structure_from_string(&content, "cif").unwrap();
+        assert_eq!(ac.get_size(), 2);
+        assert_eq!(ac.get_atom_name(0), atom);
+        assert_eq!(ac.get_res_name(0), "AABCD");
+        assert_eq!(ac.get_chain_id(0), chain);
+        assert_eq!(*ac.get_res_id(0), 7);
+        assert_eq!(ac.get_atom_name(1), "OXT");
+        assert_eq!(ac.get_res_name(1), "HOH");
+        assert_eq!(ac.get_chain_id(1), "B");
+        assert_eq!(*ac.get_res_id(1), 19);
+        assert_eq!(ac.get_coords(), &[[1.25, -2.5, 3.75], [-4.0, 5.5, 6.25]]);
+
+        // The optimized Model conversion must preserve heap-backed and inline names.
+        let converted = AtomCollection::from(&ac.to_model());
+        for i in 0..2 {
+            assert_eq!(converted.get_atom_name(i), ac.get_atom_name(i));
+            assert_eq!(converted.get_res_name(i), ac.get_res_name(i));
+            assert_eq!(converted.get_chain_id(i), ac.get_chain_id(i));
+            assert_eq!(converted.get_res_id(i), ac.get_res_id(i));
+        }
+        assert_eq!(converted.get_coords(), ac.get_coords());
+    }
+}
 
 #[test]
 fn test_load_structure_cif() {
