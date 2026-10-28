@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# No backing services or per-thread authentication are needed for ordinary tests.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# Hooks are clone-local, so repair them after repository activation, not in the
+# reusable snapshot. This script is idempotent and performs no network access.
+sh scripts/install-git-hooks.sh

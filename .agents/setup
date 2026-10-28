@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Reusable Linux prerequisites and caches; no user authentication or model weights.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+SECONDS=0
+trap 'echo "[setup] Failed at line $LINENO after ${SECONDS}s" >&2' ERR
+
+echo '[setup] Checking native build dependencies'
+packages=(build-essential pkg-config curl ca-certificates libssl-dev
+    libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+    libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev
+    libgl1-mesa-dev libvulkan1 mesa-vulkan-drivers protobuf-compiler)
+missing=()
+for package in "${packages[@]}"; do
+    if [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)" != 'install ok installed' ]]; then
+        missing+=("$package")
+    fi
+done
+if ((${#missing[@]})); then
+    sudo apt-get update -qq
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+fi
+echo "[setup] Native dependencies ready (${SECONDS}s)"
+
+# Match CI's stable channel. On a stale snapshot, reuse the installed stable
+# toolchain instead of updating Rust and invalidating its caches every time.
+export PATH="$HOME/.cargo/bin:$PATH"
+if ! command -v rustup >/dev/null 2>&1; then
+    curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs |
+        sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path
+fi
+if ! rustup run stable rustc --version >/dev/null 2>&1; then
+    rustup toolchain install stable --profile minimal --no-self-update
+fi
+rustup component add --toolchain stable clippy rustfmt
+rustup default stable
+# Amp and supervised services start separate login shells, not this process.
+marker='# Ferritin orb Rust environment'
+if ! grep -Fqx "$marker" "$HOME/.bash_profile" 2>/dev/null; then
+    cat >> "$HOME/.bash_profile" <<'EOF'
+
+# Ferritin orb Rust environment
+if [ -f "$HOME/.cargo/env" ]; then
+    . "$HOME/.cargo/env"
+fi
+EOF
+fi
+echo "[setup] Rust ready (${SECONDS}s)"
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+case "$(uname -m)" in
+    x86_64) arch=amd64; just_arch=x86_64 ;;
+    aarch64) arch=arm64; just_arch=aarch64 ;;
+    *) echo 'Unsupported Linux architecture' >&2; exit 1 ;;
+esac
+
+# Prebuilt tools avoid compiling CLI utilities during every cold setup.
+if ! command -v just >/dev/null 2>&1; then
+    curl -fsSL --retry 3 "https://github.com/casey/just/releases/download/1.59.0/just-1.59.0-${just_arch}-unknown-linux-musl.tar.gz" -o "$tmp/just.tar.gz"
+    tar -xzf "$tmp/just.tar.gz" -C "$tmp" just
+    sudo install -m 755 "$tmp/just" /usr/local/bin/just
+fi
+if ! command -v bd >/dev/null 2>&1; then
+    curl -fsSL --retry 3 "https://github.com/gastownhall/beads/releases/download/v1.3.2/beads_1.3.2_linux_${arch}.tar.gz" -o "$tmp/beads.tar.gz"
+    tar -xzf "$tmp/beads.tar.gz" -C "$tmp" bd
+    sudo install -m 755 "$tmp/bd" /usr/local/bin/bd
+fi
+if ! command -v quarto >/dev/null 2>&1; then
+    curl -fsSL --retry 3 "https://github.com/quarto-dev/quarto-cli/releases/download/v1.10.19/quarto-1.10.19-linux-${arch}.deb" -o "$tmp/quarto.deb"
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "$tmp/quarto.deb"
+fi
+echo "[setup] Repository tools ready (${SECONDS}s)"
+
+# Fetch only Linux dependencies, including optional features, without compiling
+# the large Bevy/ML workspace or downloading multi-GB/gated Hugging Face weights.
+cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
+echo "[setup] Locked Cargo dependencies cached (${SECONDS}s total)"
