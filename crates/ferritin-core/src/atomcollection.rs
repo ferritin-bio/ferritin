@@ -618,16 +618,23 @@ impl From<&Model> for AtomCollection {
             let chain_idx = hierarchy.chain_of_residue(res_idx);
 
             res_ids.push(hierarchy.residues.auth_seq_id[res_idx]);
-            res_names.push(hierarchy.residues.comp_id[res_idx].clone());
+            res_names.push(CompactString::new(&hierarchy.residues.comp_id[res_idx]));
             is_hetero.push(hierarchy.residues.group[res_idx] == ResidueGroup::NonPolymer);
-            chain_ids.push(hierarchy.chains.auth_asym_id[chain_idx].clone());
+            chain_ids.push(CompactString::new(
+                &hierarchy.chains.auth_asym_id[chain_idx],
+            ));
         }
 
         let elements = hierarchy.atoms.element.clone();
 
-        let atom_names = hierarchy.atoms.atom_name.clone();
+        let atom_names = hierarchy
+            .atoms
+            .atom_name
+            .iter()
+            .map(CompactString::new)
+            .collect();
 
-        let mut ac = AtomCollection::new(
+        let mut ac = AtomCollection::from_compact(
             n_atoms, coords, res_ids, res_names, is_hetero, elements, atom_names, chain_ids, None,
         );
 
