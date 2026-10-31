@@ -28,6 +28,7 @@ use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
 use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::prelude::*;
 use bevy::ui::Node as UiNode;
+use ferritin_core::selection::SelectionIndex;
 use ferritin_core::{AtomCollection, Model, load_model};
 use ferritin_molviewspec::molviewspec::nodes::{
     CameraParams, CanvasParams, ColorT, ColorThemeT, ComponentInlineParams, ComponentSelector,
@@ -36,8 +37,8 @@ use ferritin_molviewspec::molviewspec::nodes::{
     StructureTypeT, TransformParams,
 };
 
-use crate::colors::{VertexMapKind, apply_mvs_colors_with_theme, color_t_to_bevy};
-use crate::selection::{AtomMask, evaluate_selector};
+use crate::colors::{VertexMapKind, apply_model_colors_with_theme, color_t_to_bevy};
+use crate::selection::{AtomMask, evaluate_model_selector};
 use crate::structure::{RenderOptions, Structure};
 
 // ---------------------------------------------------------------------------
@@ -444,6 +445,7 @@ fn execute_download(node: &Node, ctx: &mut Ctx) {
         }
     };
     let ac = AtomCollection::from(&model);
+    let index = SelectionIndex::new(&model);
 
     // download -> parse -> structure
     for parse in children(node) {
@@ -461,13 +463,19 @@ fn execute_download(node: &Node, ctx: &mut Ctx) {
         }
         for structure in children(parse) {
             if structure.kind == KindT::Structure {
-                execute_structure(structure, &model, &ac, ctx);
+                execute_structure(structure, &model, &ac, &index, ctx);
             }
         }
     }
 }
 
-fn execute_structure(node: &Node, model: &Model, ac: &AtomCollection, ctx: &mut Ctx) {
+fn execute_structure(
+    node: &Node,
+    model: &Model,
+    ac: &AtomCollection,
+    index: &SelectionIndex,
+    ctx: &mut Ctx,
+) {
     // Assembly / symmetry are not expanded; warn and render the plain model.
     if let Some(NodeParams::StructureParams(sp)) = &node.params {
         report_unsupported_structure(sp, ctx);
@@ -489,7 +497,7 @@ fn execute_structure(node: &Node, model: &Model, ac: &AtomCollection, ctx: &mut 
 
     for child in children(node) {
         match child.kind {
-            KindT::Component => execute_component(child, model, ac, pending_transform, ctx),
+            KindT::Component => execute_component(child, model, ac, index, pending_transform, ctx),
             KindT::ComponentFromUri | KindT::ComponentFromSource => {
                 ctx.errors.push(MvsError::UnsupportedNode {
                     kind: child.kind.clone(),
@@ -514,6 +522,7 @@ fn execute_component(
     node: &Node,
     model: &Model,
     ac: &AtomCollection,
+    index: &SelectionIndex,
     transform: Transform,
     ctx: &mut Ctx,
 ) {
@@ -522,7 +531,16 @@ fn execute_component(
         _ => return,
     };
 
-    let mask = evaluate_selector(selector, ac);
+    let mask = match evaluate_model_selector(selector, model, index) {
+        Ok(mask) => mask,
+        Err(error) => {
+            ctx.errors.push(MvsError::UnsupportedNode {
+                kind: KindT::Component,
+                reason: error.to_string(),
+            });
+            return;
+        }
+    };
     if mask.all_false() {
         ctx.errors.push(MvsError::NoAtomsSelected {
             selector_description: describe_selector(selector),
@@ -533,7 +551,9 @@ fn execute_component(
     // A component may carry a representation, a label, and/or a focus child.
     for child in children(node) {
         match child.kind {
-            KindT::Representation => render_representation(child, model, ac, &mask, transform, ctx),
+            KindT::Representation => {
+                render_representation(child, model, ac, index, &mask, transform, ctx)
+            }
             KindT::Label => {
                 if let Some(NodeParams::LabelInlineParams(LabelInlineParams { text })) =
                     &child.params
@@ -565,6 +585,7 @@ fn render_representation(
     repr: &Node,
     model: &Model,
     ac: &AtomCollection,
+    index: &SelectionIndex,
     mask: &AtomMask,
     transform: Transform,
     ctx: &mut Ctx,
@@ -635,14 +656,21 @@ fn render_representation(
     // Use the explicit color_theme when present; fall back to ElementSymbol (CPK)
     // so structures without any Color child nodes get sensible default coloring.
     let effective_theme = color_theme.unwrap_or(ColorThemeT::ElementSymbol);
-    apply_mvs_colors_with_theme(
+    if let Err(error) = apply_model_colors_with_theme(
         &mut mesh,
         &effective_theme,
         &color_nodes,
-        ac,
+        model,
         &vertex_map,
         map_kind,
-    );
+        index,
+    ) {
+        ctx.errors.push(MvsError::UnsupportedNode {
+            kind: KindT::Color,
+            reason: error.to_string(),
+        });
+        return;
+    }
 
     // Wireframe (MVS "line") geometry is now thin triangle cylinders with real
     // normals (ferritin-t0h.9), so it can take normal PBR shading like every
@@ -1115,6 +1143,53 @@ mod tests {
               "metadata": {{"version": "1.0", "timestamp": "2024-01-01T00:00:00"}}
             }}"#
         )
+    }
+
+    #[test]
+    fn test_expression_rows_render_union_and_reject_source_atom_ids() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let base = mvsj_one_component(&path, "all", "spacefill");
+        let rows = base.replace("\"selector\": \"all\"", "\"selector\": [{\"residue_index\": 0}, {\"residue_index\": 2}, {\"residue_index\": 0}]");
+        let mut app = make_app();
+        send_and_update(&mut app, &rows);
+        assert!(get_errors(&app).is_empty());
+        assert_eq!(count_meshes(&mut app), 1);
+
+        // Compare rendered geometry with a directly constructed selection, not
+        // another call through the expression evaluator.
+        let model = load_model(&path).unwrap();
+        let mut mask = AtomMask(vec![false; model.n_atoms()]);
+        for residue in [0, 2] {
+            for atom in model.hierarchy.atoms_in_residue(residue) {
+                mask.0[atom] = true;
+            }
+        }
+        let expected = Structure::builder()
+            .pdb(model)
+            .rendertype(RenderOptions::Solid)
+            .build()
+            .to_mesh_with_atom_map(Some(&mask))
+            .0;
+        let handle = app
+            .world_mut()
+            .query::<&Mesh3d>()
+            .single(app.world())
+            .unwrap()
+            .0
+            .clone();
+        let meshes = app.world().resource::<Assets<Mesh>>();
+        let actual = meshes.get(&handle).unwrap();
+        assert_eq!(actual.count_vertices(), expected.count_vertices());
+        assert_eq!(
+            actual.attribute(Mesh::ATTRIBUTE_POSITION),
+            expected.attribute(Mesh::ATTRIBUTE_POSITION)
+        );
+
+        let unsupported = base.replace("\"selector\": \"all\"", "\"selector\": {\"atom_id\": 0}");
+        send_and_update(&mut app, &unsupported);
+        assert_eq!(count_meshes(&mut app), 0);
+        assert!(get_errors(&app).iter().any(|e| matches!(e, MvsError::UnsupportedNode { kind: KindT::Component, reason } if reason.contains("source atom_id"))));
     }
 
     // --- Pure-helper unit tests (T3-01 .. T3-09) ---------------------------

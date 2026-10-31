@@ -22,6 +22,7 @@ pub mod data;
 pub mod info;
 mod io;
 pub mod model;
+pub mod selection;
 pub mod trajectory;
 pub mod unit;
 mod views;

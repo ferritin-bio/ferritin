@@ -1,5 +1,6 @@
-//! AtomMask selection layer: maps MolViewSpec ComponentSelector → per-atom boolean mask.
-use ferritin_core::AtomCollection;
+//! MolViewSpec selectors backed by hierarchy-scoped core row selections.
+use ferritin_core::selection::{RowSelection, SelectionIndex};
+use ferritin_core::{AtomCollection, Model};
 use ferritin_molviewspec::molviewspec::nodes::{
     ComponentExpression, ComponentSelector, ComponentSelectorT,
 };
@@ -17,209 +18,97 @@ impl AtomMask {
     }
 }
 
-/// Evaluate a MolViewSpec `ComponentSelector` against an `AtomCollection`, returning a per-atom mask.
+/// Compatibility entry point for flat collections, which have no distinct auth/label IDs.
+///
+/// Prefer [`evaluate_model_selector`] with the original model to preserve identifiers
+/// and reuse indices. Panics on unsupported source `atom_id` selectors.
 pub fn evaluate_selector(selector: &ComponentSelector, model: &AtomCollection) -> AtomMask {
-    match selector {
-        ComponentSelector::Selector(s) => evaluate_named(s, model),
-        ComponentSelector::Expression(expr) => evaluate_expression(expr, model),
-        ComponentSelector::ExpressionList(exprs) => {
-            let n = model.get_size();
-            let mut mask = vec![false; n];
-            for expr in exprs {
-                let sub = evaluate_expression(expr, model);
-                for (dst, src) in mask.iter_mut().zip(sub.0.iter()) {
-                    *dst |= src;
-                }
-            }
-            AtomMask(mask)
-        }
-    }
+    let model = model.to_model();
+    let index = SelectionIndex::new(&model);
+    evaluate_model_selector(selector, &model, &index).expect("unsupported MVS selector")
 }
 
-fn evaluate_named(selector: &ComponentSelectorT, model: &AtomCollection) -> AtomMask {
-    let n = model.get_size();
-    match selector {
-        ComponentSelectorT::All => AtomMask(vec![true; n]),
-        ComponentSelectorT::Polymer => {
-            let mut mask = vec![false; n];
-            for residue in model.iter_residues() {
-                let is_polymer = residue.is_amino_acid() || residue.is_nucleotide();
-                for idx in residue.atom_range() {
-                    mask[idx] = is_polymer;
-                }
-            }
-            AtomMask(mask)
+/// Evaluate against the original hierarchy, using one final mask for an entire row list.
+///
+/// Rows are ORed, fields within each row are ANDed. Source atom IDs are not
+/// stored in the hierarchy and are rejected rather than treated as dense indices.
+pub fn evaluate_model_selector(
+    selector: &ComponentSelector,
+    model: &Model,
+    index: &SelectionIndex,
+) -> anyhow::Result<AtomMask> {
+    anyhow::ensure!(
+        index.is_current_for(model),
+        "selection index belongs to another hierarchy"
+    );
+    let rows = match selector {
+        ComponentSelector::Selector(s) => {
+            return Ok(evaluate_named(s, model));
         }
-        ComponentSelectorT::Protein => {
-            let mut mask = vec![false; n];
-            for residue in model.iter_residues() {
-                if residue.is_amino_acid() {
-                    for idx in residue.atom_range() {
-                        mask[idx] = true;
-                    }
-                }
-            }
-            AtomMask(mask)
+        ComponentSelector::Expression(expr) => vec![row_selection(expr)?],
+        ComponentSelector::ExpressionList(exprs) => exprs
+            .iter()
+            .map(row_selection)
+            .collect::<anyhow::Result<Vec<_>>>()?,
+    };
+    let mut mask = vec![false; model.n_atoms()];
+    for row in index.select_many(&rows) {
+        for atom in row.iter() {
+            mask[atom as usize] = true;
         }
-        ComponentSelectorT::Nucleic => {
-            let mut mask = vec![false; n];
-            for residue in model.iter_residues() {
-                if residue.is_nucleotide() {
-                    for idx in residue.atom_range() {
-                        mask[idx] = true;
-                    }
-                }
-            }
-            AtomMask(mask)
-        }
-        ComponentSelectorT::Branched => {
-            let mut mask = vec![false; n];
-            for residue in model.iter_residues() {
-                if residue.is_carbohydrate() {
-                    for idx in residue.atom_range() {
-                        mask[idx] = true;
-                    }
-                }
-            }
-            AtomMask(mask)
-        }
-        ComponentSelectorT::Ligand => {
-            let mut mask = vec![false; n];
-            for residue in model.iter_residues() {
-                if residue.is_hetero() && !residue.is_water() && !residue.is_ion() {
-                    for idx in residue.atom_range() {
-                        mask[idx] = true;
-                    }
-                }
-            }
-            AtomMask(mask)
-        }
-        ComponentSelectorT::Ion => AtomMask(model.select_ion()),
-        ComponentSelectorT::Water => AtomMask(model.select_water()),
     }
+    Ok(AtomMask(mask))
 }
 
-fn evaluate_expression(expr: &ComponentExpression, model: &AtomCollection) -> AtomMask {
-    // An all-None expression matches everything (MVS spec: "match whole structure").
-    if is_all_none(expr) {
-        return AtomMask(vec![true; model.get_size()]);
+fn row_selection(expr: &ComponentExpression) -> anyhow::Result<RowSelection> {
+    anyhow::ensure!(
+        expr.atom_id.is_none(),
+        "source atom_id selection is unsupported: source IDs are not stored; use atom_index for dense indices"
+    );
+    Ok(RowSelection {
+        label_entity_id: expr.label_entity_id.clone(),
+        label_asym_id: expr.label_asym_id.clone(),
+        auth_asym_id: expr.auth_asym_id.clone(),
+        label_seq_id: expr.label_seq_id,
+        auth_seq_id: expr.auth_seq_id,
+        pdbx_pdb_ins_code: expr.pdbx_pdb_ins_code.clone(),
+        beg_label_seq_id: expr.beg_label_seq_id,
+        end_label_seq_id: expr.end_label_seq_id,
+        beg_auth_seq_id: expr.beg_auth_seq_id,
+        end_auth_seq_id: expr.end_auth_seq_id,
+        residue_index: expr.residue_index,
+        label_atom_id: expr.label_atom_id.clone(),
+        auth_atom_id: expr.auth_atom_id.clone(),
+        type_symbol: expr.type_symbol.clone(),
+        atom_index: expr.atom_index,
+    })
+}
+
+fn evaluate_named(selector: &ComponentSelectorT, model: &Model) -> AtomMask {
+    if matches!(selector, ComponentSelectorT::All) {
+        return AtomMask(vec![true; model.n_atoms()]);
     }
-
-    let n = model.get_size();
-    let mut mask = vec![false; n];
-
-    for (res_iter_idx, residue) in model.iter_residues().enumerate() {
-        // Chain filter (label_asym_id matched against auth_asym_id in MVP)
-        if let Some(ref chain) = expr.label_asym_id
-            && residue.chain_id() != chain
-        {
-            continue;
-        }
-        if let Some(ref chain) = expr.auth_asym_id
-            && residue.chain_id() != chain
-        {
-            continue;
-        }
-
-        // residue_index: 0-based residue iteration index
-        if let Some(ri) = expr.residue_index
-            && res_iter_idx as i32 != ri
-        {
-            continue;
-        }
-
-        let res_id = residue.residue_id();
-
-        // Exact residue seq id (label_seq_id matched against auth_seq_id in MVP)
-        if let Some(seq) = expr.label_seq_id
-            && res_id != seq
-        {
-            continue;
-        }
-        if let Some(seq) = expr.auth_seq_id
-            && res_id != seq
-        {
-            continue;
-        }
-
-        // Range filters (beg inclusive, end inclusive)
-        if let Some(beg) = expr.beg_label_seq_id
-            && res_id < beg
-        {
-            continue;
-        }
-        if let Some(end) = expr.end_label_seq_id
-            && res_id > end
-        {
-            continue;
-        }
-        if let Some(beg) = expr.beg_auth_seq_id
-            && res_id < beg
-        {
-            continue;
-        }
-        if let Some(end) = expr.end_auth_seq_id
-            && res_id > end
-        {
-            continue;
-        }
-
-        // residue_index: 0-based index of this residue in iteration order
-        // We skip this check at residue level; handle per-atom below since it's unusual.
-
-        // Residue passed — now check per-atom fields
-        for idx in residue.atom_range() {
-            // atom_index: 0-based global atom index
-            if let Some(ai) = expr.atom_index
-                && idx as i32 != ai
-            {
-                continue;
-            }
-
-            // label_atom_id / auth_atom_id
-            let atom_name = model.get_atom_name(idx);
-            if let Some(ref la) = expr.label_atom_id
-                && atom_name != la
-            {
-                continue;
-            }
-            if let Some(ref aa) = expr.auth_atom_id
-                && atom_name != aa
-            {
-                continue;
-            }
-
-            // type_symbol (element symbol, uppercase)
-            if let Some(ref sym) = expr.type_symbol
-                && model.get_element(idx).symbol() != sym.as_str()
-            {
-                continue;
-            }
-
-            mask[idx] = true;
+    let mut mask = vec![false; model.n_atoms()];
+    for (r, residue) in model.residues().enumerate() {
+        let water = matches!(residue.residue_name(), "HOH" | "WAT" | "H2O");
+        let hetero =
+            model.hierarchy.residues.group[r] == ferritin_core::model::ResidueGroup::NonPolymer;
+        let ion = hetero && residue.atom_count() == 1 && !water;
+        let selected = match selector {
+            ComponentSelectorT::All => true,
+            ComponentSelectorT::Polymer => residue.is_amino_acid() || residue.is_nucleotide(),
+            ComponentSelectorT::Protein => residue.is_amino_acid(),
+            ComponentSelectorT::Nucleic => residue.is_nucleotide(),
+            ComponentSelectorT::Branched => residue.is_carbohydrate(),
+            ComponentSelectorT::Ligand => hetero && !water && !ion,
+            ComponentSelectorT::Ion => ion,
+            ComponentSelectorT::Water => water,
+        };
+        if selected {
+            mask[model.hierarchy.atoms_in_residue(r)].fill(true);
         }
     }
-
     AtomMask(mask)
-}
-
-fn is_all_none(expr: &ComponentExpression) -> bool {
-    expr.label_entity_id.is_none()
-        && expr.label_asym_id.is_none()
-        && expr.auth_asym_id.is_none()
-        && expr.label_seq_id.is_none()
-        && expr.auth_seq_id.is_none()
-        && expr.pdbx_pdb_ins_code.is_none()
-        && expr.beg_label_seq_id.is_none()
-        && expr.end_label_seq_id.is_none()
-        && expr.beg_auth_seq_id.is_none()
-        && expr.end_auth_seq_id.is_none()
-        && expr.residue_index.is_none()
-        && expr.label_atom_id.is_none()
-        && expr.auth_atom_id.is_none()
-        && expr.type_symbol.is_none()
-        && expr.atom_id.is_none()
-        && expr.atom_index.is_none()
 }
 
 #[cfg(test)]
@@ -563,5 +452,94 @@ mod tests {
             "residue 1 CA should be exactly 1 atom"
         );
         assert!(mask.0[4], "atom index 4 is GLY CA");
+    }
+
+    #[test]
+    fn test_model_rows_preserve_identifiers_and_color_override_order() {
+        use crate::colors::{VertexMapKind, apply_model_colors_with_theme};
+        use bevy::asset::RenderAssetUsages;
+        use bevy::prelude::Mesh;
+        use bevy::render::mesh::{PrimitiveTopology, VertexAttributeValues};
+        use ferritin_molviewspec::molviewspec::nodes::{ColorT, ColorThemeT};
+        use std::sync::Arc;
+
+        let mut model = make_test_collection().to_model();
+        let hierarchy = Arc::make_mut(&mut model.hierarchy);
+        hierarchy.chains.label_asym_id[0] = "LABEL".into();
+        hierarchy.chains.entity_id[0] = "ENTITY".into();
+        hierarchy.residues.label_seq_id[0] = 42;
+        hierarchy.residues.ins_code[0] = Some('B');
+        hierarchy.atoms.auth_atom_name[1] = "AUTH_CA".into();
+        let index = SelectionIndex::new(&model);
+        let row = ComponentExpression {
+            label_asym_id: Some("LABEL".into()),
+            auth_asym_id: Some("A".into()),
+            label_entity_id: Some("ENTITY".into()),
+            label_seq_id: Some(42),
+            auth_seq_id: Some(1),
+            pdbx_pdb_ins_code: Some("B".into()),
+            label_atom_id: Some("CA".into()),
+            auth_atom_id: Some("AUTH_CA".into()),
+            ..Default::default()
+        };
+        let selector = ComponentSelector::ExpressionList(vec![row.clone(), row.clone()]);
+        let mask = evaluate_model_selector(&selector, &model, &index).unwrap();
+        assert_eq!(
+            mask.0,
+            vec![false, true, false, false, false, false, false, false, false]
+        );
+        let wrong = ComponentSelector::Expression(ComponentExpression {
+            label_asym_id: Some("A".into()),
+            ..Default::default()
+        });
+        assert!(
+            evaluate_model_selector(&wrong, &model, &index)
+                .unwrap()
+                .all_false()
+        );
+
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
+        apply_model_colors_with_theme(
+            &mut mesh,
+            &ColorThemeT::Uniform,
+            &[
+                (selector, ColorT::Hex("#ff0000".into())),
+                (
+                    ComponentSelector::Expression(row),
+                    ColorT::Hex("#0000ff".into()),
+                ),
+            ],
+            &model,
+            &[0, 1, 4],
+            VertexMapKind::AtomMap,
+            &index,
+        )
+        .unwrap();
+        let Some(VertexAttributeValues::Float32x4(colors)) = mesh.attribute(Mesh::ATTRIBUTE_COLOR)
+        else {
+            panic!("missing colors")
+        };
+        assert_eq!(
+            colors,
+            &vec![
+                [1.0, 1.0, 1.0, 1.0],
+                [0.0, 0.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0]
+            ]
+        );
+
+        let source_id = ComponentSelector::Expression(ComponentExpression {
+            atom_id: Some(1),
+            ..Default::default()
+        });
+        assert!(
+            evaluate_model_selector(&source_id, &model, &index)
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("source atom_id")
+        );
+        Arc::make_mut(&mut model.hierarchy).atoms.atom_name[0] = "NEW".into();
+        assert!(evaluate_model_selector(&wrong, &model, &index).is_err());
     }
 }
