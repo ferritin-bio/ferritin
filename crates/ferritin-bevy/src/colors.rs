@@ -1,10 +1,11 @@
 //! Color schemes for protein structure rendering.
 
-use crate::selection::{AtomMask, evaluate_selector};
+use crate::selection::{AtomMask, evaluate_model_selector, evaluate_selector};
 use bevy::color::Srgba;
 use bevy::math::Vec4;
 use bevy::prelude::{Color, Mesh};
-use ferritin_core::AtomCollection;
+use ferritin_core::selection::SelectionIndex;
+use ferritin_core::{AtomCollection, Model};
 use ferritin_molviewspec::molviewspec::nodes::{
     ColorNamesT, ColorT, ColorThemeT, ComponentSelector,
 };
@@ -314,7 +315,9 @@ pub fn apply_mvs_colors(
         model,
         vertex_map,
         &map_kind,
-    );
+        |selector| Ok(evaluate_selector(selector, model)),
+    )
+    .expect("unsupported MVS color selector");
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, vertex_colors);
 }
@@ -342,8 +345,35 @@ pub fn apply_mvs_colors_with_theme(
         model,
         vertex_map,
         &map_kind,
-    );
+        |selector| Ok(evaluate_selector(selector, model)),
+    )
+    .expect("unsupported MVS color selector");
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, vertex_colors);
+}
+
+/// Apply colors using the original identifiers and a shared topology index.
+/// Later color nodes still override earlier nodes on overlapping atoms.
+pub fn apply_model_colors_with_theme(
+    mesh: &mut Mesh,
+    theme: &ColorThemeT,
+    color_nodes: &[(ComponentSelector, ColorT)],
+    model: &Model,
+    vertex_map: &[usize],
+    map_kind: VertexMapKind,
+    index: &SelectionIndex,
+) -> anyhow::Result<()> {
+    let ac = AtomCollection::from(model);
+    let mut colors = initial_colors_from_theme(theme, &ac, vertex_map, &map_kind);
+    apply_color_overrides(
+        &mut colors,
+        color_nodes,
+        &ac,
+        vertex_map,
+        &map_kind,
+        |selector| evaluate_model_selector(selector, model, index),
+    )?;
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
+    Ok(())
 }
 
 /// Overlay `color_nodes` on top of an existing `vertex_colors` array in-place.
@@ -353,9 +383,10 @@ fn apply_color_overrides(
     model: &AtomCollection,
     vertex_map: &[usize],
     map_kind: &VertexMapKind,
-) {
+    evaluate: impl Fn(&ComponentSelector) -> anyhow::Result<AtomMask>,
+) -> anyhow::Result<()> {
     for (selector, color_t) in color_nodes {
-        let atom_mask = evaluate_selector(selector, model);
+        let atom_mask = evaluate(selector)?;
         let bevy_color = color_t_to_bevy(color_t).to_srgba();
         let cv = Vec4::new(
             bevy_color.red,
@@ -383,6 +414,7 @@ fn apply_color_overrides(
             }
         }
     }
+    Ok(())
 }
 
 /// Build a per-residue boolean mask (indexed by ALL-residue iteration order)
