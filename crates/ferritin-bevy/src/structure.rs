@@ -15,6 +15,7 @@ use bevy::prelude::{
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bon::Builder;
 use ferritin_core::Model;
+use ferritin_core::columns::{FrameColumns, PositionLayout};
 
 /// Enum representing various rendering options.
 ///
@@ -804,8 +805,17 @@ impl Structure {
     fn render_spheres_mapped(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
         let mut atom_map: Vec<usize> = Vec::new();
         let mut combined: Option<Mesh> = None;
+        // Bevy still tessellates spheres on the CPU. Consume the same packed
+        // position descriptor used by external GPU clients for their centers;
+        // do not reinterpret the model's separate x/y/z arrays as AoS storage.
+        let positions = FrameColumns::new(&self.pdb)
+            .expect("rendering requires valid coordinate columns")
+            .positions(PositionLayout::Packed3);
+        let stride = positions.layout.stride_bytes as usize;
+        debug_assert_eq!(positions.layout.components, 3);
+        debug_assert_eq!(positions.layout.count as usize, self.pdb.n_atoms());
 
-        for atom in self.pdb.atoms() {
+        for (atom, position) in self.pdb.atoms().zip(positions.bytes.chunks_exact(stride)) {
             let idx = atom.index();
             if let Some(m) = mask
                 && !m.0[idx]
@@ -813,8 +823,10 @@ impl Structure {
                 continue;
             }
 
-            let coord = atom.coords();
-            let center = Vec3::new(coord[0], coord[1], coord[2]);
+            let center = Vec3::from_array(std::array::from_fn(|axis| {
+                let start = axis * 4;
+                f32::from_le_bytes(position[start..start + 4].try_into().unwrap())
+            }));
             let element = atom.element();
             let mut radius = element.atomic_radius().van_der_waals.expect("vdw radius") as f32;
             if Self::is_water_residue(atom.residue_name()) {
@@ -1632,6 +1644,41 @@ mod tests {
             map_none.len(),
             "atom_map len must equal vertex count"
         );
+        // The packed-column path must preserve the mesh produced from direct
+        // model coordinates, including non-first atoms and asymmetric axes.
+        let direct = structure.to_mesh();
+        for attribute in [
+            Mesh::ATTRIBUTE_POSITION,
+            Mesh::ATTRIBUTE_NORMAL,
+            Mesh::ATTRIBUTE_COLOR,
+        ] {
+            assert_eq!(mesh_none.attribute(attribute), direct.attribute(attribute));
+        }
+        assert_eq!(mesh_none.indices(), direct.indices());
+
+        let mut mask = AtomMask(vec![false; structure.pdb.n_atoms()]);
+        for idx in [1, 7, 13] {
+            mask.0[idx] = true;
+        }
+        let (masked, atom_map) = structure.to_mesh_with_atom_map(Some(&mask));
+        let bevy::render::mesh::VertexAttributeValues::Float32x3(all_positions) =
+            mesh_none.attribute(Mesh::ATTRIBUTE_POSITION).unwrap()
+        else {
+            panic!("expected Float32x3 positions");
+        };
+        let expected: Vec<[f32; 3]> = all_positions
+            .iter()
+            .zip(&map_none)
+            .filter(|(_, atom)| mask.0[**atom])
+            .map(|(position, _)| *position)
+            .collect();
+        assert_eq!(
+            masked.attribute(Mesh::ATTRIBUTE_POSITION),
+            Some(&bevy::render::mesh::VertexAttributeValues::Float32x3(
+                expected
+            ))
+        );
+        assert!(atom_map.iter().all(|&idx| mask.0[idx]));
         Ok(())
     }
 

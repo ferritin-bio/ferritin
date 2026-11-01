@@ -76,6 +76,20 @@ pub fn load_model<P: AsRef<Path>>(file_path: P) -> Result<Model> {
     }
 }
 
+/// Parse the first mmCIF model directly, preserving label/auth identifiers.
+///
+/// Unlike the legacy `AtomCollection` adapter, this retains the full model
+/// tables. PDB input is not yet supported, matching [`load_model`].
+pub fn load_model_from_string(content: &str, filetype: &str) -> Result<Model> {
+    match filetype.to_lowercase().as_str() {
+        "cif" => cif::CIFFile::new(content.to_string())
+            .context("Failed to read CIF from string")?
+            .parse_to_model()
+            .context("Failed to parse CIF string to model"),
+        _ => Err(anyhow::anyhow!("Unsupported model file type: {}", filetype)),
+    }
+}
+
 pub fn load_structure_from_string(content: &str, filetype: &str) -> Result<AtomCollection> {
     let filetype = filetype.to_lowercase();
 

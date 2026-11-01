@@ -1,6 +1,5 @@
 [workspace]
-# The LigandMPNN WASM example stubs (crates/ferritin-wasm-examples) were removed
-# in ferritin-8q9; a real WASM consumer of ferritin-core is tracked in ferritin-5vb.
+# The LigandMPNN WASM example stubs were removed in ferritin-8q9.
 # PyMOL (.pse) support (crates/ferritin-pymol) was removed in ferritin-9jg.
 members = [
     "crates/ferritin",
@@ -11,6 +10,7 @@ members = [
     "crates/ferritin-molviewspec",
     "crates/ferritin-plms",
     "crates/ferritin-test-data",
+    "crates/ferritin-wasm",
 ]
 resolver = "3"
 

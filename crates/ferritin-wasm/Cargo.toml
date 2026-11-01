@@ -1,0 +1,18 @@
+[package]
+name = "ferritin-wasm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Owned JavaScript typed-array exports of Ferritin model columns"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ferritin-core = { path = "../ferritin-core" }
+js-sys = "0.3.103"
+wasm-bindgen = "0.2.126"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.76"
