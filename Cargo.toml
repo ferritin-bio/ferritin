@@ -35,6 +35,12 @@ candle-nn = "0.11.0"
 candle-transformers = "0.11.0"
 clap = { version = "4.6.7", features = ["derive"] }
 hf-hub = { version = "1.0.0", features = ["blocking"] }
+# Zenodo-hosted checkpoints (AbLang2). reqwest is already in the tree through
+# hf-hub; only its blocking client is added. flate2/tar unpack the archive.
+reqwest = { version = "0.13", features = ["blocking"] }
+flate2 = "1"
+tar = "0.4"
+sha2 = "0.11"
 itertools = "0.15.0"
 ndarray = "0.17.2"
 rerun = "0.40"

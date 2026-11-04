@@ -81,12 +81,14 @@
 //! | `prostt5-fp16` | T5 | `Rostlab/ProstT5_fp16` (pth) | verified (`prostt5_parity`) | supported |
 //! | `proteinmpnn-v48-020` | Mpnn | `zcpbx/ligandmpnn-weights` (pth) | verified (`proteinmpnn_parity`) | supported |
 //! | `ligandmpnn-v32-020-25` | Mpnn | `zcpbx/ligandmpnn-weights` (pth) | verified (`ligandmpnn_parity`) | supported |
+//! | `ablang2-paired` | AbLang2 | `zenodo/10185169` (pth) | verified (`ablang2_parity`) | supported |
 //! <!-- END SUPPORT MATRIX -->
 
 // The crate deliberately uses the `foo/mod.rs` + inner `mod foo` layout for
 // each model family, so module_inception is expected throughout.
 #![allow(clippy::module_inception)]
 
+pub use ablang2::runner::{AbLang2ChainRunner, AbLang2Models, AbLang2Runner};
 pub use amplify::amplify::{AMPLIFY, AmplifyOutput};
 pub use amplify::amplify_runner::{AmplifyModels, AmplifyRunner};
 pub use amplify::config::AMPLIFYConfig;
@@ -105,6 +107,7 @@ pub use ligandmpnn::pmpnn_runner::{ProteinMPNNModels, ProteinMPNNRunner};
 pub use t5::runner::{T5Models, T5Runner};
 pub use t5::translator::{ProstT5Models, ProstT5Translator};
 
+pub mod ablang2;
 pub mod amplify;
 pub mod esm2;
 pub mod esm3;

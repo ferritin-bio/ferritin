@@ -51,6 +51,8 @@ pub enum Family {
     Mpnn,
     /// ProtT5 and the rest of the T5 encoder family.
     T5,
+    /// AbLang2 — a paired heavy/light antibody encoder, run on chain pairs.
+    AbLang2,
 }
 
 // ── TokenizerSpec ─────────────────────────────────────────────────────────────
@@ -200,6 +202,7 @@ impl ModelCard {
             // LigandMPNN and SolubleMPNN share `model_utils.py`.
             Family::Mpnn => "mpnn",
             Family::T5 => "t5",
+            Family::AbLang2 => "ablang2",
         }
     }
 }
@@ -849,6 +852,39 @@ pub const REGISTRY: &[ModelCard] = &[
         },
         unsupported: None,
     },
+    // ── AbLang2: paired heavy/light antibody encoder (ferritin-sxg) ─────────
+    //
+    // The only row not hosted on the HF hub: the authors publish the weights
+    // solely as a Zenodo tarball, and loading a third-party HF re-upload would
+    // mean trusting that copy is the official one. The archive is pinned by
+    // SHA-256 and unpacked into ferritin's own cache.
+    ModelCard {
+        id: "ablang2-paired",
+        family: Family::AbLang2,
+        source: crate::ablang2::runner::ZENODO_PAIRED,
+        file: "model.pt",
+        tokenizer: TokenizerSpec::BuiltinVocab("ablang2::tokenizer"),
+        // A pair has no single layout — `<H>|<L>` vs `<H>|` vs `|<L>` — so
+        // this is the layout of `AbLang2ChainRunner` for the heavy chain, the
+        // PlmRunner view the conformance suite exercises. Paired callers use
+        // `AbLang2Encoding::roles` instead.
+        specials: SpecialTokenLayout {
+            leading: 1,
+            trailing: 2,
+        },
+        metadata: ModelMetadata {
+            d_model: 480,
+            n_layers: 12,
+            vocab_size: 26,
+            max_positions: None,
+        },
+        // 44.8M parameters (plus the stored copy of the tied head).
+        approx_bytes_f32: 180 * MB,
+        parity: ParityStatus::Verified {
+            fixture: "ablang2_parity",
+        },
+        unsupported: None,
+    },
 ];
 
 // ── Support matrix ────────────────────────────────────────────────────────────
@@ -954,6 +990,37 @@ mod tests {
 
     /// Every repo id must be well formed, or the failure only shows up as a
     /// confusing 404 after a network round-trip.
+    /// The one non-hub row is pinned to the archive bytes, not to a mutable
+    /// name, and its `repo_id` names the record it is fetched from.
+    #[test]
+    fn test_zenodo_source_is_pinned() {
+        use crate::loader::Host;
+        let card = lookup("ablang2-paired").unwrap();
+        assert_eq!(card.source.repo_id, "zenodo/10185169");
+        match card.source.host {
+            Host::ZenodoArchive {
+                record,
+                archive,
+                sha256,
+            } => {
+                assert_eq!(record, "10185169");
+                assert_eq!(archive, "ablang2-weights.tar.gz");
+                assert_eq!(sha256.len(), 64);
+                assert!(
+                    sha256
+                        .bytes()
+                        .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+                );
+            }
+            Host::HuggingFace => panic!("ablang2-paired is published on Zenodo, not the hub"),
+        }
+        let hub_rows = REGISTRY
+            .iter()
+            .filter(|c| c.source.host != Host::HuggingFace)
+            .count();
+        assert_eq!(hub_rows, 1, "only AbLang2 is hosted off the hub");
+    }
+
     #[test]
     fn test_every_source_repo_is_well_formed() {
         for card in REGISTRY {
@@ -1020,6 +1087,8 @@ mod tests {
             Family::Esmc,
             Family::Esm3,
             Family::Mpnn,
+            Family::T5,
+            Family::AbLang2,
         ] {
             assert!(
                 by_family(family).next().is_some(),
@@ -1058,7 +1127,7 @@ mod tests {
     }
 
     /// Parity claims must name a fixture that the test suite actually has.
-    /// Fourteen models are verified today.
+    /// Fifteen models are verified today.
     ///
     /// ESMC-300M closed the last whole-family gap: before it, `Family::Esmc`
     /// held three rows and no fixture at all (ferritin-100.33).
@@ -1086,6 +1155,7 @@ mod tests {
         assert_eq!(
             verified,
             [
+                ("ablang2-paired", "ablang2_parity"),
                 ("amplify-120m", "amplify_parity"),
                 ("ankh-base", "ankh_parity"),
                 ("dplm-650m", "dplm_parity"),

@@ -63,6 +63,27 @@ disagree". See `ferritin-100.33`.
   wrong residue count or contains `<unk>` — a parity fixture over `<unk>` rows
   compares two models' opinions about nothing.
 
+### New model: AbLang2 (paired antibody encoder)
+
+- `ablang2-paired` (`Family::AbLang2`, ~45M parameters) is ported and
+  parity-verified against the official `oxpig/AbLang2` code at commit
+  `586af308` (ferritin-sxg). The check covers token ids, hidden states,
+  per-layer intermediates, full masked-LM logits for paired, heavy-only,
+  light-only, masked and unknown-residue inputs, a padded unequal-length
+  batch, and upstream's `pseudo_log_likelihood`, `confidence` and `restore`.
+  Worst logit error is 4.5e-5 at CPU F32.
+- Inputs are `(heavy, light)` pairs. Each output row carries a `TokenRole`
+  instead of a fixed special-token offset, because upstream encodes
+  heavy-only input as `<H>|` and light-only as `|<L>`. `AbLang2ChainRunner`
+  adapts the model to `PlmRunner` for one explicitly named chain.
+- The weights come from Zenodo record 10185169, the authors' only
+  distribution, and are licensed BSD-3-Clause-Clear. They are fetched on first
+  use into `~/.cache/ferritin` (or `FERRITIN_CACHE`) and checked against a
+  pinned SHA-256 before unpacking. `WeightSource` gained a `host` field for
+  this; every other row is still on the Hugging Face hub.
+- Example: `cargo run --example ablang2` ranks amino acids at a masked
+  position.
+
 ### Reading the support matrix
 
 `not checked` now documents itself as "this output could be anything" rather

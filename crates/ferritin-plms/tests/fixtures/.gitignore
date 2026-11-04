@@ -55,3 +55,10 @@
 !pepmlm_parity.safetensors
 !dplm_parity.safetensors
 !fastesm2_parity.safetensors
+# ~1 MB, the largest fixture: the (238, 480) final hidden states of a full
+# VH/VL pair plus three (60, 480) per-layer intermediates of a short pair, so a
+# regression can be localised to a layer; everything else is (L, 26) logits,
+# token ids and scalar scores. Generated from the official oxpig/AbLang2 code at
+# a pinned commit and the Zenodo checkpoint pinned by SHA-256; it is the only
+# thing checking Family::AbLang2 (ferritin-sxg).
+!ablang2_parity.safetensors

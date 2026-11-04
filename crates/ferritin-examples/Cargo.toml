@@ -89,6 +89,10 @@ path = "examples/rerun/main.rs"
 required-features = ["rerun"]
 
 [[example]]
+name = "ablang2"
+path = "examples/ablang2/main.rs"
+
+[[example]]
 name = "amplify"
 path = "examples/amplify/main.rs"
 

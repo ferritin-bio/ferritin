@@ -124,7 +124,33 @@ pub enum Format {
 
 // ── WeightSource ──────────────────────────────────────────────────────────────
 
-/// Where a model's weights live on the HuggingFace hub, and how to read them.
+/// Where a [`WeightSource`]'s files are hosted.
+///
+/// Almost every checkpoint is on the HuggingFace hub. AbLang2 is the exception:
+/// its authors publish the weights only as a tarball on Zenodo, and loading a
+/// third-party HF re-upload instead would mean trusting that someone else's
+/// copy is the official one (ferritin-sxg).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Host {
+    /// The HuggingFace hub, through `hf-hub` and its cache.
+    HuggingFace,
+    /// A gzipped tarball attached to a Zenodo record.
+    ///
+    /// A published Zenodo record is immutable, so the record id plays the role
+    /// a pinned revision plays on the hub — and `sha256` makes that a checked
+    /// property rather than a trusted one: the archive is hashed before it is
+    /// unpacked, and a mismatch is an error.
+    ZenodoArchive {
+        /// The numeric record id, as in `zenodo.org/records/<record>`.
+        record: &'static str,
+        /// The archive's filename within the record.
+        archive: &'static str,
+        /// Lowercase hex SHA-256 of the archive.
+        sha256: &'static str,
+    },
+}
+
+/// Where a model's weights live, and how to read them.
 ///
 /// Intended to be a `const` on each model enum:
 ///
@@ -134,12 +160,15 @@ pub enum Format {
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct WeightSource {
-    /// Full `owner/name` repo id.
+    /// Full `owner/name` repo id. For a Zenodo archive this is
+    /// `zenodo/<record>`, which keeps it readable in the support matrix.
     pub repo_id: &'static str,
     /// Git revision; `None` means the hub default (`main`).
     pub revision: Option<&'static str>,
     /// On-disk format of the weight files.
     pub format: Format,
+    /// Which service hosts the files.
+    pub host: Host,
 }
 
 impl WeightSource {
@@ -149,6 +178,7 @@ impl WeightSource {
             repo_id,
             revision: None,
             format: Format::Safetensors,
+            host: Host::HuggingFace,
         }
     }
 
@@ -161,6 +191,33 @@ impl WeightSource {
             repo_id,
             revision: None,
             format: Format::Pth { root_key },
+            host: Host::HuggingFace,
+        }
+    }
+
+    /// Files unpacked from a tarball on a Zenodo record.
+    ///
+    /// `repo_id` must be `zenodo/<record>`; the record id is taken from it so
+    /// the two cannot disagree. `sha256` pins the archive's bytes.
+    pub const fn zenodo_archive(
+        repo_id: &'static str,
+        archive: &'static str,
+        sha256: &'static str,
+        format: Format,
+    ) -> Self {
+        let record = match zenodo_record_of(repo_id) {
+            Some(r) => r,
+            None => panic!("a Zenodo WeightSource id must be `zenodo/<record>`"),
+        };
+        Self {
+            repo_id,
+            revision: None,
+            format,
+            host: Host::ZenodoArchive {
+                record,
+                archive,
+                sha256,
+            },
         }
     }
 
@@ -207,6 +264,14 @@ impl WeightSource {
     /// Errors name both the repo and the file — previously only ESM3 did this,
     /// so a failure elsewhere surfaced as a bare transport error.
     pub fn fetch(&self, filename: &str) -> Result<PathBuf> {
+        if let Host::ZenodoArchive {
+            record,
+            archive,
+            sha256,
+        } = self.host
+        {
+            return zenodo::fetch(record, archive, sha256, filename);
+        }
         let repo = self.repo()?;
         let deadline = Instant::now() + CACHE_LOCK_RETRY_BUDGET;
 
@@ -390,6 +455,205 @@ pub fn var_builder_from_path(
     }
 }
 
+/// `"zenodo/10185169"` → `Some("10185169")`, in a `const` context.
+///
+/// Byte-level because `str::split_once` is not `const`. The record must be
+/// non-empty and all ASCII digits, which is what Zenodo record ids are.
+const fn zenodo_record_of(repo_id: &'static str) -> Option<&'static str> {
+    const PREFIX: &[u8] = b"zenodo/";
+    let bytes = repo_id.as_bytes();
+    if bytes.len() <= PREFIX.len() {
+        return None;
+    }
+    let mut i = 0;
+    while i < PREFIX.len() {
+        if bytes[i] != PREFIX[i] {
+            return None;
+        }
+        i += 1;
+    }
+    while i < bytes.len() {
+        if !bytes[i].is_ascii_digit() {
+            return None;
+        }
+        i += 1;
+    }
+    let (_, record) = repo_id.split_at(PREFIX.len());
+    Some(record)
+}
+
+// ── Zenodo archives ───────────────────────────────────────────────────────────
+
+/// Download, verify and unpack a Zenodo tarball into a local cache.
+///
+/// Kept deliberately small: one archive per record, fetched once, hashed while
+/// it streams to disk, unpacked into a scratch directory, and only then renamed
+/// into place. A reader therefore sees either nothing or a complete, verified
+/// directory — never a half-written one — and a second process that loses the
+/// race finds the winner's directory and uses it.
+mod zenodo {
+    use anyhow::{Context, Result, bail};
+    use sha2::{Digest, Sha256};
+    use std::io::{Read, Write};
+    use std::path::{Path, PathBuf};
+
+    /// Marker written last, so its presence means the directory is complete.
+    const COMPLETE: &str = ".ferritin-complete";
+
+    /// Root of ferritin's own download cache.
+    ///
+    /// `FERRITIN_CACHE`, else `$XDG_CACHE_HOME/ferritin`, else
+    /// `$HOME/.cache/ferritin`. Separate from the HF cache because hf-hub owns
+    /// that layout.
+    pub(super) fn cache_root() -> Result<PathBuf> {
+        if let Some(dir) = std::env::var_os("FERRITIN_CACHE") {
+            return Ok(PathBuf::from(dir));
+        }
+        if let Some(dir) = std::env::var_os("XDG_CACHE_HOME") {
+            return Ok(PathBuf::from(dir).join("ferritin"));
+        }
+        let home = std::env::var_os("HOME")
+            .context("cannot place the ferritin cache: none of FERRITIN_CACHE, XDG_CACHE_HOME or HOME is set")?;
+        Ok(PathBuf::from(home).join(".cache").join("ferritin"))
+    }
+
+    /// The local path of `filename` from the archive, downloading on first use.
+    pub(super) fn fetch(
+        record: &str,
+        archive: &str,
+        sha256: &str,
+        filename: &str,
+    ) -> Result<PathBuf> {
+        let dir = cache_root()?.join("zenodo").join(record);
+        if !dir.join(COMPLETE).exists() {
+            populate(record, archive, sha256, &dir)?;
+        }
+        let path = dir.join(filename);
+        if !path.is_file() {
+            bail!(
+                "zenodo record {record}: {archive} has no file {filename:?} (looked in {})",
+                dir.display()
+            );
+        }
+        Ok(path)
+    }
+
+    fn populate(record: &str, archive: &str, sha256: &str, dir: &Path) -> Result<()> {
+        let parent = dir.parent().expect("cache dir has a parent");
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+        let tag = format!("{}-{}", std::process::id(), unique());
+        let tarball = parent.join(format!("{record}.{tag}.download"));
+        let scratch = parent.join(format!("{record}.{tag}.unpack"));
+
+        let result = (|| {
+            download(record, archive, sha256, &tarball)?;
+            unpack(&tarball, &scratch)?;
+            std::fs::write(scratch.join(COMPLETE), sha256)?;
+            match std::fs::rename(&scratch, dir) {
+                Ok(()) => Ok(()),
+                // Another process finished first; its copy is equally verified.
+                Err(_) if dir.join(COMPLETE).exists() => Ok(()),
+                Err(e) => Err(anyhow::Error::new(e))
+                    .with_context(|| format!("failed to move archive into {}", dir.display())),
+            }
+        })();
+
+        let _ = std::fs::remove_file(&tarball);
+        let _ = std::fs::remove_dir_all(&scratch);
+        result
+    }
+
+    fn url(record: &str, archive: &str) -> String {
+        format!("https://zenodo.org/api/records/{record}/files/{archive}/content")
+    }
+
+    fn download(record: &str, archive: &str, sha256: &str, dest: &Path) -> Result<()> {
+        let url = url(record, archive);
+        eprintln!("downloading {url} …");
+        let client = reqwest::blocking::Client::builder()
+            // Zenodo answers 403 to a request with no User-Agent, and reqwest
+            // sends none by default.
+            .user_agent(concat!("ferritin-plms/", env!("CARGO_PKG_VERSION")))
+            // The archives are hundreds of MB; the default 30 s total timeout
+            // would abort a healthy download on a slow link.
+            .timeout(None)
+            .build()
+            .context("failed to build an HTTP client")?;
+        let mut response = client
+            .get(&url)
+            .send()
+            .and_then(|r| r.error_for_status())
+            .with_context(|| format!("failed to download {url}"))?;
+
+        let mut file = std::fs::File::create(dest)
+            .with_context(|| format!("failed to create {}", dest.display()))?;
+        let mut hasher = Sha256::new();
+        let mut buf = vec![0u8; 1 << 20];
+        loop {
+            let n = response
+                .read(&mut buf)
+                .with_context(|| format!("download of {url} was interrupted"))?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+            file.write_all(&buf[..n])?;
+        }
+        file.sync_all()?;
+
+        let got = hex(&hasher.finalize());
+        if got != sha256 {
+            bail!(
+                "zenodo record {record}: {archive} has sha256 {got}, expected {sha256}; \
+                 refusing to unpack an archive that is not the pinned one"
+            );
+        }
+        Ok(())
+    }
+
+    fn unpack(tarball: &Path, dest: &Path) -> Result<()> {
+        std::fs::create_dir_all(dest)?;
+        let file = std::fs::File::open(tarball)?;
+        let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(file));
+        // `unpack` refuses entries that would escape `dest` (absolute paths,
+        // `..`), so a hostile archive cannot write outside the cache.
+        tar.unpack(dest)
+            .with_context(|| format!("failed to unpack {}", tarball.display()))?;
+        Ok(())
+    }
+
+    pub(super) fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    /// Distinguishes concurrent downloads within one process (threads share a
+    /// pid), so two never write the same scratch path.
+    fn unique() -> u64 {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    }
+}
+
+/// Lowercase hex SHA-256 of a file, for checking a checkpoint against a pin.
+pub fn sha256_file(path: &Path) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file =
+        std::fs::File::open(path).with_context(|| format!("failed to open {}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(zenodo::hex(&hasher.finalize()))
+}
+
 // ── Optional wrapper prefix ───────────────────────────────────────────────────
 
 /// Descend into `prefix` when the checkpoint nests the backbone under it.
@@ -420,6 +684,83 @@ pub fn optional_prefix<'a>(vb: VarBuilder<'a>, prefix: &str, probe: &str) -> Var
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_zenodo_record_is_parsed_from_the_id() {
+        assert_eq!(zenodo_record_of("zenodo/10185169"), Some("10185169"));
+        for bad in [
+            "zenodo/",
+            "zenodo",
+            "zenodo/12a",
+            "zenodo/1/2",
+            "owner/10185169",
+            "",
+        ] {
+            assert_eq!(zenodo_record_of(bad), None, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn test_zenodo_archive_constructor() {
+        const SRC: WeightSource = WeightSource::zenodo_archive(
+            "zenodo/42",
+            "weights.tar.gz",
+            "00",
+            Format::Pth { root_key: None },
+        );
+        assert_eq!(
+            SRC.host,
+            Host::ZenodoArchive {
+                record: "42",
+                archive: "weights.tar.gz",
+                sha256: "00",
+            }
+        );
+        assert_eq!(SRC.repo_id, "zenodo/42");
+        assert_eq!(WeightSource::safetensors("a/b").host, Host::HuggingFace);
+    }
+
+    /// A Zenodo file is served from the unpacked cache without any network
+    /// access once the completion marker is present.
+    #[test]
+    fn test_zenodo_fetch_uses_a_completed_cache() -> Result<()> {
+        let root = tempfile_dir("zenodo-cache")?;
+        let dir = root.join("zenodo").join("7");
+        std::fs::create_dir_all(&dir)?;
+        std::fs::write(dir.join("hparams.json"), "{}")?;
+        std::fs::write(dir.join(".ferritin-complete"), "x")?;
+        // SAFETY of env mutation: this is the only test touching FERRITIN_CACHE.
+        unsafe { std::env::set_var("FERRITIN_CACHE", &root) };
+        let got = zenodo::fetch("7", "a.tar.gz", "x", "hparams.json");
+        let missing = zenodo::fetch("7", "a.tar.gz", "x", "model.pt");
+        unsafe { std::env::remove_var("FERRITIN_CACHE") };
+        assert_eq!(got?, dir.join("hparams.json"));
+        assert!(
+            missing.is_err(),
+            "a file absent from the archive is an error"
+        );
+        std::fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    fn tempfile_dir(tag: &str) -> Result<PathBuf> {
+        let dir = std::env::temp_dir().join(format!("ferritin-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        Ok(dir)
+    }
+
+    #[test]
+    fn test_sha256_file_matches_a_known_digest() -> Result<()> {
+        let dir = tempfile_dir("sha256")?;
+        let path = dir.join("abc");
+        std::fs::write(&path, b"abc")?;
+        assert_eq!(
+            sha256_file(&path)?,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        std::fs::remove_dir_all(&dir)?;
+        Ok(())
+    }
 
     #[test]
     fn test_owner_and_name_splits_valid_id() {

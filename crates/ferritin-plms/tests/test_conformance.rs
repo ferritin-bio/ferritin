@@ -54,11 +54,12 @@ mod support;
 
 use anyhow::{Result, bail};
 use candle_core::DType;
+use ferritin_plms::ablang2::tokenizer::Chain;
 use ferritin_plms::plm_runner::PlmRunner;
 use ferritin_plms::registry::{ModelCard, ParityStatus, REGISTRY, TokenizerSpec, VocabAlphabet};
 use ferritin_plms::{
-    AmplifyModels, AmplifyRunner, ESM2Models, ESM2Runner, ESM3Models, ESM3Runner, ESMCModels,
-    ESMCRunner, T5Models, T5Runner, device,
+    AbLang2ChainRunner, AbLang2Models, AbLang2Runner, AmplifyModels, AmplifyRunner, ESM2Models,
+    ESM2Runner, ESM3Models, ESM3Runner, ESMCModels, ESMCRunner, T5Models, T5Runner, device,
 };
 use support::parity::{ParityFixture, fixture_path, hf_tests_enabled};
 
@@ -141,6 +142,12 @@ fn runner_for(card: &ModelCard) -> Result<Box<dyn PlmRunner>> {
         )?),
         "ankh-base" => Box::new(T5Runner::from_pretrained(T5Models::AnkhBase, dev)?),
         "ankh-large" => Box::new(T5Runner::from_pretrained(T5Models::AnkhLarge, dev)?),
+        // A paired model behind a single-sequence trait: the adapter fixes the
+        // chain, and the card's `specials` is the heavy-chain layout to match.
+        "ablang2-paired" => Box::new(AbLang2ChainRunner::new(
+            AbLang2Runner::from_pretrained(AbLang2Models::Paired, dev)?,
+            Chain::Heavy,
+        )),
         other => bail!(
             "{other} is a loadable embedding model with no arm in runner_for; \
              add one so it inherits conformance coverage"
@@ -328,6 +335,7 @@ fn test_every_loadable_model_can_be_constructed() {
         "prott5-xl-half-uniref50-enc",
         "ankh-base",
         "ankh-large",
+        "ablang2-paired",
     ];
     for card in REGISTRY
         .iter()

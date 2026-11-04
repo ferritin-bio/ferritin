@@ -17,11 +17,12 @@
 //! pretending otherwise would make this suite red for reasons it does not own.
 
 use anyhow::Result;
+use ferritin_plms::ablang2::tokenizer::Chain;
 use ferritin_plms::plm_runner::PlmRunner;
 use ferritin_plms::registry::{Family, REGISTRY, TokenizerSpec, VocabAlphabet, lookup};
 use ferritin_plms::{
-    AmplifyModels, AmplifyRunner, ESM2Models, ESM2Runner, ESMCModels, ESMCRunner, T5Models,
-    T5Runner, device,
+    AbLang2ChainRunner, AbLang2Models, AbLang2Runner, AmplifyModels, AmplifyRunner, ESM2Models,
+    ESM2Runner, ESMCModels, ESMCRunner, T5Models, T5Runner, device,
 };
 
 /// Every enum variant resolves to a registry row, and the row's source is what
@@ -146,6 +147,20 @@ fn test_prott5_loaded_dims_match_card() -> Result<()> {
     assert_card_matches(card.id, &runner)
 }
 
+/// AbLang2's card declares the heavy-chain `AbLang2ChainRunner` layout, since a
+/// pair has no single one; this pins that the declared layout is the one the
+/// adapter reports, against the real Zenodo checkpoint (ferritin-sxg).
+#[test]
+#[ignore = "downloads the AbLang2 weights from Zenodo (166 MB)"]
+fn test_ablang2_loaded_dims_match_card() -> Result<()> {
+    let card = lookup("ablang2-paired").expect("registered");
+    let runner = AbLang2ChainRunner::new(
+        AbLang2Runner::from_pretrained(AbLang2Models::Paired, device(false)?)?,
+        Chain::Heavy,
+    );
+    assert_card_matches(card.id, &runner)
+}
+
 /// Compare a loaded runner's self-reported metadata and token layout against
 /// its registry row.
 fn assert_card_matches(id: &str, runner: &dyn PlmRunner) -> Result<()> {
@@ -203,6 +218,7 @@ fn test_loadable_embedding_models_are_covered() {
     assert_eq!(
         covered,
         [
+            "ablang2-paired",
             "amplify-120m",
             "amplify-350m",
             "ankh-base",
@@ -248,6 +264,7 @@ fn test_uncovered_loadable_models_are_accounted_for() {
         "esmc-300m",
         "prott5-xl-half-uniref50-enc",
         "ankh-base",
+        "ablang2-paired",
     ];
 
     let uncovered: Vec<&str> = REGISTRY
