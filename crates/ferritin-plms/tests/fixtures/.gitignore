@@ -62,3 +62,7 @@
 # a pinned commit and the Zenodo checkpoint pinned by SHA-256; it is the only
 # thing checking Family::AbLang2 (ferritin-sxg).
 !ablang2_parity.safetensors
+# ~1 MB, same layout as ablang2_parity, for the TCRLang-paired weights on the
+# JM22 TCR (TRB first, TRA second). Same architecture does not mean the same
+# numbers, so it has its own reference (ferritin-4dm).
+!tcrlang_parity.safetensors

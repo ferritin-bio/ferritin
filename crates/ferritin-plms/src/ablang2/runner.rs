@@ -23,7 +23,7 @@ use anyhow::{Context, Result, bail};
 use candle_core::{D, DType, Device, IndexOp, Tensor};
 use std::path::Path;
 
-/// SHA-256 of `model.pt` inside the Zenodo archive.
+/// SHA-256 of `model.pt` inside the AbLang2 Zenodo archive.
 ///
 /// Checked by [`AbLang2Runner::from_dir`] when the caller supplies their own
 /// copy, because that path does not go through the archive hash.
@@ -44,17 +44,45 @@ pub const ZENODO_PAIRED: WeightSource = WeightSource::zenodo_archive(
     Format::Pth { root_key: None },
 );
 
+/// SHA-256 of `model.pt` inside the TCRLang Zenodo archive.
+pub const TCRLANG_MODEL_PT_SHA256: &str =
+    "5f93dcf715271b8315967c930ed858b890476bdc7ecb1cb08f959b900299c83b";
+
+/// SHA-256 of `tcrlang-weights.tar.gz` on Zenodo record 11208211.
+///
+/// Zenodo publishes the MD5 (`8bbade5ba653096a490467cbc68b4034`); the SHA-256
+/// was computed from the archive whose MD5 matched it.
+pub const TCRLANG_ARCHIVE_SHA256: &str =
+    "027e32a05805df1a2a46f1ec378b80c02c8bac0f0cdd272cf102a8f14f2f1626";
+
+/// The official TCRLang-paired weights: `tcrlang-weights.tar.gz` on Zenodo.
+pub const ZENODO_TCRLANG: WeightSource = WeightSource::zenodo_archive(
+    "zenodo/11208211",
+    "tcrlang-weights.tar.gz",
+    TCRLANG_ARCHIVE_SHA256,
+    Format::Pth { root_key: None },
+);
+
 /// How many masked copies of a sequence go through the model at once when
 /// computing a pseudo-log-likelihood. Upstream sends them all at once; at
 /// ~230 tokens that is a 230-row batch, which is fine on a workstation but
 /// needlessly peaky, and chunking does not change the result.
 const PLL_CHUNK: usize = 32;
 
-/// Available AbLang2 checkpoints.
+/// Available checkpoints of the AbLang2 architecture.
+///
+/// Both take two chains in fixed slots. The API names them heavy and light
+/// after AbLang2; for TCRLang the first slot is the **beta** chain (TRB) and
+/// the second the **alpha** chain (TRA), the order upstream's TCRLang
+/// notebook prescribes. Swapping them still runs, and gives wrong answers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AbLang2Models {
-    /// `ablang2-paired`, trained on paired heavy/light variable domains.
+    /// `ablang2-paired`, trained on paired heavy/light antibody variable
+    /// domains.
     Paired,
+    /// `tcrlang-paired`, the same architecture trained on paired TCR
+    /// variable domains (Observed TCR Space). Weights CC-BY-4.0.
+    TcrLangPaired,
 }
 
 impl AbLang2Models {
@@ -62,6 +90,15 @@ impl AbLang2Models {
     pub const fn registry_id(&self) -> &'static str {
         match self {
             Self::Paired => "ablang2-paired",
+            Self::TcrLangPaired => "tcrlang-paired",
+        }
+    }
+
+    /// SHA-256 of this checkpoint's `model.pt`.
+    pub const fn model_pt_sha256(&self) -> &'static str {
+        match self {
+            Self::Paired => MODEL_PT_SHA256,
+            Self::TcrLangPaired => TCRLANG_MODEL_PT_SHA256,
         }
     }
 
@@ -76,6 +113,9 @@ impl AbLang2Models {
 pub struct AbLang2Runner {
     model: AbLang2,
     device: Device,
+    /// Registry id of the loaded checkpoint, or `"ablang2-custom"` for one
+    /// loaded through [`from_var_builder`][Self::from_var_builder].
+    id: &'static str,
 }
 
 impl AbLang2Runner {
@@ -94,29 +134,31 @@ impl AbLang2Runner {
         let config_path = card.source.fetch("hparams.json")?;
         let config = AbLang2Config::from_file(&config_path)?;
         let vb = card.source.var_builder(card.file, opts)?;
-        Self::from_var_builder(vb, &config, opts)
+        Ok(Self::from_var_builder(vb, &config, opts)?.named(model.registry_id()))
     }
 
-    /// Load from a directory holding an unpacked `ablang2-weights.tar.gz`
-    /// (`model.pt` and `hparams.json`).
+    /// Load from a directory holding an unpacked weights archive
+    /// (`model.pt` and `hparams.json`) for `model`.
     ///
-    /// `model.pt` is checked against [`MODEL_PT_SHA256`] first: a directory
-    /// is whatever the caller says it is, and a different checkpoint of the
-    /// same shape would load without complaint.
-    pub fn from_dir(dir: &Path, opts: &LoadOptions) -> Result<Self> {
+    /// `model.pt` is checked against [`AbLang2Models::model_pt_sha256`]
+    /// first: a directory is whatever the caller says it is, and the two
+    /// checkpoints have identical shapes, so loading TCRLang as AbLang2 (or
+    /// the reverse) would otherwise succeed silently.
+    pub fn from_dir(model: AbLang2Models, dir: &Path, opts: &LoadOptions) -> Result<Self> {
         let weights = dir.join("model.pt");
         let digest = crate::loader::sha256_file(&weights)?;
-        if digest != MODEL_PT_SHA256 {
+        let expected = model.model_pt_sha256();
+        if digest != expected {
             bail!(
-                "{} has sha256 {digest}, not the official ablang2-paired checkpoint \
-                 ({MODEL_PT_SHA256})",
-                weights.display()
+                "{} has sha256 {digest}, not the official {} checkpoint ({expected})",
+                weights.display(),
+                model.registry_id()
             );
         }
         let config = AbLang2Config::from_file(&dir.join("hparams.json"))?;
         let vb =
             crate::loader::var_builder_from_path(&weights, Format::Pth { root_key: None }, opts)?;
-        Self::from_var_builder(vb, &config, opts)
+        Ok(Self::from_var_builder(vb, &config, opts)?.named(model.registry_id()))
     }
 
     /// Load from any VarBuilder over the checkpoint's key layout.
@@ -129,7 +171,18 @@ impl AbLang2Runner {
         Ok(Self {
             model,
             device: opts.device.clone(),
+            id: "ablang2-custom",
         })
+    }
+
+    fn named(mut self, id: &'static str) -> Self {
+        self.id = id;
+        self
+    }
+
+    /// Registry id of the loaded checkpoint.
+    pub fn id(&self) -> &'static str {
+        self.id
     }
 
     /// The underlying model.
@@ -334,12 +387,22 @@ fn residue_log_probs(logits: &Tensor) -> Result<Tensor> {
 pub struct AbLang2ChainRunner {
     runner: AbLang2Runner,
     chain: Chain,
+    name: String,
 }
 
 impl AbLang2ChainRunner {
     /// Wrap a runner, fixing which chain single sequences are.
     pub fn new(runner: AbLang2Runner, chain: Chain) -> Self {
-        Self { runner, chain }
+        let slot = match chain {
+            Chain::Heavy => "first chain",
+            Chain::Light => "second chain",
+        };
+        let name = format!("{} ({slot})", runner.id());
+        Self {
+            runner,
+            chain,
+            name,
+        }
     }
 
     /// The wrapped runner, for paired inputs and scoring.
@@ -367,10 +430,7 @@ impl PlmRunner for AbLang2ChainRunner {
     }
 
     fn model_name(&self) -> &str {
-        match self.chain {
-            Chain::Heavy => "ablang2-paired (heavy)",
-            Chain::Light => "ablang2-paired (light)",
-        }
+        &self.name
     }
 
     fn special_tokens(&self) -> SpecialTokenLayout {

@@ -854,7 +854,7 @@ pub const REGISTRY: &[ModelCard] = &[
     },
     // ── AbLang2: paired heavy/light antibody encoder (ferritin-sxg) ─────────
     //
-    // The only row not hosted on the HF hub: the authors publish the weights
+    // Not hosted on the HF hub: the authors publish the weights
     // solely as a Zenodo tarball, and loading a third-party HF re-upload would
     // mean trusting that copy is the official one. The archive is pinned by
     // SHA-256 and unpacked into ferritin's own cache.
@@ -882,6 +882,32 @@ pub const REGISTRY: &[ModelCard] = &[
         approx_bytes_f32: 180 * MB,
         parity: ParityStatus::Verified {
             fixture: "ablang2_parity",
+        },
+        unsupported: None,
+    },
+    // Same architecture and vocabulary, TCR weights (ferritin-4dm). The first
+    // slot is TRB (beta), the second TRA (alpha); a separate fixture checks it
+    // because sharing the architecture says nothing about these weights.
+    ModelCard {
+        id: "tcrlang-paired",
+        family: Family::AbLang2,
+        source: crate::ablang2::runner::ZENODO_TCRLANG,
+        file: "model.pt",
+        tokenizer: TokenizerSpec::BuiltinVocab("ablang2::tokenizer"),
+        // First-chain (beta) layout of AbLang2ChainRunner, as for AbLang2.
+        specials: SpecialTokenLayout {
+            leading: 1,
+            trailing: 2,
+        },
+        metadata: ModelMetadata {
+            d_model: 480,
+            n_layers: 12,
+            vocab_size: 26,
+            max_positions: None,
+        },
+        approx_bytes_f32: 180 * MB,
+        parity: ParityStatus::Verified {
+            fixture: "tcrlang_parity",
         },
         unsupported: None,
     },
@@ -1018,7 +1044,10 @@ mod tests {
             .iter()
             .filter(|c| c.source.host != Host::HuggingFace)
             .count();
-        assert_eq!(hub_rows, 1, "only AbLang2 is hosted off the hub");
+        assert_eq!(
+            hub_rows, 2,
+            "only AbLang2 and TCRLang are hosted off the hub"
+        );
     }
 
     #[test]
@@ -1127,7 +1156,7 @@ mod tests {
     }
 
     /// Parity claims must name a fixture that the test suite actually has.
-    /// Fifteen models are verified today.
+    /// Sixteen models are verified today.
     ///
     /// ESMC-300M closed the last whole-family gap: before it, `Family::Esmc`
     /// held three rows and no fixture at all (ferritin-100.33).
@@ -1170,6 +1199,7 @@ mod tests {
                 ("proteinmpnn-v48-020", "proteinmpnn_parity"),
                 ("prott5-xl-half-uniref50-enc", "prott5_parity"),
                 ("saprot-35m-af2", "saprot_parity"),
+                ("tcrlang-paired", "tcrlang_parity"),
             ],
             "the set of parity-verified models changed; that is a deliberate act"
         );

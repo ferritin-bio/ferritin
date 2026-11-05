@@ -80,14 +80,27 @@ ABLANG2_FILES = [
     "ablang2/pretrained_utils/alignment.py",
 ]
 
-ZENODO_RECORD = "10185169"
-ZENODO_URL = (
-    f"https://zenodo.org/api/records/{ZENODO_RECORD}/files/ablang2-weights.tar.gz/content"
-)
-# Published by Zenodo for the archive.
-ARCHIVE_MD5 = "6425b35e9b83750fde67a6a6d240d996"
-# Of the extracted files, recorded here so a re-packaged archive is noticed.
-MODEL_PT_SHA256 = "56d6f07862a6f824f88c8707bbc03e4026c9db762be2d3041e9767e2e6f86386"
+# Each checkpoint: its Zenodo archive, the published MD5, the SHA-256 of the
+# extracted `model.pt` (so a re-packaged archive is noticed), the fixture it
+# produces, and the inputs it is checked on.
+MODELS = {
+    "ablang2-paired": {
+        "record": "10185169",
+        "archive": "ablang2-weights.tar.gz",
+        "archive_md5": "6425b35e9b83750fde67a6a6d240d996",
+        "model_pt_sha256": "56d6f07862a6f824f88c8707bbc03e4026c9db762be2d3041e9767e2e6f86386",
+        "fixture": "ablang2_parity",
+    },
+    # Same architecture and vocabulary, trained on paired TCRs. Upstream's
+    # TCRLang notebook puts TRB (beta) first and TRA (alpha) second.
+    "tcrlang-paired": {
+        "record": "11208211",
+        "archive": "tcrlang-weights.tar.gz",
+        "archive_md5": "8bbade5ba653096a490467cbc68b4034",
+        "model_pt_sha256": "5f93dcf715271b8315967c930ed858b890476bdc7ecb1cb08f959b900299c83b",
+        "fixture": "tcrlang_parity",
+    },
+}
 
 # ── Inputs ───────────────────────────────────────────────────────────────────
 
@@ -101,6 +114,16 @@ VL = (
     "ISRVEADDVAVYYCMQGTHWPPAFGQGTKVDIK"
 )
 
+# The JM22 TCR from upstream's TCRLang notebook.
+TRB = (
+    "GGITQSPKYLFRKEGQNVTLSCEQNLNHDAMYWYRQDPGQGLRLIYYSQIVNDFQKGDIAEGYSVSREKKESFPLTV"
+    "TSAQKNPTAFYLCASSIRSSYEQYFGPGTRLTVTEDLKN"
+)
+TRA = (
+    "QLLEQSPQFLSIQEGENLTVYCNSSSVFSSLQWYRQEPGEGPVLLVTVVTGGEVKKLKRLTFQFGDARKDSSLHITA"
+    "AQPGDTGLYLCAGAGSQGNLIFGKGTKLSVKP"
+)
+
 
 def masked(seq: str, positions) -> str:
     chars = list(seq)
@@ -109,24 +132,32 @@ def masked(seq: str, positions) -> str:
     return "".join(chars)
 
 
-# name -> (heavy, light). Order matters only for readability.
-CASES = {
-    # Full-length pair: the realistic case, and the only one whose hidden
-    # states are stored at full length.
-    "paired": (VH, VL),
-    # Single-chain inputs, which upstream formats asymmetrically.
-    "heavy_only": (VH, ""),
-    "light_only": ("", VL),
-    # Short pair: cheap enough to store per-layer intermediates for.
-    "short_pair": (VH[:30], VL[:25]),
-    # Masked residues in both chains, including CDR-H3 and the first residue.
-    "masked": (masked(VH, [0, 30, 99, 100, 101]), masked(VL, [5, 90])),
-    # Unknown residue token inside chain text.
-    "unknown": (VH[:20] + "X" + VH[21:40], "X" + VL[1:30]),
+def make_cases(first, second, first_only, second_only, first_masks, second_masks):
+    """name -> (first slot, second slot), the same shapes for every model."""
+    return {
+        # Full-length pair: the realistic case, and the only one whose hidden
+        # states are stored at full length.
+        "paired": (first, second),
+        # Single-chain inputs, which upstream formats asymmetrically.
+        first_only: (first, ""),
+        second_only: ("", second),
+        # Short pair: cheap enough to store per-layer intermediates for.
+        "short_pair": (first[:30], second[:25]),
+        # Masked residues in both chains, including CDR3 and the first residue.
+        "masked": (masked(first, first_masks), masked(second, second_masks)),
+        # Unknown residue token inside chain text.
+        "unknown": (first[:20] + "X" + first[21:40], "X" + second[1:30]),
+    }
+
+
+CASES_BY_MODEL = {
+    # CDR-H3 at 99..101.
+    "ablang2-paired": make_cases(VH, VL, "heavy_only", "light_only", [0, 30, 99, 100, 101], [5, 90]),
+    # CDR3-beta "ASSIRSSYEQY" starts at 90; 95..97 is "SSY" inside it.
+    "tcrlang-paired": make_cases(TRB, TRA, "beta_only", "alpha_only", [0, 30, 95, 96, 97], [5, 90]),
 }
 
-# One padded forward pass over unequal lengths.
-BATCH = ["short_pair", "heavy_only", "unknown"]
+FIRST_ONLY = {"ablang2-paired": "heavy_only", "tcrlang-paired": "beta_only"}
 
 PLL_CASES = ["short_pair", "unknown"]
 CONFIDENCE_CASES = ["paired", "masked", "unknown"]
@@ -160,12 +191,16 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def fetch_weights(dest: Path) -> Path:
-    archive = dest / "ablang2-weights.tar.gz"
-    urllib.request.urlretrieve(ZENODO_URL, archive)
+def fetch_weights(spec: dict, dest: Path) -> Path:
+    archive = dest / spec["archive"]
+    url = f"https://zenodo.org/api/records/{spec['record']}/files/{spec['archive']}/content"
+    # Zenodo refuses requests with no User-Agent.
+    req = urllib.request.Request(url, headers={"User-Agent": "ferritin-fixture-generator"})
+    with urllib.request.urlopen(req) as r:
+        archive.write_bytes(r.read())
     md5 = hashlib.md5(archive.read_bytes()).hexdigest()
-    if md5 != ARCHIVE_MD5:
-        sys.exit(f"archive md5 {md5} != published {ARCHIVE_MD5}")
+    if md5 != spec["archive_md5"]:
+        sys.exit(f"archive md5 {md5} != published {spec['archive_md5']}")
     with tarfile.open(archive) as tar:
         tar.extractall(dest, filter="data")
     return dest
@@ -175,19 +210,23 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--weights-dir", type=Path)
+    ap.add_argument("--model", choices=sorted(MODELS), default="ablang2-paired")
     args = ap.parse_args()
+    spec = MODELS[args.model]
+    CASES = CASES_BY_MODEL[args.model]
+    BATCH = ["short_pair", FIRST_ONLY[args.model], "unknown"]
 
     torch.manual_seed(0)
     torch.use_deterministic_algorithms(True)
 
     work = Path(tempfile.mkdtemp(prefix="ablang2-ref-"))
     src = fetch_upstream(work / "src")
-    weights = args.weights_dir or fetch_weights(work / "weights")
+    weights = args.weights_dir or fetch_weights(spec, work / "weights")
 
     model_pt = weights / "model.pt"
     digest = sha256(model_pt)
-    if digest != MODEL_PT_SHA256:
-        sys.exit(f"model.pt sha256 {digest} != pinned {MODEL_PT_SHA256}")
+    if digest != spec["model_pt_sha256"]:
+        sys.exit(f"model.pt sha256 {digest} != pinned {spec['model_pt_sha256']}")
     hparams = json.loads((weights / "hparams.json").read_text())
 
     sys.path.insert(0, str(src))
@@ -211,8 +250,10 @@ def main() -> None:
     meta = {
         "ablang2_repo": ABLANG2_REPO,
         "ablang2_commit": ABLANG2_COMMIT,
-        "zenodo_record": ZENODO_RECORD,
-        "archive_md5": ARCHIVE_MD5,
+        "model": args.model,
+        "zenodo_record": spec["record"],
+        "archive": spec["archive"],
+        "archive_md5": spec["archive_md5"],
         "model_pt_sha256": digest,
         "hparams": json.dumps(hparams, sort_keys=True),
         "torch": torch.__version__,
@@ -295,7 +336,7 @@ def main() -> None:
     from safetensors.torch import save_file
 
     args.output.mkdir(parents=True, exist_ok=True)
-    out = args.output / "ablang2_parity.safetensors"
+    out = args.output / f"{spec['fixture']}.safetensors"
     save_file({k: v.contiguous() for k, v in tensors.items()}, str(out), metadata=meta)
     print(f"wrote {out} ({out.stat().st_size} bytes, {len(tensors)} tensors)")
     for k in sorted(tensors):

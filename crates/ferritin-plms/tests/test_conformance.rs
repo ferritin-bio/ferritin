@@ -148,6 +148,10 @@ fn runner_for(card: &ModelCard) -> Result<Box<dyn PlmRunner>> {
             AbLang2Runner::from_pretrained(AbLang2Models::Paired, dev)?,
             Chain::Heavy,
         )),
+        "tcrlang-paired" => Box::new(AbLang2ChainRunner::new(
+            AbLang2Runner::from_pretrained(AbLang2Models::TcrLangPaired, dev)?,
+            Chain::Heavy,
+        )),
         other => bail!(
             "{other} is a loadable embedding model with no arm in runner_for; \
              add one so it inherits conformance coverage"
@@ -336,6 +340,7 @@ fn test_every_loadable_model_can_be_constructed() {
         "ankh-base",
         "ankh-large",
         "ablang2-paired",
+        "tcrlang-paired",
     ];
     for card in REGISTRY
         .iter()

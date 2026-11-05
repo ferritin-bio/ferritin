@@ -161,6 +161,17 @@ fn test_ablang2_loaded_dims_match_card() -> Result<()> {
     assert_card_matches(card.id, &runner)
 }
 
+#[test]
+#[ignore = "downloads the TCRLang weights from Zenodo (166 MB)"]
+fn test_tcrlang_loaded_dims_match_card() -> Result<()> {
+    let card = lookup("tcrlang-paired").expect("registered");
+    let runner = AbLang2ChainRunner::new(
+        AbLang2Runner::from_pretrained(AbLang2Models::TcrLangPaired, device(false)?)?,
+        Chain::Heavy,
+    );
+    assert_card_matches(card.id, &runner)
+}
+
 /// Compare a loaded runner's self-reported metadata and token layout against
 /// its registry row.
 fn assert_card_matches(id: &str, runner: &dyn PlmRunner) -> Result<()> {
@@ -245,6 +256,7 @@ fn test_loadable_embedding_models_are_covered() {
             "prott5-xl-half-uniref50-enc",
             "saprot-35m-af2",
             "saprot-650m-af2",
+            "tcrlang-paired",
         ],
         "the set of loadable embedding models changed; add or remove a \
          conformance test to match"
@@ -265,6 +277,7 @@ fn test_uncovered_loadable_models_are_accounted_for() {
         "prott5-xl-half-uniref50-enc",
         "ankh-base",
         "ablang2-paired",
+        "tcrlang-paired",
     ];
 
     let uncovered: Vec<&str> = REGISTRY

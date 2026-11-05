@@ -157,6 +157,11 @@ pub const PARITY_COVERAGE: &[ParityCoverage] = &[
         generator: "ablang2",
         status: CoverageStatus::Committed,
     },
+    ParityCoverage {
+        fixture: "tcrlang_parity",
+        generator: "ablang2",
+        status: CoverageStatus::Committed,
+    },
 ];
 
 /// Look up a fixture's declared coverage, if it is declared at all.

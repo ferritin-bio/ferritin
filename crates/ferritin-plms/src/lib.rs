@@ -82,6 +82,7 @@
 //! | `proteinmpnn-v48-020` | Mpnn | `zcpbx/ligandmpnn-weights` (pth) | verified (`proteinmpnn_parity`) | supported |
 //! | `ligandmpnn-v32-020-25` | Mpnn | `zcpbx/ligandmpnn-weights` (pth) | verified (`ligandmpnn_parity`) | supported |
 //! | `ablang2-paired` | AbLang2 | `zenodo/10185169` (pth) | verified (`ablang2_parity`) | supported |
+//! | `tcrlang-paired` | AbLang2 | `zenodo/11208211` (pth) | verified (`tcrlang_parity`) | supported |
 //! <!-- END SUPPORT MATRIX -->
 
 // The crate deliberately uses the `foo/mod.rs` + inner `mod foo` layout for

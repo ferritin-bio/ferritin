@@ -83,6 +83,14 @@ disagree". See `ferritin-100.33`.
   this; every other row is still on the Hugging Face hub.
 - Example: `cargo run --example ablang2` ranks amino acids at a masked
   position.
+- `tcrlang-paired` (ferritin-4dm), the same architecture with weights trained
+  on paired TCRs (Zenodo record 11208211, CC-BY-4.0). It has its own fixture
+  from the same pinned upstream code, run on the JM22 TCR, and all the same
+  checks pass (worst logit error 3.8e-5). The first slot is TRB (beta) and the
+  second is TRA (alpha), the order upstream's notebook prescribes.
+  `AbLang2Runner::from_dir` now takes the model and checks that checkpoint's
+  SHA-256, since the two load into the same shapes. Run it with
+  `cargo run --example ablang2 -- --model tcrlang`.
 
 ### Reading the support matrix
 
