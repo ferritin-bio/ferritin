@@ -9,7 +9,7 @@ are the six issues it changed, exported with `bd export`:
 |---|---|
 | ferritin-sxg | closed: AbLang2 ported and parity-verified |
 | ferritin-y3b | new: AbLang2 ANARCI-aligned modes |
-| ferritin-4dm | new: TCRLang-paired |
+| ferritin-4dm | new, then closed: TCRLang-paired registered and parity-verified |
 | ferritin-fju | note: HF CDN blocked in cloud sessions; ModernBERT-DNA config findings |
 | ferritin-yjp, ferritin-u7g | note: same HF CDN block |
 
