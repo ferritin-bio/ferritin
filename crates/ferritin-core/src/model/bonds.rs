@@ -134,9 +134,9 @@ pub(crate) fn infer_bonds_from_residue_templates(
     let mut atom_b = Vec::new();
     let mut order = Vec::new();
 
-    for res_idx in 0..n_residues {
+    for (res_idx, comp_id) in residues.comp_id.iter().enumerate() {
         let range = atom_to_residue.segment(res_idx);
-        if let Some(bond_dict_for_res) = aa_bond_info.get(residues.comp_id[res_idx].as_str()) {
+        if let Some(bond_dict_for_res) = aa_bond_info.get(comp_id.as_str()) {
             for &(name1, name2, bond_order) in bond_dict_for_res {
                 let indices1: Vec<usize> = range
                     .clone()
