@@ -17,6 +17,9 @@
 //!   [`MvsError::UnsupportedNode`] warning.
 //! - `component_from_uri` / `*_from_uri` / `*_from_source` nodes are skipped with an
 //!   [`MvsError::UnsupportedNode`].
+//! - BCIF `parse` nodes and source `atom_id` selectors emit
+//!   [`MvsError::UnsupportedNode`].
+//! - `tooltip` and `volume` nodes are not rendered.
 //! - Surface representation degrades to VdW spheres (Solid).
 //! - When multiple `focus` nodes exist, the last one processed (document order) wins.
 

@@ -25,21 +25,16 @@ Protein utilities for Rust
 
 ### Ferritin-Core
 
-Data structures and algorithms to work with proteins. [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_core/). [source](https://github.com/zachcp/ferritin/tree/main/ferritin-core).
+Data structures and algorithms to work with proteins. [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_core/). [source](https://github.com/ferritin-bio/ferritin/tree/main/crates/ferritin-core).
 
 
 ### Ferritin-MolViewSpec
 
-Utilities for consuming and creating [molviewspec files](https://molstar.org/mol-view-spec/).  [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_molviewspec/index.html). [source](https://github.com/ferritin-bio/ferritin/tree/main/ferritin-molviewspec).
-
-### Ferritin-ONNX-Models
-
-Access to protein PLM via the ONNX runtime. [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_onnx_models/index.html). [source](https://github.com/ferritin-bio/ferritin/tree/main/ferritin-onnx-models).
-
+Utilities for consuming and creating [molviewspec files](https://molstar.org/mol-view-spec/).  [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_molviewspec/index.html). [source](https://github.com/ferritin-bio/ferritin/tree/main/crates/ferritin-molviewspec).
 
 ### Ferritin-PLMs
 
-Utilities for working with protein language models. [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_plms/index.html). [source](https://github.com/ferritin-bio/ferritin/tree/main/ferritin-plms).
+Utilities for working with protein language models. [rust-docs](https://ferritin-bio.github.io/ferritin/doc/ferritin_plms/index.html). [source](https://github.com/ferritin-bio/ferritin/tree/main/crates/ferritin-plms).
 
 ### Ferritin-Bevy
 

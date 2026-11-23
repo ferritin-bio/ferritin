@@ -50,8 +50,9 @@ variant in `ProteinMPNNConfig::proteinmpnn()` / `::ligandmpnn()` and covered by
 
 ## Status of the CLI
 
-The CLI equivalent was abandoned in December 2024. The library API
-(`ProteinMPNNRunner`) is the supported surface.
+The CLI equivalent was abandoned in December 2024. Its code remains in
+`commands/` but is not compiled (`mod commands` is commented out in `mod.rs`).
+The library API (`ProteinMPNNRunner`, `ProteinMPNN`) is the supported surface.
 
 Its test suite — `tests/test_cli_ligandmpnn.rs`, 33 tests transcribed from
 upstream's [`run_examples.sh`](https://github.com/dauparas/LigandMPNN/blob/main/run_examples.sh)
@@ -65,6 +66,15 @@ uncommented.
 
 To resurrect it, take the upstream `run_examples.sh` as the source of truth
 rather than the deleted file, and add the CLI and dev-dependencies it assumed.
+
+## Remaining work
+
+GitHub issue #58 asked for compatibility with upstream's 33 `run_examples.sh`
+cases. None of them run today. The behavior they exercise — `score()`,
+`sample()`, fixed residues and chains, ligand-context controls, batches — has
+no Python comparison yet; the plan for that is Beads `ferritin-3xs`, which
+checks the library API against pinned upstream code rather than replaying the
+CLI.
 
 ## Resources
 

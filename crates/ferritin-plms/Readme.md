@@ -1,15 +1,12 @@
 # ferritin-plms
 
-## Fully Operational
+## Status
 
-- Amplify
-
-## WIP
-
-- ESM2
-- ESMC
-- LigandMPNN
-
+The model support matrix at the top of `src/lib.rs` (generated from
+`src/registry.rs`) lists every supported checkpoint and whether it has a
+Python parity fixture. For ProteinMPNN and LigandMPNN that parity covers only
+the structure-only forward pass; `score()` and `sample()` are not yet checked
+against Python (Beads `ferritin-3xs`). See `src/ligandmpnn/Readme.md`.
 
 
 # ferritin-esm
