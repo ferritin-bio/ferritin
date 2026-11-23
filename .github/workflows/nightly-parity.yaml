@@ -23,7 +23,8 @@ jobs:
   parity:
     name: PLM parity (nightly)
     runs-on: ubuntu-latest
-    # Weight downloads dominate; give the job plenty of headroom.
+    # Keep the full suite bounded; optimized inference avoids spending this
+    # budget in Candle's unoptimized CPU loops before parity tests even start.
     timeout-minutes: 120
     steps:
       - name: Checkout repository
@@ -55,4 +56,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HUGGING_FACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: cargo test -p ferritin-plms -- --include-ignored --nocapture
+        # Debug CPU inference makes the sequential conformance sweep alone
+        # exceed the job budget. Serialize tests so multi-GB models do not
+        # compete for memory; keep every ignored and fixture parity test.
+        run: cargo test --locked --release -p ferritin-plms -- --include-ignored --nocapture --test-threads=1
