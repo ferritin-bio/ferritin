@@ -231,9 +231,9 @@ impl EncodeInputs {
         if let Some(func) = function_tokens {
             // func: (B, L, n_tracks); each track uses its own embedding
             let mut parts: Vec<Tensor> = Vec::with_capacity(self.n_function_tracks);
-            for i in 0..self.n_function_tracks {
+            for (i, embed) in self.function_embeds.iter().enumerate() {
                 let track = func.narrow(D::Minus1, i, 1)?.squeeze(D::Minus1)?; // (B, L)
-                parts.push(self.function_embeds[i].forward(&track)?); // (B, L, func_dim)
+                parts.push(embed.forward(&track)?); // (B, L, func_dim)
             }
             let func_emb = Tensor::cat(&parts, D::Minus1)?; // (B, L, d_model)
             add(func_emb)?;
