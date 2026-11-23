@@ -48,6 +48,11 @@
 //! `esm1b`, `saprot-650m-af2`, `amplify-350m`, `ankh-large`, `esmc-600m` and
 //! `esmc-6b` — where inherited trust is reasonable.
 //!
+//! **verified** names the path its fixture covers, not every method. The two
+//! `Mpnn` fixtures pin the structure-only `simple_decode` distributions;
+//! `ProteinMPNN::score()` and `ProteinMPNN::sample()` are not yet compared
+//! with Python (Beads `ferritin-3xs`).
+//!
 //! <!-- BEGIN SUPPORT MATRIX -->
 //! | Model | Family | Weights | Parity | Status |
 //! |---|---|---|---|---|
