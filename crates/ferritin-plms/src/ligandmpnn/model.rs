@@ -47,6 +47,26 @@ fn apply_dropout_and_norm(
     norm.forward(&(input + delta_dropout)?)
 }
 
+/// `(B, L, L)` mask whose `[b, q, p]` is 1 when position `p` is decoded before
+/// position `q` under `decoding_order`, matching upstream's
+/// `einsum("ij,biq,bjp->bqp", 1 - triu(ones), P, P)`: `Pᵀ · strict_lower · P`,
+/// where `P[b, step, pos]` is the one-hot of `decoding_order`. Strictly lower,
+/// so a position never sees its own residue.
+fn order_mask_backward(decoding_order: &Tensor, l: usize) -> Result<Tensor> {
+    let device = decoding_order.device();
+    let p = one_hot(decoding_order.clone(), l, 1f32, 0f32)?
+        .to_dtype(DType::F32)?
+        .contiguous()?;
+    let strict_lower = (Tensor::tril2(l, DType::F32, device)?
+        - Tensor::eye(l, DType::F32, device)?)?
+    .unsqueeze(0)?;
+    p.transpose(1, 2)?
+        .contiguous()?
+        .broadcast_matmul(&strict_lower)?
+        .matmul(&p)?
+        .contiguous()
+}
+
 pub fn multinomial_sample(probs: &Tensor, temperature: f64, seed: u64) -> Result<Tensor> {
     let mut logits_processor = LogitsProcessor::new(
         seed,              // seed for reproducibility
@@ -852,17 +872,7 @@ impl ProteinMPNN {
         match symmetry_residues {
             None => {
                 let e_idx = e_idx.repeat(&[b, 1, 1])?;
-                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1f32, 0f32)?
-                    .to_dtype(sample_dtype)?
-                    .contiguous()?;
-                let tril = Tensor::tril2(l, sample_dtype, device)?;
-                let tril = tril.unsqueeze(0)?;
-                let temp = tril
-                    .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
-                    .contiguous()?; //tensor of shape (b, i, q)
-                let order_mask_backward = temp
-                    .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
-                    .contiguous()?; // This will give us a tensor of shape (b, q, p)
+                let order_mask_backward = order_mask_backward(&decoding_order, l)?;
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
@@ -1098,10 +1108,24 @@ impl ProteinMPNN {
     }
 
     pub fn score(&self, features: &ProteinFeatures, use_sequence: bool) -> Result<ScoreOutput> {
+        let (b, l) = features.s.dims2()?;
+        let randn = Tensor::randn(0f32, 1f32, (b, l), features.s.device())?;
+        self.score_with_randn(features, use_sequence, &randn)
+    }
+
+    /// [`score`](Self::score) with the decoding-order noise supplied by the
+    /// caller, as upstream's `feature_dict["randn"]`. Positions are decoded in
+    /// ascending `|randn|`, so the same `randn` gives the same order — and the
+    /// same output — in this port and in the Python reference.
+    pub fn score_with_randn(
+        &self,
+        features: &ProteinFeatures,
+        use_sequence: bool,
+        randn: &Tensor,
+    ) -> Result<ScoreOutput> {
         let ProteinFeatures { s, x_mask, .. } = &features;
         let sample_dtype = DType::F32;
         let s_true = &s.clone();
-        let device = s_true.device();
         let (b, l) = s_true.dims2()?;
         let mask = &x_mask.as_ref().clone();
         let b_decoder: usize = b;
@@ -1113,7 +1137,7 @@ impl ProteinMPNN {
 
         // encode ...
         let (h_v, h_e, e_idx) = self.encode(features)?;
-        let rand_tensor = Tensor::randn(0f32, 1f32, (b, l), device)?.to_dtype(sample_dtype)?;
+        let rand_tensor = randn.to_dtype(sample_dtype)?;
         // Compute decoding order
         // Ascending: see the note in `sample` (ferritin-100.11).
         let decoding_order = (chain_mask + 0.001)?
@@ -1128,17 +1152,7 @@ impl ProteinMPNN {
             }
             None => {
                 let e_idx = e_idx.repeat(&[b_decoder, 1, 1])?;
-                let permutation_matrix_reverse = one_hot(decoding_order.clone(), l, 1f32, 0f32)?
-                    .to_dtype(sample_dtype)?
-                    .contiguous()?;
-
-                let tril = Tensor::tril2(l, sample_dtype, device)?.unsqueeze(0)?;
-                let temp = tril
-                    .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
-                    .contiguous()?; // shape (b, i, q)
-                let order_mask_backward = temp
-                    .matmul(&permutation_matrix_reverse.transpose(1, 2)?)?
-                    .contiguous()?; // shape (b, q, p)
+                let order_mask_backward = order_mask_backward(&decoding_order, l)?;
                 let mask_attend = order_mask_backward
                     .gather(&e_idx, 2)?
                     .unsqueeze(D::Minus1)?;
@@ -1183,7 +1197,7 @@ impl ProteinMPNN {
             self.decoder_layers.iter().fold(Ok(h_v), |acc, layer| {
                 let current_h_v = acc?;
                 let h_esv = cat_neighbors_nodes(&current_h_v, &h_es, &e_idx)?
-                    .mul(&mask_bw)?
+                    .broadcast_mul(&mask_bw)?
                     .add(&h_exv_encoder_fw)?;
                 layer.forward(&current_h_v, &h_esv, Some(&mask), None, None)
             })?

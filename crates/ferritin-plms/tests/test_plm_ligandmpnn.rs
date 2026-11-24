@@ -256,4 +256,98 @@ mod tests {
         )
         .expect("LigandMPNN distribution parity");
     }
+
+    /// Load `model_type` on 1BC8 and its parity fixture.
+    fn model_features_fixture(
+        model_type: ModelTypes,
+    ) -> (
+        ferritin_plms::ligandmpnn::model::ProteinMPNN,
+        ferritin_plms::ligandmpnn::proteinfeatures::ProteinFeatures,
+        ParityFixture,
+    ) {
+        let device = Device::Cpu;
+        let (weights, config, stem) = match model_type {
+            ModelTypes::ProteinMPNN => (
+                TestFile::ligmpnn_pmpnn_01(),
+                ProteinMPNNConfig::proteinmpnn(),
+                "proteinmpnn_parity",
+            ),
+            ModelTypes::LigandMPNN => (
+                TestFile::ligmpnn_lmpnn_01(),
+                ProteinMPNNConfig::ligandmpnn(),
+                "ligandmpnn_parity",
+            ),
+        };
+        let fixture = ParityFixture::load(stem, &device).expect("parity fixture");
+        let (weights_path, _weights_handle) = weights.create_temp().expect("weights");
+        let model = ProteinMPNNRunner::from_path_as(
+            &weights_path,
+            &config,
+            &LoadOptions::new(device.clone()),
+        )
+        .expect("load model")
+        .into_model();
+        let (pdb_path, _pdb_handle) = TestFile::protein_02().create_temp().expect("1BC8.pdb");
+        let features = MPNNExecConfig::new(
+            device,
+            pdb_path,
+            run_config_for(model_type),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("MPNNExecConfig")
+        .generate_protein_features()
+        .expect("features");
+        (model, features, fixture)
+    }
+
+    /// `score()` against upstream `score()` with the same `randn`, so both
+    /// sides decode in the same order. `use_sequence=false` checks the
+    /// order-dependent forward mask; `use_sequence=true` additionally checks
+    /// that each position sees exactly the native residues decoded before it.
+    fn check_score_parity(model_type: ModelTypes) {
+        let (model, features, fixture) = model_features_fixture(model_type);
+        let randn = fixture
+            .tensor("score_randn")
+            .and_then(|t| Ok(t.unsqueeze(0)?))
+            .expect("score_randn");
+        for (use_sequence, tag) in [(false, "structure"), (true, "sequence")] {
+            let out = model
+                .score_with_randn(&features, use_sequence, &randn)
+                .expect("score_with_randn");
+            let ref_order: Vec<u32> = fixture
+                .tensor(&format!("score_{tag}_decoding_order"))
+                .and_then(|t| Ok(t.to_dtype(candle_core::DType::U32)?.to_vec1()?))
+                .expect("reference decoding order");
+            assert_eq!(
+                out.get_decoding_order().expect("decoding order"),
+                ref_order,
+                "{model_type:?} {tag}: decoding order differs from the reference"
+            );
+            let rust_probs = out
+                .get_log_probs()
+                .squeeze(0)
+                .and_then(|t| t.exp())
+                .expect("log_probs");
+            let ref_probs = fixture
+                .tensor(&format!("score_{tag}_log_probs"))
+                .and_then(|t| Ok(t.exp()?))
+                .expect("reference log_probs");
+            assert_distribution_close(&rust_probs, &ref_probs, KL_THRESHOLD)
+                .unwrap_or_else(|e| panic!("{model_type:?} score({tag}) parity: {e}"));
+        }
+    }
+
+    #[test]
+    fn test_pmpnn_score_parity_vs_python_reference() {
+        check_score_parity(ModelTypes::ProteinMPNN);
+    }
+
+    #[test]
+    fn test_ligandmpnn_score_parity_vs_python_reference() {
+        check_score_parity(ModelTypes::LigandMPNN);
+    }
 }
