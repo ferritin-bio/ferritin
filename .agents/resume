@@ -4,5 +4,19 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 # Hooks are clone-local, so repair them after repository activation, not in the
-# reusable snapshot. This script is idempotent and performs no network access.
+# reusable snapshot. This script is idempotent.
 sh scripts/install-git-hooks.sh
+
+# The Beads database is gitignored, so a fresh orb has none and `bd ready`
+# shows nothing. Restore it from refs/dolt/data on origin (ferritin-5iw).
+# `bd bootstrap` only validates an existing database, so move an empty one
+# aside first; a database that holds any issue is never touched.
+if command -v bd >/dev/null 2>&1; then
+    if [[ -d .beads/embeddeddolt ]] && [[ "$(bd count --include-infra 2>/dev/null)" == 0 ]]; then
+        mkdir -p "$HOME/.cache/ferritin-beads"
+        mv .beads/embeddeddolt "$HOME/.cache/ferritin-beads/empty-embeddeddolt-$(date +%s)"
+    fi
+    if [[ ! -d .beads/embeddeddolt ]]; then
+        bd bootstrap --yes || echo '[resume] bd bootstrap failed; run it manually' >&2
+    fi
+fi
