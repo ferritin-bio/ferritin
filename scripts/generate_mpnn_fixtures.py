@@ -40,6 +40,9 @@ from pathlib import Path
 
 import torch
 
+# Seed for the `randn` that fixes score()'s decoding order.
+SCORE_SEED = 20261124
+
 MODELS = {
     # fixture stem            (checkpoint stem,                model_type)
     "proteinmpnn_parity": ("proteinmpnn_v_48_020", "protein_mpnn"),
@@ -114,6 +117,22 @@ def build(weights_path: Path, model_type: str, pdb: Path, device: str):
     out["logits"] = logits[0].contiguous()
     out["log_probs"] = torch.log_softmax(logits, dim=-1)[0].contiguous()
     out["S"] = features["S"][0].to(torch.int32).contiguous()
+
+    # score(): the decoding order is argsort(|randn|), so pinning `randn` pins
+    # the order and makes score() reproducible across frameworks. The noise is
+    # saved with the outputs and fed to the Rust side verbatim.
+    generator = torch.Generator().manual_seed(SCORE_SEED)
+    randn = torch.randn((B, L), generator=generator).to(device)
+    features["randn"] = randn
+    features["batch_size"] = 1
+    features["symmetry_residues"] = [[]]
+    out["score_randn"] = randn[0].contiguous()
+    for use_sequence, tag in ((False, "structure"), (True, "sequence")):
+        scored = model.score(features, use_sequence=use_sequence)
+        out[f"score_{tag}_log_probs"] = scored["log_probs"][0].contiguous()
+        out[f"score_{tag}_decoding_order"] = (
+            scored["decoding_order"][0].to(torch.int32).contiguous()
+        )
     return out
 
 
