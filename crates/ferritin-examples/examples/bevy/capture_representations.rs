@@ -8,7 +8,7 @@
 //! permission — only a real window/GPU context.
 //!
 //! Run with:
-//!   cargo run --example bevy_capture_representations --features bevy -p ferritin-examples
+//!   cargo run --example bevy_capture_representations -p ferritin-examples
 
 use anyhow::Result;
 use bevy::app::AppExit;
@@ -27,6 +27,10 @@ const OUT_DIR: &str = "docs/screenshots/ferritin-ala";
 /// Frames to let a freshly-loaded scene settle (mesh build + camera framing)
 /// before the GPU readback fires.
 const SETTLE_FRAMES: u32 = 15;
+/// The first scene also waits for the render pipelines to compile; on a
+/// software renderer (llvmpipe in an orb) 15 frames pass before anything is
+/// drawn and the first capture comes out as bare background.
+const FIRST_SETTLE_FRAMES: u32 = 120;
 
 struct Shot {
     name: &'static str,
@@ -103,6 +107,7 @@ fn main() -> Result<()> {
         .insert_resource(ShotQueue {
             shots: shots.into(),
             state: QueueState::Idle,
+            settle_frames: FIRST_SETTLE_FRAMES,
         })
         .insert_resource(PresetTempFiles(temps))
         .add_systems(Startup, setup_scene)
@@ -129,6 +134,8 @@ enum QueueState {
 struct ShotQueue {
     shots: std::collections::VecDeque<Shot>,
     state: QueueState,
+    /// Settle length for the scene in progress.
+    settle_frames: u32,
 }
 
 fn drive_queue(
@@ -149,10 +156,11 @@ fn drive_queue(
             queue.state = QueueState::Settling(0);
         }
         QueueState::Settling(n) => {
-            if n < SETTLE_FRAMES {
+            if n < queue.settle_frames {
                 queue.state = QueueState::Settling(n + 1);
             } else {
                 queue.state = QueueState::Idle;
+                queue.settle_frames = SETTLE_FRAMES;
             }
         }
     }
@@ -168,7 +176,7 @@ fn take_pending_screenshot(
 ) {
     // Fire the screenshot on the last settle frame only.
     if let QueueState::Settling(n) = queue.state
-        && n == SETTLE_FRAMES - 1
+        && n == queue.settle_frames - 1
         && let Some(pending) = pending
     {
         let path = format!("{OUT_DIR}/{}.png", pending.0);

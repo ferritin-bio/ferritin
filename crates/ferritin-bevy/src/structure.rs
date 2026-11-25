@@ -40,10 +40,22 @@ enum SecondaryStructure {
 }
 
 // Structure to hold residue information needed for cartoon rendering
+#[derive(Clone, Copy)]
 struct BackboneAtoms {
     ca: Vec3,
     n: Vec3,
     c: Vec3,
+}
+
+/// One residue on the polymer trace that Cartoon and Putty spline through:
+/// CA for amino acids, C4' for nucleotides.
+struct TracePoint {
+    /// Index over all residues, the order color themes and selection masks use.
+    res_idx: usize,
+    pos: Vec3,
+    is_nucleic: bool,
+    /// N/CA/C for amino acids, input to secondary-structure detection.
+    backbone: Option<BackboneAtoms>,
 }
 
 /// Define Everything Needed to render
@@ -81,8 +93,8 @@ impl Structure {
         }
     }
 
-    /// Returns `(Mesh, residue_map)` where `residue_map[vertex_idx]` is the 0-based residue
-    /// iteration index that produced that vertex. Applicable to Cartoon and Putty.
+    /// Returns `(Mesh, residue_map)` where `residue_map[vertex_idx]` is the 0-based index
+    /// over all residues of the residue that produced that vertex. Applicable to Cartoon and Putty.
     /// `mask` filters which residues contribute; `None` includes all residues.
     pub fn to_mesh_with_residue_map(&self, mask: Option<&AtomMask>) -> (Mesh, Vec<usize>) {
         match &self.rendertype {
@@ -119,6 +131,9 @@ impl Structure {
     /// peptide bond gives ~3.8 Å; anything beyond this is a chain break or a
     /// stretch of missing residues, across which the ribbon must not spline.
     const CA_BREAK_DIST: f32 = 5.0;
+    /// Maximum C4'-C4' distance (Å) between consecutive nucleotides; a
+    /// continuous strand spaces them about 5.5-7 Å apart.
+    const NUCLEIC_BREAK_DIST: f32 = 8.0;
 
     /// BallAndStick geometry (Å). The stick is half the ball radius so the rep
     /// reads as spheres joined by thin sticks rather than uniform fat tubes
@@ -190,8 +205,8 @@ impl Structure {
 
     /// Whether two consecutive backbone residues should start a new ribbon
     /// segment rather than be splined together. A break is any of: a gap in the
-    /// (masked) residue-iteration index, a chain change, or a CA-CA distance
-    /// beyond a single peptide bond (missing residues / HETATM insertion).
+    /// (masked) residue-iteration index, a chain change, or a trace-atom distance
+    /// beyond `max_dist` (missing residues / HETATM insertion).
     /// See ferritin-t0h.1.
     fn is_backbone_break(
         prev_idx: usize,
@@ -200,8 +215,86 @@ impl Structure {
         idx: usize,
         chain: &str,
         ca: Vec3,
+        max_dist: f32,
     ) -> bool {
-        idx != prev_idx + 1 || chain != prev_chain || ca.distance(prev_ca) > Self::CA_BREAK_DIST
+        idx != prev_idx + 1 || chain != prev_chain || ca.distance(prev_ca) > max_dist
+    }
+
+    /// Polymer trace split into contiguous segments, so the spline never joins
+    /// across a chain break, a gap, or a protein/nucleic boundary. A residue
+    /// takes part when its trace atom (CA or C4') passes `mask`. With
+    /// `full_backbone`, amino acids also need N, C, and O, which Cartoon's
+    /// secondary-structure detection reads.
+    fn trace_segments(&self, mask: Option<&AtomMask>, full_backbone: bool) -> Vec<Vec<TracePoint>> {
+        let mut segments: Vec<Vec<TracePoint>> = Vec::new();
+        let mut current: Vec<TracePoint> = Vec::new();
+        let mut last_chain = "";
+        for (res_idx, residue) in self.pdb.residues().enumerate() {
+            let is_nucleic = residue.is_nucleotide();
+            if !is_nucleic && !residue.is_amino_acid() {
+                continue;
+            }
+            let Some(trace) = residue.find_atom_by_name(if is_nucleic { "C4'" } else { "CA" })
+            else {
+                continue;
+            };
+            if let Some(m) = mask
+                && !m.0[trace.index()]
+            {
+                continue;
+            }
+            let pos = Vec3::from_array(trace.coords());
+            let backbone = if is_nucleic {
+                None
+            } else {
+                let atoms = (
+                    residue.find_atom_by_name("N"),
+                    residue.find_atom_by_name("C"),
+                    residue.find_atom_by_name("O"),
+                );
+                match atoms {
+                    (Some(n), Some(c), Some(_o)) => Some(BackboneAtoms {
+                        ca: pos,
+                        n: Vec3::from_array(n.coords()),
+                        c: Vec3::from_array(c.coords()),
+                    }),
+                    _ if full_backbone => continue,
+                    _ => None,
+                }
+            };
+            let chain = residue.chain_id();
+            if let Some(last) = current.last() {
+                let max_dist = if is_nucleic {
+                    Self::NUCLEIC_BREAK_DIST
+                } else {
+                    Self::CA_BREAK_DIST
+                };
+                if last.is_nucleic != is_nucleic
+                    || Structure::is_backbone_break(
+                        last.res_idx,
+                        last_chain,
+                        last.pos,
+                        res_idx,
+                        chain,
+                        pos,
+                        max_dist,
+                    )
+                {
+                    segments.push(std::mem::take(&mut current));
+                }
+            }
+            last_chain = chain;
+            current.push(TracePoint {
+                res_idx,
+                pos,
+                is_nucleic,
+                backbone,
+            });
+        }
+        if !current.is_empty() {
+            segments.push(current);
+        }
+        segments
     }
 
     fn create_smooth_curve(points: &[Vec3], segments: usize) -> Vec<Vec3> {
@@ -1006,74 +1099,24 @@ impl Structure {
         let segments_per_residue: usize = Self::TUBE_CURVE_SEGMENTS;
         let cross_segments: usize = Self::TUBE_CROSS_SEGMENTS;
 
-        // Collect (residue_iter_idx, chain_id, BackboneAtoms) for residues whose CA passes the mask.
-        let indexed_backbone: Vec<(usize, String, BackboneAtoms)> = self
-            .pdb
-            .residues_aminoacid()
-            .enumerate()
-            .filter_map(|(res_iter_idx, residue)| {
-                let ca = residue.find_atom_by_name("CA")?;
-                if let Some(m) = mask
-                    && !m.0[ca.index()]
-                {
-                    return None;
-                }
-                let n = residue.find_atom_by_name("N")?;
-                let c = residue.find_atom_by_name("C")?;
-                // O is required so the residue counts as a complete backbone unit,
-                // matching the previous behaviour, even though only N/CA/C feed the
-                // dihedral-based secondary-structure classifier.
-                let _o = residue.find_atom_by_name("O")?;
-                Some((
-                    res_iter_idx,
-                    residue.chain_id().to_string(),
-                    BackboneAtoms {
-                        ca: Vec3::from_array(ca.coords()),
-                        n: Vec3::from_array(n.coords()),
-                        c: Vec3::from_array(c.coords()),
-                    },
-                ))
-            })
-            .collect();
-
-        if indexed_backbone.is_empty() {
-            return (
-                Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all()),
-                Vec::new(),
-            );
-        }
-
-        // Split into contiguous backbone segments so the spline never connects
-        // across a ribbon break. A break is any of: a gap in the masked residue
-        // sequence, a chain change, or a CA-CA jump larger than a peptide bond
-        // (missing residues / HETATM insertion). See ferritin-t0h.1.
-        let mut segments: Vec<Vec<(usize, BackboneAtoms)>> = Vec::new();
-        let mut current: Vec<(usize, BackboneAtoms)> = Vec::new();
-        let mut last_chain: Option<String> = None;
-        for (idx, chain, bb) in indexed_backbone {
-            if let (Some(last), Some(prev_chain)) = (current.last(), last_chain.as_deref())
-                && Structure::is_backbone_break(last.0, prev_chain, last.1.ca, idx, &chain, bb.ca)
-            {
-                segments.push(std::mem::take(&mut current));
-            }
-            last_chain = Some(chain);
-            current.push((idx, bb));
-        }
-        if !current.is_empty() {
-            segments.push(current);
-        }
-
         let mut residue_map: Vec<usize> = Vec::new();
         let mut combined: Option<Mesh> = None;
 
-        for segment in segments {
+        for segment in self.trace_segments(mask, true) {
             if segment.len() < 2 {
                 continue;
             }
-            let (res_indices, backbone_atoms): (Vec<usize>, Vec<BackboneAtoms>) =
-                segment.into_iter().unzip();
-            let secondary_structures = Structure::detect_secondary_structure(&backbone_atoms);
-            let ca_positions: Vec<Vec3> = backbone_atoms.iter().map(|a| a.ca).collect();
+            let res_indices: Vec<usize> = segment.iter().map(|p| p.res_idx).collect();
+            let ca_positions: Vec<Vec3> = segment.iter().map(|p| p.pos).collect();
+            // Nucleic strands have no helix/sheet classifier yet; they render
+            // as a round loop tube.
+            let secondary_structures = if segment[0].is_nucleic {
+                vec![SecondaryStructure::Loop; segment.len()]
+            } else {
+                let backbone_atoms: Vec<BackboneAtoms> =
+                    segment.iter().filter_map(|p| p.backbone).collect();
+                Structure::detect_secondary_structure(&backbone_atoms)
+            };
             let curve = Structure::create_smooth_curve(&ca_positions, segments_per_residue);
             let curve_sec: Vec<SecondaryStructure> = (0..curve.len())
                 .map(|i| {
@@ -1122,59 +1165,15 @@ impl Structure {
         const CROSS_SEGMENTS: usize = Structure::TUBE_CROSS_SEGMENTS;
         const CURVE_SEGMENTS: usize = Structure::TUBE_CURVE_SEGMENTS;
 
-        // Collect (res_iter_idx, chain_id, CA position) for unmasked residues.
-        let ca_data: Vec<(usize, String, Vec3)> = self
-            .pdb
-            .residues_aminoacid()
-            .enumerate()
-            .filter_map(|(res_iter_idx, residue)| {
-                let ca = residue.find_atom_by_name("CA")?;
-                if let Some(m) = mask
-                    && !m.0[ca.index()]
-                {
-                    return None;
-                }
-                Some((
-                    res_iter_idx,
-                    residue.chain_id().to_string(),
-                    Vec3::from_array(ca.coords()),
-                ))
-            })
-            .collect();
-
-        if ca_data.len() < 2 {
-            return (
-                Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all()),
-                Vec::new(),
-            );
-        }
-
-        // Split into contiguous segments at chain breaks / missing-residue gaps
-        // so the tube never splines straight through them (ferritin-t0h.1).
-        let mut segments: Vec<Vec<(usize, Vec3)>> = Vec::new();
-        let mut current: Vec<(usize, Vec3)> = Vec::new();
-        let mut last_chain: Option<String> = None;
-        for (idx, chain, ca) in ca_data {
-            if let (Some(last), Some(prev_chain)) = (current.last(), last_chain.as_deref())
-                && Structure::is_backbone_break(last.0, prev_chain, last.1, idx, &chain, ca)
-            {
-                segments.push(std::mem::take(&mut current));
-            }
-            last_chain = Some(chain);
-            current.push((idx, ca));
-        }
-        if !current.is_empty() {
-            segments.push(current);
-        }
-
         let mut residue_map: Vec<usize> = Vec::new();
         let mut combined: Option<Mesh> = None;
 
-        for segment in segments {
+        for segment in self.trace_segments(mask, false) {
             if segment.len() < 2 {
                 continue;
             }
-            let (res_indices, ca_positions): (Vec<usize>, Vec<Vec3>) = segment.into_iter().unzip();
+            let res_indices: Vec<usize> = segment.iter().map(|p| p.res_idx).collect();
+            let ca_positions: Vec<Vec3> = segment.iter().map(|p| p.pos).collect();
             let curve = Structure::create_smooth_curve(&ca_positions, CURVE_SEGMENTS);
             let radii = Structure::synthetic_putty_radii(curve.len());
             let seg_mesh = Structure::generate_tube_mesh_varying(&curve, &radii, CROSS_SEGMENTS);
@@ -1437,14 +1436,46 @@ mod tests {
         let a = Vec3::new(0.0, 0.0, 0.0);
         let b = Vec3::new(3.8, 0.0, 0.0); // one peptide bond away
         // Contiguous, same chain, adjacent CAs → no break.
-        assert!(!Structure::is_backbone_break(0, "A", a, 1, "A", b));
+        assert!(!Structure::is_backbone_break(
+            0,
+            "A",
+            a,
+            1,
+            "A",
+            b,
+            Structure::CA_BREAK_DIST
+        ));
         // Chain change → break, even if spatially close.
-        assert!(Structure::is_backbone_break(0, "A", a, 1, "B", b));
+        assert!(Structure::is_backbone_break(
+            0,
+            "A",
+            a,
+            1,
+            "B",
+            b,
+            Structure::CA_BREAK_DIST
+        ));
         // Residue-index gap (e.g. masked-out residue) → break.
-        assert!(Structure::is_backbone_break(0, "A", a, 2, "A", b));
+        assert!(Structure::is_backbone_break(
+            0,
+            "A",
+            a,
+            2,
+            "A",
+            b,
+            Structure::CA_BREAK_DIST
+        ));
         // Large CA-CA jump (missing residues) → break.
         let far = Vec3::new(20.0, 0.0, 0.0);
-        assert!(Structure::is_backbone_break(0, "A", a, 1, "A", far));
+        assert!(Structure::is_backbone_break(
+            0,
+            "A",
+            a,
+            1,
+            "A",
+            far,
+            Structure::CA_BREAK_DIST
+        ));
     }
 
     #[test]
@@ -1819,6 +1850,36 @@ mod tests {
             residue_map.len(),
             "cartoon: residue_map len must equal vertex count"
         );
+        Ok(())
+    }
+
+    // ferritin-5v8: nucleic acids get a cartoon trace, and every residue-map
+    // entry indexes all residues, which color themes and masks read. 1c0a lists
+    // its tRNA before the protein, so an amino-acid-only index lands on tRNA
+    // residues.
+    #[test]
+    fn test_cartoon_traces_nucleic_and_maps_all_residue_indices() -> anyhow::Result<()> {
+        let (molfile, _handle) = TestFile::mvs_1c0a().create_temp()?;
+        let model = load_model(molfile).unwrap();
+        let ac = ferritin_core::AtomCollection::from(&model);
+        let mask = |s| evaluate_selector(&ComponentSelector::Selector(s), &ac);
+        let (nucleic, protein) = (
+            mask(ComponentSelectorT::Nucleic),
+            mask(ComponentSelectorT::Protein),
+        );
+        for rendertype in [RenderOptions::Cartoon, RenderOptions::Putty] {
+            let structure = Structure::builder()
+                .pdb(model.clone())
+                .rendertype(rendertype)
+                .build();
+            let residues: Vec<_> = structure.pdb.residues().collect();
+            let (mesh, map) = structure.to_mesh_with_residue_map(Some(&nucleic));
+            assert!(mesh.count_vertices() > 0, "tRNA must produce geometry");
+            assert!(map.iter().all(|&r| residues[r].is_nucleotide()));
+            let (_, map) = structure.to_mesh_with_residue_map(Some(&protein));
+            assert!(!map.is_empty());
+            assert!(map.iter().all(|&r| residues[r].is_amino_acid()));
+        }
         Ok(())
     }
 

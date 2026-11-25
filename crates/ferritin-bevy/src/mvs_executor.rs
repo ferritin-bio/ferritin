@@ -655,6 +655,12 @@ fn render_representation(
             (m, v, VertexMapKind::AtomMap)
         }
     };
+    // A mask with no geometry for this representation (a cartoon over a ligand,
+    // or a selector matching nothing) yields an attribute-less mesh. Spawning it
+    // breaks the SSAO normal prepass pipeline and quits the app, so skip it.
+    if mesh.count_vertices() == 0 {
+        return;
+    }
 
     // Use the explicit color_theme when present; fall back to ElementSymbol (CPK)
     // so structures without any Color child nodes get sensible default coloring.
@@ -1146,6 +1152,19 @@ mod tests {
               "metadata": {{"version": "1.0", "timestamp": "2024-01-01T00:00:00"}}
             }}"#
         )
+    }
+
+    // A selection with atoms but no geometry for its representation (a cartoon
+    // over waters) must not spawn an attribute-less mesh: it has no normals, so
+    // the SSAO normal prepass fails pipeline validation and Bevy quits (seen on
+    // preset_components).
+    #[test]
+    fn test_representation_without_geometry_spawns_no_mesh() {
+        use ferritin_test_data::TestFile;
+        let (path, _tmp) = TestFile::protein_01().create_temp().unwrap();
+        let mut app = make_app();
+        send_and_update(&mut app, &mvsj_one_component(&path, "water", "cartoon"));
+        assert_eq!(count_meshes(&mut app), 0);
     }
 
     #[test]

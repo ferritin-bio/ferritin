@@ -35,7 +35,7 @@ impl ColorScheme {
 pub enum VertexMapKind {
     /// Each entry is a 0-based atom index into the `AtomCollection`.
     AtomMap,
-    /// Each entry is a 0-based amino-acid residue iteration index.
+    /// Each entry is a 0-based index over all residues in the model.
     /// Coloring is approximate: a residue is colored if any of its atoms passes the selector.
     ResidueMap,
 }
@@ -191,7 +191,7 @@ pub fn initial_colors_from_theme(
 
 /// Resolve a `vertex_map` entry to an atom index, per `map_kind`.
 ///
-/// For `ResidueMap`, `idx` is an amino-acid iteration index; map it to that
+/// For `ResidueMap`, `idx` is an index over all residues; map it to that
 /// residue's first atom, since per-residue scalar fields (B-factor/pLDDT/occupancy)
 /// are approximated by a single representative atom.
 fn resolve_atom_index(model: &AtomCollection, idx: usize, map_kind: &VertexMapKind) -> usize {
@@ -244,17 +244,24 @@ fn occupancy_color(v: f32) -> Vec4 {
 }
 
 /// Simple CA-distance secondary-structure heuristic (same logic as `Structure::detect_secondary_structure`).
-/// Returns one `Vec4` color per amino-acid residue in iteration order.
+/// Returns one `Vec4` color per residue (all residues, in model order, the
+/// index both vertex-map kinds resolve to); non-amino-acid residues get the
+/// loop color.
 fn detect_secondary_structure_colors(model: &AtomCollection) -> Vec<Vec4> {
     // Canonical SS colors matching the cartoon renderer.
     let helix_color = Vec4::new(1.0, 0.6, 0.6, 1.0); // salmon
     let sheet_color = Vec4::new(0.6, 0.6, 1.0, 1.0); // periwinkle
     let loop_color = Vec4::new(0.6, 0.9, 0.6, 1.0); // light-green
 
-    // Collect CA positions for each amino-acid residue.
+    // CA position per residue; None for residues that are not amino acids
+    // (so a calcium ion named "CA" is not mistaken for a backbone atom).
     let ca_positions: Vec<Option<[f32; 3]>> = model
-        .iter_residues_aminoacid()
-        .map(|res| res.find_atom_by_name("CA").map(|a| *a.coords()))
+        .iter_residues()
+        .map(|res| {
+            res.is_amino_acid()
+                .then(|| res.find_atom_by_name("CA").map(|a| *a.coords()))
+                .flatten()
+        })
         .collect();
 
     let n = ca_positions.len();
@@ -291,7 +298,7 @@ fn dist(a: [f32; 3], b: [f32; 3]) -> f32 {
 /// Later nodes override earlier nodes on overlapping vertices.
 ///
 /// `vertex_map[vertex_idx]` holds the atom index (for `VertexMapKind::AtomMap`) or the
-/// amino-acid residue iteration index (for `VertexMapKind::ResidueMap`) that produced
+/// index over all residues (for `VertexMapKind::ResidueMap`) that produced
 /// that vertex.
 pub fn apply_mvs_colors(
     mesh: &mut Mesh,
